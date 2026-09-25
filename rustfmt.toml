@@ -1,0 +1,2 @@
+# 全默认配置,不做个人化设置。edition 由 Cargo.toml(workspace.package.edition)提供,
+# rustfmt 自动读取;此处不重复声明,避免双源漂移。

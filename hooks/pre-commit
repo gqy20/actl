@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# pre-commit:仅快检查(<5s);重量级门禁在 pre-push。三者一致性约定见 AGENTS.md §4.3。
+set -euo pipefail
+
+# 1) 格式检查(修复方式:make fmt)
+if ! cargo fmt --all -- --check >/dev/null 2>&1; then
+  echo "✗ cargo fmt --check 未通过 → 运行 'make fmt' 后重新暂存提交" >&2
+  exit 1
+fi
+
+# 2) 防误提交:构建产物、超大文件、遗留的合并冲突标记
+fail=0
+while IFS= read -r staged; do
+  [ -f "$staged" ] || continue
+  case "$staged" in
+    target/*)
+      echo "✗ 禁止提交构建产物: $staged" >&2; fail=1 ;;
+  esac
+  size=$(git cat-file -s ":$staged" 2>/dev/null || echo 0)
+  if [ "$size" -gt 10485760 ]; then
+    echo "✗ 文件超过 10MB,禁止直提交(请用 LFS 或拆分): $staged" >&2
+    fail=1
+  fi
+  # 等价 pre-commit-hooks 的 check-merge-conflict
+  if grep -qE '^(<<<<<<< |=======$|>>>>>>> )' "$staged" 2>/dev/null; then
+    echo "✗ 文件含未解决的合并冲突标记: $staged" >&2
+    fail=1
+  fi
+done < <(git diff --cached --name-only)
+
+exit "$fail"

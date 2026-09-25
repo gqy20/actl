@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# commit-msg:Conventional Commits 校验(规范表见 AGENTS.md §4.2)
+set -euo pipefail
+msg_file="$1"
+first_line=$(head -n1 "$msg_file")
+
+# 豁免:合并与回滚的自动信息
+case "$first_line" in
+  "Merge "*|"Revert "*" merge "*) exit 0 ;;
+esac
+
+pattern='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert|spec)(\([a-z0-9/_-]+\))?!?: .+'
+
+if ! echo "$first_line" | grep -Eq "$pattern"; then
+  cat >&2 <<'EOF'
+✗ 提交信息不符合 Conventional Commits 规范(AGENTS.md §4.2)
+
+  格式: <type>(<scope>)!: <subject>     [首行 ≤100 字符]
+
+  type: feat | fix | docs | refactor | perf | test | build | ci | chore | revert | spec
+  scope 可选: core | uia | physical | cli | protocol | release | ...
+  示例:
+    feat(uia): fallback locator chain with resolved_by reporting
+    spec(protocol)!: rename STALE_REF to REF_STALE
+    docs: add M0 spike findings to repo conventions
+EOF
+  exit 1
+fi
+
+if [ "${#first_line}" -gt 100 ]; then
+  echo "✗ 提交信息首行 ${#first_line} 字符,超过 100 上限" >&2
+  exit 1
+fi

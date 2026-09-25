@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# pre-push:完整门禁 = cargo xtask gate(fmt + clippy -D warnings + 全量测试)
+# 门禁的唯一实现在 xtask crate,hook 与 CI 均调用它(AGENTS.md 工作流)。
+# 跳过方式(仅紧急,需在 PR 说明): git push --no-verify
+set -euo pipefail
+
+exec cargo xtask gate

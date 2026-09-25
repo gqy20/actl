@@ -1,0 +1,19 @@
+# 仓库统一行尾策略
+* text=auto
+
+# shell 脚本与 Makefile 必须保持 LF:
+# - git hooks 以 #!/usr/bin/env bash 执行,CRLF 会导致 shebang 解析失败
+# - GNU Make 对 CRLF 的 recipe 兼容性脆弱
+hooks/* text eol=lf
+Makefile text eol=lf
+*.sh text eol=lf
+
+# Windows 原生脚本保留 CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# 二进制
+*.png binary
+*.exe binary
+*.zip binary

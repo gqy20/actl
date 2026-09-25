@@ -1,0 +1,12 @@
+[package]
+name = "actl-uia"
+description = "Windows UIA backend: the ONLY crate allowed to touch COM/unsafe (scaffold)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+# M1 起加入:windows = { workspace = true, features = [...] }(版本统一由根 Cargo.toml 管理,ADR-003)
+
+[lints]
+workspace = true

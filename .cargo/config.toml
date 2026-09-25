@@ -1,0 +1,6 @@
+# 项目级 cargo 配置(alias 与通用参数;版本锁定策略见 docs/TECH_STACK.md ADR-003)
+# xtask 是任务入口:clone 后 `cargo xtask setup` 一步完成配置(无需 make/python)
+[alias]
+xtask = "run -p xtask --"
+lint = "clippy --all-targets -- -D warnings"
+t = "test --workspace"

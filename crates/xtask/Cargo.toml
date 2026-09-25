@@ -1,0 +1,13 @@
+[package]
+name = "xtask"
+description = "Task runner: cargo xtask setup|gate|fmt — the single entry for env setup and the quality gate"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+# 有意零依赖:setup 必须在任何网络/registry 可用之前就能跑
+
+[lints]
+workspace = true

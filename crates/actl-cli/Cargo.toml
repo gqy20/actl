@@ -1,0 +1,18 @@
+[package]
+name = "actl-cli"
+description = "actl: Windows AI-native desktop control CLI for agents (scaffold binary)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+actl-core = { path = "../actl-core" }
+
+# bin 名 = actl(crate 名 actl-cli 仅用于 crates.io 发布,避免与被占的裸名冲突)
+[[bin]]
+name = "actl"
+path = "src/main.rs"
+
+[lints]
+workspace = true

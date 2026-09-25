@@ -1,0 +1,13 @@
+[package]
+name = "actl-physical"
+description = "Physical input fallback (enigo-based; compile-time strippable) — scaffold"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+# M1 起加入(enigo,ADR-007:物理操作必须显式 --physical):
+# enigo = { workspace = true }
+
+[lints]
+workspace = true

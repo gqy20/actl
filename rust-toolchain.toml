@@ -1,0 +1,6 @@
+# 工具链固定:全体贡献者/CI 与本机一致(docs/TECH_STACK.md §1)
+[toolchain]
+channel = "1.98.1"
+components = ["rustfmt", "clippy"]
+targets = ["x86_64-pc-windows-msvc"]
+profile = "minimal"

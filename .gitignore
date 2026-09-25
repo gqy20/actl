@@ -1,0 +1,23 @@
+# Rust 构建产物
+/target
+
+# LLVM 覆盖率 profiling(llvm-cov / -Cprofile-generate 运行时产生)
+*.profraw
+*.profdata
+*.profmerge
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# 系统与日志
+Thumbs.db
+.DS_Store
+*.log
+
+# 本地环境(不入库;CARGO_HOME 迁移说明见 docs/TECH_STACK.md §1)
+.env.local
+
+# 某些工具把 PowerShell UTF-8 初始化误写入 cwd/PROFILE 的垃圾文件(全盘常见)
+/PROFILE
