@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: fmt + clippy + test (windows-latest)
+    runs-on: windows-latest
+    # 门禁单点:与 pre-push hook 同一实现(crates/xtask 的 gate 命令)
+    steps:
+      - uses: actions/checkout@v4
+
+      # 工具链唯一来源:rust-toolchain.toml。rustup 自动安装 pinned 版本与 components,
+      # 禁止在 CI 里另写版本号(单一事实来源)。
+      - name: Activate pinned toolchain
+        run: rustup show active-toolchain
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Quality gate (fmt + clippy + test, single definition in xtask)
+        run: cargo xtask gate
