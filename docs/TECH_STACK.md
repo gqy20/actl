@@ -33,7 +33,7 @@ computer_cli/
 | 用途 | crate | 版本策略 | 备注/备选 |
 |---|---|---|---|
 | UIA/COM | `windows`(微软官方) | **全 workspace 锁同一版本**(ADR-003);features: `Win32_UI_Accessibility`, `Win32_UI_WindowsAndMessaging`, `Win32_System_Com`, `Win32_System_Threading` | 唯一重度依赖 |
-| UIA 高层封装 | `uiautomation-rs` | 评估期使用 | M0 验证其覆盖度;不满足则弃用,自写薄封装(只依赖 windows-rs);**不 vendor 进核心** |
+| UIA 高层封装 | `uiautomation`(**0.25,M0 评估期**:actl-uia 的 dev-dep,供 examples/probe 使用) | 评估结论(M1 采用或自写薄封装)写入 [spike-findings](spike-findings.md) |
 | CLI | `clap`(derive) | 跟 stable | 子命令即契约 |
 | 序列化 | `serde` + `serde_json` | 跟 stable | envelope 唯一出口 |
 | 错误 | `thiserror` | 跟 stable | 单一 Error 枚举 → 错误码映射(ADR-004) |

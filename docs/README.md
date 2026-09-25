@@ -22,6 +22,8 @@
 | [PRD.md](PRD.md) | 产品需求:定位、用户故事、功能/非功能需求、成功指标、风险 |
 | [ROADMAP.md](ROADMAP.md) | 路线图:Phase 0–3 的范围、交付物、退出标准、排期原则 |
 | [TECH_STACK.md](TECH_STACK.md) | 技术选型规格:工具链、workspace 结构、依赖清单、ADR、测试与分发 |
+| [07-golden-tasks.md](07-golden-tasks.md) | 金任务集:各 Phase 的验收标的与测试纪律 |
+| [spike-findings.md](spike-findings.md) | M0 坑清单:五场景实测结论、性能量级、uiautomation crate 评估 |
 
 **调研层(决策依据)**
 

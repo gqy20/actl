@@ -23,11 +23,11 @@ Phase 3  T+3月起,长期     生产级打磨      v1.0    (协议冻结,生态�
 **目标**:用最小代价验证五个最险场景,把"未知未知"变成坑清单;搭好工程骨架。
 
 **范围**:
-- Python + pywinauto 验证(不写产品代码):① Electron 应用(如 VSCode)UIA 树质量;② 管理员窗口/UIPI 跨完整性级别行为;③ 中文 UIA 树(名称、AutomationId);④ Canvas/游戏类(确认 UIA 不可达,物理兜底是唯一路径);⑤ RDP 会话内行为
-- Rust workspace 脚手架(见 [TECH_STACK §3](TECH_STACK.md)):crates 骨架、CI(GitHub Actions windows-latest:fmt + clippy + test)、envelope schema 草案(含错误码枚举)
-- 金任务集定义文档化(Phase 1/2 的验收标的)
+- Rust probe 验证(`crates/actl-uia/examples/probe.rs`,实测结论见 [spike-findings.md](spike-findings.md)):① Electron 应用 UIA 树质量;② 管理员窗口/UIPI 跨完整性级别行为;③ 中文 UIA 树;④ Canvas/游戏(UIA 不可达,物理兜底是唯一路径);⑤ RDP 会话内行为
+- Rust workspace 脚手架(已完成:五 crates、CI、hooks、envelope v1 契约测试)
+- 金任务集定义文档化([07-golden-tasks.md](07-golden-tasks.md))
 
-**退出标准**:坑清单入库(每项:场景、现象、绕行方案);CI 绿;schema 草案评审通过。
+**退出标准**:坑清单入库(每项:场景、现象、绕行方案);CI 绿;uiautomation crate 采用/弃用决策。
 
 **风险出口**:若 ②(管理员窗口)证明无法安全绕行 → 降级为文档化的已知限制,不阻塞后续。
 
