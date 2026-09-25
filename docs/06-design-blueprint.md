@@ -167,6 +167,7 @@ L2  actl commands     机器 schema:全命令+参数的 JSON(agent 自发现入�
 | `NOT_ACTIONABLE` | 元素存在但不可操作(disabled/offscreen) | 先 scroll/focus;hint 会指向 `set-value` |
 | `ASSERTION_FAILED` | `verify`/`--expect` 断言未成立 | 检查前置步骤(`--expect` 默认 2s 轮询后判定) |
 | `PROTOCOL` | 协议/参数错误(不可恢复) | 修正命令参数 |
+| `INTERNAL` | 内部/UIA/系统层错误(非协议非目标问题) | 重试一次;持续出现附 evidence 报 issue |
 
 退出码:`0` 成功 · `1` 业务失败(可恢复) · `2` 协议/参数错误(不可恢复)。
 

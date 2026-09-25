@@ -34,7 +34,7 @@ computer_cli/
 |---|---|---|---|
 | UIA/COM | `windows`(微软官方) | **全 workspace 锁同一版本**(ADR-003);features: `Win32_UI_Accessibility`, `Win32_UI_WindowsAndMessaging`, `Win32_System_Com`, `Win32_System_Threading` | 唯一重度依赖 |
 | UIA 高层封装 | `uiautomation`(**0.25,M0 评估期**:actl-uia 的 dev-dep,供 examples/probe 使用) | 评估结论(M1 采用或自写薄封装)写入 [spike-findings](spike-findings.md) |
-| CLI | `clap`(derive) | 跟 stable | 子命令即契约 |
+| CLI | `clap`(derive) | 4.6 | 子命令即契约;help 文本与 `commands` schema 从 doc comment 同源生成(06 §3.5) |
 | 序列化 | `serde` + `serde_json` | 跟 stable | envelope 唯一出口 |
 | 错误 | `thiserror` | 跟 stable | 单一 Error 枚举 → 错误码映射(ADR-004) |
 | 日志 | `tracing` + `tracing-subscriber` | 跟 stable | 仅写 **stderr**(ADR-002) |
