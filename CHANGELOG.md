@@ -5,7 +5,49 @@
 
 ## [Unreleased]
 
-(空;下个开发周期的变更先落此处,发版时移入版本节)
+M2 第三批 · 观察层强化(接入面:虚拟化大列表 + 老 Win32 报表 + Chromium/Electron 系)+ 定位性能结构优化。
+
+### Added
+- **L4 虚拟化容器定位(spec)**:定位链新增第四级——L1/L2 在已物化树中空手时,询问窗口内
+  ItemContainerPattern 容器(`FindItemByProperty` 原生直调,NULL 起查;crate 安全包装不接受
+  空元素且零值 UIElement 的 Drop 会 Release(null) 崩溃,故经 `UIElement::as_ref()` 取原生
+  接口,unsafe 登记于 actl-uia 豁免点)。**精确匹配,无子串语义**(provider 侧属性查询);
+  `Role`/`@eN` 不参与;命中元素不在快照树内 → 无 ref,重放走同一 name/id 查询。
+  `resolved_by` 新值 `item-container`(docs/06 §5 同步);`find` 在已物化树 0 命中且查询
+  可映射时自动走 L4 并上报 resolved_by。Explorer 实证:61 文件目录(walker 树内 0 命中)
+  → 精确查询命中按字母序末位的未物化文件;late-create("刚保存的文件")秒级可见——
+  US1 挂账的"Explorer 条目级确认"开放项收口;
+- **P1 滚入视野配套**:物理指针动作(click --physical/right-click/double-click/hover/drag/wheel)
+  前元素 offscreen → 自动 `ScrollItemPattern::ScrollIntoView`(失败静默,由命中检查如实
+  拦截);结果新增 `scrolled_into_view` 字段;drag 的 from/to 两侧都处理;
+- **`get --property text`(spec,加法)**:TextPattern 文档正文专用通道,与 `value`(ValuePattern)
+  分工——Chromium 的 Document Value=URL 会掩盖正文(实测 Edge 页面 value=file:///...),
+  正文只能走 text;`value` 读取链补 TextPattern 兜底(空 Value 时),`value_via` 上报通道;
+- **`extract --table` GridPattern 直读优先**:`GetItemAt(row, col)` provider 侧行列寻址
+  (带 row/col 语义,虚拟化行可达),读不全如实回退树扁平化;新增 `source` 字段
+  (grid-pattern | tree-flatten)。msinfo32 实证:44 行 [名称, 值] 结构化提取,中文内容
+  全对(source=tree-flatten,该应用无 Grid;grid-pattern 直读待真实 Grid 控件触发);
+- **`list-windows` 物理层叠放事实**:每窗口新增 foreground(GetForegroundWindow 判据,
+  与注入护栏同源)/ topmost(WS_EX_TOPMOST"总在最前"弹窗)/ minimized / visible(UWP
+  后台挂起 cloak 时 false 属预期)/ z_order(Win32 Z 链位次,0=最顶)/ rect(虚拟桌面
+  坐标)/ owner_title(owned dialog 宿主)——agent 可直接回答"谁在最上面/是否被遮挡/
+  弹窗挂在谁下面";
+- **验收 fixtures 三件**:virtualized-list.sh(Explorer 条目级,8/8)、win32-table-extract.sh
+  (msinfo32,9/9,金任务 3"老 Win32 抠数"正宗标的)、edge-deep-tree.sh(Chromium 系,8/8);
+  全系统自带应用,CI 安全纪律不破;
+- **定位性能结构优化**:`id:` 精确匹配走 provider 侧属性条件(UIA FindAll 单次往返替代
+  Rust 侧逐元素三连读;恰一命中直接用,多命中回退全遍历保 AMBIGUOUS 候选语义——另存为
+  id:1001 双命中先例);collect_matches 惰性属性读(非命中元素每元素 3 次 COM → 2 次,
+  Role 目标 1 次)。本日为环境慢日(单 COM 往返 ~15ms,正常 <1ms,timing 文档既有纪律:
+  绝对值不可跨日比较),收益绝对值待正常日 timing fixture 复测;
+- 金任务 1 fixture:12 键改单次 batch 执行(@eN ref 重放语义保留,进程冷启动 13 次 → 1 次);
+  默认轮数 10 → 3(日常回归;正式 M2 验收 RUNS=10)。
+
+### Fixed
+- probe 探测工具补 `ic` 模式(ItemContainer 容器发现 + 原生查询验证,spike 载体)。
+
+### 回归
+- 金任务 1(计算器,batch 化)3/3;金任务 2(记事本全链含注入)10/10;验收 A/B/C 全绿。
 
 ## [0.1.2] - 2026-09-26
 

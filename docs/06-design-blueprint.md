@@ -60,9 +60,16 @@ status                     # 版本、权限、屏幕信息
 ```
 snapshot [--app X] [--skeleton]     # 可交互元素树 + @eN ref + snapshot_id
 find --role button [--name "确定"]   # 条件查元素(带 ref);与 snapshot 的分工见 §3.6
+                                     # 已物化树 0 命中且可映射精确属性时走 L4 虚拟化容器(§5)
 get @e3 [--property p] [--raw]      # 读元素属性;--raw 全量含 pattern 支持(合并原 inspect)
-list-windows / list-surfaces        # 窗口/虚拟桌面枚举
+                                     # property 白名单含 text(TextPattern 文档正文专用通道,
+                                     # 与 value 分工:Chromium 的 Document Value=URL 会掩盖正文)
+list-windows / list-surfaces        # 窗口/虚拟桌面枚举(list-surfaces 未实现)
+                                     # list-windows 附物理层叠放事实:foreground / topmost /
+                                     # minimized / visible / z_order(0=最顶) / rect / owner_title
 extract @ref [--table]              # 结构化提取(表格→JSON 数组),@ref 指定容器
+                                     # GridPattern 直读优先(source:"grid-pattern",带 row/col
+                                     # 语义),树扁平化兜底(source:"tree-flatten");来源随结果上报
 ```
 
 #### 交互(interact)
@@ -177,9 +184,18 @@ L2  actl commands     机器 schema:全命令+参数的 JSON(agent 自发现入�
 1. `snapshot` 深度优先遍历,仅对**可交互**元素编号 `@e1..@eN`,scoped 到本次 `snapshot_id`;
 2. 每个 ref 同时生成定位链,执行时逐条回退:
    - primary:UIA 路径(AutomationId / ControlType + Name 精确);
+     `id:` 精确匹配走 provider 侧属性条件(UIA FindAll,单次往返;恰一命中直接用,
+     多命中回退全遍历算 ref 候选——候选 ref 编号仅在多命中时需要);
    - fallback-1:Name 模糊匹配 + 相对锚点(父容器定位);
    - fallback-2:role + 同级序数;
-3. 回退结果写入返回(`resolved_by` 字段),全部失效才报 `STALE_REF`;
+   - fallback-3(2026-09-26,L4):**虚拟化容器**——L1/L2 在已物化树中空手且目标可
+     映射为精确属性(name 完整值 / AutomationId)时,询问窗口内 ItemContainer 容器
+     (`FindItemByProperty`,provider 侧命中未物化条目;Explorer 文件列表实证:61 文件
+     目录树内 0 命中 → 精确查询命中末位文件)。**精确匹配,无子串语义**——`name:`
+     进 L4 的值必须是完整名称(如完整文件名);命中元素不在快照树内,无 `@eN` ref,
+     重放走同一 name/id 查询;`Role`/`@eN` 不参与(无属性查询语义);
+3. 回退结果写入返回(`resolved_by` 字段,全集:`primary` | `fuzzy-name` | `role-ordinal` |
+   `anchor` | `ref-replay` | `item-container`),全部失效才报 `STALE_REF`(@eN)/`NOT_FOUND`(语义选择器);
 4. 重定位在同 snapshot_id 内自动进行(agent 无感),跨 snapshot 必须重取——契约简单严格,优于模糊缓存。
 
 ## 6. token 控制
