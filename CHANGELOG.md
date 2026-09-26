@@ -4,7 +4,33 @@
 版本语义遵循 SemVer;0.x 期间破坏性变更在条目中以 **[BC]** 标注。
 
 ## [Unreleased]
-(空;下个开发周期的变更先落此处,发版时移入版本节)
+
+M2 收官批:命令面补齐(wait 谓词/select/toggle)+ skeleton 单链折叠 + P50 结构优化 + 全命令 help 四要素。
+
+### Added
+- **`wait --property` 谓词等待(spec)**:`wait --element <t> --property <prop>=<expected>`
+  (prop ∈ value|name|checked,checked 期望 on/off;`--contains` 子串语义)。谓词隐含存在性——
+  元素未解析继续等;value 走 Value/TextPattern 双通道。WaitPredicate 解析/判定纯函数,
+  3 项单测 + 契约测试(PROTOCOL 路径离线可测);真机:计算器结果断言 `name=56 --contains`
+  与精确 `name=七` 双绿。
+- **`select`/`toggle` 命令**(蓝图 31 补齐 26/31):select = 容器内按选项名
+  SelectionItem 选中(精确→子串兜底,多命中 AMBIGUOUS 附候选);toggle = Toggle 翻转并
+  上报翻转后状态(与 click 的分工:无点击副作用/可读状态)。pattern 调用与 click 既有
+  分发同路径,真机验证留自然场景。
+- **skeleton 单链折叠投影**:非交互保留节点若只剩一个保留子则折叠(倒序单遍收敛,
+  窗口根豁免; 编号不受影响——ref 只编号交互元素且 DFS 序不变)。Edge 实测
+  33%→36% 字节削减——浏览器形态的剩余体量是工具栏交互按钮本体(结构性不可压),
+  据此修订 PRD §4 NFR 为分形态口径(深单链 ≥70% 保留,浏览器/小窗口如实记录)。
+- **全命令 help 四要素补齐(06 §3.5)**:29 个命令的 -h 统一 Usage/参数表/
+  Example/Errors(表驱动 after_help,clap derive variant 级属性不传播故 builder 注入,
+  `build_cli()` 单点);29 命令审计脚本 0 缺失。
+- **P50 结构优化**:瞬时读类命令(status/commands/list-windows/get-clipboard)跳过
+  begin 态写入(250ms 轮询必然错过的瞬时态,却占冷启动路径;终态写保留)。同环境对照:
+  单次 state 写 ≈11ms(慢日值);绝对收益待正常日复测(慢日纪律:绝对值不可跨日)。
+
+### 搁置
+- `list-notifications`:WinRT(Windows.UI.Notifications)依赖超出纯 Win32 边界且
+  真实通知验收难造——裁定移出 M2 命令面收官,登记 M3 候选(蓝图 FR4 留位)。
 
 ## [0.1.3] - 2026-09-27
 

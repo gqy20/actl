@@ -95,8 +95,9 @@ list-notifications              # 系统通知读取
 
 #### 可靠性(reliability,RPA 借鉴)
 ```
-wait --element @e3 --predicate actionable [--timeout 5s]
-wait --window "保存" | --gone @e3 | --property @e3 value="OK"
+wait --element @e3 [--timeout 5000]                # 等元素可解析(存在性)
+wait --element @e3 --property value="OK" [--contains]   # 谓词等待:value/name/checked
+wait --window "保存" | --gone @e3                        # 等窗口出现 | 等元素消失
 verify --exists @e3 / --value @e3 "x" / --checked @e8 / --order ...
 batch --json '<commands>'   # 单进程内顺序执行,共享 snapshot;每步结果与耗时进 steps[]
                              # (i/cmd/ok/duration_ms,失败步附 error),首错即停时
@@ -114,7 +115,7 @@ L2  actl commands     机器 schema:全命令+参数的 JSON(agent 自发现入�
 ```
 
 - **协议例外(ADR-002 修订条款)**:数据命令 stdout = envelope;`--help/-h/--version` 为元命令,按 POSIX 惯例输出人类文本到 stdout;`commands` 为 agent 服务,输出 envelope 包裹的 schema。由此 stdout 形成不变量:**要么 envelope JSON,要么 help/version 文本,无第三种形态**。
-- **三处输出同源生成**:clap doc comment 一处维护,L0/L1/L2 三处渲染,禁止手写 help 字符串。
+- **三处输出同源生成**:clap doc comment 一处维护,L0/L1/L2 三处渲染,禁止手写 help 字符串;四要素的 Example/Errors 经 after_help 表注入(derive variant 级属性不传播,build_cli() 单点注入),表与 doc comment 同为 help 单一事实来源。
 - **help 文本英文**(docs 保持中文):LLM 对英文 CLI 语义理解与 token 效率最优,与命令名同语言。
 - **单命令 help 四要素**(对齐 §3.1 可理解性验收):一行 USAGE / 参数表 / 一条可直接复制的 EXAMPLE / 该命令特有错误码。
 - **未知子命令**:stderr 人类可读错误 + exit 2(PROTOCOL)。
