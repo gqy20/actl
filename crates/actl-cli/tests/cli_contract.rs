@@ -218,3 +218,17 @@ fn batch_reports_no_windows_created_on_headless_run() {
                 .is_some_and(|a| a.is_empty())
     );
 }
+
+#[test]
+fn batch_steps_have_no_blocked_by_when_foreground_is_baseline() {
+    // 正常路径:前台(终端)在批前基线内 → 步条目不带 blocked_by
+    let (code, stdout) = actl(&["batch", "--json", r#"["status"]"#]);
+    assert_eq!(code, 0);
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
+    let step = &v["data"]["steps"][0];
+    assert_eq!(step["ok"], true);
+    assert!(
+        step.get("blocked_by").is_none(),
+        "no spurious popup warning"
+    );
+}

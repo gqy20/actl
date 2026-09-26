@@ -770,3 +770,13 @@ pub fn focus_window_by(r: WindowRef<'_>) -> Result<String, CtlError> {
     })?;
     Ok(win.get_name().unwrap_or_default())
 }
+
+/// 轻量前台窗口查询(物理层,零 UIA 往返):标题 + 原生 HWND。
+/// batch 步间弹窗闸门用——每步一次,必须便宜。
+pub fn foreground_window() -> Option<(String, isize)> {
+    let hwnd = unsafe { windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow() };
+    if hwnd.0.is_null() {
+        return None;
+    }
+    window_title_of(hwnd).map(|t| (t, hwnd.0 as isize))
+}

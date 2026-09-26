@@ -6,6 +6,15 @@
 ## [Unreleased]
 
 ### Added
+- **batch 步间弹窗闸门(blocked_by,warning 不阻断)**:每步前采样前台窗口,若它既不在
+  批前基线、也不匹配本批任何 --app 目标 → 该步 steps 条目附 `blocked_by:{title,hwnd}`;
+  失败时刻补采样一次(launch 竞态/慢弹窗在步执行中才成形)。语义 = **前台劫持检测**
+  (更新提示/对话框抢焦点——注入类步骤的真正威胁);不抢前台的新窗由 windows_created
+  兜底,两机制分工。真机实证:批执行中弹 Updater 对话框抢焦点 → 失败步 evidence 直接
+  指出 `"blocked_by":{"title":"Updater"}`;
+- **弹窗处理协议文档化**(skills/actl SKILL.md):三档分类(宿主弹窗 owner_title 判定/
+  消息框按按钮名点/意外弹窗读 blocked_by 处理后重试)+ windows_created 收尾清理协议
+  (close-window --pid/--hwnd,禁 taskkill)——agent 可直接执行。
 - **batch 窗口差集上报(spec,加法)**:进入时取窗口 hwnd 基线,结束时差集 = 本轮新开窗口,
   非空时 data 与失败 evidence 携带 `windows_created: [{title,pid,hwnd}]`——生命周期仍归
   编排层(原子 CLI 不代管、不悄悄关窗),清理地基闭环(list-windows 发现 → close-window

@@ -511,7 +511,7 @@ fn after_help_for(name: &str) -> Option<&'static str> {
             "Example:\n  actl wait --element name:完成 --property value=OK --timeout 8000 --app 应用\nPredicates: value=<expected> | name=<substr> | checked=on|off; --contains for substring; existence implied.\nErrors: TIMEOUT predicate unmet or element absent | PROTOCOL bad predicate | ASSERTION_FAILED (--window)"
         }
         "batch" => {
-            "Example:\n  actl batch --json '[\"focus-window Notepad\",\"press ctrl+s --app Notepad\"]'\nStops on first error; steps[] carries per-step ok/duration (partial steps ride the error evidence); windows_created reports windows opened during the run (cleanup: close-window --pid/--hwnd).\nErrors: PROTOCOL bad JSON/nesting | the first failing step's code is propagated"
+            "Example:\n  actl batch --json '[\"focus-window Notepad\",\"press ctrl+s --app Notepad\"]'\nStops on first error; steps[] carries per-step ok/duration (partial steps ride the error evidence); windows_created reports windows opened during the run (cleanup: close-window --pid/--hwnd); steps may carry blocked_by when an unexpected window holds the foreground.\nErrors: PROTOCOL bad JSON/nesting | the first failing step's code is propagated"
         }
         _ => return None,
     })

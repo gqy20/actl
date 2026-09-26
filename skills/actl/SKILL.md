@@ -47,6 +47,24 @@ actl verify --value <target> "<期望>" --app <app> # 确认:立即断言
 目标语法:`@eN`(重放,须 --app)· `name:<子串>` · `id:<AutomationId>` · `role:<Type>` ·
 `role:<Type>#<序数>`;多候选消歧:`--near <锚点>`。
 
+## 弹窗处理协议
+
+弹窗分三类,处理方式不同;判定入口是 `list-windows`(看 `foreground`/`owner_title`/`topmost`):
+
+1. **宿主弹窗(另存为/打开等)**:owner_title 非空 = 挂靠某窗口的对话框。直接
+   `snapshot --app <弹窗标题>` → 定位控件操作(文件名走 `set-value`);用
+   `press ctrl+s --app X --expect window:<弹窗标题>` 断言其出现。
+2. **消息框(确认/警告)**:普通窗口 + 按钮元素,`click name:确定`(或 是/否/取消)
+   即可;中文按钮名可直接定位。
+3. **意外弹窗(更新提示/浮窗)**:batch 的 steps[] 会带 `blocked_by`(前台窗口既
+   不在批前基线、也不匹配本批任何 --app)——这就是元凶。处理:读 blocked_by 的
+   title → snapshot 它 → 关闭/点击 → 重试原步骤。**不要盲目重试**:type 被抢焦点
+   会停在批边界并如实上报 delivered/stopped_early,先处理弹窗再续。
+
+收尾:batch 结束看 `windows_created`(data 或失败 evidence)——本轮新开的窗口清单,
+用 `close-window --pid/--hwnd` 逐一优雅关闭(**禁 taskkill**:记事本/计算器等会话
+恢复型应用强杀会复活一堆窗口)。
+
 ## 更多
 
 错误码与恢复动作全表:[references/error-codes.md](references/error-codes.md)

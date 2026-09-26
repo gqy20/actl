@@ -103,7 +103,8 @@ batch --json '<commands>'   # 单进程内顺序执行,共享 snapshot;每步结
                              # (i/cmd/ok/duration_ms,失败步附 error),首错即停时
                              # 已执行步随错误 evidence 带出(部分结果不丢失);
                              # 本轮新开窗口差集上报 windows_created(title/pid/hwnd,
-                             # 清理地基;生命周期归编排层,CLI 不代管)
+                             # 清理地基;生命周期归编排层,CLI 不代管);
+                             # 步前弹窗闸门:前台非基线且不匹配本批 --app → steps 附 blocked_by(warning)
 ```
 
 ### 3.5 帮助系统规范(`-h` 的设计与层级)

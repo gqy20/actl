@@ -300,6 +300,18 @@ pub(crate) fn batch_cmd(json_str: &str) -> Result<CommandOutput, CtlError> {
         .iter()
         .filter_map(|w| w.hwnd)
         .collect();
+    // 弹窗闸门的合法目标集:batch 自身声明的 --app 值(launch-then-interact 模式里,
+    // 自启窗口会成为前台,不该误报)
+    let app_patterns: Vec<String> = cmds
+        .iter()
+        .filter_map(|l| {
+            let toks: Vec<&str> = l.split_whitespace().collect();
+            toks.iter().position(|t| *t == "--app").and_then(|p| {
+                toks.get(p + 1)
+                    .map(|v| v.trim_matches(|c| c == '"' || c == '\'').to_string())
+            })
+        })
+        .collect();
     for (i, line) in cmds.iter().enumerate() {
         // 步间双闸门:停止标志(用户热键)优先;随后步级状态落盘(阶段信号)
         if signals.stop_requested() {
@@ -308,6 +320,23 @@ pub(crate) fn batch_cmd(json_str: &str) -> Result<CommandOutput, CtlError> {
                 format!("batch stopped by user at step {i} (after {executed} ok)"),
             ));
         }
+
+        // 意外弹窗闸门(warning 不阻断):前台窗口若既不在基线、也不匹配本批任何
+        // --app 目标,记入该步 blocked_by——弹窗可能是良性的,裁决权归编排层;
+        // 步失败时它随 evidence 直接指出元凶
+        let fg_blocked = || {
+            actl_uia::foreground_window().and_then(|(title, hwnd)| {
+                if baseline.contains(&hwnd)
+                    || app_patterns.iter().any(|p| title.contains(p.as_str()))
+                {
+                    None
+                } else {
+                    Some(json!({ "title": title, "hwnd": hwnd }))
+                }
+            })
+        };
+        // 步前采样一次(launch 后自启窗未成形的竞态由失败时刻补采样兜住)
+        let mut blocked_by = fg_blocked();
         signals.write_state(&actl_core::state::SessionState::now(
             std::process::id(),
             "batch",
@@ -327,17 +356,30 @@ pub(crate) fn batch_cmd(json_str: &str) -> Result<CommandOutput, CtlError> {
         let step_started = Instant::now();
         match dispatch(&sub.command) {
             Ok(_) => {
-                steps.push(json!({
+                let mut entry = json!({
                     "i": i, "cmd": line, "ok": true,
                     "duration_ms": step_started.elapsed().as_millis() as u64,
-                }));
+                });
+                if let Some(b) = &blocked_by {
+                    entry["blocked_by"] = b.clone();
+                }
+                steps.push(entry);
             }
             Err(err) => {
-                steps.push(json!({
+                // 失败时刻补采样:launch 竞态/慢弹窗在步执行中才成形,
+                // 此刻仍占据前台者即元凶候选
+                if blocked_by.is_none() {
+                    blocked_by = fg_blocked();
+                }
+                let mut entry = json!({
                     "i": i, "cmd": line, "ok": false,
                     "duration_ms": step_started.elapsed().as_millis() as u64,
                     "error": { "code": err.code, "message": err.message },
-                }));
+                });
+                if let Some(b) = &blocked_by {
+                    entry["blocked_by"] = b.clone();
+                }
+                steps.push(entry);
                 return Err(CtlError::with_evidence(
                     err.code,
                     format!(
