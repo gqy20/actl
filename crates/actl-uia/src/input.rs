@@ -25,7 +25,15 @@ impl InputLock {
     /// 停止标志优先于一切:用户按了紧急热键后,所有物理注入在此被拒
     /// (ABORTED)——显示信号协议的执行侧闸门(docs/11 §10.3)。
     pub fn acquire(timeout_ms: u32) -> Result<Self, CtlError> {
-        let paths = actl_core::state::SignalPaths::default();
+        Self::acquire_at(&actl_core::state::SignalPaths::default(), timeout_ms)
+    }
+
+    /// 路径可注入版(测试隔离:真实 %LOCALAPPDATA% 里可能残留用户按下
+    /// 紧急热键留下的停止标志,单测不得依赖全局状态)。
+    pub fn acquire_at(
+        paths: &actl_core::state::SignalPaths,
+        timeout_ms: u32,
+    ) -> Result<Self, CtlError> {
         if paths.stop_requested() {
             return Err(CtlError::new(
                 ErrorCode::Aborted,
@@ -102,7 +110,11 @@ mod tests {
 
     #[test]
     fn lock_is_mutual_across_threads() {
-        let a = InputLock::acquire(0).expect("first acquire");
+        // 隔离:临时目录,避免读到用户真实停止标志
+        let paths = actl_core::state::SignalPaths::at(
+            std::env::temp_dir().join(format!("actl-lock-test-{}", std::process::id())),
+        );
+        let a = InputLock::acquire_at(&paths, 0).expect("first acquire");
         // 互斥体所有权在线程:同线程重入会成功,必须跨线程验证互斥;
         // 锁本身留在原线程,跨线程只把错误码传回来
         let other = std::thread::spawn(|| match InputLock::acquire(0) {

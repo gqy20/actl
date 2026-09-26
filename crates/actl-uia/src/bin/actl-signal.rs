@@ -37,7 +37,19 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use windows::core::w;
 
 const WIDTH: i32 = 420;
-const HEIGHT: i32 = 80;
+const HEIGHT: i32 = 96;
+
+/// DPI 缩放(200% 屏上未感知的进程会被系统位图拉伸 → 字全糊,实测坑)。
+/// main 里声明 Per-Monitor V2 后取系统 DPI,一切尺寸按此换算物理像素。
+fn dpi_scale() -> i32 {
+    static DPI: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
+    let dpi = *DPI.get_or_init(|| unsafe { windows::Win32::UI::HiDpi::GetDpiForSystem() });
+    dpi as i32 / 96
+}
+
+fn scale(v: i32) -> i32 {
+    v * dpi_scale()
+}
 const TIMER_ID: usize = 1;
 const TIMER_MS: u32 = 250;
 const HOTKEY_ID: i32 = 1;
@@ -171,8 +183,8 @@ unsafe fn font(height: i32) -> windows::Win32::Graphics::Gdi::HFONT {
     static MID: std::sync::OnceLock<isize> = std::sync::OnceLock::new();
     static DIM: std::sync::OnceLock<isize> = std::sync::OnceLock::new();
     use windows::Win32::Graphics::Gdi::{
-        CLIP_DEFAULT_PRECIS, CreateFontW, DEFAULT_CHARSET, FIXED_PITCH, FW_NORMAL,
-        OUT_DEFAULT_PRECIS, PROOF_QUALITY,
+        CLEARTYPE_QUALITY, CLIP_DEFAULT_PRECIS, CreateFontW, DEFAULT_CHARSET, FIXED_PITCH,
+        FW_NORMAL, OUT_DEFAULT_PRECIS,
     };
     let slot = match height {
         17 => &BIG,
@@ -181,7 +193,7 @@ unsafe fn font(height: i32) -> windows::Win32::Graphics::Gdi::HFONT {
     };
     let h = *slot.get_or_init(|| {
         CreateFontW(
-            -height, // 字符高度(负值=char height)
+            -scale(height), // 逻辑高度 → 物理像素(负值=char height)
             0,
             0,
             0,
@@ -192,7 +204,7 @@ unsafe fn font(height: i32) -> windows::Win32::Graphics::Gdi::HFONT {
             DEFAULT_CHARSET,
             OUT_DEFAULT_PRECIS,
             CLIP_DEFAULT_PRECIS,
-            PROOF_QUALITY,
+            CLEARTYPE_QUALITY,
             FIXED_PITCH.0 as u32,
             w!("Source Code Pro"),
         )
@@ -240,7 +252,7 @@ unsafe fn draw(hwnd: HWND, snap: &Snapshot) {
     );
 
     let dt = DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS | DT_VCENTER;
-    let left = 18;
+    let left = scale(18);
     let line = |r: &mut RECT, s: &str, h: i32, color: u32| {
         let old_f = SelectObject(hdc, HGDIOBJ(font(h).0));
         let old_c = SetTextColor(hdc, COLORREF(color));
@@ -250,23 +262,25 @@ unsafe fn draw(hwnd: HWND, snap: &Snapshot) {
         SetTextColor(hdc, old_c);
         SelectObject(hdc, old_f);
     };
+    // 行高与间隙全部按 DPI 缩放:字体是缩放的,矩形不缩放就会被挤压
+    // (实测:200% 屏上 34px 字塞进 24px 框 → "挤到一起")
     let mut r1 = RECT {
         left,
-        top: 8,
-        right: rc.right - 12,
-        bottom: 32,
+        top: scale(12),
+        right: rc.right - scale(12),
+        bottom: scale(38),
     };
     let mut r2 = RECT {
         left,
-        top: 34,
-        right: rc.right - 12,
-        bottom: 56,
+        top: scale(44),
+        right: rc.right - scale(12),
+        bottom: scale(64),
     };
     let mut r3 = RECT {
         left,
-        top: 58,
-        right: rc.right - 12,
-        bottom: 78,
+        top: scale(72),
+        right: rc.right - scale(12),
+        bottom: scale(88),
     };
     line(&mut r1, &snap.line1, 17, 0x00E8_E8E8);
     line(&mut r2, &snap.line2, 13, state_fg);
@@ -353,6 +367,11 @@ unsafe extern "system" fn wnd_proc(
 
 fn main() {
     unsafe {
+        // 必须第一个调用:声明 Per-Monitor V2 感知,否则 200% 缩放屏上
+        // 整窗被 DWM 位图拉伸,Source Code Pro 全糊(实测)
+        let _ = windows::Win32::UI::HiDpi::SetProcessDpiAwarenessContext(
+            windows::Win32::UI::HiDpi::DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
+        );
         let hinstance = GetModuleHandleW(None).expect("hinstance");
         let class_name = w!("actl_signal_window");
         let wc = WNDCLASSW {
@@ -376,8 +395,8 @@ fn main() {
             Some(&mut work as *mut RECT as *mut _),
             SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
         );
-        let x = work.right - WIDTH - 16;
-        let y = work.top + 16;
+        let x = work.right - scale(WIDTH) - scale(12);
+        let y = work.top + scale(12);
 
         let ex = WINDOW_EX_STYLE(
             WS_EX_TOPMOST.0 | WS_EX_NOACTIVATE.0 | WS_EX_TOOLWINDOW.0 | WS_EX_LAYERED.0,
@@ -389,8 +408,8 @@ fn main() {
             WINDOW_STYLE(WS_POPUP.0 | WS_VISIBLE.0),
             x,
             y,
-            WIDTH,
-            HEIGHT,
+            scale(WIDTH),
+            scale(HEIGHT),
             None,
             None,
             Some(hinstance.into()),
