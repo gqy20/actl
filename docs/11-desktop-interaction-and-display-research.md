@@ -2,7 +2,7 @@
 
 调研日期：2026-09-26 · 状态：后期产品研究与交互提案，未实现、未做用户实测
 
-关联：[现行 PRD](PRD.md) · [现行命令协议](06-design-blueprint.md) · [Agent/Jev 分工](08-agent-cli-jev-design-proposal.md) · [输入占用边界](09-input-backends-review.md) · [Quicker 需求研究](10-quicker-demand-research.md)
+关联：[现行 PRD](PRD.md) · [现行命令协议](06-design-blueprint.md) · [Agent/Jev 分工](08-agent-cli-jev-design-proposal.md) · [输入占用边界](09-input-backends-review.md) · [Quicker 需求研究](10-quicker-demand-research.md) · [实时状态维护](13-realtime-state-maintenance.md)
 
 > 本文回答：用户如何观察桌面任务、何时可以继续使用电脑、怎样暂停和介入，以及如何放心地让任务继续。本文不修改现行命令或授权语义。独立显示程序、会话协调器、控制通道、任务记录和执行隔离均属于后期提案；其中涉及 PRD §1.3 的常驻程序、热键或范围扩展，须先另行评审。这里研究的任务显示层不承担可视化编排、动作市场或第二套聊天入口。
 

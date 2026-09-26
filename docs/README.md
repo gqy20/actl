@@ -45,3 +45,4 @@
 | [10-quicker-demand-research.md](10-quicker-demand-research.md) | Quicker 公开动作需求抽样、执行路线和 actl 场景优先级 |
 | [11-desktop-interaction-and-display-research.md](11-desktop-interaction-and-display-research.md) | 后期显示层、分屏与隔离、暂停接管、人工介入、状态协议及用户研究方案 |
 | [12-codex-computer-use-comparison.md](12-codex-computer-use-comparison.md) | Codex Computer Use(26.924)本机实证、sky window2 API × actl 命令面对照与生态定位 |
+| [13-realtime-state-maintenance.md](13-realtime-state-maintenance.md) | 窗口/应用实时状态:三层机制、轮询 vs 事件生态实践、事故清单与 wait/serve 映射 |

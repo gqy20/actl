@@ -24,7 +24,7 @@ Phase 3  T+3月起,长期     生产级打磨      v1.0    (协议冻结,生态�
 > (doc 09 §6.2:进程间执行锁、长注入分批+批间焦点复核、焦点被抢即停并上报
 > 已执行部分;`input_effects` 字段进 envelope)——四次并发真人输入损坏注入的
 > 活体实证(docs/spike-findings);②激活感知目标解析(UWP 后台挂起时单命令
-> stall ~2s,操作前探测唤醒);③`--physical` 规范裁定(06 蓝图)+物理鼠标链
+> stall ~2s,操作前探测唤醒;cloak/挂起判定依据 [13 §1.1](13-realtime-state-maintenance.md));③`--physical` 规范裁定(06 蓝图)+物理鼠标链
 > (doc 09 §6 七步:right-click/drag/hover/scroll 的共同前置);④小项:修饰键
 > 只清自己按下的、Toggle/ExpandCollapse/ScrollItem 分发、`snapshot_id` ref
 > 版本化校验(后移第二批:依赖快照持久化/会话状态设计,与 fallback 定位链同做)。
@@ -37,6 +37,7 @@ Phase 3  T+3月起,长期     生产级打磨      v1.0    (协议冻结,生态�
 
 **范围(in)**:
 - 命令补全至 45+:right-click/double-click/select/toggle/scroll/drag/hover、key-down、resize-window、notifications、`verify` 族、`extract`、`wait` 完整谓词语法
+- `wait`/`verify` 实现约定([13 §4](13-realtime-state-maintenance.md)):轮询制,默认值取生态共识——间隔 ~100ms、窗口/元素级超时 3–5s、text 类指数退避 200ms→1s、动作后 settle ~500ms;窗口状态判定走物理层快照组合(GetGUIThreadInfo/DWMWA_CLOAKED 等,§4.3),不引入事件订阅
 - **fallback 定位链**(primary UIA 路径 → 名称模糊+锚点 → role+序数,`resolved_by` 上报)——RPA 借鉴核心([03 §3](03-rpa-vs-quicker.md))
 - skeleton 投影(token 削减 ≥70%);evidence(失败附局部树/截图引用);`click --expect`
 - 集成测试 fixtures(计算器/记事本/ms-settings);envelope 契约测试
@@ -53,7 +54,7 @@ Phase 3  T+3月起,长期     生产级打磨      v1.0    (协议冻结,生态�
 
 候选方向(按社区反馈排序,不预先承诺):
 - 长尾 workaround 库(应用特化 pack,参考 desktop-cli 的 application packs 思路)
-- `serve` 常驻模式(性能优化,协议不变)
+- `serve` 常驻模式(性能优化,协议不变);可选事件加速:UIA/WinEvent 订阅仅作 wait 触发器(uiautomation crate `event` feature,零新增依赖),前置条件与防御清单见 [13 §4.4](13-realtime-state-maintenance.md)——不维护常驻树、不空闲全局订阅
 - 录制器 → agent 可复现"操作轨迹"(OpenAdapt 思路)
 - Linux(AT-SPI2)/ macOS 后端(协议层已平台无关)
 - MCP 薄壳(独立 crate,不进核心)
