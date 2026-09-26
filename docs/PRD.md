@@ -83,7 +83,7 @@
 - 冷启动 P95 < 80ms、P50 < 50ms(连续 100 次;实测 P50 40.2 / P95 53.9);
 - 同任务较"截图视觉方案"token 消耗低 ≥ 80%(抽样对比)。
 
-**v1.0 北极星**:外部 agent 用户靠 README 示例在 15 分钟内完成首个真实桌面自动化任务。
+**v0.3 北极星**:外部 agent 用户靠 README 示例在 15 分钟内完成首个真实桌面自动化任务。
 
 ## 7. 风险与对策
 
@@ -97,4 +97,4 @@
 
 ## 8. 发布标准
 
-与 [ROADMAP](ROADMAP.md) 各 Phase 退出标准一致;版本语义:0.x 破坏性演进、1.0 = 协议冻结(envelope version 字段与 CLI semver 解耦)。
+与 [ROADMAP](ROADMAP.md) 各 Phase 退出标准一致;版本语义:0.x 破坏性演进、0.3 = 协议冻结(M3;envelope version 字段与 CLI semver 解耦),1.0 保留给协议冻结后的正式稳定版。
