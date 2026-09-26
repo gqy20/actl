@@ -71,3 +71,15 @@ fn version_is_the_documented_stdout_exception() {
         "--version must stay human text, not JSON"
     );
 }
+
+#[test]
+fn snapshot_missing_window_emits_not_found_envelope() {
+    let (code, stdout, _) = actl(&["snapshot", "--app", "definitely-no-such-window-xyz"]);
+    assert_eq!(code, 1);
+    let v = parse_envelope(&stdout);
+    assert_eq!(v["ok"], false);
+    assert_eq!(v["command"], "snapshot");
+    assert_eq!(v["error"]["code"], "NOT_FOUND");
+    assert!(v["error"]["hint"].is_string());
+    assert!(v.get("snapshot_id").is_none());
+}

@@ -14,6 +14,7 @@ repository = "TBD"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
+uiautomation = "0.25.1"
 
 # deny(而非 forbid)以保留 actl-uia 的唯一豁免点(AGENTS.md §5.5)
 [workspace.lints.rust]

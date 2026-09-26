@@ -6,7 +6,7 @@
 
 use std::time::Instant;
 
-use actl_core::{CtlError, Envelope, ErrorEnvelope};
+use actl_core::{CtlError, Envelope, ErrorEnvelope, SnapshotBuilder};
 use clap::{CommandFactory, Parser, Subcommand};
 use serde_json::{Value, json};
 
@@ -27,6 +27,30 @@ enum Command {
     Commands,
     /// Report version, protocol version and platform info
     Status,
+    /// Capture the interactive element tree of a window as refs (@e1..)
+    Snapshot {
+        /// Target window by title substring (default: focused window)
+        #[arg(long)]
+        app: Option<String>,
+        /// Keep only interactive elements and their ancestor chain (token saver)
+        #[arg(long)]
+        skeleton: bool,
+    },
+}
+
+/// 命令执行产物:data 进 envelope,`snapshot_id` 存在时附加到顶层(06 §4)。
+struct CommandOutput {
+    data: Value,
+    snapshot_id: Option<String>,
+}
+
+impl From<Value> for CommandOutput {
+    fn from(data: Value) -> Self {
+        Self {
+            data,
+            snapshot_id: None,
+        }
+    }
 }
 
 fn main() {
@@ -35,14 +59,18 @@ fn main() {
     let started = Instant::now();
 
     let result = match cli.command {
-        Command::Commands => commands(),
-        Command::Status => status(),
+        Command::Commands => commands().map(Into::into),
+        Command::Status => status().map(Into::into),
+        Command::Snapshot { app, skeleton } => snapshot(app.as_deref(), skeleton),
     };
 
     let duration_ms = started.elapsed().as_millis() as u64;
     match result {
-        Ok(data) => {
-            let env = Envelope::success(command_name, Some(data), duration_ms);
+        Ok(out) => {
+            let mut env = Envelope::success(command_name, Some(out.data), duration_ms);
+            if let Some(id) = out.snapshot_id {
+                env = env.with_snapshot_id(id);
+            }
             println!(
                 "{}",
                 serde_json::to_string(&env).expect("envelope serializes")
@@ -63,6 +91,7 @@ fn command_name(cmd: &Command) -> &'static str {
     match cmd {
         Command::Commands => "commands",
         Command::Status => "status",
+        Command::Snapshot { .. } => "snapshot",
     }
 }
 
@@ -100,4 +129,28 @@ fn status() -> Result<Value, CtlError> {
         "os": std::env::consts::OS,
         "arch": std::env::consts::ARCH,
     }))
+}
+
+fn snapshot(app: Option<&str>, skeleton: bool) -> Result<CommandOutput, CtlError> {
+    let cap = actl_uia::capture(app)?;
+    let mut builder = SnapshotBuilder::new(actl_uia::MAX_ELEMENTS + 1);
+    for node in cap.nodes {
+        if !builder.push(node) {
+            break;
+        }
+    }
+    let out = builder.finish(skeleton);
+    let data = json!({
+        "window": {
+            "title": cap.window.title,
+            "class": cap.window.class,
+            "pid": cap.window.pid,
+        },
+        "truncated": cap.truncated || out.truncated,
+        "elements": serde_json::to_value(&out.elements).expect("elements serialize"),
+    });
+    Ok(CommandOutput {
+        data,
+        snapshot_id: Some(out.snapshot_id),
+    })
 }

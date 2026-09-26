@@ -1,15 +1,15 @@
 [package]
 name = "actl-uia"
-description = "Windows UIA backend: the ONLY crate allowed to touch COM/unsafe (scaffold)"
+description = "Windows UIA backend: the ONLY crate allowed to touch COM/unsafe"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
-# M1 起加入:windows = { workspace = true, features = [...] }(版本统一由根 Cargo.toml 管理,ADR-003)
+[dependencies]
+actl-core = { path = "../actl-core" }
+# M0 评估通过,升为正式依赖(docs/spike-findings.md);版本统一由根 Cargo.toml 管理(ADR-003)
+uiautomation.workspace = true
 
 [lints]
 workspace = true
-
-[dev-dependencies]
-uiautomation = "0.25.1"

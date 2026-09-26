@@ -5,6 +5,13 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod snapshot;
+
+pub use snapshot::{
+    ElementOut, INTERACTIVE_ROLES, SnapshotBuilder, SnapshotOutput, UiNode, is_interactive_role,
+    new_snapshot_id,
+};
+
 /// envelope 协议版本,与 CLI semver 解耦(ADR-006)。
 pub const ENVELOPE_VERSION: &str = "1";
 

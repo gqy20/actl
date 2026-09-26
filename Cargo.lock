@@ -7,6 +7,7 @@ name = "actl-cli"
 version = "0.1.0"
 dependencies = [
  "actl-core",
+ "actl-uia",
  "clap",
  "serde_json",
 ]
@@ -28,6 +29,7 @@ version = "0.1.0"
 name = "actl-uia"
 version = "0.1.0"
 dependencies = [
+ "actl-core",
  "uiautomation",
 ]
 
