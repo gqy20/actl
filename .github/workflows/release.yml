@@ -110,9 +110,9 @@ jobs:
               echo
               echo "| 文件 | 说明 |"
               echo "|------|------|"
-              echo "| `actl_${GITHUB_REF_NAME}_windows_amd64.exe` | Windows x64 主程序,下载即用 |"
-              echo "| `actl_${GITHUB_REF_NAME}_windows_amd64.zip` | 完整包(actl + actl-signal 状态条 + README + LICENSE) |"
-              echo "| `checksums.txt` | SHA-256 校验 |"
+              echo "| \`actl_${GITHUB_REF_NAME}_windows_amd64.exe\` | Windows x64 主程序,下载即用 |"
+              echo "| \`actl_${GITHUB_REF_NAME}_windows_amd64.zip\` | 完整包(actl + actl-signal 状态条 + README + LICENSE) |"
+              echo "| \`checksums.txt\` | SHA-256 校验 |"
               echo
               cat changelog_section.md
             } > release_notes.md
