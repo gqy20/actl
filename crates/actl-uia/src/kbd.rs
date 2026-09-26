@@ -274,7 +274,8 @@ pub fn send_key_spec(spec: &KeySpec) -> Result<(), CtlError> {
 /// click_physical 同样调用:用户按住 ctrl 时物理点击会被劫持成 ctrl+click。
 /// 用户按住 ctrl 时注入 's' 会变成 ctrl+s 被劫持成快捷键——宁可拒绝。
 pub fn wait_modifiers_clear() -> Result<(), CtlError> {
-    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(1500);
+    let deadline = std::time::Instant::now()
+        + std::time::Duration::from_millis(actl_core::timing::Timing::load().modifier_wait_ms);
     loop {
         let held = held_modifiers();
         if held.is_empty() {
@@ -291,7 +292,9 @@ pub fn wait_modifiers_clear() -> Result<(), CtlError> {
                 ),
             ));
         }
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        std::thread::sleep(std::time::Duration::from_millis(
+            actl_core::timing::Timing::load().poll_ms,
+        ));
     }
 }
 

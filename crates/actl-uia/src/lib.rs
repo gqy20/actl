@@ -173,7 +173,7 @@ fn ensure_window_responsive(elem: &UIElement) -> u32 {
         )
         .0 != 0
     };
-    if pumps(60) {
+    if pumps(timing().probe_ms) {
         return 0;
     }
     let started = std::time::Instant::now();
@@ -181,8 +181,8 @@ fn ensure_window_responsive(elem: &UIElement) -> u32 {
         // 异步投递不等待应用;激活请求本身是 UWP 恢复的最常见触发器
         let _ = ShowWindowAsync(hwnd, SW_SHOW);
     }
-    while started.elapsed() < std::time::Duration::from_millis(1600) {
-        std::thread::sleep(std::time::Duration::from_millis(100));
+    while started.elapsed() < std::time::Duration::from_millis(timing().wake_bound_ms) {
+        std::thread::sleep(std::time::Duration::from_millis(timing().poll_ms));
         if pumps(60) {
             break;
         }
@@ -379,6 +379,10 @@ fn to_node(elem: &UIElement, depth: u32, parent: Option<usize>) -> UiNode {
         automation_id: elem.get_automation_id().ok().filter(|a| !a.is_empty()),
         parent,
     }
+}
+
+fn timing() -> &'static actl_core::timing::Timing {
+    actl_core::timing::Timing::load()
 }
 
 fn internal(e: impl std::fmt::Debug) -> CtlError {
@@ -843,7 +847,7 @@ pub fn type_text(
     })?;
     // 护栏与 press 相同:元素置焦后仍要物理前台核对,文本才允许注入
     if let Some(pattern) = app {
-        std::thread::sleep(std::time::Duration::from_millis(150));
+        std::thread::sleep(std::time::Duration::from_millis(timing().type_focus_ms));
         let fg = kbd::foreground_title().unwrap_or_default();
         if !fg.contains(pattern) {
             return Err(CtlError::new(
@@ -857,7 +861,7 @@ pub fn type_text(
         }
     }
     // 输入占用锁(doc 09 §6.2):多 actl 实例互斥;持锁覆盖整个注入动作段
-    let _lock = input::InputLock::acquire(input::LOCK_TIMEOUT_MS)?;
+    let _lock = input::InputLock::acquire(timing().lock_wait_ms)?;
     let total = text.chars().count();
     let outcome = |delivered: usize, stopped_early: bool| TypeOutcome {
         located: (&loc).into(),
@@ -881,7 +885,7 @@ pub fn type_text(
         let pattern = app.map(str::to_string);
         let delivered = input::send_in_segments(
             &chars,
-            TYPE_SEGMENT_CHARS,
+            timing().segment_chars,
             |seg| {
                 kbd::send_key_spec(&KeySpec {
                     modifiers: Vec::new(),
@@ -912,10 +916,6 @@ pub struct TypeOutcome {
     pub stopped_early: bool,
 }
 
-/// 键盘逐字通道的分批大小:批间有一次物理前台复核,批越小反应越快、
-/// 事件越碎;32 字符≈一次短句,实测取中。
-const TYPE_SEGMENT_CHARS: usize = 32;
-
 /// press:可选先置前台(--app)。实测链路(docs/spike-findings.md):窗口级 SetFocus
 /// 只激活窗口、不建立键盘焦点(键会被丢);必须再对窗口内内容元素做**元素级** SetFocus。
 /// 启发式:窗口内首个 Document/Edit;找不到(如纯按钮面板)退化为仅窗口前置。
@@ -926,7 +926,7 @@ const TYPE_SEGMENT_CHARS: usize = 32;
 pub fn press_keys(spec: &KeySpec, app: Option<&str>) -> Result<Option<String>, CtlError> {
     let focused = prepare_keyboard(app)?;
     // 输入占用锁(doc 09 §6.2):护栏之后、注入之前取得,覆盖整个按键序列
-    let _lock = input::InputLock::acquire(input::LOCK_TIMEOUT_MS)?;
+    let _lock = input::InputLock::acquire(timing().lock_wait_ms)?;
     kbd::send_key_spec(spec)?;
     Ok(focused)
 }
@@ -934,7 +934,7 @@ pub fn press_keys(spec: &KeySpec, app: Option<&str>) -> Result<Option<String>, C
 /// key-down/key-up:与 press 相同的护栏链,但只发半边事件(见 kbd::send_key_partial)。
 pub fn press_half(spec: &KeySpec, app: Option<&str>) -> Result<Option<String>, CtlError> {
     let focused = prepare_keyboard(app)?;
-    let _lock = input::InputLock::acquire(input::LOCK_TIMEOUT_MS)?;
+    let _lock = input::InputLock::acquire(timing().lock_wait_ms)?;
     // 半事件方向由调用方决定;此函数不持锁跨进程(key-up 是另一进程,锁不横跨)
     kbd::send_key_partial(spec, true)?;
     Ok(focused)
@@ -945,7 +945,7 @@ fn prepare_keyboard(app: Option<&str>) -> Result<Option<String>, CtlError> {
     Ok(match app {
         Some(pattern) => {
             let title = focus_window(pattern)?;
-            std::thread::sleep(std::time::Duration::from_millis(120));
+            std::thread::sleep(std::time::Duration::from_millis(timing().press_focus_ms));
             // 元素聚焦是异步请求且存在竞态(实测固定延时忽好忽坏):
             // 反复 SetFocus 并验证 UIA 焦点元素真的变为可编辑角色,最多 3 轮
             ensure_element_focus(pattern)?;
@@ -973,11 +973,11 @@ fn prepare_keyboard(app: Option<&str>) -> Result<Option<String>, CtlError> {
 /// ——战记"信源必须用可靠层"的又一次实例)。重试耗尽未就绪 → 放行,由
 /// verify-then-inject 物理前台护栏做最终裁决(它才是注入前的权威闸门)。
 fn ensure_element_focus(pattern: &str) -> Result<(), CtlError> {
-    for _ in 0..3 {
+    for _ in 0..timing().focus_retries {
         if let Some(edit) = find_editable_element(pattern) {
             let _ = edit.set_focus();
         }
-        std::thread::sleep(std::time::Duration::from_millis(120));
+        std::thread::sleep(std::time::Duration::from_millis(timing().poll_ms));
         if kbd::focused_root_title()
             .map(|t| t.contains(pattern))
             .unwrap_or(false)
@@ -1052,7 +1052,7 @@ pub fn wait_window(substr: &str, timeout_ms: u64) -> Result<String, CtlError> {
                 ),
             ));
         }
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        std::thread::sleep(std::time::Duration::from_millis(timing().poll_ms));
     }
 }
 
@@ -1102,7 +1102,7 @@ pub fn wait_new_window(
                 ),
             ));
         }
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        std::thread::sleep(std::time::Duration::from_millis(timing().poll_ms));
     }
 }
 
@@ -1194,7 +1194,7 @@ pub fn wait_element(app: Option<&str>, target: &Target, timeout_ms: u64) -> Resu
                 ),
             ));
         }
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        std::thread::sleep(std::time::Duration::from_millis(timing().poll_ms));
     }
 }
 
@@ -1365,7 +1365,7 @@ pub fn pointer_physical(
         ));
     }
 
-    let _lock = input::InputLock::acquire(input::LOCK_TIMEOUT_MS)?;
+    let _lock = input::InputLock::acquire(timing().lock_wait_ms)?;
     // 修饰键空置检查:ctrl 按住时的物理点击 = ctrl+click(语义劫持)
     kbd::wait_modifiers_clear()?;
     match action {
@@ -1412,7 +1412,7 @@ pub fn drag_physical(
         ));
     };
     let point = (dest.get_x(), dest.get_y());
-    let _lock = input::InputLock::acquire(input::LOCK_TIMEOUT_MS)?;
+    let _lock = input::InputLock::acquire(timing().lock_wait_ms)?;
     mouse::drag_to(fx, fy, point.0, point.1)?;
     Ok((locate(app, from, from_near)?, (fx, fy)))
 }
@@ -1595,7 +1595,7 @@ pub fn wait_gone(app: Option<&str>, target: &Target, timeout_ms: u64) -> Result<
                 ),
             ));
         }
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        std::thread::sleep(std::time::Duration::from_millis(timing().poll_ms));
     }
 }
 

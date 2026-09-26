@@ -1,0 +1,95 @@
+//! 时序参数单源:默认值 = 生产路径;环境变量覆盖 = 测试/调优路径
+//! (timing-profile/timing-sweep fixtures 用,免重编译扫描;也是未来
+//! "按应用自适应时序"的种子)。env 只在进程内读一次(OnceLock),
+//! 非法值静默回退默认——时序旋钮绝不能因配置错误让命令失败。
+
+use std::sync::OnceLock;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Timing {
+    /// wait 族轮询间隔(docs/13 §4.2 生态共识:pywinauto 90 / terminator 100)
+    pub poll_ms: u64,
+    /// 挂起唤醒的有界等待上界(实测挂起 stall ~2s,取略低)
+    pub wake_bound_ms: u64,
+    /// WM_NULL 探针超时(快路径零误伤)
+    pub probe_ms: u32,
+    /// 焦点建立重试轮数
+    pub focus_retries: u32,
+    /// press 链 SetFocus 后的稳定等待
+    pub press_focus_ms: u64,
+    /// type 链 SetFocus 后的稳定等待
+    pub type_focus_ms: u64,
+    /// type 键盘通道分批大小(停止响应粒度 = 本值)
+    pub segment_chars: usize,
+    /// 修饰键空置等待上限
+    pub modifier_wait_ms: u64,
+    /// 输入占用锁等待上限
+    pub lock_wait_ms: u32,
+}
+
+impl Default for Timing {
+    fn default() -> Self {
+        Self {
+            poll_ms: 100,
+            wake_bound_ms: 1600,
+            probe_ms: 60,
+            focus_retries: 3,
+            press_focus_ms: 120,
+            type_focus_ms: 150,
+            segment_chars: 32,
+            modifier_wait_ms: 1500,
+            lock_wait_ms: 3000,
+        }
+    }
+}
+
+fn env_num<T: std::str::FromStr>(name: &str, default: T) -> T {
+    std::env::var(name)
+        .ok()
+        .and_then(|v| v.trim().parse().ok())
+        .unwrap_or(default)
+}
+
+impl Timing {
+    /// 进程内首次调用读 env 并缓存;之后零开销。
+    pub fn load() -> &'static Timing {
+        static T: OnceLock<Timing> = OnceLock::new();
+        T.get_or_init(|| {
+            let d = Timing::default();
+            Timing {
+                poll_ms: env_num("ACTL_POLL_MS", d.poll_ms),
+                wake_bound_ms: env_num("ACTL_WAKE_BOUND_MS", d.wake_bound_ms),
+                probe_ms: env_num("ACTL_PROBE_MS", d.probe_ms),
+                focus_retries: env_num("ACTL_FOCUS_RETRIES", d.focus_retries),
+                press_focus_ms: env_num("ACTL_PRESS_FOCUS_MS", d.press_focus_ms),
+                type_focus_ms: env_num("ACTL_TYPE_FOCUS_MS", d.type_focus_ms),
+                segment_chars: env_num("ACTL_SEGMENT_CHARS", d.segment_chars),
+                modifier_wait_ms: env_num("ACTL_MODIFIER_WAIT_MS", d.modifier_wait_ms),
+                lock_wait_ms: env_num("ACTL_LOCK_WAIT_MS", d.lock_wait_ms),
+            }
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn defaults_match_production_values() {
+        let d = Timing::default();
+        assert_eq!(d.poll_ms, 100); // 生态共识
+        assert_eq!(d.wake_bound_ms, 1600); // 挂起 stall 实测 ~2s
+        assert_eq!(d.segment_chars, 32);
+        assert_eq!(d.lock_wait_ms, 3000);
+        assert_eq!(d.modifier_wait_ms, 1500);
+        assert_eq!(d.focus_retries, 3);
+    }
+
+    #[test]
+    fn env_num_parses_and_falls_back() {
+        assert_eq!(env_num::<u64>("_ACTL_TEST_ABSENT_", 42), 42);
+        assert_eq!(env_num::<u64>("PATH", 42), 42); // 非数字 → 默认
+        // 不测 set_var(edition 2024 unsafe):解析正确性由上两行覆盖
+    }
+}
