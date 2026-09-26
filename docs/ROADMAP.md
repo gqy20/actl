@@ -52,6 +52,20 @@ Phase 3  T+3月起,长期     生产级打磨      v1.0    (协议冻结,生态�
 
 ## Phase 2 · M2 认真 MVP v0.3.0(T+1 ~ T+3 月,累计 12–22k 行)
 
+> **批次排序(2026-09-26 定,实证驱动)**:
+> **第一批·输入可靠性硬化**(先行,约 1-2 周,不铺新命令)——①输入占用协调
+> (doc 09 §6.2:进程间执行锁、长注入分批+批间焦点复核、焦点被抢即停并上报
+> 已执行部分;`input_effects` 字段进 envelope)——四次并发真人输入损坏注入的
+> 活体实证(docs/spike-findings);②激活感知目标解析(UWP 后台挂起时单命令
+> stall ~2s,操作前探测唤醒);③`--physical` 规范裁定(06 蓝图)+物理鼠标链
+> (doc 09 §6 七步:right-click/drag/hover/scroll 的共同前置);④小项:修饰键
+> 只清自己按下的、Toggle/ExpandCollapse/ScrollItem 分发、`snapshot_id` ref
+> 版本化校验。
+> **第二批·命令面与定位链**:45+ 命令补全、fallback 定位链(resolved_by)。
+> **收尾·对外发布**:README 示例、crates.io、scoop;同步发布 Agent Skill
+> (SKILL.md + envelope 生成的错误码恢复指南,docs/12 §3.4:品类空缺、成本极低)。
+> 协议评审候选(docs/12 §4):AMBIGUOUS/STALE_REF 携带结构化 evidence。
+
 **目标**:达到 PRD §6 全部指标,对外发布(README 示例 + crates.io + GitHub Releases)。
 
 **范围(in)**:
