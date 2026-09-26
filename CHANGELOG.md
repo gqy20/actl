@@ -6,10 +6,11 @@
 ## [Unreleased]
 
 ### Added
-- **doc 09 评审第一批修复落地**(P0 立即档):
-  - 键盘编译层纯函数化 `compile_key_spec`(注入前编译,报错时零事件发出)+ actl-uia 首批单测(双通道断言/shift 包裹/f 键/多键序列/不可映射组合拒绝)。
-  - `--expect window:<substr>` 升级为**新窗口语义**:注入前取全部窗口 UIA RuntimeId 基线,断言"本动作导致的新窗口";预存同名窗口不再恒真(标题基线会被脏标记"*"改名骗过,故用 RuntimeId)。
-  - 并发真人输入损坏注入文本四次活体实证入档(docs/spike-findings.md):输入占用协调与粘贴路径升级为实测需要的手段。
+- **M1 命令面补齐(17/17)**:`find`(条件查元素,snapshot 同源 ref 编号)、`close-window`(WM_CLOSE 优雅关闭,经 HWND 转译)、`get-clipboard`/`set-clipboard`(CF_UNICODETEXT,ClipGuard 保证释放)、`wait --element/--window`(TIMEOUT 语义)、`batch --json`(单进程顺序执行,首错即停,禁嵌套);`commands` 自发现自动收录。
+- **`type --paste`**:剪贴板+ctrl+v 文本通道——中文模式 IME 下唯一可靠的送达方式(输出 `via` 字段透明上报);直注 UNICODE 会被 IME 组合改写(实测)。
+- **click 语义分发**:Invoke 优先,SelectionItem 回退(列表/树/选项卡项),实际 pattern 随结果上报。
+- **金任务 2 达成 10/10**(fixtures/golden-task-2.sh):focus-window → ctrl+n → type(--paste)→ 内容读回 → ctrl+s(--expect 新窗口)→ set-value 文件名 → enter → 关窗后置态 → 磁盘逐字终验 → ctrl+w;金任务 1 同日以新代码复验 10/10。
+- doc 09 评审第一批修复落地(编译层单测/expect 新窗口语义/f10-f12/组合键拒绝降级/press+type fail-closed,见前次条目)。
 - **M1 键盘/文本命令族**:`type`(元素置焦+护栏+逐字注入)、`press`(组合键,`--expect window:<substr>` 后置断言轮询)、`set-value`(UIValuePattern 写值)、`focus-window`、`list-windows`;自建 SendInput 管线 `actl-uia::kbd` 取代 uiautomation crate 的 Keyboard。
 - **金任务 2 达成 7/7**(fixtures/golden-task-2.sh):type → ctrl+s → 另存为对话框(--expect 断言)→ set-value 文件名 → enter → **磁盘内容逐字一致终验**;覆盖键盘文本、组合键、系统对话框、ValuePattern、跨窗口护栏五类能力。
 - 双通道注入规则(实测驱动,docs/spike-findings.md):组合键成员 → VK 通道(VkKeyScanW 映射,IME 不拦 ctrl+键);纯文本 → KEYEVENTF_UNICODE(绕 IME)。修饰键用通用 VK_CONTROL/VK_MENU/VK_SHIFT(AHK/pywinauto 同款),清场全集 11 键。
@@ -29,6 +30,8 @@
 - pre-commit hook 增加 merge-conflict 标记检查(等价 pre-commit-hooks 官方集)。
 
 ### Fixed
+- **窗口解析强化(fail-closed 族)**:多匹配 → **AMBIGUOUS 附候选标题**(首个命中静默胜出的旧病);WinUI 三件套(ApplicationFrameWindow/TitleBarWindow/CoreWindow)折叠为单一可见窗口且**保留 CoreWindow**(内容元素只在其子树);owned dialog 深扫改为两阶段(热路径零深扫,修复每命令 ~2s 的自伤回归)。
+- **焦点归属判据改物理层**:UIA focused element 在 WinUI 上会反向谎报(物理已聚焦仍报别窗口编辑框,曾致成批误拒绝);改用 GetGUIThreadInfo 上溯根窗口。
 - **f10/f11/f12 解析边界**(doc 09 §3.6):旧条件 `p.len()==2` 把 f10-f12 挡在解析层而后端支持 1..=12;修复并补 f1-f12 全段回归测试(f0/f13/f99 仍拒绝)。
 - **组合键不可映射字符静默降级**(doc 09 §3.1 剩余项):带修饰键但 VkKeyScanW 映射不出的字符(如 CJK)此前退回 UNICODE 通道(修饰键语义丢失),现直接 PROTOCOL 报错并提示改用 `type`。
 - **[BC] `press`/`type` 强制 `--app`**(fail-closed):无 `--app` 的键盘注入打进"当下恰好前台"的窗口,是事故 #1 的路径之一;现返回 PROTOCOL(exit 2)。

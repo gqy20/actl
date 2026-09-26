@@ -70,6 +70,10 @@ enum Command {
         /// Target window by title substring (required: keyboard injection is fail-closed)
         #[arg(long)]
         app: Option<String>,
+        /// Deliver via clipboard + ctrl+v (the only reliable text channel
+        /// under a Chinese-mode IME; uses the shared clipboard, reported in output)
+        #[arg(long)]
+        paste: bool,
     },
     /// Press a key combination acting on the current focus (e.g. ctrl+s)
     Press {
@@ -102,8 +106,60 @@ enum Command {
         /// Window title substring
         pattern: String,
     },
+    /// Close a window gracefully (WM_CLOSE; unsaved work may prompt)
+    CloseWindow {
+        /// Window title substring (must match exactly one window)
+        pattern: String,
+    },
     /// List top-level windows (title, class, pid)
     ListWindows,
+    /// Find elements by condition (token-saving targeted search vs snapshot)
+    Find {
+        /// Match element name containing this substring
+        #[arg(long)]
+        name: Option<String>,
+        /// Match control role exactly, case-insensitive (Button, Edit, Document ...)
+        #[arg(long)]
+        role: Option<String>,
+        /// Match AutomationId exactly
+        #[arg(long)]
+        id: Option<String>,
+        /// Target window by title substring (default: focused window)
+        #[arg(long)]
+        app: Option<String>,
+        /// Max matches to report (default 20)
+        #[arg(long)]
+        limit: Option<usize>,
+    },
+    /// Read the clipboard as text (null if it holds no text)
+    GetClipboard,
+    /// Write text to the clipboard (replaces current content)
+    SetClipboard {
+        /// Text to place on the clipboard
+        text: String,
+    },
+    /// Wait for an element or window to appear (patience, not assertion)
+    Wait {
+        /// Wait until this element target (@eN | name: | id: | role:) resolves
+        #[arg(long, conflicts_with = "window")]
+        element: Option<String>,
+        /// Wait until a window whose title contains this substring exists
+        #[arg(long)]
+        window: Option<String>,
+        /// Target window by title substring (for --element)
+        #[arg(long)]
+        app: Option<String>,
+        /// Timeout in milliseconds (default 5000)
+        #[arg(long)]
+        timeout: Option<u64>,
+    },
+    /// Run multiple commands in one process (cold-start amortization;
+    /// stops on first error, prior results are lost from output)
+    Batch {
+        /// JSON array of command strings, e.g. '["focus-window Notepad","press enter --app Notepad"]'
+        #[arg(long)]
+        json: String,
+    },
 }
 
 /// 命令执行产物:data 进 envelope,`snapshot_id` 存在时附加到顶层(06 §4)。
@@ -126,30 +182,72 @@ fn main() {
     let command_name = command_name(&cli.command);
     let started = Instant::now();
 
-    let result = match cli.command {
+    let result = dispatch(&cli.command);
+
+    let duration_ms = started.elapsed().as_millis() as u64;
+    finish(command_name, result, duration_ms);
+}
+
+/// 单命令执行体;batch 子命令复用同一入口(06 §3.7 唯一复合逃生舱)。
+fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
+    match command {
         Command::Commands => commands().map(Into::into),
         Command::Status => status().map(Into::into),
-        Command::Snapshot { app, skeleton } => snapshot(app.as_deref(), skeleton),
-        Command::Click { target, app } => click(&target, app.as_deref()),
+        Command::Snapshot { app, skeleton } => snapshot(app.as_deref(), *skeleton),
+        Command::Click { target, app } => click(target, app.as_deref()),
         Command::Get {
             target,
             property,
             app,
-        } => get(&target, property.as_deref(), app.as_deref()),
-        Command::Launch { args } => launch(&args),
-        Command::Type { target, text, app } => type_cmd(&target, &text, app.as_deref()),
+        } => get(target, property.as_deref(), app.as_deref()),
+        Command::Launch { args } => launch(args),
+        Command::Type {
+            target,
+            text,
+            app,
+            paste,
+        } => type_cmd(target, text, app.as_deref(), *paste),
         Command::Press {
             keys,
             app,
             expect,
             timeout,
-        } => press(&keys, app.as_deref(), expect.as_deref(), timeout),
-        Command::SetValue { target, value, app } => set_value_cmd(&target, &value, app.as_deref()),
-        Command::FocusWindow { pattern } => focus_window_cmd(&pattern),
+        } => press(keys, app.as_deref(), expect.as_deref(), *timeout),
+        Command::SetValue { target, value, app } => set_value_cmd(target, value, app.as_deref()),
+        Command::FocusWindow { pattern } => focus_window_cmd(pattern),
+        Command::CloseWindow { pattern } => close_window_cmd(pattern),
         Command::ListWindows => list_windows_cmd(),
-    };
+        Command::Find {
+            name,
+            role,
+            id,
+            app,
+            limit,
+        } => find_cmd(
+            name.as_deref(),
+            role.as_deref(),
+            id.as_deref(),
+            app.as_deref(),
+            *limit,
+        ),
+        Command::GetClipboard => get_clipboard_cmd(),
+        Command::SetClipboard { text } => set_clipboard_cmd(text),
+        Command::Wait {
+            element,
+            window,
+            app,
+            timeout,
+        } => wait_cmd(
+            element.as_deref(),
+            window.as_deref(),
+            app.as_deref(),
+            *timeout,
+        ),
+        Command::Batch { json } => batch_cmd(json),
+    }
+}
 
-    let duration_ms = started.elapsed().as_millis() as u64;
+fn finish(command_name: &'static str, result: Result<CommandOutput, CtlError>, duration_ms: u64) {
     match result {
         Ok(out) => {
             let mut env = Envelope::success(command_name, Some(out.data), duration_ms);
@@ -190,7 +288,13 @@ fn command_name(cmd: &Command) -> &'static str {
         Command::Press { .. } => "press",
         Command::SetValue { .. } => "set-value",
         Command::FocusWindow { .. } => "focus-window",
+        Command::CloseWindow { .. } => "close-window",
         Command::ListWindows => "list-windows",
+        Command::Find { .. } => "find",
+        Command::GetClipboard => "get-clipboard",
+        Command::SetClipboard { .. } => "set-clipboard",
+        Command::Wait { .. } => "wait",
+        Command::Batch { .. } => "batch",
     }
 }
 
@@ -256,11 +360,12 @@ fn snapshot(app: Option<&str>, skeleton: bool) -> Result<CommandOutput, CtlError
 
 fn click(target_raw: &str, app: Option<&str>) -> Result<CommandOutput, CtlError> {
     let target = actl_core::parse_target(target_raw)?;
-    let loc = actl_uia::click(app, &target)?;
+    let (loc, pattern) = actl_uia::click(app, &target)?;
     Ok(json!({
         "action": "click",
         "target": target.describe(),
         "resolved_by": "primary",
+        "pattern": pattern,
         "resolved": {
             "role": loc.role,
             "name": loc.name,
@@ -313,14 +418,20 @@ fn launch(args: &[String]) -> Result<CommandOutput, CtlError> {
     Ok(json!({ "pid": child.id(), "program": program }).into())
 }
 
-fn type_cmd(target_raw: &str, text: &str, app: Option<&str>) -> Result<CommandOutput, CtlError> {
+fn type_cmd(
+    target_raw: &str,
+    text: &str,
+    app: Option<&str>,
+    paste: bool,
+) -> Result<CommandOutput, CtlError> {
     let app = require_app(app, "type")?;
     let target = actl_core::parse_target(target_raw)?;
-    let res = actl_uia::type_text(Some(app), &target, text)?;
+    let res = actl_uia::type_text(Some(app), &target, text, paste)?;
     Ok(json!({
         "action": "type",
         "target": target.describe(),
         "chars": text.chars().count(),
+        "via": if paste { "clipboard-paste" } else { "keyboard" },
         "resolved": { "role": res.role, "name": res.name },
     })
     .into())
@@ -404,6 +515,152 @@ fn parse_expect(raw: &str) -> Result<String, CtlError> {
 fn focus_window_cmd(pattern: &str) -> Result<CommandOutput, CtlError> {
     let title = actl_uia::focus_window(pattern)?;
     Ok(json!({ "action": "focus-window", "window": title }).into())
+}
+
+fn close_window_cmd(pattern: &str) -> Result<CommandOutput, CtlError> {
+    let title = actl_uia::close_window(pattern)?;
+    Ok(json!({ "action": "close-window", "window": title }).into())
+}
+
+/// find:条件查元素,复用 snapshot 的 ref 编号(同一 DFS,同一编号空间,
+/// find 的 @eN 与 snapshot 的 @eN 可互换)。至少一个过滤条件,反对全树 dump。
+fn find_cmd(
+    name: Option<&str>,
+    role: Option<&str>,
+    id: Option<&str>,
+    app: Option<&str>,
+    limit: Option<usize>,
+) -> Result<CommandOutput, CtlError> {
+    if name.is_none() && role.is_none() && id.is_none() {
+        return Err(CtlError::protocol(
+            "find needs at least one of --name/--role/--id (full-tree dump is `snapshot`)",
+        ));
+    }
+    let cap = actl_uia::capture(app)?;
+    let mut builder = SnapshotBuilder::new(actl_uia::MAX_ELEMENTS + 1);
+    for node in cap.nodes {
+        if !builder.push(node) {
+            break;
+        }
+    }
+    let out = builder.finish(false);
+    let role_want = role.map(str::to_lowercase);
+    let matched: Vec<&actl_core::snapshot::ElementOut> = out
+        .elements
+        .iter()
+        .filter(|e| {
+            name.map(|n| e.name.as_deref().is_some_and(|en| en.contains(n)))
+                .unwrap_or(true)
+        })
+        .filter(|e| {
+            role_want
+                .as_ref()
+                .map(|r| e.role.to_lowercase().contains(r.as_str()))
+                .unwrap_or(true)
+        })
+        .filter(|e| {
+            id.map(|i| e.automation_id.as_deref() == Some(i))
+                .unwrap_or(true)
+        })
+        .collect();
+    let total = matched.len();
+    let limit = limit.unwrap_or(20);
+    let elements: Vec<_> = matched
+        .iter()
+        .take(limit)
+        .map(|e| serde_json::to_value(e).expect("element serializes"))
+        .collect();
+    let data = json!({
+        "window": {
+            "title": cap.window.title,
+            "class": cap.window.class,
+            "pid": cap.window.pid,
+        },
+        "total": total,
+        "returned": elements.len(),
+        "elements": elements,
+    });
+    Ok(CommandOutput {
+        data,
+        snapshot_id: Some(out.snapshot_id),
+    })
+}
+
+fn get_clipboard_cmd() -> Result<CommandOutput, CtlError> {
+    let text = actl_uia::get_clipboard_text()?;
+    Ok(json!({ "text": text }).into())
+}
+
+fn set_clipboard_cmd(text: &str) -> Result<CommandOutput, CtlError> {
+    actl_uia::set_clipboard_text(text)?;
+    Ok(json!({ "chars": text.chars().count() }).into())
+}
+
+fn wait_cmd(
+    element: Option<&str>,
+    window: Option<&str>,
+    app: Option<&str>,
+    timeout: Option<u64>,
+) -> Result<CommandOutput, CtlError> {
+    let timeout = timeout.unwrap_or(5000);
+    let started = Instant::now();
+    let what = match (element, window) {
+        (Some(t), _) => {
+            let target = actl_core::parse_target(t)?;
+            actl_uia::wait_element(app, &target, timeout)?;
+            json!({ "element": target.describe() })
+        }
+        (None, Some(w)) => {
+            let title = actl_uia::wait_window(w, timeout)?;
+            json!({ "window": title })
+        }
+        (None, None) => {
+            return Err(CtlError::protocol(
+                "wait needs --element <target> or --window <substr>",
+            ));
+        }
+    };
+    Ok(json!({
+        "waited": what,
+        "waited_ms": started.elapsed().as_millis() as u64,
+    })
+    .into())
+}
+
+/// batch:单进程顺序执行(--json '["cmd args", ...]'),首错即停。
+/// 退出码沿用失败子命令的错误契约;M1 不带出部分结果(M2 加 partial)。
+fn batch_cmd(json_str: &str) -> Result<CommandOutput, CtlError> {
+    let cmds: Vec<String> = serde_json::from_str(json_str).map_err(|e| {
+        CtlError::protocol(format!(
+            "--json must be a JSON array of command strings: {e}"
+        ))
+    })?;
+    if cmds.is_empty() {
+        return Err(CtlError::protocol("batch needs at least one command"));
+    }
+    let mut executed = 0usize;
+    for (i, line) in cmds.iter().enumerate() {
+        let tokens: Vec<&str> = line.split_whitespace().collect();
+        if tokens.is_empty() {
+            return Err(CtlError::protocol(format!("batch[{i}] is empty")));
+        }
+        let sub = Cli::try_parse_from(std::iter::once("actl").chain(tokens.iter().copied()))
+            .map_err(|e| CtlError::protocol(format!("batch[{i}] {line:?}: {e}")))?;
+        if let Command::Batch { .. } = sub.command {
+            return Err(CtlError::protocol("batch cannot nest batch"));
+        }
+        if let Err(err) = dispatch(&sub.command) {
+            return Err(CtlError::new(
+                err.code,
+                format!(
+                    "batch[{i}] {:?} failed after {executed} ok: {}",
+                    line, err.message
+                ),
+            ));
+        }
+        executed += 1;
+    }
+    Ok(json!({ "executed": executed }).into())
 }
 
 fn list_windows_cmd() -> Result<CommandOutput, CtlError> {

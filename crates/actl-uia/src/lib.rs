@@ -58,12 +58,22 @@ pub fn capture(app: Option<&str>) -> Result<CaptureResult, CtlError> {
     })
 }
 
-/// 在顶层窗口中按标题子串定位首个匹配;无匹配 → NOT_FOUND(06 §4)。
 /// 顶层窗口 + 挂靠宿主的 owned dialog(IFileSaveDialog 等不是 root 的直接子节点,
 /// 实测新记事本的"另存为"在宿主窗口的 depth-1,以 role=Window 挂靠)。
-/// 顶层窗口 + 挂靠宿主的 owned dialog(IFileSaveDialog 等不是 root 的直接子节点,
-/// 实测新记事本的"另存为"在宿主窗口的 depth-1,以 role=Window 挂靠)。
+/// 注意:不做可见性过滤——UWP 应用后台挂起时 CoreWindow 会被 cloak
+/// (IsWindowVisible=false),硬过滤会让快照只剩空壳框架、内容全失联
+/// (金任务 1 实测 0/10);同名噪声由 find_window 的 WINUI_AUX_CLASSES 折叠消化。
 fn top_windows(auto: &UIAutomation, walker: &UITreeWalker) -> Vec<UIElement> {
+    let mut out = Vec::new();
+    for w in root_children(auto, walker) {
+        out.push(w.clone());
+        out.extend(owned_dialogs_of(walker, &w));
+    }
+    out
+}
+
+/// root 直接子节点(顶层窗口)。快路径只走这里:不触 owned-dialog 深扫。
+fn root_children(auto: &UIAutomation, walker: &UITreeWalker) -> Vec<UIElement> {
     let mut out = Vec::new();
     let Ok(root) = auto.get_root_element() else {
         return out;
@@ -71,17 +81,23 @@ fn top_windows(auto: &UIAutomation, walker: &UITreeWalker) -> Vec<UIElement> {
     let mut child = walker.get_first_child(&root).ok();
     while let Some(w) = child {
         out.push(w.clone());
-        let mut sub = walker.get_first_child(&w).ok();
-        while let Some(d) = sub {
-            if d.get_control_type()
-                .map(|t| t == ControlType::Window)
-                .unwrap_or(false)
-            {
-                out.push(d.clone());
-            }
-            sub = walker.get_next_sibling(&d).ok();
-        }
         child = walker.get_next_sibling(&w).ok();
+    }
+    out
+}
+
+/// 窗口的直接子 Window(owned dialog,如挂靠宿主的"另存为")。
+fn owned_dialogs_of(walker: &UITreeWalker, host: &UIElement) -> Vec<UIElement> {
+    let mut out = Vec::new();
+    let mut sub = walker.get_first_child(host).ok();
+    while let Some(d) = sub {
+        if d.get_control_type()
+            .map(|t| t == ControlType::Window)
+            .unwrap_or(false)
+        {
+            out.push(d.clone());
+        }
+        sub = walker.get_next_sibling(&d).ok();
     }
     out
 }
@@ -98,17 +114,74 @@ fn name_matches(elem: &UIElement, pattern: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// WinUI 同一可见窗口的辅助 HWND(标题相同;实测计算器 3 个同名"计算器":
+/// ApplicationFrameWindow 空壳框架 + TitleBarWindow 标题栏 + CoreWindow 内容,
+/// 分属框架/内容两个 pid)。目标解析时折叠辅助件,**保留 CoreWindow**——
+/// 内容元素(按钮等)挂在 CoreWindow 子树,框架子树是空壳(金任务 1 实测:
+/// 偏好框架时 num1Button 全部失联 0/10)。
+const WINUI_AUX_CLASSES: [&str; 2] = ["ApplicationFrameWindow", "ApplicationFrameTitleBarWindow"];
+
+/// 在顶层窗口(含 owned dialog)中按标题子串定位**唯一**窗口。
+/// 无匹配 → NOT_FOUND;**多匹配 → AMBIGUOUS 并附候选标题**(fail-closed:
+/// 此前首个命中静默胜出,同名/含同名子串的窗口会把操作引向错误目标,doc 09 §3.3)。
+/// 两阶段:先只扫 root 直接子节点(快路径,常见一步命中);0 命中才对每个
+/// 顶层窗口深扫 owned dialog(如"另存为"挂靠宿主 depth-1)——深扫是每窗口
+/// 几十次跨进程 COM 往返,放热路径实测把命令耗时从 ~40ms 拖到 ~2s。
 fn find_window(
     auto: &UIAutomation,
     walker: &UITreeWalker,
     pattern: &str,
 ) -> Result<UIElement, CtlError> {
-    scan_top_window(auto, walker, pattern).ok_or_else(|| {
-        CtlError::new(
+    let mut matches: Vec<UIElement> = root_children(auto, walker)
+        .into_iter()
+        .filter(|w| name_matches(w, pattern))
+        .collect();
+    if matches.is_empty() {
+        // owned dialog 兜底:只对有子 Window 的宿主扫
+        for host in root_children(auto, walker) {
+            matches.extend(
+                owned_dialogs_of(walker, &host)
+                    .into_iter()
+                    .filter(|w| name_matches(w, pattern)),
+            );
+        }
+    }
+    // 折叠 WinUI 辅助 HWND:存在非辅助窗口时,辅助件不参与解析
+    let has_primary = matches.iter().any(|w| {
+        let cls = w.get_classname().unwrap_or_default();
+        !WINUI_AUX_CLASSES.contains(&cls.as_str())
+    });
+    let pool: Vec<UIElement> = if has_primary {
+        matches
+            .into_iter()
+            .filter(|w| {
+                let cls = w.get_classname().unwrap_or_default();
+                !WINUI_AUX_CLASSES.contains(&cls.as_str())
+            })
+            .collect()
+    } else {
+        matches
+    };
+    match pool.len() {
+        0 => Err(CtlError::new(
             ErrorCode::NotFound,
             format!("no top-level window title contains {pattern:?}"),
-        )
-    })
+        )),
+        1 => Ok(pool.into_iter().next().expect("len == 1")),
+        n => {
+            let titles: Vec<String> = pool
+                .iter()
+                .filter_map(|w| w.get_name().ok())
+                .take(5)
+                .collect();
+            Err(CtlError::new(
+                ErrorCode::Ambiguous,
+                format!(
+                    "pattern {pattern:?} matches {n} windows: {titles:?}; tighten the selector"
+                ),
+            ))
+        }
+    }
 }
 
 /// 焦点元素沿父链上行到顶层窗口。
@@ -161,7 +234,7 @@ fn internal(e: impl std::fmt::Debug) -> CtlError {
 // ---------- 定位与交互(locate / click / read_property) ----------
 
 use actl_core::target::Target;
-use uiautomation::patterns::{UIInvokePattern, UIValuePattern};
+use uiautomation::patterns::{UIInvokePattern, UISelectionItemPattern, UIValuePattern};
 
 /// 定位结果:命中元素 + 所在窗口。
 pub struct Located {
@@ -265,21 +338,28 @@ fn locate_walk(
     Ok(None)
 }
 
-/// click:UIA Invoke pattern 后台调用(不抢物理鼠标,06 §2.2)。
-pub fn click(app: Option<&str>, target: &Target) -> Result<Located, CtlError> {
+/// click:语义执行分发(06 M1 范围:Invoke/Value/Selection)。
+/// Invoke 优先;无 Invoke 但支持 SelectionItem(列表项/树项/选项卡)→ select(),
+/// 语义同为"点击选中"。实际使用的 pattern 随结果上报,agent 可归因。
+pub fn click(app: Option<&str>, target: &Target) -> Result<(Located, &'static str), CtlError> {
     let loc = locate(app, target)?;
-    let pattern = loc.element.get_pattern::<UIInvokePattern>().map_err(|_| {
-        CtlError::new(
-            ErrorCode::NotActionable,
-            format!(
-                "{} ({}) exposes no Invoke pattern; scroll/focus first, or try `set-value` — physical fallback arrives with --physical (M2)",
-                target.describe(),
-                loc.role
-            ),
-        )
-    })?;
-    pattern.invoke().map_err(internal)?;
-    Ok(loc)
+    if let Ok(invoke) = loc.element.get_pattern::<UIInvokePattern>() {
+        invoke.invoke().map_err(internal)?;
+        return Ok((loc, "invoke"));
+    }
+    if let Ok(sel) = loc.element.get_pattern::<UISelectionItemPattern>() {
+        sel.select().map_err(internal)?;
+        return Ok((loc, "selection-item"));
+    }
+    Err(CtlError::new(
+        ErrorCode::NotActionable,
+        format!(
+            "{} ({}) exposes neither Invoke nor SelectionItem pattern; scroll/focus first, \
+             or try `set-value` — physical fallback arrives with --physical (M2)",
+            target.describe(),
+            loc.role
+        ),
+    ))
 }
 
 /// get:读取元素属性;`property` 白名单,缺省返回基本全集。
@@ -353,8 +433,16 @@ impl From<&Located> for InputResult {
     }
 }
 
-/// type:定位 → SetFocus → 逐字键盘输入(触发输入事件;绕过键盘请用 set-value)。
-pub fn type_text(app: Option<&str>, target: &Target, text: &str) -> Result<InputResult, CtlError> {
+/// type:定位 → SetFocus →(护栏)→ 逐字键盘输入或剪贴板粘贴。
+/// `--paste`:文本经剪贴板 + ctrl+v 送达——**中文模式 IME 下唯一可靠的文本通道**
+/// (UNICODE 包在 WinUI/TSF 仍会被 IME 组合改写:空格吞成上屏、标点全角化,
+/// 战记实测);代价是占用共享剪贴板,输出透明上报 via 字段,不静默。
+pub fn type_text(
+    app: Option<&str>,
+    target: &Target,
+    text: &str,
+    paste: bool,
+) -> Result<InputResult, CtlError> {
     let loc = locate(app, target)?;
     loc.element.set_focus().map_err(|_| {
         CtlError::new(
@@ -381,12 +469,20 @@ pub fn type_text(app: Option<&str>, target: &Target, text: &str) -> Result<Input
             ));
         }
     }
-    // 自建管线(uiautomation crate 的 Keyboard 有 wScan=0 缺陷,见 kbd.rs 模块注释)
-    let spec = KeySpec {
-        modifiers: Vec::new(),
-        keys: text.chars().map(actl_core::keys::Key::Char).collect(),
-    };
-    kbd::send_key_spec(&spec)?;
+    if paste {
+        set_clipboard_text(text)?;
+        // ctrl+v 走 VK 组合通道(IME 不拦截带修饰键组合)
+        kbd::send_key_spec(&KeySpec {
+            modifiers: vec!["ctrl".into()],
+            keys: vec![actl_core::keys::Key::Char('v')],
+        })?;
+    } else {
+        // 自建管线(uiautomation crate 的 Keyboard 有 wScan=0 缺陷,见 kbd.rs 模块注释)
+        kbd::send_key_spec(&KeySpec {
+            modifiers: Vec::new(),
+            keys: text.chars().map(actl_core::keys::Key::Char).collect(),
+        })?;
+    }
     Ok((&loc).into())
 }
 
@@ -425,26 +521,24 @@ pub fn press_keys(spec: &KeySpec, app: Option<&str>) -> Result<Option<String>, C
     Ok(focused)
 }
 
-/// 反复对窗口内可编辑元素 SetFocus,直到 UIA 焦点元素确为 Document/Edit(SetFocus
-/// 是异步请求,单次调用+固定延时存在竞态)。窗口无可编辑元素时(纯按钮面板)直接通过。
+/// 反复对窗口内可编辑元素 SetFocus,直到**物理**键盘焦点的根窗口是目标。
+/// 判据用 GetGUIThreadInfo 物理层而非 UIA focused element:后者在 WinUI 上
+/// 实测会谎报(物理层 RichEditD2DPT 已聚焦时仍报别窗口编辑框,导致成批误拒绝
+/// ——战记"信源必须用可靠层"的又一次实例)。重试耗尽未就绪 → 放行,由
+/// verify-then-inject 物理前台护栏做最终裁决(它才是注入前的权威闸门)。
 fn ensure_element_focus(pattern: &str) -> Result<(), CtlError> {
     for _ in 0..3 {
         if let Some(edit) = find_editable_element(pattern) {
             let _ = edit.set_focus();
         }
         std::thread::sleep(std::time::Duration::from_millis(120));
-        if let Ok(auto) = UIAutomation::new() {
-            if let Ok(f) = auto.get_focused_element() {
-                if let Ok(ct) = f.get_control_type() {
-                    let role = format!("{ct:?}");
-                    if role == "Document" || role == "Edit" {
-                        return Ok(());
-                    }
-                }
-            }
+        if kbd::focused_root_title()
+            .map(|t| t.contains(pattern))
+            .unwrap_or(false)
+        {
+            return Ok(());
         }
     }
-    // 无可编辑元素的窗口(计算器等)不算失败:窗口前置 + 护栏已足够
     Ok(())
 }
 
@@ -598,4 +692,142 @@ pub fn list_windows() -> Result<Vec<(String, String, u32)>, CtlError> {
             ))
         })
         .collect())
+}
+
+// ─── 窗口/等待/剪贴板(M1 收尾) ───────────────────────────────────────────
+
+/// CF_UNICODETEXT(=13)。不引 Win32_System_Ole 只为一个常量。
+const CF_UNICODETEXT: u32 = 13;
+
+/// close-window:优雅关闭标题匹配的唯一窗口(WM_CLOSE 异步投递;未保存内容
+/// 由应用自行弹提示——语义关闭,不是强杀)。
+pub fn close_window(pattern: &str) -> Result<String, CtlError> {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_CLOSE};
+
+    let auto = UIAutomation::new().map_err(internal)?;
+    let walker = auto.create_tree_walker().map_err(internal)?;
+    let win = find_window(&auto, &walker, pattern)?;
+    let title = win.get_name().unwrap_or_default();
+    let handle = win.get_native_window_handle().map_err(internal)?;
+    if handle.is_invalid() {
+        return Err(CtlError::new(
+            ErrorCode::NotActionable,
+            format!("window {pattern:?} exposes no native handle"),
+        ));
+    }
+    // crate 的 Handle 未暴露原始 HWND;Handle/HANDLE 均为单指针包装,布局一致
+    let raw: windows::Win32::Foundation::HANDLE = unsafe { std::mem::transmute(handle) };
+    unsafe {
+        PostMessageW(
+            Some(HWND(raw.0)),
+            WM_CLOSE,
+            windows::Win32::Foundation::WPARAM(0),
+            windows::Win32::Foundation::LPARAM(0),
+        )
+    }
+    .map_err(|e| CtlError::internal(format!("PostMessageW(WM_CLOSE) failed for {title:?}: {e}")))?;
+    Ok(title)
+}
+
+/// wait --element:轮询定位直到目标可解析(TIMEOUT 语义;与 --expect 的
+/// "立即断言"分工见 06 §3.6"耐心等待")。
+pub fn wait_element(app: Option<&str>, target: &Target, timeout_ms: u64) -> Result<(), CtlError> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
+    loop {
+        if locate(app, target).is_ok() {
+            return Ok(());
+        }
+        if std::time::Instant::now() >= deadline {
+            return Err(CtlError::new(
+                ErrorCode::Timeout,
+                format!(
+                    "element {} did not resolve within {timeout_ms}ms",
+                    target.describe()
+                ),
+            ));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+}
+
+// ─── 剪贴板(CF_UNICODETEXT;剪贴板是共享状态,doc 09 §6.2 提醒并发) ──────
+
+use windows::Win32::Foundation::HGLOBAL;
+use windows::Win32::System::DataExchange::{
+    CloseClipboard, EmptyClipboard, GetClipboardData, OpenClipboard, SetClipboardData,
+};
+use windows::Win32::System::Memory::{GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalUnlock};
+
+/// 确保任何返回路径都 CloseClipboard(占用不释放会拖死系统剪贴板)。
+struct ClipGuard;
+impl Drop for ClipGuard {
+    fn drop(&mut self) {
+        unsafe { CloseClipboard() }.ok();
+    }
+}
+
+fn open_clipboard() -> Result<ClipGuard, CtlError> {
+    if unsafe { OpenClipboard(None) }.is_ok() {
+        Ok(ClipGuard)
+    } else {
+        Err(CtlError::new(
+            ErrorCode::NotActionable,
+            "clipboard is held by another process; retry shortly",
+        ))
+    }
+}
+
+/// get-clipboard:读文本(None = 无文本格式/空)。非文本格式(图片等)返回 None。
+pub fn get_clipboard_text() -> Result<Option<String>, CtlError> {
+    unsafe {
+        let _guard = open_clipboard()?;
+        if !windows::Win32::System::DataExchange::IsClipboardFormatAvailable(CF_UNICODETEXT).is_ok()
+        {
+            return Ok(None);
+        }
+        let Ok(h) = GetClipboardData(CF_UNICODETEXT) else {
+            return Ok(None);
+        };
+        let hg = HGLOBAL(h.0);
+        let p = GlobalLock(hg) as *const u16;
+        if p.is_null() {
+            return Ok(None);
+        }
+        // 手动扫 nul 结尾(免引 Globalization 的 lstrlenW)
+        let mut len = 0usize;
+        while *p.add(len) != 0 {
+            len += 1;
+        }
+        let text = String::from_utf16_lossy(std::slice::from_raw_parts(p, len));
+        let _ = GlobalUnlock(hg);
+        Ok(Some(text))
+    }
+}
+
+/// set-clipboard:写入文本(整体替换当前剪贴板内容——这是本命令的语义)。
+pub fn set_clipboard_text(text: &str) -> Result<(), CtlError> {
+    use windows::Win32::Foundation::{GlobalFree, HANDLE};
+
+    let mut wide: Vec<u16> = text.encode_utf16().collect();
+    wide.push(0);
+    unsafe {
+        let _guard = open_clipboard()?;
+        EmptyClipboard().map_err(|e| CtlError::internal(format!("EmptyClipboard: {e}")))?;
+        let h = GlobalAlloc(GMEM_MOVEABLE, wide.len() * 2)
+            .map_err(|e| CtlError::internal(format!("GlobalAlloc: {e}")))?;
+        let p = GlobalLock(h) as *mut u16;
+        if p.is_null() {
+            let _ = GlobalFree(Some(h));
+            return Err(CtlError::internal("GlobalLock failed"));
+        }
+        std::ptr::copy_nonoverlapping(wide.as_ptr(), p, wide.len());
+        let _ = GlobalUnlock(h);
+        // 所有权移交系统;失败则自毁防泄漏
+        if SetClipboardData(CF_UNICODETEXT, Some(HANDLE(h.0))).is_err() {
+            let _ = GlobalFree(Some(h));
+            return Err(CtlError::internal("SetClipboardData failed"));
+        }
+        Ok(())
+    }
 }

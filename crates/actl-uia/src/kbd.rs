@@ -37,6 +37,34 @@ pub fn foreground_title() -> Option<String> {
     }
 }
 
+/// 物理键盘焦点所在控件,上溯到根窗口后的标题(None = 取不到)。
+/// 焦点归属的**物理**判据:UIA focused element 视图在 WinUI 上实测会谎报
+/// (物理层 RichEditD2DPT 已聚焦时仍报别窗口编辑框,金任务 2 误拒绝实证)。
+pub fn focused_root_title() -> Option<String> {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GA_ROOT, GUITHREADINFO, GetAncestor, GetGUIThreadInfo,
+    };
+    unsafe {
+        let mut info = GUITHREADINFO {
+            cbSize: std::mem::size_of::<GUITHREADINFO>() as u32,
+            ..Default::default()
+        };
+        if !GetGUIThreadInfo(0, &mut info).is_ok() || info.hwndFocus.0.is_null() {
+            return None;
+        }
+        let root = GetAncestor(info.hwndFocus, GA_ROOT);
+        if root.0.is_null() {
+            return None;
+        }
+        let mut buf = [0u16; 512];
+        let len = GetWindowTextW(root, &mut buf);
+        if len <= 0 {
+            return None;
+        }
+        Some(String::from_utf16_lossy(&buf[..len as usize]))
+    }
+}
+
 const KEYDOWN: KEYBD_EVENT_FLAGS = KEYBD_EVENT_FLAGS(0);
 
 fn vk_event(vk: VIRTUAL_KEY, up: bool) -> INPUT {

@@ -30,28 +30,40 @@ TEXT="golden task 2: keyboard + dialog + value pattern"
 $ACTL list-windows 2>/dev/null | grep -q Notepad || cmd //c start notepad
 sleep 1
 
-# 1. 新标签:未命名文档,保证 ctrl+s 必弹另存为(已命名文档会静默保存)
+# 1. 前置窗口(键盘命令的目标绑定)
+step "focus-window Notepad" \
+  $ACTL focus-window Notepad
+
+# 2. 新标签:未命名文档,保证 ctrl+s 必弹另存为(已命名文档会静默保存)
 step "press ctrl+n (new untitled tab)" \
   $ACTL press ctrl+n --app Notepad
 sleep 1
 
-# 2. 键盘输入 golden 文本(元素置焦 + 护栏 + VK/UNICODE 管线)
-step "type marker text into editor" \
-  $ACTL type role:Document "$TEXT" --app Notepad
+# 3. 键盘输入 golden 文本(--paste:剪贴板+ctrl+v 通道,中文模式 IME 下唯一
+#    可靠的文本送达方式;直注 UNICODE 会被 IME 组合改写,战记实测)
+step "type marker text into editor (paste channel)" \
+  $ACTL type role:Document "$TEXT" --app Notepad --paste
+sleep 1
 
-# 3. 读回验证:UIA Value 必须等于打入的文本(不信标题,信内容)
-if v=$($ACTL get role:Document --app Notepad --property value 2>&1) \
-   && grep -q "\"value\":\"$TEXT\"" <<<"$v"; then
+# 4. 读回验证:UIA Value 必须等于打入的文本(不信标题,信内容);新标签的
+#    ValueProvider 偶尔迟于粘贴就绪,重试一次再判
+v=""
+for _ in 1 2; do
+  v=$($ACTL get role:Document --app Notepad --property value 2>&1)
+  grep -q "\"value\":\"$TEXT\"" <<<"$v" && break
+  sleep 1
+done
+if grep -q "\"value\":\"$TEXT\"" <<<"$v"; then
   PASS=$((PASS+1)); echo "PASS: readback equals typed text"
 else
   FAIL=$((FAIL+1)); echo "FAIL: readback mismatch"; head -c 300 <<<"$v"; echo
 fi
 
-# 4. ctrl+s:组合键 → 另存为对话框必须出现(--expect 轮询断言)
-step "press ctrl+s, expect 另存为 dialog" \
+# 5. ctrl+s:组合键 → 另存为对话框必须**新出现**(--expect RuntimeId 基线断言)
+step "press ctrl+s, expect NEW 另存为 dialog" \
   $ACTL press ctrl+s --app Notepad --expect window:另存为 --timeout 5000
 
-# 5. 文件名写入:文件名 Edit(id 1001);ValuePattern 失败则宿主 ComboBox 兜底
+# 6. 文件名写入:文件名 Edit(id 1001);ValuePattern 失败则宿主 ComboBox 兜底
 if $ACTL set-value id:1001 "$MARK" --app 另存为 2>/dev/null | grep -q '"ok":true'; then
   PASS=$((PASS+1)); echo "PASS: set filename (edit value pattern)"
 else
@@ -59,12 +71,20 @@ else
     $ACTL set-value id:FileNameControlHost "$MARK" --app 另存为
 fi
 
-# 6. enter 确认 → 对话框关闭、文档已命名
+# 7. enter 确认 → 对话框关闭、文档已命名
 step "press enter to confirm save" \
   $ACTL press enter --app 另存为
 sleep 2
 
-# 7. 磁盘终验:文件存在且内容逐字一致
+# 8. 后置状态:对话框已消失,且 Notepad 标题变为文件名(保存成功的窗口级证据)
+if ! $ACTL list-windows 2>/dev/null | grep -q 另存为 \
+   && $ACTL list-windows 2>/dev/null | grep -q "\"title\":\"$MARK - Notepad\""; then
+  PASS=$((PASS+1)); echo "PASS: dialog closed and tab retitled to saved file"
+else
+  FAIL=$((FAIL+1)); echo "FAIL: post-save window state"
+fi
+
+# 9. 磁盘终验:文件存在且内容逐字一致
 F="$DOCS/$MARK"
 for _ in 1 2 3 4 5; do [ -f "$F" ] && break; sleep 1; done
 if [ -f "$F" ] && [ "$(cat "$F")" = "$TEXT" ]; then
@@ -73,8 +93,9 @@ else
   FAIL=$((FAIL+1)); echo "FAIL: disk verify at $F"
 fi
 
-# 8. 清理:关标签(刚保存,直接关) + 删文件,保持可重复运行
-$ACTL press ctrl+w --app Notepad >/dev/null 2>&1 || true
+# 10. 清理:关标签(刚保存,直接关) + 删文件,保持可重复运行
+step "press ctrl+w close saved tab" \
+  $ACTL press ctrl+w --app Notepad
 rm -f "$F"
 
 echo "----"

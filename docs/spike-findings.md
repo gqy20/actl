@@ -89,3 +89,13 @@ doc 09 修复落地验证时,金任务 2 连续 4 次 readback 损坏且**每次
   从"建议"升级为"实测需要的手段"。
 - fixtures/golden-task-2.sh 头部已标注"桌面空闲"前置;其断言(读回+磁盘)
   正确地暴露了并发损坏——**坏读回是护栏在工作,不是误报**。
+
+## M1 收尾追加实测(2026-09-26 深夜二)
+
+- **金任务 1/2 双双 10/10**(新代码):10 步金任务 2 覆盖 focus-window→ctrl+n→type(--paste)→内容读回→ctrl+s(--expect 新窗口)→set-value→enter→关窗后置态→磁盘逐字终验→ctrl+w。
+- **中文 IME 下唯一可靠文本通道 = 剪贴板+ctrl+v**:UNICODE 直注在 WinUI/TSF 上仍会被 CN 模式 IME 组合改写(`golden task 2:` → `golden ue nnnnn`)。`type --paste` 显式通道落地(输出 `via` 字段透明上报,不静默占剪贴板)。
+- **UIA focused element 会反向说谎**:物理层 RichEditD2DPT 已聚焦时,UIA 仍报"别窗口的编辑框"→曾致成批误拒绝。焦点归属判据改用 GetGUIThreadInfo 物理层(kbd::focused_root_title)——"信源必须用可靠层"教训的第 3 次实例(标题、UIA 焦点视图、UIA focused element 全部骗过我们)。
+- **WinUI 窗口三件套**:同一可见窗口 = ApplicationFrameWindow(空壳)+ TitleBarWindow(标题栏)+ CoreWindow(内容,独立 pid)。AMBIGUOUS 折叠须**保留 CoreWindow**(内容元素只在其子树;偏好框架时金任务 1 的按钮全部失联 0/10)。
+- **UWP 挂起 = UIA 停摆**:计算器后台挂起后每次跨进程属性调用 ~2s 超时(今晨 40ms/命令 → 现今 ~2.3s/命令,连发快跑与挂起空隙互为因果)。M2 课题:激活感知目标解析(先唤醒再操作);金任务若在活动桌面上跑,单轮可到 30s+。
+- **`start calc:` 协议启动在 taskkill 后会静默失败**;可靠方式 `start shell:AppsFolder\Microsoft.WindowsCalculator_8wekyb3d8bbwe!App`。
+- **性能回归自查**:owned-dialog 深扫曾进 find_window 热路径(每窗口几十次 COM 往返)→ 改两阶段(root 快路径一步命中,0 命中才深扫 owned)。
