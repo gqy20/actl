@@ -151,7 +151,10 @@ impl SnapshotBuilder {
         vec![true; self.nodes.len()]
     }
 
-    /// skeleton 保留集:可交互元素 ∪ 其祖先链。
+    /// skeleton 保留集:可交互元素 ∪ 其祖先链,再**单链折叠**——非交互保留节点
+    /// 若只剩一个保留子则自身折叠(Chromium/Electron 的深度单子容器是削减大头;
+    /// depth 跳变即折叠信号,窗口根豁免以保留窗口身份)。ref 只编号交互元素,
+    /// DFS 序不变 → 折叠不影响 @eN 编号(与全量快照互通)。
     fn skeleton_keep_set(&self) -> Vec<bool> {
         let mut keep = vec![false; self.nodes.len()];
         for (i, n) in self.nodes.iter().enumerate() {
@@ -164,6 +167,28 @@ impl SnapshotBuilder {
                     }
                     keep[pi] = true;
                     p = self.nodes[pi].parent;
+                }
+            }
+        }
+        // 单链折叠:kept_children[i] = i 的保留子数;倒序(深→浅)一遍收敛——
+        // 处理父时子的去留已定。窗口根(i=0)豁免,保留窗口身份。
+        let mut kept_children = vec![0usize; self.nodes.len()];
+        for (i, n) in self.nodes.iter().enumerate() {
+            if keep[i] {
+                if let Some(pi) = n.parent {
+                    kept_children[pi] += 1;
+                }
+            }
+        }
+        for i in (0..self.nodes.len()).rev() {
+            if i > 0
+                && keep[i]
+                && !is_interactive_role(&self.nodes[i].role)
+                && kept_children[i] == 1
+            {
+                keep[i] = false;
+                if let Some(pi) = self.nodes[i].parent {
+                    kept_children[pi] -= 1;
                 }
             }
         }
@@ -203,17 +228,30 @@ mod tests {
     }
 
     #[test]
-    fn skeleton_keeps_interactives_and_ancestors_only() {
+    fn skeleton_keeps_interactives_and_collapses_single_chains() {
         let mut b = SnapshotBuilder::new(100);
         b.push(node(0, "Window", None));
-        b.push(node(1, "Pane", Some(0))); // 祖先链:保留
-        b.push(node(2, "Pane", Some(1))); // 空容器:折叠
+        b.push(node(1, "Pane", Some(0))); // 单保留子链上的祖先:折叠
+        b.push(node(2, "Pane", Some(1))); // 同上:折叠
         b.push(node(3, "Text", Some(2))); // 空文本:折叠
-        b.push(node(2, "Button", Some(1)));
+        b.push(node(2, "Button", Some(1))); // 交互:保留(2/1 折叠后由 depth 跳变表达)
         b.push(node(1, "Text", Some(0))); // 无交互子孙的分支:折叠
         let out = b.finish(true);
         let roles: Vec<&str> = out.elements.iter().map(|e| e.role.as_ref()).collect();
-        assert_eq!(roles, vec!["Window", "Pane", "Button"]);
+        // 根豁免 + 交互元素;单链祖先全部折叠
+        assert_eq!(roles, vec!["Window", "Button"]);
+    }
+
+    #[test]
+    fn skeleton_keeps_shared_ancestors_with_multiple_kept_children() {
+        let mut b = SnapshotBuilder::new(100);
+        b.push(node(0, "Window", None));
+        b.push(node(1, "Pane", Some(0))); // 两个保留子(Button+Edit):不折叠
+        b.push(node(2, "Button", Some(1)));
+        b.push(node(2, "Edit", Some(1)));
+        let out = b.finish(true);
+        let roles: Vec<&str> = out.elements.iter().map(|e| e.role.as_ref()).collect();
+        assert_eq!(roles, vec!["Window", "Pane", "Button", "Edit"]);
     }
 
     #[test]
