@@ -5,6 +5,9 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
+keywords = ["windows", "automation", "accessibility", "cli", "agent"]
+categories = ["command-line-utilities"]
 
 [dependencies]
 serde = { workspace = true }

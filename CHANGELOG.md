@@ -7,6 +7,19 @@
 
 (空;下个开发周期的变更先落此处,发版时移入版本节)
 
+<!-- 2026-09-26 M2 收尾批次(发 v0.1.2 时归版):
+- README 示例化(安装三渠道/快速上手/信号条/安全设计/命令面);
+- scoop manifest(scoop/actl.json,哈希与官方 checksums 交叉验证,autoupdate);
+- Agent Skill(skills/actl:SKILL.md + references/error-codes.md 恢复手册,自包含无仓库链接);
+- crates.io 发布准备:publish 元数据 + 版本化 path 依赖 + PUBLISHING.md 手册
+  (actl 名被 2018 旧包占用,crate 名用 actl-cli、bin 名仍 actl;core dry-run 通过,
+  实际发布需维护者 token 按序三条命令);
+- **US1 十次重跑 10/10(100%,验收门 ≥90%)**;
+- NFR 实测:冷启动 P50 54.9ms / P95 73.3ms(P95<80 达标;P50 微超 50——信号层两次
+  状态写+锁探测的有意权衡,后续可优化为仅长命令写 begin 态);snapshot 全量 3.9KB /
+  skeleton 2.4KB(削减 38%,记事本 23 个交互引用);
+- 外部机器 US3 复现留待非开发机验证(README 安装三渠道已具备)。 -->
+
 ## [0.1.1] - 2026-09-26
 
 M2 前两批:输入可靠性硬化 + 命令面 24 + fallback 定位链 + US1 跨 3 应用 +

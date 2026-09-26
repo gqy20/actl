@@ -46,6 +46,11 @@ Phase 3  T+3月起,长期     生产级打磨      v1.0    (协议冻结,生态�
 - 集成测试 fixtures(计算器/记事本/ms-settings);envelope 契约测试
 - 分发:cargo install、GitHub Releases 单 exe、scoop manifest
 
+**收尾状态(2026-09-26)**:README 示例化 ✓ · scoop manifest ✓ · Agent Skill ✓ ·
+crates.io 备妥待维护者 token(PUBLISHING.md,crate 名 actl-cli)·
+**US1 十次重跑 10/10(100%)** ✓ · NFR:P95 73.3ms<80 ✓(P50 54.9 微超 50,信号层
+状态写的有意权衡)· 外部机器复现 US3 待非开发机验证。
+
 **退出标准**:
 - 金任务集全过,US1"跨 3 应用数据搬运"成功率 ≥ 90%(10 次重跑);
 - 冷启动、输出体积、token 消耗三项 NFR 达标(PRD §4);
