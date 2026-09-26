@@ -13,8 +13,8 @@
 use actl_core::state::{Phase, SessionState, SignalPaths};
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, RECT, WAIT_OBJECT_0, WPARAM};
 use windows::Win32::Graphics::Gdi::{
-    BeginPaint, CreateSolidBrush, DT_END_ELLIPSIS, DT_LEFT, DT_SINGLELINE, DeleteObject, DrawTextW,
-    EndPaint, FillRect, HGDIOBJ, InvalidateRect,
+    BeginPaint, CreateSolidBrush, DT_END_ELLIPSIS, DT_LEFT, DT_SINGLELINE, DT_VCENTER,
+    DeleteObject, DrawTextW, EndPaint, FillRect, HGDIOBJ, InvalidateRect,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Threading::OpenMutexW;
@@ -27,9 +27,9 @@ use windows::Win32::UI::Shell::{
 use windows::Win32::UI::WindowsAndMessaging::GetClientRect;
 use windows::Win32::UI::WindowsAndMessaging::{
     CS_HREDRAW, CS_VREDRAW, CreateWindowExW, DefWindowProcW, DispatchMessageW, GWLP_USERDATA,
-    GetMessageW, HWND_BROADCAST, IDI_APPLICATION, KillTimer, LWA_ALPHA, LoadIconW, MB_OK,
-    MB_SETFOREGROUND, MSG, MessageBoxW, PostQuitMessage, RegisterClassW, SPI_GETWORKAREA,
-    SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, SetLayeredWindowAttributes, SetTimer,
+    GetMessageW, HWND_BROADCAST, IDC_ARROW, IDI_APPLICATION, KillTimer, LWA_ALPHA, LoadCursorW,
+    LoadIconW, MB_OK, MB_SETFOREGROUND, MSG, MessageBoxW, PostQuitMessage, RegisterClassW,
+    SPI_GETWORKAREA, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, SetLayeredWindowAttributes, SetTimer,
     SystemParametersInfoW, TranslateMessage, WINDOW_EX_STYLE, WINDOW_STYLE, WM_APP, WM_DESTROY,
     WM_HOTKEY, WM_LBUTTONDOWN, WM_PAINT, WM_RBUTTONUP, WM_TIMER, WNDCLASSW, WS_EX_LAYERED,
     WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP, WS_VISIBLE,
@@ -164,57 +164,118 @@ fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
+/// Source Code Pro 三级字阶(进程生命周期内只建一次)。
+/// DEFAULT_CHARSET 让中文走系统 font-linking(否则乱码方框)。
+unsafe fn font(height: i32) -> windows::Win32::Graphics::Gdi::HFONT {
+    static BIG: std::sync::OnceLock<isize> = std::sync::OnceLock::new();
+    static MID: std::sync::OnceLock<isize> = std::sync::OnceLock::new();
+    static DIM: std::sync::OnceLock<isize> = std::sync::OnceLock::new();
+    use windows::Win32::Graphics::Gdi::{
+        CLIP_DEFAULT_PRECIS, CreateFontW, DEFAULT_CHARSET, FIXED_PITCH, FW_NORMAL,
+        OUT_DEFAULT_PRECIS, PROOF_QUALITY,
+    };
+    let slot = match height {
+        17 => &BIG,
+        13 => &MID,
+        _ => &DIM,
+    };
+    let h = *slot.get_or_init(|| {
+        CreateFontW(
+            -height, // 字符高度(负值=char height)
+            0,
+            0,
+            0,
+            FW_NORMAL.0 as i32,
+            0,
+            0,
+            0,
+            DEFAULT_CHARSET,
+            OUT_DEFAULT_PRECIS,
+            CLIP_DEFAULT_PRECIS,
+            PROOF_QUALITY,
+            FIXED_PITCH.0 as u32,
+            w!("Source Code Pro"),
+        )
+        .0 as isize
+    });
+    windows::Win32::Graphics::Gdi::HFONT(h as *mut _)
+}
+
+/// HUD 布局:恒定深底 + 左侧模式色条 + 状态行文字着色
+/// (纯色大底太吵——实测反馈;颜色语义由色条与文字承载,docs/11 §11)。
 unsafe fn draw(hwnd: HWND, snap: &Snapshot) {
+    use windows::Win32::Graphics::Gdi::{SelectObject, SetBkColor, SetTextColor};
+
     let mut ps = std::mem::zeroed();
     let hdc = BeginPaint(hwnd, &mut ps);
     let mut rc = RECT::default();
     let _ = GetClientRect(hwnd, &mut rc);
-    // BGR
-    let (bg, fg) = match snap.mode {
-        Mode::Stopped => (0x0040_40b0u32, 0x00FF_FFFFu32), // 红(BGR)
-        Mode::Active => (0x0078_5020u32, 0x0000_0000u32),  // 琥珀
-        Mode::Busy => (0x0096_9696u32, 0x0000_0000u32),    // 浅灰
-        Mode::Idle => (0x0030_3030u32, 0x00E0_E0E0u32),    // 深灰
-        Mode::Stale => (0x0020_2020u32, 0x00B0_B0B0u32),   // 暗
+
+    // BGR 恒定深底
+    const BG: u32 = 0x001E_1E1E;
+    // (accent 色条, 状态行文字)按模式
+    let (accent, state_fg) = match snap.mode {
+        Mode::Stopped => (0x0040_40b0u32, 0x006A_6AFFu32), // 红
+        Mode::Active => (0x0078_5020u32, 0x0050_a0ffu32),  // 琥珀
+        Mode::Busy => (0x0096_9696u32, 0x00c8_c8c8u32),    // 浅灰
+        Mode::Idle => (0x0050_5050u32, 0x00a0_a0a0u32),    // 灰
+        Mode::Stale => (0x0028_2828u32, 0x0080_8080u32),   // 暗
     };
-    let brush = CreateSolidBrush(COLORREF(bg));
-    FillRect(hdc, &rc, brush);
-    let _ = DeleteObject(HGDIOBJ(brush.0));
-    let set_text_color = windows::Win32::Graphics::Gdi::SetTextColor(hdc, COLORREF(fg));
-    let _ = windows::Win32::Graphics::Gdi::SetBkColor(hdc, COLORREF(bg));
-    let dt = DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS;
-    let margin = 12;
+
+    let fill = |r: &RECT, color: u32| {
+        let b = CreateSolidBrush(COLORREF(color));
+        FillRect(hdc, r, b);
+        let _ = DeleteObject(HGDIOBJ(b.0));
+    };
+    fill(&rc, BG);
+    // 左侧 6px 模式色条
+    fill(
+        &RECT {
+            left: 0,
+            top: 0,
+            right: 6,
+            bottom: rc.bottom,
+        },
+        accent,
+    );
+
+    let dt = DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS | DT_VCENTER;
+    let left = 18;
+    let line = |r: &mut RECT, s: &str, h: i32, color: u32| {
+        let old_f = SelectObject(hdc, HGDIOBJ(font(h).0));
+        let old_c = SetTextColor(hdc, COLORREF(color));
+        SetBkColor(hdc, COLORREF(BG));
+        let mut buf = wide(s);
+        let _ = DrawTextW(hdc, &mut buf, r as *mut RECT, dt);
+        SetTextColor(hdc, old_c);
+        SelectObject(hdc, old_f);
+    };
     let mut r1 = RECT {
-        left: margin,
+        left,
         top: 8,
-        right: rc.right - margin,
-        bottom: 34,
+        right: rc.right - 12,
+        bottom: 32,
     };
     let mut r2 = RECT {
-        left: margin,
-        top: 36,
-        right: rc.right - margin,
+        left,
+        top: 34,
+        right: rc.right - 12,
         bottom: 56,
     };
     let mut r3 = RECT {
-        left: margin,
-        top: 60,
-        right: rc.right - margin,
-        bottom: 76,
+        left,
+        top: 58,
+        right: rc.right - 12,
+        bottom: 78,
     };
-    let show = |r: &mut RECT, s: &str| {
-        let mut buf = wide(s);
-        let len = buf.len() as i32 - 1;
-        let _ = DrawTextW(hdc, &mut buf, r as *mut RECT, dt);
-        let _ = len;
-    };
-    show(&mut r1, &snap.line1);
-    show(&mut r2, &snap.line2);
-    show(
+    line(&mut r1, &snap.line1, 17, 0x00E8_E8E8);
+    line(&mut r2, &snap.line2, 13, state_fg);
+    line(
         &mut r3,
         "Ctrl+Alt+F12 紧急停止 · 点击本条=清除停止 · 关闭窗口=退出",
+        11,
+        0x006E_6E6E,
     );
-    let _ = set_text_color;
     let _ = EndPaint(hwnd, &ps);
 }
 
@@ -226,7 +287,28 @@ unsafe extern "system" fn wnd_proc(
 ) -> LRESULT {
     match msg {
         WM_TIMER if wparam.0 == TIMER_ID => {
-            let _ = InvalidateRect(Some(hwnd), None, true);
+            // 变化才重绘:内容键(模式+两行)存 GWLP_USERDATA,避免常刷闪烁
+            let snap = poll();
+            let key = format!(
+                "{:?}|{}|{}",
+                std::mem::discriminant(&snap.mode),
+                snap.line1,
+                snap.line2
+            );
+            let prev =
+                windows::Win32::UI::WindowsAndMessaging::GetWindowLongPtrW(hwnd, GWLP_USERDATA);
+            if prev != 0 {
+                drop(Box::from_raw(prev as *mut String));
+            }
+            let changed = prev == 0 || unsafe { &*(prev as *const String) } != &key;
+            let _ = windows::Win32::UI::WindowsAndMessaging::SetWindowLongPtrW(
+                hwnd,
+                GWLP_USERDATA,
+                Box::into_raw(Box::new(key)) as isize,
+            );
+            if changed {
+                let _ = InvalidateRect(Some(hwnd), None, true);
+            }
             LRESULT(0)
         }
         WM_PAINT => {
@@ -278,6 +360,8 @@ fn main() {
             lpfnWndProc: Some(wnd_proc),
             hInstance: hinstance.into(),
             hIcon: LoadIconW(None, IDI_APPLICATION).unwrap_or_default(),
+            // 不设类光标 = 悬浮时系统兜底显示"忙"圈(实测坑);显式箭头
+            hCursor: LoadCursorW(None, IDC_ARROW).unwrap_or_default(),
             lpszClassName: class_name,
             ..Default::default()
         };
