@@ -64,7 +64,7 @@ Agent Skill ✓ · crates.io 已发布且 tag 自动同步(三 crate;cargo insta
 
 候选方向(按社区反馈排序,不预先承诺):
 - 长尾 workaround 库(应用特化 pack,参考 desktop-cli 的 application packs 思路)
-- `serve` 常驻模式(性能优化,协议不变);可选事件加速:UIA/WinEvent 订阅仅作 wait 触发器(uiautomation crate `event` feature,零新增依赖),前置条件与防御清单见 [13 §4.4](13-realtime-state-maintenance.md)——不维护常驻树、不空闲全局订阅
+- `serve` 常驻模式(协议不变;收益主项是增量观察 `changed since <snapshot_id>` 与定向应答,次级才是冷启动摊销与 wait 提速——设计原则见 [13 §4.5](13-realtime-state-maintenance.md):本地状态富度与协议面解耦、禁 eager 预取、serve 挂掉自动回落单发);可选事件加速:UIA/WinEvent 订阅仅作 wait 触发器(uiautomation crate `event` feature,零新增依赖),前置条件与防御清单见 [13 §4.4](13-realtime-state-maintenance.md)——不维护常驻树、不空闲全局订阅;推迟理由 = 防御工程 + 故障模型 + 会话语义定案(ref 稳定性/快照持久校验),与 token 无关
 - 录制器 → agent 可复现"操作轨迹"(OpenAdapt 思路)
 - Linux(AT-SPI2)/ macOS 后端(协议层已平台无关)
 - MCP 薄壳(独立 crate,不进核心)
