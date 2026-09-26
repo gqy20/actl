@@ -46,6 +46,9 @@ enum Command {
         /// Disambiguate multi-matches by picking the one nearest to this anchor element's name
         #[arg(long)]
         near: Option<String>,
+        /// Validate ref replay against this snapshot id (window-instance check)
+        #[arg(long)]
+        snapshot: Option<String>,
         /// Physically move the mouse and click at the UIA clickable point
         /// (uses the real pointer + input lock; UIA Invoke is the default)
         #[arg(long)]
@@ -70,6 +73,9 @@ enum Command {
         /// Disambiguate multi-matches by picking the one nearest to this anchor element's name
         #[arg(long)]
         near: Option<String>,
+        /// Validate ref replay against this snapshot id (window-instance check)
+        #[arg(long)]
+        snapshot: Option<String>,
     },
     /// Launch a program with optional arguments
     Launch {
@@ -89,6 +95,9 @@ enum Command {
         /// Disambiguate multi-matches by picking the one nearest to this anchor element's name
         #[arg(long)]
         near: Option<String>,
+        /// Validate ref replay against this snapshot id (window-instance check)
+        #[arg(long)]
+        snapshot: Option<String>,
         /// Deliver via clipboard + ctrl+v (the only reliable text channel
         /// under a Chinese-mode IME; uses the shared clipboard, reported in output)
         #[arg(long)]
@@ -122,6 +131,9 @@ enum Command {
         /// Disambiguate multi-matches by picking the one nearest to this anchor element's name
         #[arg(long)]
         near: Option<String>,
+        /// Validate ref replay against this snapshot id (window-instance check)
+        #[arg(long)]
+        snapshot: Option<String>,
     },
     /// Right-click an element (physical; opens context menus)
     RightClick {
@@ -347,6 +359,7 @@ fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             target,
             app,
             near,
+            snapshot,
             physical,
             expect,
             timeout,
@@ -354,6 +367,7 @@ fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             target,
             app.as_deref(),
             near.as_deref(),
+            snapshot.as_deref(),
             *physical,
             expect.as_deref(),
             *timeout,
@@ -363,15 +377,30 @@ fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             property,
             app,
             near,
-        } => get(target, property.as_deref(), app.as_deref(), near.as_deref()),
+            snapshot,
+        } => get(
+            target,
+            property.as_deref(),
+            app.as_deref(),
+            near.as_deref(),
+            snapshot.as_deref(),
+        ),
         Command::Launch { args } => launch(args),
         Command::Type {
             target,
             text,
             app,
             near,
+            snapshot,
             paste,
-        } => type_cmd(target, text, app.as_deref(), near.as_deref(), *paste),
+        } => type_cmd(
+            target,
+            text,
+            app.as_deref(),
+            near.as_deref(),
+            snapshot.as_deref(),
+            *paste,
+        ),
         Command::Press {
             keys,
             app,
@@ -383,7 +412,14 @@ fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             value,
             app,
             near,
-        } => set_value_cmd(target, value, app.as_deref(), near.as_deref()),
+            snapshot,
+        } => set_value_cmd(
+            target,
+            value,
+            app.as_deref(),
+            near.as_deref(),
+            snapshot.as_deref(),
+        ),
         Command::RightClick { target, app, near } => pointer_cmd(
             "right-click",
             target,
@@ -591,6 +627,7 @@ fn snapshot(app: Option<&str>, skeleton: bool) -> Result<CommandOutput, CtlError
         }
     }
     let out = builder.finish(skeleton);
+    actl_uia::persist_snapshot(&out.snapshot_id, &cap.window.title, &cap.window_runtime_id);
     let data = json!({
         "window": {
             "title": cap.window.title,
@@ -612,11 +649,13 @@ fn click(
     target_raw: &str,
     app: Option<&str>,
     near: Option<&str>,
+    snapshot: Option<&str>,
     physical: bool,
     expect: Option<&str>,
     timeout: Option<u64>,
 ) -> Result<CommandOutput, CtlError> {
     let target = actl_core::parse_target(target_raw)?;
+    replay_guard(snapshot, app)?;
     // --expect = 新窗口断言:动作前取 RuntimeId 基线(与 press 相同语义)
     let expect_substr = match expect {
         Some(raw) => Some(parse_expect(raw)?),
@@ -669,8 +708,10 @@ fn get(
     property: Option<&str>,
     app: Option<&str>,
     near: Option<&str>,
+    snapshot: Option<&str>,
 ) -> Result<CommandOutput, CtlError> {
     let target = actl_core::parse_target(target_raw)?;
+    replay_guard(snapshot, app)?;
     let info = actl_uia::read_property(app, &target, property, near)?;
     let mut props = serde_json::Map::new();
     if let Some(v) = &info.name {
@@ -712,9 +753,11 @@ fn type_cmd(
     text: &str,
     app: Option<&str>,
     near: Option<&str>,
+    snapshot: Option<&str>,
     paste: bool,
 ) -> Result<CommandOutput, CtlError> {
     let app = require_app(app, "type")?;
+    replay_guard(snapshot, Some(app))?;
     let target = actl_core::parse_target(target_raw)?;
     let res = actl_uia::type_text(Some(app), &target, text, paste, near)?;
     let keyboard = if res.stopped_early {
@@ -781,6 +824,18 @@ fn press(
     .into())
 }
 
+/// --snapshot <id> 回放校验:仅对 @eN 目标有意义;窗口实例与快照记录
+/// 不一致 → STALE_REF(同标题 ≠ 同实例,重开窗口后计数重放会点错)。
+fn replay_guard(snapshot: Option<&str>, app: Option<&str>) -> Result<(), CtlError> {
+    let Some(id) = snapshot else { return Ok(()) };
+    let Some(pattern) = app else {
+        return Err(CtlError::protocol(
+            "--snapshot requires --app (the window to freshness-check)",
+        ));
+    };
+    actl_uia::check_snapshot_freshness_by_pattern(id, pattern)
+}
+
 /// 键盘注入命令的 fail-closed 门:必须显式 --app 绑定目标窗口。
 /// 裸注入打进"当下恰好前台"的窗口是事故 #1 的路径之一;护栏随 --app 生效。
 fn require_app<'a>(app: Option<&'a str>, cmd: &str) -> Result<&'a str, CtlError> {
@@ -797,8 +852,10 @@ fn set_value_cmd(
     value: &str,
     app: Option<&str>,
     near: Option<&str>,
+    snapshot: Option<&str>,
 ) -> Result<CommandOutput, CtlError> {
     let target = actl_core::parse_target(target_raw)?;
+    replay_guard(snapshot, app)?;
     let res = actl_uia::set_value(app, &target, value, near)?;
     Ok(json!({
         "action": "set-value",
@@ -852,6 +909,7 @@ fn find_cmd(
         }
     }
     let out = builder.finish(false);
+    actl_uia::persist_snapshot(&out.snapshot_id, &cap.window.title, &cap.window_runtime_id);
     let role_want = role.map(str::to_lowercase);
     let matched: Vec<&actl_core::snapshot::ElementOut> = out
         .elements

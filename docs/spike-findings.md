@@ -99,3 +99,12 @@ doc 09 修复落地验证时,金任务 2 连续 4 次 readback 损坏且**每次
 - **UWP 挂起 = UIA 停摆**:计算器后台挂起后每次跨进程属性调用 ~2s 超时(今晨 40ms/命令 → 现今 ~2.3s/命令,连发快跑与挂起空隙互为因果)。M2 课题:激活感知目标解析(先唤醒再操作);金任务若在活动桌面上跑,单轮可到 30s+。
 - **`start calc:` 协议启动在 taskkill 后会静默失败**;可靠方式 `start shell:AppsFolder\Microsoft.WindowsCalculator_8wekyb3d8bbwe!App`。
 - **性能回归自查**:owned-dialog 深扫曾进 find_window 热路径(每窗口几十次 COM 往返)→ 改两阶段(root 快路径一步命中,0 命中才深扫 owned)。
+
+## M2 第二批收官实测(2026-09-26 深夜三)
+
+- **金任务 1/2 在命令面大改(17→24 命令、定位链重写)后双双 10/10 回归通过**。
+- **US1 跨 3 应用首版 16/16**(fixtures/us1-cross-app.sh):计算器(算 123×456→读显示)→记事本(paste 通道写入+另存为)→资源管理器(开目录+窗口级确认);文件由磁盘+内容双验背书。
+- **资源管理器文件列表 = UIA 虚拟化黑洞(新开放项,M2 第三批)**:新建文件的 ListItem 不实时实现——等 6s、F5 强刷后 find 仍 total=0;根因方向是 ItemContainerPattern/虚拟化实现,与 scroll-into-view 同族。文件确认改走磁盘;条目级确认待 pattern 支持。
+- **另存为对话框 id:1001 会匹配两个元素**(同 AutomationId 重复暴露)——AMBIGUOUS 候选机制正确拦截,fixture 用 id:FileNameControlHost 兜底;这正是定位链多命中上报设计的用武之地。
+- **Win11 记事本 = 单进程多窗口 + 会话恢复**:taskkill 重启会把全部窗口(含未保存内容)复活;测试残留需 TabState 重置或逐窗优雅关闭。快照版本化测试因此改用计算器(实例即身份)。
+- **snapshot_id 版本化-lite 落地**:快照记录落盘(%LOCALAPPDATA%\actl\snapshots,保留 20 份);`--snapshot <id>` 回放校验窗口 RuntimeId——新鲜快照通过、伪造 id 拒、重开窗口(同标题新实例)拒,三案例真机验证。元素级树前缀校验留待完整会话设计。

@@ -28,6 +28,8 @@ pub struct WindowInfo {
 
 pub struct CaptureResult {
     pub window: WindowInfo,
+    /// 窗口 RuntimeId(snapshot_id 版本化的比对键;跨进程稳定)
+    pub window_runtime_id: Vec<i32>,
     /// DFS 序节点流,`parent` 指向同流索引(供 core 层 skeleton 投影)
     pub nodes: Vec<UiNode>,
     pub truncated: bool,
@@ -52,16 +54,97 @@ pub fn capture(app: Option<&str>) -> Result<CaptureResult, CtlError> {
         pid: target.get_process_id().unwrap_or_default(),
     };
     let wake_ms = ensure_window_responsive(&target);
+    let window_runtime_id = target.get_runtime_id().unwrap_or_default();
 
     let mut nodes = Vec::new();
     walk(&walker, &target, 0, None, &mut nodes);
     let truncated = nodes.len() >= MAX_ELEMENTS;
     Ok(CaptureResult {
         window,
+        window_runtime_id,
         nodes,
         truncated,
         wake_ms,
     })
+}
+
+// ─── snapshot_id 版本化-lite(M2:窗口身份绑定)──────────────────────────
+/// @eN 绑定的是"快照那一刻的窗口实例"。跨命令重放时窗口可能已关闭重开
+/// (同标题 ≠ 同实例),纯计数重放会静默点进新窗口的巧合位置。方案:快照
+/// 落盘 {snapshot_id → 窗口 RuntimeId};回放命令带 `--snapshot <id>` 时
+/// 校验当前窗口实例与快照一致,不一致 → STALE_REF。
+/// 元素级校验(树前缀比对)留待完整会话设计,与 fallback 链的 evidence 演进同批。
+const SNAPSHOT_KEEP: usize = 20;
+
+fn snapshot_dir() -> Option<std::path::PathBuf> {
+    let base = std::env::var("LOCALAPPDATA").ok()?;
+    let dir = std::path::Path::new(&base).join("actl").join("snapshots");
+    std::fs::create_dir_all(&dir).ok()?;
+    Some(dir)
+}
+
+/// 快照记录落盘(保留最近 SNAPSHOT_KEEP 份,按修改时间淘汰)。
+pub fn persist_snapshot(id: &str, window_title: &str, window_runtime_id: &[i32]) {
+    let Some(dir) = snapshot_dir() else { return };
+    let record = serde_json::json!({
+        "snapshot_id": id,
+        "window_title": window_title,
+        "window_runtime_id": window_runtime_id,
+    });
+    let _ = std::fs::write(
+        dir.join(format!("{id}.json")),
+        serde_json::to_string(&record).unwrap_or_default(),
+    );
+    // 淘汰旧记录:按修改时间留最新 SNAPSHOT_KEEP 份
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        let mut files: Vec<_> = entries
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().extension().is_some_and(|x| x == "json"))
+            .filter_map(|e| {
+                let m = e.metadata().ok()?;
+                let t = m.modified().ok()?;
+                Some((t, e.path()))
+            })
+            .collect();
+        files.sort();
+        let excess = files.len().saturating_sub(SNAPSHOT_KEEP);
+        for (_, path) in files.into_iter().take(excess) {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+}
+
+fn load_snapshot(id: &str) -> Option<(String, Vec<i32>)> {
+    let dir = snapshot_dir()?;
+    let text = std::fs::read_to_string(dir.join(format!("{id}.json"))).ok()?;
+    let v: serde_json::Value = serde_json::from_str(&text).ok()?;
+    let title = v["window_title"].as_str()?.to_string();
+    let rid = v["window_runtime_id"]
+        .as_array()?
+        .iter()
+        .filter_map(|x| x.as_i64().map(|n| n as i32))
+        .collect();
+    Some((title, rid))
+}
+
+/// 回放校验:当前窗口实例须与快照记录一致(RuntimeId 比对)。
+pub fn check_snapshot_freshness(snapshot_id: &str, current: &UIElement) -> Result<(), CtlError> {
+    let Some((_, recorded)) = load_snapshot(snapshot_id) else {
+        return Err(CtlError::new(
+            ErrorCode::StaleRef,
+            format!("snapshot {snapshot_id:?} not found on disk (expired or different machine)"),
+        ));
+    };
+    let now = current.get_runtime_id().unwrap_or_default();
+    if !recorded.is_empty() && now != recorded {
+        return Err(CtlError::new(
+            ErrorCode::StaleRef,
+            format!(
+                "window instance changed since snapshot {snapshot_id:?}                  (same-title window reopened); re-snapshot before replaying refs"
+            ),
+        ));
+    }
+    Ok(())
 }
 
 /// 激活感知目标解析(M2 第一批,docs/spike-findings"UWP 挂起 = UIA 停摆"):
@@ -1576,4 +1659,15 @@ pub fn extract_table(app: Option<&str>, target: &Target) -> Result<Vec<Vec<Strin
         }
     }
     Ok(table)
+}
+
+/// check_snapshot_freshness 的按模式入口:解析窗口后比对 RuntimeId。
+pub fn check_snapshot_freshness_by_pattern(
+    snapshot_id: &str,
+    pattern: &str,
+) -> Result<(), CtlError> {
+    let auto = UIAutomation::new().map_err(internal)?;
+    let walker = auto.create_tree_walker().map_err(internal)?;
+    let win = find_window(&auto, &walker, pattern)?;
+    check_snapshot_freshness(snapshot_id, &win)
 }
