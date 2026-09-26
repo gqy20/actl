@@ -19,5 +19,8 @@ Thumbs.db
 # 本地环境(不入库;CARGO_HOME 迁移说明见 docs/TECH_STACK.md §1)
 .env.local
 
+# ZCode CLI 的本地忽略清单(会话级工具配置)
+.zcodeignore
+
 # 某些工具把 PowerShell UTF-8 初始化误写入 cwd/PROFILE 的垃圾文件(全盘常见)
 /PROFILE
