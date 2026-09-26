@@ -220,8 +220,12 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
         Command::Toggle { target, app, near } => {
             toggle_cmd(target, app.as_deref(), near.as_deref())
         }
-        Command::FocusWindow { pattern } => focus_window_cmd(pattern),
-        Command::CloseWindow { pattern } => close_window_cmd(pattern),
+        Command::FocusWindow { pattern, pid, hwnd } => {
+            focus_window_cmd(pattern.as_deref(), *pid, hwnd.as_deref())
+        }
+        Command::CloseWindow { pattern, pid, hwnd } => {
+            close_window_cmd(pattern.as_deref(), *pid, hwnd.as_deref())
+        }
         Command::ListWindows => list_windows_cmd(),
         Command::Find {
             name,

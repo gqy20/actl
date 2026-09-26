@@ -342,13 +342,41 @@ pub(crate) fn resize_window_cmd(
     .into())
 }
 
-pub(crate) fn focus_window_cmd(pattern: &str) -> Result<CommandOutput, CtlError> {
-    let title = actl_uia::focus_window(pattern)?;
+pub(crate) fn window_ref_of<'a>(
+    pattern: Option<&'a str>,
+    pid: Option<u32>,
+    hwnd: Option<&'a str>,
+) -> Result<actl_uia::WindowRef<'a>, CtlError> {
+    // FR3 三形态:标题/PID/HWND 互斥(clap 已强制);全空 = 协议错误
+    if let Some(p) = pattern {
+        return Ok(actl_uia::WindowRef::Title(p));
+    }
+    if let Some(pid) = pid {
+        return Ok(actl_uia::WindowRef::Pid(pid));
+    }
+    if let Some(raw) = hwnd {
+        return Ok(actl_uia::WindowRef::Hwnd(actl_uia::parse_hwnd(raw)?));
+    }
+    Err(CtlError::protocol(
+        "needs a title substring or --pid or --hwnd (run list-windows to find them)",
+    ))
+}
+
+pub(crate) fn focus_window_cmd(
+    pattern: Option<&str>,
+    pid: Option<u32>,
+    hwnd: Option<&str>,
+) -> Result<CommandOutput, CtlError> {
+    let title = actl_uia::focus_window_by(window_ref_of(pattern, pid, hwnd)?)?;
     Ok(json!({ "action": "focus-window", "window": title }).into())
 }
 
-pub(crate) fn close_window_cmd(pattern: &str) -> Result<CommandOutput, CtlError> {
-    let title = actl_uia::close_window(pattern)?;
+pub(crate) fn close_window_cmd(
+    pattern: Option<&str>,
+    pid: Option<u32>,
+    hwnd: Option<&str>,
+) -> Result<CommandOutput, CtlError> {
+    let title = actl_uia::close_window_by(window_ref_of(pattern, pid, hwnd)?)?;
     Ok(json!({ "action": "close-window", "window": title }).into())
 }
 

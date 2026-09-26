@@ -496,6 +496,8 @@ pub struct WindowEntry {
     pub rect: Option<[i32; 4]>,
     /// owned dialog 的宿主窗口标题(None = 顶层窗口)
     pub owner_title: Option<String>,
+    /// 原生 HWND(十进制;close/focus-window --hwnd 的取值来源)
+    pub hwnd: Option<isize>,
 }
 
 /// list-windows:枚举顶层窗口 + owned dialog,附物理层叠放事实。
@@ -579,6 +581,7 @@ pub fn list_windows() -> Result<Vec<WindowEntry>, CtlError> {
                 title,
                 class: w.get_classname().unwrap_or_default(),
                 pid: w.get_process_id().unwrap_or_default(),
+                hwnd: hwnd.map(|h| h.0 as isize),
                 foreground,
                 topmost,
                 minimized,
@@ -665,4 +668,105 @@ pub fn check_snapshot_freshness_by_pattern(
     let walker = auto.create_tree_walker().map_err(internal)?;
     let win = find_window(&auto, &walker, pattern)?;
     check_snapshot_freshness(snapshot_id, &win)
+}
+
+// ─── FR3 补缺:窗口按 PID/句柄定位(蓝图 FR3"支持按句柄/标题/PID 定位") ──
+
+/// 窗口引用三形态(与 FR3 对齐;标题子串沿用既有语义,PID/HWND 精确)。
+#[derive(Debug, Clone, Copy)]
+pub enum WindowRef<'a> {
+    Title(&'a str),
+    Pid(u32),
+    /// 原生 HWND(十进制或 0x 前缀,由 CLI 层解析)
+    Hwnd(isize),
+}
+
+/// 按引用解析唯一顶层窗口:PID 多窗口 → AMBIGUOUS 附候选(与标题多匹配
+/// 同语义);HWND 天然唯一。list-windows 的 pid/hwnd 字段是 agent 侧的来源。
+pub fn resolve_window(r: WindowRef<'_>) -> Result<UIElement, CtlError> {
+    let auto = UIAutomation::new().map_err(crate::internal)?;
+    let walker = auto.create_tree_walker().map_err(crate::internal)?;
+    match r {
+        WindowRef::Title(pattern) => find_window(&auto, &walker, pattern),
+        WindowRef::Pid(pid) => {
+            let matches: Vec<UIElement> = top_windows(&auto, &walker)
+                .into_iter()
+                .filter(|w| w.get_process_id().map(|p| p == pid).unwrap_or(false))
+                .collect();
+            match matches.len() {
+                0 => Err(CtlError::new(
+                    ErrorCode::NotFound,
+                    format!("no top-level window owned by pid {pid}"),
+                )),
+                1 => Ok(matches.into_iter().next().unwrap_or_else(|| unreachable!())),
+                n => {
+                    let titles: Vec<String> = matches
+                        .iter()
+                        .filter_map(|w| w.get_name().ok())
+                        .take(5)
+                        .collect();
+                    Err(CtlError::with_evidence(
+                        ErrorCode::Ambiguous,
+                        format!("pid {pid} owns {n} windows; pass --hwnd or a title"),
+                        serde_json::json!({ "candidates": titles }),
+                    ))
+                }
+            }
+        }
+        WindowRef::Hwnd(raw) => top_windows(&auto, &walker)
+            .into_iter()
+            .find(|w| native_hwnd(w).map(|h| h.0 as isize == raw).unwrap_or(false))
+            .ok_or_else(|| {
+                CtlError::new(ErrorCode::NotFound, format!("no window at hwnd {raw:#x}"))
+            }),
+    }
+}
+
+/// 解析 --hwnd 参数(十进制或 0x 前缀十六进制)。
+pub fn parse_hwnd(raw: &str) -> Result<isize, CtlError> {
+    let t = raw.trim();
+    let v = if let Some(hex) = t.strip_prefix("0x").or_else(|| t.strip_prefix("0X")) {
+        isize::from_str_radix(hex, 16).ok()
+    } else {
+        t.parse::<isize>().ok()
+    };
+    v.filter(|v| *v != 0).ok_or_else(|| {
+        CtlError::protocol(format!(
+            "invalid --hwnd {raw:?}: expected decimal or 0x-prefixed hex"
+        ))
+    })
+}
+
+/// close-window 的按引用入口(FR3)。
+pub fn close_window_by(r: WindowRef<'_>) -> Result<String, CtlError> {
+    let win = resolve_window(r)?;
+    let title = win.get_name().unwrap_or_default();
+    let Some(hwnd) = native_hwnd(&win) else {
+        return Err(CtlError::new(
+            ErrorCode::NotActionable,
+            format!("window {title:?} exposes no native handle"),
+        ));
+    };
+    unsafe {
+        windows::Win32::UI::WindowsAndMessaging::PostMessageW(
+            Some(hwnd),
+            windows::Win32::UI::WindowsAndMessaging::WM_CLOSE,
+            windows::Win32::Foundation::WPARAM(0),
+            windows::Win32::Foundation::LPARAM(0),
+        )
+    }
+    .map_err(|e| CtlError::internal(format!("PostMessageW(WM_CLOSE) failed for {title:?}: {e}")))?;
+    Ok(title)
+}
+
+/// focus-window 的按引用入口(FR3)。
+pub fn focus_window_by(r: WindowRef<'_>) -> Result<String, CtlError> {
+    let win = resolve_window(r)?;
+    win.set_focus().map_err(|e| {
+        CtlError::new(
+            ErrorCode::NotActionable,
+            format!("cannot focus window: {e:?}"),
+        )
+    })?;
+    Ok(win.get_name().unwrap_or_default())
 }

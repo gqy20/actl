@@ -2,7 +2,7 @@
 # 无 make 的环境(如纯净 Windows)等价直达:cargo xtask setup / gate / fmt
 
 .DEFAULT_GOAL := help
-.PHONY: help setup gate fmt
+.PHONY: help setup gate fmt regress
 
 help: ## 显示本帮助
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-8s\033[0m %s\n", $$1, $$2}'
@@ -15,3 +15,6 @@ gate: ## 质量门禁:fmt --check + clippy -D warnings + test
 
 fmt: ## 格式化全部代码
 	cargo xtask fmt
+
+regress: ## 真机全量回归(需交互桌面):release 构建 + 全部 live fixtures
+	cargo xtask regress

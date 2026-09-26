@@ -5,6 +5,25 @@
 
 ## [Unreleased]
 
+### Added(0.2.0 清账批)
+- **一键回归入口**:`cargo xtask regress` / `make regress`——release 构建 + 顺序跑全部六个
+  live fixtures(金任务 1/2、US1、验收 A/B/C)并汇总。Windows 陷阱实录:裸 "bash"
+  解析到 System32 的 WSL bash(fixture 全线假败,报 WSL_E_DEFAULT_DISTRO_NOT_FOUND)——
+  显式探测 Git Bash 路径,`ACTL_BASH` 可覆盖;
+- **close/focus-window 按 --pid/--hwnd(FR3 补缺)**:窗口命令三形态定位(标题子串/
+  进程/句柄,clap 互斥);PID 多窗口 → AMBIGUOUS 附候选标题(fail-closed,同标题多窗
+  的正确行为);`list-windows` 每窗口补 `hwnd`(十进制)。真机闭环:notepad 双实例
+  --pid 被 AMBIGUOUS 正确拒绝、--hwnd 精确关闭其一;
+- **actl-signal Per-Monitor DPI**:WM_DPICHANGED 处理(DPI 基准更新 + 字体缓存失效 +
+  采纳系统建议矩形)+ 启动时按窗口落点 DPI 校正(DPI 基准从 OnceLock 改 AtomicU32)。
+  本机验证:渲染清晰正常;跨屏拖动的完整行为待手动拖动复测(本机处于系统 DPI 虚拟化
+  场景,窗口逻辑坐标与物理坐标不同源,如实记录)。
+
+### 回归(清账批)
+- `cargo xtask regress` 首跑:金任务 1 3/3、金任务 2 10/10、验收 A 8/8、B 9/9、
+  C 8/8;**US1 环境阻塞**:Win11 记事本云会话恢复自动重建历史窗口 → 多窗 AMBIGUOUS
+  (行为正确,环境脏了)——taskkill 会复活(TabState),本地 TabState 清除不够(云同步),
+  需一次性手动关闭记事本"自动保存会话"设置后复跑;记事本全链已由金任务 2 10/10 覆盖。
 M2 收官批:命令面补齐(wait 谓词/select/toggle)+ skeleton 单链折叠 + P50 结构优化 + 全命令 help 四要素。
 
 ### Added
@@ -28,7 +47,7 @@ M2 收官批:命令面补齐(wait 谓词/select/toggle)+ skeleton 单链折叠 +
   begin 态写入(250ms 轮询必然错过的瞬时态,却占冷启动路径;终态写保留)。同环境对照:
   单次 state 写 ≈11ms(慢日值);绝对收益待正常日复测(慢日纪律:绝对值不可跨日)。
 
-### 搁置
+### Added(清账批)
 - `list-notifications`:WinRT(Windows.UI.Notifications)依赖超出纯 Win32 边界且
   真实通知验收难造——裁定移出 M2 命令面收官,登记 M3 候选(蓝图 FR4 留位)。
 

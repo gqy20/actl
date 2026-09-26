@@ -183,3 +183,23 @@ fn wait_property_predicate_validated_at_protocol_level() {
     ]);
     assert_eq!(code, 2);
 }
+
+#[test]
+fn close_window_by_missing_pid_is_not_found() {
+    // FR3:--pid 定位;无此进程的窗口 → NOT_FOUND exit 1(离线可测,不碰真实窗口)
+    let (code, stdout) = actl(&["close-window", "--pid", "3999999"]);
+    assert_eq!(code, 1);
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
+    assert_eq!(v["error"]["code"], "NOT_FOUND");
+}
+
+#[test]
+fn window_commands_without_selector_is_protocol() {
+    let (code, stdout) = actl(&["close-window"]);
+    assert_eq!(
+        code, 2,
+        "PROTOCOL (no selector) exits 2 per the exit-code contract"
+    );
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
+    assert_eq!(v["error"]["code"], "PROTOCOL");
+}

@@ -354,6 +354,9 @@ pub(crate) fn list_windows_cmd() -> Result<CommandOutput, CtlError> {
             m.insert("title".into(), json!(w.title));
             m.insert("class".into(), json!(w.class));
             m.insert("pid".into(), json!(w.pid));
+            if let Some(h) = w.hwnd {
+                m.insert("hwnd".into(), json!(h));
+            }
             m.insert("foreground".into(), json!(w.foreground));
             if w.topmost {
                 m.insert("topmost".into(), json!(true));

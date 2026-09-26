@@ -255,13 +255,29 @@ pub(crate) enum Command {
     },
     /// Bring a window to the foreground (keyboard commands act on global focus)
     FocusWindow {
-        /// Window title substring
-        pattern: String,
+        /// Window title substring (exactly one match; or use --pid/--hwnd)
+        #[arg(conflicts_with_all = ["fpid", "fhwnd"])]
+        pattern: Option<String>,
+        /// Focus the window owned by this process id (from list-windows)
+        #[arg(long, id = "fpid", conflicts_with_all = ["pattern", "fhwnd"])]
+        pid: Option<u32>,
+        //
+        /// Focus the window at this native handle (decimal or 0x-hex; from list-windows)
+        #[arg(long, id = "fhwnd", conflicts_with_all = ["pattern", "fpid"], value_name = "HWND")]
+        hwnd: Option<String>,
     },
     /// Close a window gracefully (WM_CLOSE; unsaved work may prompt)
     CloseWindow {
-        /// Window title substring (must match exactly one window)
-        pattern: String,
+        /// Window title substring (must match exactly one window; or --pid/--hwnd)
+        #[arg(conflicts_with_all = ["cpid", "chwnd"])]
+        pattern: Option<String>,
+        /// Close the window owned by this process id (from list-windows)
+        #[arg(long, id = "cpid", conflicts_with_all = ["pattern", "chwnd"])]
+        pid: Option<u32>,
+        //
+        /// Close the window at this native handle (decimal or 0x-hex; from list-windows)
+        #[arg(long, id = "chwnd", value_name = "HWND", conflicts_with_all = ["pattern", "cpid"])]
+        hwnd: Option<String>,
     },
     /// List top-level windows (title, class, pid)
     ListWindows,

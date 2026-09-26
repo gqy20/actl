@@ -20,12 +20,14 @@ fn main() -> ExitCode {
         Some("setup") => setup(),
         Some("gate") => gate(),
         Some("fmt") => code(run(&["fmt", "--all"])),
+        Some("regress") => regress(),
         Some(_) | None => {
             eprintln!(
                 "tasks:\n  \
                  cargo xtask setup   install git hooks + activate pinned toolchain (run once after clone)\n  \
                  cargo xtask gate    quality gate: file-lines + fmt --check + clippy -D warnings + tests (= pre-push = CI)\n  \
-                 cargo xtask fmt     format all code"
+                 cargo xtask fmt     format all code
+                 cargo xtask regress run all live fixtures sequentially (needs an interactive desktop)"
             );
             ExitCode::FAILURE
         }
@@ -146,4 +148,52 @@ fn step(program: &str, args: &[&str]) -> bool {
         .status()
         .unwrap_or_else(|e| panic!("failed to spawn {program}: {e}"));
     status.success()
+}
+
+/// 全量回归入口:release 构建 + 顺序跑全部 live fixtures,汇总 PASS/FAIL。
+/// 与 gate 的分工:gate = 离线质量门禁(CI 安全);regress = 真机行为回归
+/// (需要交互桌面;金任务含键盘注入,桌面需空闲——并发打字会如实报 FAIL,
+/// 这是护栏在工作,不是误报)。fixture 各自负责应用的启停与清理。
+fn regress() -> ExitCode {
+    if !run(&["build", "--release", "-p", "actl-cli", "--bins"]) {
+        return ExitCode::FAILURE;
+    }
+    let ws_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let fixtures = [
+        "golden-task-1.sh",       // 计算器(3 轮;正式验收 ACTL_RUNS? RUNS=10)
+        "golden-task-2.sh",       // 记事本全链(注入,需桌面空闲)
+        "us1-cross-app.sh",       // 跨 3 应用数据搬运
+        "virtualized-list.sh",    // Explorer 条目级(L4)
+        "win32-table-extract.sh", // msinfo32 报表提取
+        "edge-deep-tree.sh",      // Chromium 深树 + 正文 + skeleton
+    ];
+    // Windows 上裸 "bash" 可能解析到 System32 的 WSL bash(fixture 用 git-bash 语义,
+    // 脚本会全线失败)——显式探测 Git Bash;ACTL_BASH 可覆盖。
+    let bash = std::env::var("ACTL_BASH").unwrap_or_else(|_| {
+        for p in [
+            r"C:\Program Files\Git\bin\bash.exe",
+            r"C:\Program Files (x86)\Git\bin\bash.exe",
+        ] {
+            if Path::new(p).exists() {
+                return p.to_string();
+            }
+        }
+        "bash".into()
+    });
+    let mut failed = Vec::new();
+    for f in fixtures {
+        let path = ws_root.join("fixtures").join(f);
+        eprintln!("▶ {f}");
+        let ok = step(&bash, &[path.to_string_lossy().as_ref()]);
+        if !ok {
+            failed.push(f);
+        }
+    }
+    if failed.is_empty() {
+        eprintln!("✓ regress: all fixtures green");
+        ExitCode::SUCCESS
+    } else {
+        eprintln!("✗ regress failed: {}", failed.join(", "));
+        ExitCode::FAILURE
+    }
 }

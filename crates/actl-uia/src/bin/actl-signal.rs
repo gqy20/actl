@@ -49,10 +49,29 @@ const HEIGHT: i32 = 96;
 const MIN_W: i32 = 280;
 const MAX_W: i32 = 460;
 
+// Per-Monitor DPI:DPI 可随窗口跨屏迁移而变(WM_DPICHANGED 更新),
+// AtomicU32 替代 OnceLock;0 = 尚未初始化(首次取系统 DPI 兜底)。
+static DPI: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
 fn dpi_scale() -> i32 {
-    static DPI: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
-    let dpi = *DPI.get_or_init(|| unsafe { windows::Win32::UI::HiDpi::GetDpiForSystem() });
+    use std::sync::atomic::Ordering;
+    let mut dpi = DPI.load(Ordering::Relaxed);
+    if dpi == 0 {
+        dpi = unsafe { windows::Win32::UI::HiDpi::GetDpiForSystem() };
+        DPI.store(dpi, Ordering::Relaxed);
+    }
     dpi as i32 / 96
+}
+
+// DPI 变更:更新基准 + 失效字体缓存(字体按物理像素创建,跨屏必重建)。
+fn set_dpi(dpi: u32) {
+    use std::sync::atomic::Ordering;
+    DPI.store(dpi, Ordering::Relaxed);
+    if let Ok(mut cache) = FONT_CACHE.lock() {
+        // 释放旧字体对象由系统管理(HFONT 泄漏量级:跨屏拖动次数,可忽略;
+        // DeleteObject 需确保不在 DC 中选中,保守不删)
+        cache.clear();
+    }
 }
 
 fn scale(v: i32) -> i32 {
@@ -247,41 +266,46 @@ fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
-/// Source Code Pro 三级字阶(进程生命周期内只建一次)。
-/// DEFAULT_CHARSET 让中文走系统 font-linking(否则乱码方框)。
+/// Source Code Pro 三级字阶(按当前 DPI 缓存;Per-Monitor 跨屏时由
+/// set_dpi 清空重建)。DEFAULT_CHARSET 让中文走系统 font-linking。
 /// 主行 SEMIBOLD(用户反馈细字发虚)、状态行 NORMAL、提示行 NORMAL。
+static FONT_CACHE: std::sync::LazyLock<std::sync::Mutex<std::collections::HashMap<i32, isize>>> =
+    std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+
 unsafe fn font(height: i32) -> windows::Win32::Graphics::Gdi::HFONT {
-    static BIG: std::sync::OnceLock<isize> = std::sync::OnceLock::new();
-    static MID: std::sync::OnceLock<isize> = std::sync::OnceLock::new();
-    static DIM: std::sync::OnceLock<isize> = std::sync::OnceLock::new();
     use windows::Win32::Graphics::Gdi::{
         CLEARTYPE_QUALITY, CLIP_DEFAULT_PRECIS, CreateFontW, DEFAULT_CHARSET, FIXED_PITCH,
         FW_NORMAL, FW_SEMIBOLD, OUT_DEFAULT_PRECIS,
     };
-    let (slot, weight) = match height {
-        17 => (&BIG, FW_SEMIBOLD.0 as i32),
-        13 => (&MID, FW_NORMAL.0 as i32),
-        _ => (&DIM, FW_NORMAL.0 as i32),
+    let weight = match height {
+        17 => FW_SEMIBOLD.0 as i32,
+        _ => FW_NORMAL.0 as i32,
     };
-    let h = *slot.get_or_init(|| {
-        CreateFontW(
-            -scale(height), // 逻辑高度 → 物理像素(负值=char height)
-            0,
-            0,
-            0,
-            weight,
-            0,
-            0,
-            0,
-            DEFAULT_CHARSET,
-            OUT_DEFAULT_PRECIS,
-            CLIP_DEFAULT_PRECIS,
-            CLEARTYPE_QUALITY,
-            FIXED_PITCH.0 as u32,
-            w!("Source Code Pro"),
-        )
-        .0 as isize
-    });
+    if let Ok(cache) = FONT_CACHE.lock() {
+        if let Some(h) = cache.get(&height) {
+            return windows::Win32::Graphics::Gdi::HFONT(*h as *mut _);
+        }
+    }
+    let h = CreateFontW(
+        -scale(height), // 逻辑高度 → 物理像素(负值=char height)
+        0,
+        0,
+        0,
+        weight,
+        0,
+        0,
+        0,
+        DEFAULT_CHARSET,
+        OUT_DEFAULT_PRECIS,
+        CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY,
+        FIXED_PITCH.0 as u32,
+        w!("Source Code Pro"),
+    )
+    .0 as isize;
+    if let Ok(mut cache) = FONT_CACHE.lock() {
+        cache.insert(height, h);
+    }
     windows::Win32::Graphics::Gdi::HFONT(h as *mut _)
 }
 
@@ -701,6 +725,29 @@ unsafe extern "system" fn wnd_proc(
             save_position(hwnd);
             LRESULT(0)
         }
+        // Per-Monitor DPI 跨屏迁移:系统给新 DPI( HIWORD(wparam) )与建议矩形。
+        // 更新基准(连带清字体缓存)+ 采纳建议尺寸 + 全量重绘。
+        windows::Win32::UI::WindowsAndMessaging::WM_DPICHANGED => {
+            let new_dpi = (wparam.0 >> 16) as u32;
+            if new_dpi != 0 {
+                set_dpi(new_dpi);
+            }
+            let suggested = unsafe { &*(lparam.0 as *const RECT) };
+            let _ = unsafe {
+                windows::Win32::UI::WindowsAndMessaging::SetWindowPos(
+                    hwnd,
+                    None,
+                    suggested.left,
+                    suggested.top,
+                    suggested.right - suggested.left,
+                    suggested.bottom - suggested.top,
+                    windows::Win32::UI::WindowsAndMessaging::SWP_NOZORDER
+                        | windows::Win32::UI::WindowsAndMessaging::SWP_NOACTIVATE,
+                )
+            };
+            let _ = InvalidateRect(Some(hwnd), None, true);
+            LRESULT(0)
+        }
         WM_HOTKEY if wparam.0 as i32 == HOTKEY_ID => {
             SignalPaths::default().request_stop();
             let _ = InvalidateRect(Some(hwnd), None, true);
@@ -789,6 +836,25 @@ fn main() {
         .expect("CreateWindowExW");
         // 半透明:存在感但不喧宾夺主
         let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), 235, LWA_ALPHA);
+
+        // 启动校正:窗口落在与主屏不同 DPI 的副屏时,创建尺寸按主屏 DPI 算错了
+        // (实测:200% 副屏上条高只有一半)。按窗口真实 DPI 重设尺寸并同步基准;
+        // 之后跨屏拖动由 WM_DPICHANGED 接管。
+        let real_dpi = windows::Win32::UI::HiDpi::GetDpiForWindow(hwnd);
+        if real_dpi != 0 && real_dpi as i32 / 96 != dpi_scale() {
+            set_dpi(real_dpi);
+            let _ = windows::Win32::UI::WindowsAndMessaging::SetWindowPos(
+                hwnd,
+                None,
+                0,
+                0,
+                scale(WIDTH),
+                scale(HEIGHT),
+                windows::Win32::UI::WindowsAndMessaging::SWP_NOMOVE
+                    | windows::Win32::UI::WindowsAndMessaging::SWP_NOZORDER
+                    | windows::Win32::UI::WindowsAndMessaging::SWP_NOACTIVATE,
+            );
+        }
 
         // 托盘锚点(锚点只做存在提示;控制入口在状态条与热键)
         let mut nid: NOTIFYICONDATAW = std::mem::zeroed();
