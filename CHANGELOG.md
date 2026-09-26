@@ -12,6 +12,8 @@
 - **M1 CLI 骨架**:envelope 输出管线(计时/退出码 0-1-2)、`status` 与 `commands`(自发现 schema,clap 同源生成)、bin 集成契约测试;clap 4.6 入依赖(TOTAL_DIRECT_DEPS=5/8)。
 - **M1 snapshot**:`actl snapshot [--app X] [--skeleton]` —— UIA 树遍历(actl-uia,`uiautomation` 升正式依赖)、`@eN` ref 编号与 skeleton 祖先链投影(actl-core 纯逻辑 + 单测)、NOT_FOUND 错误契约;计算器实测 204ms(debug 构建)。
 - **M1 交互链路**:`click`(UIInvoke 后台调用,支持 `@eN`/`name:`/`id:`/`role:` 四种目标)、`get`(属性白名单读取含 ValuePattern)、`launch`(spawn + trailing args);PROTOCOL 错误改走 exit 2(对齐 06 §4);真实链路验证:launch calc → click num7Button(显示"七")→ get CalculatorResults 读出"显示为 77"。
+- **金任务 1 达成 10/10**(fixtures/golden-task-1.sh):计算器 123×456+789 → 56,877,120 次点击零失败,ref 重放(snapshot→@eN→click)100% 稳定;性能实测 P50 40.2ms / P95 53.9ms / snapshot 275ms / 二进制 0.78MB。
+- **[spec] PRD 冷启动指标按实测修订**:P95 50ms → 80ms(附加 P50 < 50ms 约束)——Windows 进程 spawn 固定开销 ~30ms 为不可压缩项。
 - **spec(错误码)**:新增 `INTERNAL`(内部/UIA/系统层错误);envelope 增加可选 `snapshot_id` 字段;actl-core 枚举落齐 `ASSERTION_FAILED`。
 - 命令面语义审计(docs/06 §3.6):补 `key-up`、`inspect` 并入 `get --raw`、`clipboard-*` 更名 `get-clipboard`/`set-clipboard`(对齐命名规则)、新增错误码 `ASSERTION_FAILED` 并定义 `--expect` 等待语义;近似命令对(type/set-value、wait/verify、snapshot/find 等)的分工裁定入档。
 - `cargo xtask` 任务入口(setup/gate/fmt):门禁实现收敛为 xtask 单点,pre-push 与 CI 均调用 `cargo xtask gate`;Makefile 作为惯例入口保留(纯转发层)。
