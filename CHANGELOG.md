@@ -68,6 +68,12 @@ M2 第三批 · 观察层强化(接入面:虚拟化大列表 + 老 Win32 报表 
 - probe 探测工具补 `ic` 模式(ItemContainer 容器发现 + 原生查询验证,spike 载体)。
 
 ### Changed
+- **actl-uia/src/lib.rs(2112 行,当时全仓最大文件)按命令域拆为五模块**:
+  `window`(窗口发现/capture/快照持久化/窗口管理,668 行)、`locate`(定位链 L1–L4 +
+  元素等待,587)、`action`(语义动作 click/type/press/set-value,286)、`pointer`
+  (物理指针 + scroll,212)、`read`(get/verify/extract + 剪贴板,380),lib.rs 收敛为
+  49 行模块中枢。纯代码搬移无语义改动;公共 API 经 `pub use` 汇聚 crate 根,crate 外
+  路径不变;跨模块原私有 helper 按需升 `pub(crate)`。
 - **版本口径修订**:里程碑版本 = 0.<里程碑号>.0——M2 完成 = 0.2.0、M3 完成 = 0.3.0
   (协议冻结),1.0 保留给协议冻结后的正式稳定版、不再是里程碑承诺;取代 ROADMAP
   早期"M2=v0.3.0 / M3=v1.0"的写法,与 M1 期 0.1.x 的实际发版序列衔接。
