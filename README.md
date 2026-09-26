@@ -1,7 +1,10 @@
 # actl
 
 [![CI](https://github.com/gqy20/actl/actions/workflows/ci.yml/badge.svg)](https://github.com/gqy20/actl/actions/workflows/ci.yml)
-[![Release](https://github.com/gqy20/actl/actions/workflows/release.yml/badge.svg)](https://github.com/gqy20/actl/releases/latest)
+[![crates.io](https://img.shields.io/crates/v/actl-cli.svg)](https://crates.io/crates/actl-cli)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+> 仓库私有期间 Actions 徽章仅登录可见;crates.io/License 徽章为公开数据。
 
 > 让 AI 像人一样操作 Windows 软件——但更快、更准、每一步可验证。
 
@@ -28,7 +31,7 @@ scoop install https://raw.githubusercontent.com/gqy20/actl/main/scoop/actl.json
 `actl_vX.Y.Z_windows_amd64.exe`(主程序单文件即可用);完整包 zip 额外含
 `actl-signal.exe`(桌面信号条,建议同装)。
 
-**cargo**:`cargo install actl-cli`(crate 名 actl-cli,二进制名 `actl`)。
+**cargo**:`cargo install actl-cli`(crate 名 [actl-cli](https://crates.io/crates/actl-cli),二进制名 `actl`;workspace 另有 [actl-core](https://crates.io/crates/actl-core)(协议层)与 [actl-uia](https://crates.io/crates/actl-uia)(UIA 后端)两个可独立复用的 crate)。
 
 **源码**:
 
@@ -95,19 +98,25 @@ Source Code Pro),状态灯取市场通行色——**绿=执行中 · 琥珀=正�
 - **输入占用协调**:多 actl 实例互斥;长注入分批复核焦点,被抢即停并上报;
 - 修饰键治理:检测用户按住 ctrl/shift 时拒绝注入(防语义劫持),绝不踩掉用户按键。
 
-## 命令面(24,`actl commands` 自发现)
+## 命令面(26,`actl commands` 自发现;`actl <cmd> -h` 四要素:用途/参数/示例/错误码)
 
 感知 `snapshot find get list-windows status commands` ·
-执行 `click right-click double-click hover drag scroll type press key-down key-up set-value` ·
+执行 `click right-click double-click hover drag scroll type press key-down key-up set-value select toggle` ·
 窗口 `launch focus-window close-window resize-window wait batch` ·
 验证 `verify extract` · 系统 `get-clipboard set-clipboard`
+
+定位链四级(primary → fuzzy-name → role-ordinal/anchor → **虚拟化容器 item-container**);
+`wait` 支持属性谓词(`--property value=OK`/`name=子串`/`checked=on`);虚拟化大列表
+(资源管理器条目级)、老 Win32 报表提取(msinfo32)、Chromium/Electron 系正文读取均实测通达。
 
 完整语义与协议契约见[设计蓝图](docs/06-design-blueprint.md)。
 
 ## 项目状态
 
-M2:24 命令全链路,金任务(计算器/记事本保存)10/10,US1 跨 3 应用数据搬运 16/16,
-envelope 契约测试,显示信号层。阶段与退出标准见 [ROADMAP](docs/ROADMAP.md)。
+M2(收官批进行中):26 命令全链路,金任务(计算器/记事本保存)双双 10/10,US1 跨 3 应用
+数据搬运 16/16;定位链四级含虚拟化容器兜底(Explorer 条目级实测通达);envelope 契约测试;
+显示信号层(状态灯波纹动画/实时耗时);batch 步级可观测 + ACTL_TRACE 阶段打点。
+阶段与退出标准见 [ROADMAP](docs/ROADMAP.md);版本口径:M2 完成 = 0.2.0。
 
 ## 文档
 

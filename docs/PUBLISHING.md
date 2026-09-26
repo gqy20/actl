@@ -1,4 +1,4 @@
-# crates.io 发布手册(v0.1.1 已发布:actl-core / actl-uia / actl-cli 均 0.1.1;
+# crates.io 发布手册(当前已发布至 0.1.3:actl-core / actl-uia / actl-cli 同版本;
 # `cargo install actl-cli` → bin `actl` 全链路验收通过)
 
 **已自动化(2026-09-26 起)**:推送 vX.Y.Z tag 时 release.yml 的 crates job 自动按序发布三 crate

@@ -57,6 +57,12 @@ Agent Skill ✓ · crates.io 已发布且 tag 自动同步(三 crate;cargo insta
 时序评估闭环(Timing 旋钮 + 画像/扫描 fixtures + 三默认值维持,docs/timing-2026-09.md)✓ ·
 外部机器复现 US3 待非开发机验证。
 
+**收官批进展(2026-09-27,v0.1.3 已发)**:命令面 26/31(wait 属性谓词/select/toggle ✓;
+list-notifications 搁置 M3,list-surfaces 待裁定)· 虚拟化容器定位 L4 + Explorer 条目级
+收口 ✓ · 全命令 help 四要素 ✓ · batch 步级可观测 + ACTL_TRACE ✓ · skeleton 单链折叠
+(NFR 修订为分形态:深单链 ≥70%,浏览器/小窗口实测受限)· P50 结构优化落地(绝对值
+待正常日)· 金任务 10 轮全量回归 + 外部机器 US3 = 0.2.0 发版前剩余项。
+
 **退出标准**:
 - 金任务集全过,US1"跨 3 应用数据搬运"成功率 ≥ 90%(10 次重跑);
 - 冷启动、输出体积、token 消耗三项 NFR 达标(PRD §4);
