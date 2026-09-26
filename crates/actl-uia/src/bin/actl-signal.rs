@@ -13,9 +13,10 @@
 use actl_core::state::{Phase, SessionState, SignalPaths};
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, RECT, WAIT_OBJECT_0, WPARAM};
 use windows::Win32::Graphics::Gdi::{
-    BeginPaint, CreateSolidBrush, DT_END_ELLIPSIS, DT_LEFT, DT_SINGLELINE, DT_VCENTER,
-    DeleteObject, DrawTextW, Ellipse, EndPaint, FillRect, GetStockObject, HGDIOBJ, InvalidateRect,
-    NULL_PEN,
+    BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BeginPaint, CreateBitmap, CreateCompatibleDC,
+    CreateDIBSection, CreateSolidBrush, DIB_RGB_COLORS, DT_END_ELLIPSIS, DT_LEFT, DT_SINGLELINE,
+    DT_VCENTER, DeleteObject, DrawTextW, Ellipse, EndPaint, FillRect, GetStockObject, HGDIOBJ,
+    InvalidateRect, NULL_PEN,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Threading::OpenMutexW;
@@ -27,14 +28,18 @@ use windows::Win32::UI::Shell::{
 };
 use windows::Win32::UI::WindowsAndMessaging::GetClientRect;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CS_HREDRAW, CS_VREDRAW, CreateWindowExW, DefWindowProcW, DispatchMessageW, GWLP_USERDATA,
-    GetMessageW, HWND_BROADCAST, IDC_ARROW, IDI_APPLICATION, KillTimer, LWA_ALPHA, LoadCursorW,
-    LoadIconW, MB_OK, MB_SETFOREGROUND, MSG, MessageBoxW, PostQuitMessage, RegisterClassW,
-    SPI_GETWORKAREA, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, SetLayeredWindowAttributes, SetTimer,
-    SystemParametersInfoW, TranslateMessage, WINDOW_EX_STYLE, WINDOW_STYLE, WM_APP, WM_DESTROY,
-    WM_HOTKEY, WM_LBUTTONDOWN, WM_PAINT, WM_RBUTTONUP, WM_TIMER, WNDCLASSW, WS_EX_LAYERED,
-    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP, WS_VISIBLE,
+    AppendMenuW, CS_HREDRAW, CS_VREDRAW, CreatePopupMenu, CreateWindowExW, DefWindowProcW,
+    DestroyMenu, DispatchMessageW, GWLP_USERDATA, GetMessageW, GetSystemMetrics, HTCAPTION,
+    HWND_BROADCAST, IDC_ARROW, KillTimer, LWA_ALPHA, LoadCursorW, MF_SEPARATOR, MF_STRING, MSG,
+    PostQuitMessage, RegisterClassW, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN,
+    SM_YVIRTUALSCREEN, SPI_GETWORKAREA, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, SetForegroundWindow,
+    SetLayeredWindowAttributes, SetTimer, SystemParametersInfoW, TPM_RETURNCMD, TPM_RIGHTBUTTON,
+    TrackPopupMenu, TranslateMessage, WINDOW_EX_STYLE, WINDOW_STYLE, WM_APP, WM_DESTROY,
+    WM_EXITSIZEMOVE, WM_HOTKEY, WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_NCHITTEST,
+    WM_PAINT, WM_RBUTTONUP, WM_TIMER, WNDCLASSW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+    WS_EX_TOPMOST, WS_POPUP, WS_VISIBLE,
 };
+use windows::Win32::UI::WindowsAndMessaging::{CreateIconIndirect, ICONINFO};
 use windows::core::w;
 
 static HOTKEY_OK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
@@ -296,6 +301,166 @@ unsafe fn draw(hwnd: HWND, snap: &Snapshot) {
     let _ = EndPaint(hwnd, &ps);
 }
 
+/// 品牌图标(运行时绘制,无 .ico 资源文件):深底圆角方 + 中央绿点——
+/// 与状态条的状态灯同一视觉母题。32×32 ARGB DIB → CreateIconIndirect。
+unsafe fn make_brand_icon() -> windows::Win32::UI::WindowsAndMessaging::HICON {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::Graphics::Gdi::{GetDC, ReleaseDC};
+    const SZ: i32 = 32;
+    let radius = 7.0f32;
+    let dot_r = 8.0f32;
+    let mut px = vec![0u32; (SZ * SZ) as usize];
+    for y in 0..SZ {
+        for x in 0..SZ {
+            let (fx, fy) = (x as f32 + 0.5, y as f32 + 0.5);
+            let cx = fx.clamp(radius, SZ as f32 - radius);
+            let cy = fy.clamp(radius, SZ as f32 - radius);
+            let in_round = (fx - cx) * (fx - cx) + (fy - cy) * (fy - cy) <= radius * radius;
+            if !in_round {
+                continue;
+            }
+            let dcx = fx - SZ as f32 / 2.0;
+            let dcy = fy - SZ as f32 / 2.0;
+            // 0xAARRGGBB(DIB 小端序即 BGRA 字节)
+            px[(y * SZ + x) as usize] = if dcx * dcx + dcy * dcy <= dot_r * dot_r {
+                0xFF3F_B950 // 绿 #3FB950
+            } else {
+                0xFF1E_1E1E // 深底 #1E1E1E
+            };
+        }
+    }
+    let bmi = BITMAPINFO {
+        bmiHeader: BITMAPINFOHEADER {
+            biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+            biWidth: SZ,
+            biHeight: -SZ, // top-down
+            biPlanes: 1,
+            biBitCount: 32,
+            biCompression: BI_RGB.0,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let hdc = GetDC(None);
+    let mem = CreateCompatibleDC(Some(hdc));
+    let mut bits: *mut std::ffi::c_void = std::ptr::null_mut();
+    let color =
+        CreateDIBSection(Some(mem), &bmi, DIB_RGB_COLORS, &mut bits, None, 0).unwrap_or_default();
+    if !color.is_invalid() && !bits.is_null() {
+        std::ptr::copy_nonoverlapping(px.as_ptr() as *const u8, bits as *mut u8, px.len() * 4);
+    }
+    let _ = windows::Win32::Graphics::Gdi::DeleteDC(mem);
+    let _ = ReleaseDC(None, hdc);
+    // 全不透明掩码(1bpp 全零)
+    let mask = CreateBitmap(SZ, SZ, 1, 1, None);
+    let ii = ICONINFO {
+        fIcon: true.into(),
+        hbmMask: mask,
+        hbmColor: color,
+        ..Default::default()
+    };
+    let icon = CreateIconIndirect(&ii).unwrap_or_default();
+    let _ = HWND(std::ptr::null_mut()); // 占位使用避免未用导入
+    icon
+}
+
+/// 右键菜单(窗口与托盘共用):清除停止 / 显示隐藏 / 退出。
+unsafe fn context_menu(hwnd: HWND) {
+    use windows::Win32::Foundation::POINT;
+    let Ok(menu) = CreatePopupMenu() else {
+        return;
+    };
+    let _ = AppendMenuW(menu, MF_STRING, 1, w!("清除停止标志"));
+    let _ = AppendMenuW(menu, MF_STRING, 2, w!("显示 / 隐藏状态条"));
+    let _ = AppendMenuW(menu, MF_SEPARATOR, 0, None);
+    let _ = AppendMenuW(menu, MF_STRING, 3, w!("退出 actl-signal"));
+    let mut pt = POINT::default();
+    let _ = windows::Win32::UI::WindowsAndMessaging::GetCursorPos(&mut pt);
+    // 经典套路:菜单要能被窗外点击关闭,先 SetForegroundWindow
+    let _ = SetForegroundWindow(hwnd);
+    let cmd = TrackPopupMenu(
+        menu,
+        TPM_RETURNCMD | TPM_RIGHTBUTTON,
+        pt.x,
+        pt.y,
+        None,
+        hwnd,
+        None,
+    )
+    .0;
+    let _ = DestroyMenu(menu);
+    match cmd {
+        1 => {
+            SignalPaths::default().clear_stop();
+            let _ = InvalidateRect(Some(hwnd), None, true);
+        }
+        2 => toggle_visible(hwnd),
+        3 => {
+            let _ = windows::Win32::UI::WindowsAndMessaging::DestroyWindow(hwnd);
+        }
+        _ => {}
+    }
+}
+
+unsafe fn toggle_visible(hwnd: HWND) {
+    use windows::Win32::UI::WindowsAndMessaging::{IsWindowVisible, SW_HIDE, SW_SHOW, ShowWindow};
+    if IsWindowVisible(hwnd).as_bool() {
+        let _ = ShowWindow(hwnd, SW_HIDE);
+    } else {
+        let _ = ShowWindow(hwnd, SW_SHOW);
+    }
+}
+
+/// 拖动后的位置落盘(下次启动沿用;简单 kv,无需 serde)。
+unsafe fn save_position(hwnd: HWND) {
+    use windows::Win32::Foundation::RECT;
+    use windows::Win32::UI::WindowsAndMessaging::GetWindowRect;
+    let mut rc = RECT::default();
+    if GetWindowRect(hwnd, &mut rc).is_ok() {
+        let dir = SignalPaths::default().dir;
+        let _ = std::fs::create_dir_all(&dir);
+        let _ = std::fs::write(
+            dir.join("signal-pos.txt"),
+            format!("{},{}", rc.left, rc.top),
+        );
+    }
+}
+
+/// 启动时读回上次位置;不存在或落在虚拟桌面之外(拔屏/DPI 变)则回默认(工作区右上)。
+unsafe fn load_position(w: i32, h: i32) -> (i32, i32) {
+    use windows::Win32::Foundation::RECT;
+    let mut work = RECT::default();
+    let _ = SystemParametersInfoW(
+        SPI_GETWORKAREA,
+        0,
+        Some(&mut work as *mut RECT as *mut _),
+        SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
+    );
+    let default = (work.right - w - 16, work.top + 16);
+    let Some((x, y)) = std::fs::read_to_string(SignalPaths::default().dir.join("signal-pos.txt"))
+        .ok()
+        .and_then(|t| {
+            let (xs, ys) = t.split_once(',')?;
+            Some((
+                xs.trim().parse::<i32>().ok()?,
+                ys.trim().parse::<i32>().ok()?,
+            ))
+        })
+    else {
+        return default;
+    };
+    // 钳制进虚拟桌面(标题永远可达)
+    let (vx, vy, vw, vh) = (
+        GetSystemMetrics(SM_XVIRTUALSCREEN),
+        GetSystemMetrics(SM_YVIRTUALSCREEN),
+        GetSystemMetrics(SM_CXVIRTUALSCREEN),
+        GetSystemMetrics(SM_CYVIRTUALSCREEN),
+    );
+    let x = x.clamp(vx, vx + vw - w);
+    let y = y.clamp(vy, vy + vh - h);
+    (x, y)
+}
+
 unsafe extern "system" fn wnd_proc(
     hwnd: HWND,
     msg: u32,
@@ -339,8 +504,17 @@ unsafe extern "system" fn wnd_proc(
             LRESULT(0)
         }
         WM_RBUTTONUP => {
-            let tip = w!("左键点击=清除停止;关闭本窗口即退出(托盘菜单规划中)");
-            let _ = MessageBoxW(Some(hwnd), tip, w!("actl-signal"), MB_OK | MB_SETFOREGROUND);
+            context_menu(hwnd);
+            LRESULT(0)
+        }
+        // 整条可拖动(HTCAPTION 语义):Windows 自带移动逻辑,NOACTIVATE 不抢焦点;
+        // 单击与拖动由系统的拖拽阈值区分,轻点仍走 WM_LBUTTONDOWN(清除停止)
+        WM_NCHITTEST => {
+            let _ = DefWindowProcW(hwnd, msg, wparam, lparam);
+            LRESULT(HTCAPTION as isize)
+        }
+        WM_EXITSIZEMOVE => {
+            save_position(hwnd);
             LRESULT(0)
         }
         WM_HOTKEY if wparam.0 as i32 == HOTKEY_ID => {
@@ -349,8 +523,17 @@ unsafe extern "system" fn wnd_proc(
             LRESULT(0)
         }
         WM_APP => {
-            // 托盘回调:v1 用左键同义(清除停止)
-            SignalPaths::default().clear_stop();
+            // 托盘回调:LOWORD(lparam) 是鼠标消息——此前不区分(悬停也清停止,bug)
+            let mouse = (lparam.0 & 0xFFFF) as u32;
+            match mouse {
+                WM_LBUTTONUP => {
+                    SignalPaths::default().clear_stop();
+                    let _ = InvalidateRect(Some(hwnd), None, true);
+                }
+                WM_LBUTTONDBLCLK => toggle_visible(hwnd),
+                WM_RBUTTONUP => context_menu(hwnd),
+                _ => {}
+            }
             LRESULT(0)
         }
         WM_DESTROY => {
@@ -381,7 +564,7 @@ fn main() {
             style: CS_HREDRAW | CS_VREDRAW,
             lpfnWndProc: Some(wnd_proc),
             hInstance: hinstance.into(),
-            hIcon: LoadIconW(None, IDI_APPLICATION).unwrap_or_default(),
+            hIcon: make_brand_icon(),
             // 不设类光标 = 悬浮时系统兜底显示"忙"圈(实测坑);显式箭头
             hCursor: LoadCursorW(None, IDC_ARROW).unwrap_or_default(),
             lpszClassName: class_name,
@@ -398,8 +581,8 @@ fn main() {
             Some(&mut work as *mut RECT as *mut _),
             SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
         );
-        let x = work.right - scale(WIDTH) - scale(12);
-        let y = work.top + scale(12);
+        let _ = &work; // 默认位置已并入 load_position(带虚拟桌面钳制)
+        let (x, y) = load_position(scale(WIDTH), scale(HEIGHT));
 
         let ex = WINDOW_EX_STYLE(
             WS_EX_TOPMOST.0 | WS_EX_NOACTIVATE.0 | WS_EX_TOOLWINDOW.0 | WS_EX_LAYERED.0,
@@ -429,7 +612,7 @@ fn main() {
         nid.uID = 1;
         nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
         nid.uCallbackMessage = WM_APP;
-        nid.hIcon = LoadIconW(None, IDI_APPLICATION).unwrap_or_default();
+        nid.hIcon = make_brand_icon();
         let tip = wide("actl 信号(空闲)");
         nid.szTip[..tip.len() - 1].copy_from_slice(&tip[..tip.len() - 1]);
         let _ = Shell_NotifyIconW(NIM_ADD, &nid);
@@ -454,5 +637,21 @@ fn main() {
         }
         let _ = HWND_BROADCAST;
         let _ = GWLP_USERDATA;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn brand_icon_is_created() {
+        unsafe {
+            let icon = make_brand_icon();
+            assert!(
+                !icon.is_invalid(),
+                "CreateIconIndirect must produce a valid HICON"
+            );
+        }
     }
 }
