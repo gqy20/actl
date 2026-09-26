@@ -14,9 +14,9 @@ use actl_core::state::{Phase, SessionState, SignalPaths};
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, RECT, WAIT_OBJECT_0, WPARAM};
 use windows::Win32::Graphics::Gdi::{
     BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BeginPaint, CreateBitmap, CreateCompatibleDC,
-    CreateDIBSection, CreateSolidBrush, DIB_RGB_COLORS, DT_END_ELLIPSIS, DT_LEFT, DT_SINGLELINE,
-    DT_VCENTER, DeleteObject, DrawTextW, Ellipse, EndPaint, FillRect, GetStockObject, HGDIOBJ,
-    InvalidateRect, NULL_PEN,
+    CreateDIBSection, CreateSolidBrush, DIB_RGB_COLORS, DT_END_ELLIPSIS, DT_LEFT, DT_RIGHT,
+    DT_SINGLELINE, DT_VCENTER, DeleteObject, DrawTextW, Ellipse, EndPaint, FillRect,
+    GetStockObject, HGDIOBJ, InvalidateRect, NULL_PEN,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Threading::OpenMutexW;
@@ -45,9 +45,10 @@ use windows::core::w;
 static HOTKEY_OK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 const WIDTH: i32 = 420;
 const HEIGHT: i32 = 96;
+/// 条宽自适应区间(内容短时收窄,右侧不留白;长命令到此封顶后省略号截断)
+const MIN_W: i32 = 280;
+const MAX_W: i32 = 460;
 
-/// DPI 缩放(200% 屏上未感知的进程会被系统位图拉伸 → 字全糊,实测坑)。
-/// main 里声明 Per-Monitor V2 后取系统 DPI,一切尺寸按此换算物理像素。
 fn dpi_scale() -> i32 {
     static DPI: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
     let dpi = *DPI.get_or_init(|| unsafe { windows::Win32::UI::HiDpi::GetDpiForSystem() });
@@ -59,10 +60,17 @@ fn scale(v: i32) -> i32 {
 }
 const TIMER_ID: usize = 1;
 const TIMER_MS: u32 = 250;
+/// 动画帧率 25fps(40ms);只失效状态点小区域,CPU 占位可忽略
+const ANIM_TIMER_ID: usize = 2;
+const ANIM_MS: u32 = 40;
 const HOTKEY_ID: i32 = 1;
 const STALE_MS: u64 = 10_000;
+static ANIM_FRAME: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+/// 最近一次轮询快照(数据 timer 写,WM_PAINT 读——绘制不再触发文件 IO)
+static SNAPSHOT: std::sync::Mutex<Option<Snapshot>> = std::sync::Mutex::new(None);
 
 /// 渲染模式(颜色 + 语义;颜色之外由文字承载,docs/11 §11)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Mode {
     /// 已请求停止(红):在途动作将在边界退出;点击清除
     Stopped,
@@ -76,10 +84,13 @@ enum Mode {
     Stale,
 }
 
+#[derive(Debug, Clone)]
 struct Snapshot {
     mode: Mode,
     line1: String,
     line2: String,
+    /// Running/注入中的已运行秒数(右侧实时跳动——"一直在干活"的最直接感知)
+    elapsed_s: Option<u64>,
 }
 
 fn state_line(s: &SessionState) -> String {
@@ -96,6 +107,15 @@ fn state_line(s: &SessionState) -> String {
     format!("{}{}{}", s.command, app, step)
 }
 
+/// 耗时格式:59s 内裸秒,之后 1m03s
+fn fmt_elapsed(s: u64) -> String {
+    if s < 60 {
+        format!("{s}s")
+    } else {
+        format!("{}m{:02}s", s / 60, s % 60)
+    }
+}
+
 fn poll() -> Snapshot {
     let paths = SignalPaths::default();
     if paths.stop_requested() {
@@ -103,6 +123,7 @@ fn poll() -> Snapshot {
             mode: Mode::Stopped,
             line1: "停止请求".into(),
             line2: "点击解除".into(),
+            elapsed_s: None,
         };
     }
     let lock_held = input_lock_held();
@@ -111,6 +132,11 @@ fn poll() -> Snapshot {
         .as_ref()
         .map(|s| actl_core::state::unix_ms().saturating_sub(s.ts_ms))
         .unwrap_or(u64::MAX);
+    // Running 态的已运行秒数(年龄即耗时——state.json 的 ts_ms 是命令起点)
+    let elapsed = st
+        .as_ref()
+        .filter(|s| s.phase == Phase::Running && age <= STALE_MS)
+        .map(|_| age / 1000);
     if lock_held {
         return Snapshot {
             mode: Mode::Active,
@@ -119,6 +145,7 @@ fn poll() -> Snapshot {
                 .map(state_line)
                 .unwrap_or_else(|| "未知命令".into()),
             line2: "注入中".into(),
+            elapsed_s: elapsed,
         };
     }
     match st {
@@ -126,6 +153,7 @@ fn poll() -> Snapshot {
             mode: Mode::Busy,
             line1: state_line(&s),
             line2: "执行中".into(),
+            elapsed_s: elapsed,
         },
         Some(s) if age <= STALE_MS => Snapshot {
             mode: Mode::Idle,
@@ -136,18 +164,57 @@ fn poll() -> Snapshot {
                 Phase::Stopped => "已停止".to_string(),
                 Phase::Running => unreachable!(),
             },
+            elapsed_s: None,
         },
         Some(_) => Snapshot {
             mode: Mode::Stale,
             line1: "actl".into(),
-            line2: "失联 >10s".into(),
+            line2: "失联".into(),
+            elapsed_s: None,
         },
         None => Snapshot {
             mode: Mode::Idle,
             line1: "actl".into(),
             line2: "空闲".into(),
+            elapsed_s: None,
         },
     }
+}
+
+/// 提示行(热键可用性自适应;退出入口在右键菜单,不占提示位)
+fn hint_text() -> &'static str {
+    if HOTKEY_OK.load(std::sync::atomic::Ordering::Relaxed) {
+        "Ctrl+Alt+F12 停止 · 点击解除"
+    } else {
+        "点击本条=停止 · 再点=解除"
+    }
+}
+
+// ─── 动画几何(纯函数,单测锁定) ────────────────────────────────────────
+
+/// 波纹帧几何:phase ∈ [0,1) → (半径倍数, 向底色淡出度)。
+/// ease-out 扩散(快出慢收)+ 线性淡出;两条波纹相位差半周期(Codex 式持续律动)。
+fn ripple(phase: f32) -> (f32, f32) {
+    let t = phase.clamp(0.0, 1.0);
+    let spread = 1.0 + 1.3 * (1.0 - (1.0 - t) * (1.0 - t));
+    (spread, t)
+}
+
+/// 空闲呼吸:半径倍数 0.88..1.12,周期 2.4s(60 帧 @25fps)
+fn breath(frame: u32) -> f32 {
+    let phase = (frame % 60) as f32 / 60.0;
+    1.0 + 0.12 * (phase * std::f32::consts::TAU).sin()
+}
+
+/// 通道级颜色插值(向底色淡出的波纹环;COLORREF/BGR 布局通用)
+fn mix(fg: u32, bg: u32, t: f32) -> u32 {
+    let t = t.clamp(0.0, 1.0);
+    let ch = |shift: u32| -> u32 {
+        let f = (fg >> shift) & 0xFF;
+        let b = (bg >> shift) & 0xFF;
+        ((f as f32 + (b as f32 - f as f32) * t).round() as u32) << shift
+    };
+    ch(16) | ch(8) | ch(0)
 }
 
 /// 输入占用锁观测:OpenMutex + Wait(0),不干扰持有者。
@@ -218,8 +285,24 @@ unsafe fn font(height: i32) -> windows::Win32::Graphics::Gdi::HFONT {
     windows::Win32::Graphics::Gdi::HFONT(h as *mut _)
 }
 
-/// HUD 布局:恒定深底 + 左侧模式色条 + 状态行文字着色
-/// (纯色大底太吵——实测反馈;颜色语义由色条与文字承载,docs/11 §11)。
+/// 状态行行心(y,未缩放):圆点与波纹的几何中心
+const ROW2_CY: i32 = 56;
+const DOT_D: i32 = 11;
+/// 波纹最大半径倍数(ripple 的 spread 上界 2.3)+ 余量 → 动画失效区
+fn dot_anim_rect() -> RECT {
+    let cx = scale(18) + scale(DOT_D) / 2;
+    let cy = scale(ROW2_CY);
+    let r = (scale(DOT_D) as f32 / 2.0 * 2.4) as i32 + scale(2);
+    RECT {
+        left: cx - r,
+        top: cy - r,
+        right: cx + r,
+        bottom: cy + r,
+    }
+}
+
+/// HUD 布局:恒定深底 + 左侧状态灯(执行/注入中双波纹律动,空闲慢呼吸)+
+/// 状态行文字着色 + 右侧实时耗时(执行中)。宽度由数据 timer 自适应内容。
 unsafe fn draw(hwnd: HWND, snap: &Snapshot) {
     use windows::Win32::Graphics::Gdi::{SelectObject, SetBkColor, SetTextColor};
 
@@ -247,59 +330,138 @@ unsafe fn draw(hwnd: HWND, snap: &Snapshot) {
     };
     fill(&rc, BG);
 
-    let dt = DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS | DT_VCENTER;
     let left = scale(18);
-    let line = |r: &mut RECT, s: &str, h: i32, color: u32| {
+    let right = rc.right - scale(14);
+    let line = |r: &mut RECT, s: &str, h: i32, color: u32, right_align: bool| {
         let old_f = SelectObject(hdc, HGDIOBJ(font(h).0));
         let old_c = SetTextColor(hdc, COLORREF(color));
         SetBkColor(hdc, COLORREF(BG));
         let mut buf = wide(s);
-        let _ = DrawTextW(hdc, &mut buf, r as *mut RECT, dt);
+        let mut fmt = DT_SINGLELINE | DT_END_ELLIPSIS | DT_VCENTER;
+        if right_align {
+            fmt |= DT_RIGHT;
+        } else {
+            fmt |= DT_LEFT;
+        }
+        let _ = DrawTextW(hdc, &mut buf, r as *mut RECT, fmt);
         SetTextColor(hdc, old_c);
         SelectObject(hdc, old_f);
     };
-    // 行高与间隙全部按 DPI 缩放:字体是缩放的,矩形不缩放就会被挤压
-    // (实测:200% 屏上 34px 字塞进 24px 框 → "挤到一起")
     let mut r1 = RECT {
         left,
         top: scale(12),
-        right: rc.right - scale(12),
+        right,
         bottom: scale(38),
     };
-    // 状态行:圆点 + 文字(dot 直径 ~ 状态字号,垂直居中于状态行)
-    let dot_d = scale(11);
-    let dot_y = scale(54) - dot_d / 2;
+    line(&mut r1, &snap.line1, 17, 0x00F3_EDE6, false);
+
+    // 状态行:左侧状态灯(动画见下)+ 文字;右侧实时耗时(执行/注入中)
+    let dot_d = scale(DOT_D);
     let mut r2 = RECT {
         left: left + dot_d + scale(9),
-        top: scale(44),
-        right: rc.right - scale(12),
-        bottom: scale(64),
+        top: scale(46),
+        right,
+        bottom: scale(66),
     };
-    let mut r3 = RECT {
-        left,
-        top: scale(72),
-        right: rc.right - scale(12),
-        bottom: scale(88),
-    };
-    line(&mut r1, &snap.line1, 17, 0x00F3_EDE6);
-    // 状态点:实心圆 + 无边框(NULL_PEN),深底上的信号灯
-    {
-        let b = CreateSolidBrush(COLORREF(dot));
+    line(&mut r2, &snap.line2, 13, state_fg, false);
+    if let Some(s) = snap.elapsed_s {
+        let mut re = RECT {
+            left,
+            top: scale(46),
+            right,
+            bottom: scale(66),
+        };
+        line(&mut re, &fmt_elapsed(s), 13, state_fg, true);
+    }
+
+    // 状态灯:执行/注入 = 双波纹持续律动(Codex 式"一直在干活");
+    // 空闲 = 慢呼吸;停止/失联 = 静止(红色本就是终止态,不制造动感)
+    let circle = |cx: i32, cy: i32, radius: i32, color: u32| {
+        let b = CreateSolidBrush(COLORREF(color));
         let old_br = SelectObject(hdc, HGDIOBJ(b.0));
         let old_pen = SelectObject(hdc, GetStockObject(NULL_PEN));
-        let _ = Ellipse(hdc, left, dot_y, left + dot_d, dot_y + dot_d);
+        let _ = Ellipse(hdc, cx - radius, cy - radius, cx + radius, cy + radius);
         SelectObject(hdc, old_pen);
         SelectObject(hdc, old_br);
         let _ = DeleteObject(HGDIOBJ(b.0));
-    }
-    line(&mut r2, &snap.line2, 13, state_fg);
-    let hint = if HOTKEY_OK.load(std::sync::atomic::Ordering::Relaxed) {
-        "Ctrl+Alt+F12 停止 · 点击解除 · ✕ 退出"
-    } else {
-        "点击本条=停止 · 再点=解除 · ✕ 退出"
     };
-    line(&mut r3, hint, 11, 0x006E_6E6E);
+    let cx = left + dot_d / 2;
+    let cy = scale(ROW2_CY);
+    let frame = ANIM_FRAME.load(std::sync::atomic::Ordering::Relaxed);
+    match snap.mode {
+        Mode::Active | Mode::Busy => {
+            // 双波纹相位差 0.5,周期 1.6s(40 帧 @25fps);波纹色向底色淡出
+            for k in 0..2u32 {
+                let phase = ((frame + k * 20) % 40) as f32 / 40.0;
+                let (spread, fade) = ripple(phase);
+                let r = (dot_d as f32 / 2.0 * spread) as i32;
+                circle(cx, cy, r, mix(dot, BG, fade * 0.85));
+            }
+            circle(cx, cy, dot_d / 2, dot);
+        }
+        Mode::Idle => {
+            let s = breath(frame);
+            let r = (dot_d as f32 / 2.0 * s) as i32;
+            circle(cx, cy, r, dot);
+        }
+        _ => circle(cx, cy, dot_d / 2, dot),
+    }
+
+    let mut r3 = RECT {
+        left,
+        top: scale(74),
+        right,
+        bottom: scale(90),
+    };
+    line(&mut r3, hint_text(), 11, 0x006E_6E6E, false);
     let _ = EndPaint(hwnd, &ps);
+}
+
+/// 条宽自适应:量三行内容宽,收窄/放宽到 [MIN_W, MAX_W],锚定右缘。
+/// 变化超阈值才动窗(避免逐帧抖动);数据 timer 每次轮询后调用。
+unsafe fn fit_width(hwnd: HWND, snap: &Snapshot) {
+    use windows::Win32::Graphics::Gdi::{DT_CALCRECT, GetDC, ReleaseDC, SelectObject as SO};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetWindowRect, SWP_NOACTIVATE, SWP_NOZORDER, SetWindowPos,
+    };
+
+    let hdc = GetDC(Some(hwnd));
+    let measure = |s: &str, h: i32| -> i32 {
+        let old = SO(hdc, HGDIOBJ(font(h).0));
+        let mut r = RECT::default();
+        let mut buf = wide(s);
+        let _ = DrawTextW(hdc, &mut buf, &mut r, DT_SINGLELINE | DT_CALCRECT);
+        let _ = SO(hdc, old);
+        r.right
+    };
+    let status = match snap.elapsed_s {
+        Some(s) => format!("{}  {}", snap.line2, fmt_elapsed(s)),
+        None => snap.line2.clone(),
+    };
+    let dot_pad = scale(DOT_D) + scale(9);
+    let content = measure(&snap.line1, 17)
+        .max(measure(&status, 13) + dot_pad)
+        .max(measure(hint_text(), 11));
+    let _ = ReleaseDC(Some(hwnd), hdc);
+    let want = (content + scale(18) + scale(14)).clamp(scale(MIN_W), scale(MAX_W));
+
+    let mut rc = RECT::default();
+    if GetWindowRect(hwnd, &mut rc).is_err() {
+        return;
+    }
+    let cur = rc.right - rc.left;
+    if (want - cur).abs() > scale(6) {
+        // 锚定右缘:条宽变化时左缘移动,视觉重心稳定(默认挂在屏幕右上)
+        let _ = SetWindowPos(
+            hwnd,
+            None,
+            rc.right - want,
+            rc.top,
+            want,
+            rc.bottom - rc.top,
+            SWP_NOZORDER | SWP_NOACTIVATE,
+        );
+    }
 }
 
 /// 品牌图标(运行时绘制,无 .ico 资源文件):深底圆角方 + 中央绿点——
@@ -470,13 +632,16 @@ unsafe extern "system" fn wnd_proc(
 ) -> LRESULT {
     match msg {
         WM_TIMER if wparam.0 == TIMER_ID => {
-            // 变化才重绘:内容键(模式+两行)存 GWLP_USERDATA,避免常刷闪烁
+            // 数据 tick:轮询 → 缓存(供 WM_PAINT 零 IO 绘制)→ 宽度自适应 →
+            // 变化才全量重绘。内容键含 elapsed_s:执行中每秒自然刷新一次
+            // (右侧耗时跳动),非执行态仍保持变化检测零重绘。
             let snap = poll();
             let key = format!(
-                "{:?}|{}|{}",
+                "{:?}|{}|{}|{:?}",
                 std::mem::discriminant(&snap.mode),
                 snap.line1,
-                snap.line2
+                snap.line2,
+                snap.elapsed_s
             );
             let prev =
                 windows::Win32::UI::WindowsAndMessaging::GetWindowLongPtrW(hwnd, GWLP_USERDATA);
@@ -489,14 +654,32 @@ unsafe extern "system" fn wnd_proc(
                 GWLP_USERDATA,
                 Box::into_raw(Box::new(key)) as isize,
             );
+            *SNAPSHOT.lock().unwrap() = Some(snap.clone());
             if changed {
+                unsafe { fit_width(hwnd, &snap) };
                 let _ = InvalidateRect(Some(hwnd), None, true);
             }
             LRESULT(0)
         }
+        WM_TIMER if wparam.0 == ANIM_TIMER_ID => {
+            // 动画 tick:仅 Active/Busy(波纹)/Idle(呼吸)推进帧并失效状态灯小区,
+            // 停止/失联静止(终止态不制造动感)
+            let animating = matches!(
+                SNAPSHOT.lock().unwrap().as_ref().map(|s| s.mode),
+                Some(Mode::Active | Mode::Busy | Mode::Idle)
+            );
+            if animating {
+                ANIM_FRAME.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let r = dot_anim_rect();
+                let _ = InvalidateRect(Some(hwnd), Some(&r), false);
+            }
+            LRESULT(0)
+        }
         WM_PAINT => {
-            let snap = poll();
-            draw(hwnd, &snap);
+            let guard = SNAPSHOT.lock().unwrap();
+            if let Some(snap) = guard.as_ref() {
+                draw(hwnd, snap);
+            }
             LRESULT(0)
         }
         WM_LBUTTONDOWN => {
@@ -539,6 +722,7 @@ unsafe extern "system" fn wnd_proc(
         }
         WM_DESTROY => {
             let _ = KillTimer(Some(hwnd), TIMER_ID);
+            let _ = KillTimer(Some(hwnd), ANIM_TIMER_ID);
             let _ = UnregisterHotKey(Some(hwnd), HOTKEY_ID);
             let mut nid: NOTIFYICONDATAW = std::mem::zeroed();
             nid.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;
@@ -630,7 +814,10 @@ fn main() {
             std::sync::atomic::Ordering::Relaxed,
         );
 
+        // 首帧数据先入缓存再进消息循环(CreateWindowExW 期间可能已触发 WM_PAINT)
+        *SNAPSHOT.lock().unwrap() = Some(poll());
         SetTimer(Some(hwnd), TIMER_ID, TIMER_MS, None);
+        SetTimer(Some(hwnd), ANIM_TIMER_ID, ANIM_MS, None);
 
         let mut msg = MSG::default();
         while GetMessageW(&mut msg, None, 0, 0).as_bool() {
@@ -654,6 +841,53 @@ mod tests {
                 !icon.is_invalid(),
                 "CreateIconIndirect must produce a valid HICON"
             );
+        }
+    }
+
+    #[test]
+    fn ripple_expands_monotonically_and_fades() {
+        let mut last_spread = 0.0f32;
+        for i in 0..=20 {
+            let (spread, fade) = ripple(i as f32 / 20.0);
+            assert!((1.0..=2.31).contains(&spread), "spread {spread} in range");
+            assert!((0.0..=1.0).contains(&fade), "fade {fade} in range");
+            assert!(spread >= last_spread, "ease-out spread is monotonic");
+            last_spread = spread;
+        }
+    }
+
+    #[test]
+    fn breath_stays_within_band_and_loops() {
+        for f in 0..120u32 {
+            let s = breath(f);
+            assert!((0.87..=1.13).contains(&s), "breath {s} in band");
+        }
+        // 周期 60 帧:首尾相位一致
+        assert!((breath(0) - breath(60)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn elapsed_formats_seconds_then_minutes() {
+        assert_eq!(fmt_elapsed(0), "0s");
+        assert_eq!(fmt_elapsed(59), "59s");
+        assert_eq!(fmt_elapsed(60), "1m00s");
+        assert_eq!(fmt_elapsed(63), "1m03s");
+        assert_eq!(fmt_elapsed(125), "2m05s");
+    }
+
+    #[test]
+    fn mix_fades_toward_background_per_channel() {
+        const BG: u32 = 0x001E_1E1E;
+        let fg = 0x0050_B93Fu32; // 绿 #3FB950(BGR)
+        assert_eq!(mix(fg, BG, 0.0), fg);
+        assert_eq!(mix(fg, BG, 1.0), BG);
+        let mid = mix(fg, BG, 0.5);
+        // 每通道都应位于两端之间
+        for shift in [16u32, 8, 0] {
+            let f = (fg >> shift) & 0xFF;
+            let b = (BG >> shift) & 0xFF;
+            let m = (mid >> shift) & 0xFF;
+            assert!(m >= f.min(b) && m <= f.max(b), "channel midway");
         }
     }
 }
