@@ -5,6 +5,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+readme = "../../README.md"
 repository.workspace = true
 keywords = ["windows", "automation", "accessibility", "cli", "agent"]
 categories = ["command-line-utilities"]
