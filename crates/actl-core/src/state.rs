@@ -1,0 +1,180 @@
+//! 显示信号协议(docs/11 §10 / docs/13 §4.1):actl 侧状态源。
+//!
+//! 原语四件套:①`state.json` 命令级状态快照(开始/结束/batch 步间写入);
+//! ②`stop-requested` 停止标志(存在即停止,粘性——只有显式动作清除);
+//! ③输入占用锁(actl-uia 的命名互斥体,"正在操控"的权威信号,本模块只约定
+//! 不实现);④时间戳心跳(消费端判失联)。
+//! 消费端(actl-signal 等)全部拉取、零订阅——"事件当触发器,拉取当真相源"
+//! (docs/13 的事故价目表:常驻事件订阅路线不可取)。
+//! 路径可注入(`SignalPaths::at`)以便测试;`default()` 用 %LOCALAPPDATA%。
+
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
+
+/// 命令生命周期相位。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Phase {
+    /// 命令开始(batch:第 i/N 步)
+    Running,
+    /// 命令成功结束
+    Done,
+    /// 命令失败结束
+    Error,
+    /// 用户停止中止
+    Stopped,
+}
+
+/// 一次命令执行的状态快照(单写者:当前 actl 进程;多读者)。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionState {
+    pub pid: u32,
+    pub command: String,
+    /// 目标窗口摘要(--app 原样;无则 None)
+    pub app: Option<String>,
+    /// batch 步序 "i/N";单命令 None
+    pub step: Option<String>,
+    pub phase: Phase,
+    /// unix 毫秒时间戳(心跳)
+    pub ts_ms: u64,
+}
+
+impl SessionState {
+    pub fn now(
+        pid: u32,
+        command: &str,
+        app: Option<&str>,
+        step: Option<String>,
+        phase: Phase,
+    ) -> Self {
+        Self {
+            pid,
+            command: command.to_string(),
+            app: app.map(str::to_string),
+            step,
+            phase,
+            ts_ms: unix_ms(),
+        }
+    }
+}
+
+pub fn unix_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// 信号目录/文件的解析。默认 %LOCALAPPDATA%\actl\。
+#[derive(Debug, Clone)]
+pub struct SignalPaths {
+    pub dir: PathBuf,
+}
+
+impl Default for SignalPaths {
+    fn default() -> Self {
+        let dir = std::env::var_os("LOCALAPPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir)
+            .join("actl");
+        Self { dir }
+    }
+}
+
+impl SignalPaths {
+    pub fn at(dir: impl Into<PathBuf>) -> Self {
+        Self { dir: dir.into() }
+    }
+
+    pub fn state_file(&self) -> PathBuf {
+        self.dir.join("state.json")
+    }
+
+    pub fn stop_file(&self) -> PathBuf {
+        self.dir.join("stop-requested")
+    }
+
+    /// 状态快照落盘(单文件原子替换;失败静默——状态通道绝不能影响命令本身)。
+    pub fn write_state(&self, st: &SessionState) {
+        let _ = std::fs::create_dir_all(&self.dir);
+        let tmp = self.dir.join("state.json.tmp");
+        if serde_json::to_string(st)
+            .map(|s| std::fs::write(&tmp, s))
+            .is_ok()
+        {
+            let _ = std::fs::rename(&tmp, self.state_file());
+        }
+    }
+
+    pub fn read_state(&self) -> Option<SessionState> {
+        let text = std::fs::read_to_string(self.state_file()).ok()?;
+        serde_json::from_str(&text).ok()
+    }
+
+    /// 写入停止标志(粘性:清除是显式动作)。
+    pub fn request_stop(&self) {
+        let _ = std::fs::create_dir_all(&self.dir);
+        let _ = std::fs::write(self.stop_file(), unix_ms().to_string());
+    }
+
+    pub fn stop_requested(&self) -> bool {
+        self.stop_file().is_file()
+    }
+
+    /// 显式清除停止标志(actl-signal 的"清除"按钮调用)。
+    pub fn clear_stop(&self) {
+        let _ = std::fs::remove_file(self.stop_file());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tmp() -> SignalPaths {
+        static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = N.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let dir = std::env::temp_dir().join(format!("actl-state-test-{}-{n}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        SignalPaths::at(&dir)
+    }
+
+    #[test]
+    fn state_roundtrip_and_fields() {
+        let p = tmp();
+        let st = SessionState::now(
+            42,
+            "press",
+            Some("记事本"),
+            Some("3/8".into()),
+            Phase::Running,
+        );
+        p.write_state(&st);
+        let back = p.read_state().expect("read back");
+        assert_eq!(back.command, "press");
+        assert_eq!(back.app.as_deref(), Some("记事本"));
+        assert_eq!(back.step.as_deref(), Some("3/8"));
+        assert_eq!(back.phase, Phase::Running);
+        assert!(back.ts_ms > 0);
+        let _ = std::fs::remove_dir_all(&p.dir);
+    }
+
+    #[test]
+    fn stop_flag_is_sticky_until_cleared() {
+        let p = tmp();
+        assert!(!p.stop_requested());
+        p.request_stop();
+        assert!(p.stop_requested());
+        p.clear_stop();
+        assert!(!p.stop_requested());
+        let _ = std::fs::remove_dir_all(&p.dir);
+    }
+
+    #[test]
+    fn phase_serializes_snake_case() {
+        assert_eq!(
+            serde_json::to_string(&Phase::Stopped).unwrap(),
+            r#""stopped""#
+        );
+    }
+}

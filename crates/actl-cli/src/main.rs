@@ -342,11 +342,55 @@ fn main() {
     let cli = Cli::parse();
     let command_name = command_name(&cli.command);
     let started = Instant::now();
+    let signals = actl_core::state::SignalPaths::default();
+
+    // 显示信号协议:命令开始即落状态(消费端 actl-signal 轮询渲染)
+    signals.write_state(&actl_core::state::SessionState::now(
+        std::process::id(),
+        command_name,
+        app_of(&cli.command).as_deref(),
+        None,
+        actl_core::state::Phase::Running,
+    ));
 
     let result = dispatch(&cli.command);
 
     let duration_ms = started.elapsed().as_millis() as u64;
+    // 停止标志存在且本命令失败 → 归因为 Stopped(诚实区分用户中止 vs 业务错误)
+    let phase = match &result {
+        Ok(_) => actl_core::state::Phase::Done,
+        Err(e) if e.code == actl_core::ErrorCode::Aborted => actl_core::state::Phase::Stopped,
+        Err(_) => actl_core::state::Phase::Error,
+    };
+    signals.write_state(&actl_core::state::SessionState::now(
+        std::process::id(),
+        command_name,
+        app_of(&cli.command).as_deref(),
+        None,
+        phase,
+    ));
     finish(command_name, result, duration_ms);
+}
+
+/// 从命令提取 --app 摘要(状态展示用;batch 递归取首步)。
+fn app_of(cmd: &Command) -> Option<String> {
+    match cmd {
+        Command::Click { app, .. }
+        | Command::Get { app, .. }
+        | Command::Type { app, .. }
+        | Command::Press { app, .. }
+        | Command::SetValue { app, .. }
+        | Command::RightClick { app, .. }
+        | Command::DoubleClick { app, .. }
+        | Command::Hover { app, .. }
+        | Command::Drag { app, .. }
+        | Command::Scroll { app, .. }
+        | Command::KeyDown { app, .. }
+        | Command::KeyUp { app, .. }
+        | Command::Wait { app, .. }
+        | Command::Find { app, .. } => app.clone(),
+        _ => None,
+    }
 }
 
 /// 单命令执行体;batch 子命令复用同一入口(06 §3.7 唯一复合逃生舱)。
@@ -1009,8 +1053,23 @@ fn batch_cmd(json_str: &str) -> Result<CommandOutput, CtlError> {
     if cmds.is_empty() {
         return Err(CtlError::protocol("batch needs at least one command"));
     }
+    let signals = actl_core::state::SignalPaths::default();
     let mut executed = 0usize;
     for (i, line) in cmds.iter().enumerate() {
+        // 步间双闸门:停止标志(用户热键)优先;随后步级状态落盘(阶段信号)
+        if signals.stop_requested() {
+            return Err(CtlError::new(
+                actl_core::ErrorCode::Aborted,
+                format!("batch stopped by user at step {i} (after {executed} ok)"),
+            ));
+        }
+        signals.write_state(&actl_core::state::SessionState::now(
+            std::process::id(),
+            "batch",
+            None,
+            Some(format!("{}/{}", i + 1, cmds.len())),
+            actl_core::state::Phase::Running,
+        ));
         let tokens: Vec<&str> = line.split_whitespace().collect();
         if tokens.is_empty() {
             return Err(CtlError::protocol(format!("batch[{i}] is empty")));

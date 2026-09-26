@@ -22,7 +22,16 @@ pub struct InputLock(HANDLE);
 
 impl InputLock {
     /// 等待并取得输入占用锁;忙 → TIMEOUT(附恢复建议)。
+    /// 停止标志优先于一切:用户按了紧急热键后,所有物理注入在此被拒
+    /// (ABORTED)——显示信号协议的执行侧闸门(docs/11 §10.3)。
     pub fn acquire(timeout_ms: u32) -> Result<Self, CtlError> {
+        let paths = actl_core::state::SignalPaths::default();
+        if paths.stop_requested() {
+            return Err(CtlError::new(
+                ErrorCode::Aborted,
+                "stop requested via signal channel (emergency hotkey); clear the flag to resume",
+            ));
+        }
         unsafe {
             // CreateMutexExW(flags=0) 等价 CreateMutexW;access=SYNCHRONIZE(0x0010_0000)
             // (裸值:免为单常量引入 Storage::FileSystem feature)

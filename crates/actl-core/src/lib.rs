@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod keys;
 pub mod snapshot;
+pub mod state;
 pub mod target;
 
 pub use keys::{Key, KeySpec, parse_key_expr};
@@ -41,6 +42,8 @@ pub enum ErrorCode {
     Protocol,
     /// 内部/UIA/系统层错误 → 重试一次;持续出现附 evidence 报 issue
     Internal,
+    /// 用户主动停止(紧急热键/停止文件)→ 清除停止标志后可安全重试
+    Aborted,
 }
 
 impl ErrorCode {
@@ -63,6 +66,9 @@ impl ErrorCode {
             Self::Protocol => "fix the command arguments (see `actl <cmd> -h`)",
             Self::Internal => {
                 "retry once; if it persists, report an issue with the `evidence` payload"
+            }
+            Self::Aborted => {
+                "user requested stop; clear the stop flag (actl-signal UI or delete the file) and retry"
             }
         }
     }
@@ -213,6 +219,7 @@ mod tests {
             ErrorCode::NotActionable,
             ErrorCode::AssertionFailed,
             ErrorCode::Protocol,
+            ErrorCode::Aborted,
             ErrorCode::Internal,
         ];
         for c in all {
