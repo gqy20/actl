@@ -64,7 +64,7 @@ enum Command {
     Get {
         /// Target: @eN (needs --app) | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N
         target: String,
-        /// Property: name | role | automation_id | offscreen | value (default: all)
+        /// Property: name | role | automation_id | offscreen | value | text (default: all)
         #[arg(long)]
         property: Option<String>,
         /// Target window by title substring (@eN refs require it; otherwise focused window)
@@ -712,13 +712,14 @@ fn click(
     };
 
     let data = if physical {
-        let (loc, (px, py)) = actl_uia::click_physical(app, &target, near)?;
+        let (loc, (px, py), scrolled) = actl_uia::click_physical(app, &target, near)?;
         json!({
             "action": "click",
             "target": target.describe(),
             "resolved_by": loc.resolved_by,
             "pattern": "physical-left",
             "point": [px, py],
+            "scrolled_into_view": scrolled,
             "input_effects": { "keyboard": "none", "clipboard": "untouched", "pointer": "move_and_click" },
             "resolved": { "role": loc.role, "name": loc.name, "automation_id": loc.automation_id },
             "window": loc.window_title,
@@ -772,6 +773,12 @@ fn get(
     }
     if let Some(v) = &info.value {
         props.insert("value".into(), json!(v));
+    }
+    if let Some(via) = info.value_via {
+        props.insert("value_via".into(), json!(via));
+    }
+    if let Some(v) = &info.text {
+        props.insert("text".into(), json!(v));
     }
     Ok(json!({ "target": target.describe(), "properties": props }).into())
 }
@@ -973,13 +980,59 @@ fn find_cmd(
                 .unwrap_or(true)
         })
         .collect();
-    let total = matched.len();
+    // 虚拟化容器兜底:已物化树 0 命中且查询可映射为精确属性时,走定位链 L4
+    // (ItemContainerPattern;Explorer 文件列表等,US1 开放项)。命中元素不在
+    // 快照树内 → 无 @eN ref,返回 name/id 选择器语义(agent 重放走同一查询)。
+    let mut virtual_hit: Option<(actl_core::snapshot::ElementOut, &'static str)> = None;
+    if matched.is_empty() {
+        if let Some(raw_target) = name
+            .map(|n| format!("name:{n}"))
+            .or_else(|| id.map(|i| format!("id:{i}")))
+        {
+            if let Ok(target) = actl_core::parse_target(&raw_target) {
+                if let Ok(loc) = actl_uia::locate(app, &target, None) {
+                    if loc.resolved_by == "item-container" {
+                        virtual_hit = Some((
+                            actl_core::snapshot::ElementOut {
+                                ref_id: None,
+                                role: loc.role.clone(),
+                                name: loc.name.clone(),
+                                automation_id: loc.automation_id.clone(),
+                                depth: 0,
+                            },
+                            loc.resolved_by,
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    let total = matched.len() + virtual_hit.is_some() as usize;
     let limit = limit.unwrap_or(20);
-    let elements: Vec<_> = matched
+    let mut elements: Vec<Value> = matched
         .iter()
         .take(limit)
         .map(|e| serde_json::to_value(e).expect("element serializes"))
         .collect();
+    if let Some((elem, level)) = virtual_hit {
+        elements.push(serde_json::to_value(&elem).expect("element serializes"));
+        let data = json!({
+            "window": {
+                "title": cap.window.title,
+                "class": cap.window.class,
+                "pid": cap.window.pid,
+            },
+            "total": total,
+            "returned": elements.len(),
+            "resolved_by": level,
+            "wake_ms": cap.wake_ms,
+            "elements": elements,
+        });
+        return Ok(CommandOutput {
+            data,
+            snapshot_id: Some(out.snapshot_id),
+        });
+    }
     let data = json!({
         "window": {
             "title": cap.window.title,
@@ -1097,7 +1150,32 @@ fn list_windows_cmd() -> Result<CommandOutput, CtlError> {
     let wins = actl_uia::list_windows()?;
     let list: Vec<Value> = wins
         .into_iter()
-        .map(|(title, class, pid)| json!({ "title": title, "class": class, "pid": pid }))
+        .map(|w| {
+            let mut m = serde_json::Map::new();
+            m.insert("title".into(), json!(w.title));
+            m.insert("class".into(), json!(w.class));
+            m.insert("pid".into(), json!(w.pid));
+            m.insert("foreground".into(), json!(w.foreground));
+            if w.topmost {
+                m.insert("topmost".into(), json!(true));
+            }
+            if w.minimized {
+                m.insert("minimized".into(), json!(true));
+            }
+            if !w.visible {
+                m.insert("visible".into(), json!(false));
+            }
+            if let Some(z) = w.z_order {
+                m.insert("z_order".into(), json!(z));
+            }
+            if let Some(r) = w.rect {
+                m.insert("rect".into(), json!(r));
+            }
+            if let Some(o) = w.owner_title {
+                m.insert("owner_title".into(), json!(o));
+            }
+            Value::Object(m)
+        })
         .collect();
     Ok(json!({ "windows": list, "count": list.len() }).into())
 }
@@ -1127,12 +1205,13 @@ fn pointer_cmd(
         PointerKind::Hover => "move",
         _ => "move_and_click",
     };
-    let (loc, (px, py)) = actl_uia::pointer_physical(app, &target, near, action)?;
+    let (loc, (px, py), scrolled) = actl_uia::pointer_physical(app, &target, near, action)?;
     Ok(json!({
         "action": name,
         "target": target.describe(),
         "resolved_by": loc.resolved_by,
         "point": [px, py],
+        "scrolled_into_view": scrolled,
         "input_effects": { "keyboard": "none", "clipboard": "untouched", "pointer": effects },
         "resolved": { "role": loc.role, "name": loc.name },
         "window": loc.window_title,
@@ -1149,13 +1228,14 @@ fn drag_cmd(
 ) -> Result<CommandOutput, CtlError> {
     let from = actl_core::parse_target(from_raw)?;
     let to = actl_core::parse_target(to_raw)?;
-    let (loc, (fx, fy)) = actl_uia::drag_physical(app, &from, near, &to, to_near)?;
+    let (loc, (fx, fy), scrolled) = actl_uia::drag_physical(app, &from, near, &to, to_near)?;
     Ok(json!({
         "action": "drag",
         "from": from.describe(),
         "to": to.describe(),
         "resolved_by": loc.resolved_by,
         "point": [fx, fy],
+        "scrolled_into_view": scrolled,
         "input_effects": { "keyboard": "none", "clipboard": "untouched", "pointer": "move_drag_click" },
         "resolved": { "role": loc.role, "name": loc.name },
         "window": loc.window_title,
@@ -1266,10 +1346,11 @@ fn verify_cmd(
 
 fn extract_cmd(target_raw: &str, app: Option<&str>) -> Result<CommandOutput, CtlError> {
     let target = actl_core::parse_target(target_raw)?;
-    let rows = actl_uia::extract_table(app, &target)?;
+    let (rows, source) = actl_uia::extract_table(app, &target)?;
     Ok(json!({
         "action": "extract",
         "target": target.describe(),
+        "source": source,
         "rows": rows.len(),
         "table": rows,
     })

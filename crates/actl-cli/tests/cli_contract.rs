@@ -95,3 +95,15 @@ fn self_describing_commands_schema() {
         assert!(c["about"].is_string(), "every command has about");
     }
 }
+
+#[test]
+fn get_property_whitelist_includes_text_channel() {
+    // value/text 分工(spec):text = TextPattern 文档正文专用通道,
+    // 白名单外属性 → PROTOCOL exit 2,错误信息须列出 text(离线可测)
+    let (code, stdout) = actl(&["get", "name:whatever", "--property", "bogus"]);
+    assert_eq!(code, 2);
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
+    assert_eq!(v["error"]["code"], "PROTOCOL");
+    let msg = v["error"]["message"].as_str().expect("message");
+    assert!(msg.contains("\"text\""), "whitelist mentions text: {msg}");
+}
