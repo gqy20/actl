@@ -7,48 +7,15 @@
 
 ## 总览
 
+已完成阶段(Phase 0 spike、Phase 1 M1 → v0.1.0,2026-09-26 发布)的历史明细见
+[CHANGELOG](../CHANGELOG.md) 与 [spike-findings](spike-findings.md);本文件只保留未完成工作。
+
 ```
-Phase 0  T+0 ─ T+1周      spike + 脚手架          (验证可行性,产出坑清单)
-Phase 1  T+1 ─ T+5周      M1 激进 MVP     v0.1.0  (20 命令,两个金任务通过)
 Phase 2  T+1 ─ T+3月      M2 认真 MVP     v0.3.0  (45+ 命令,金任务 ≥90%,对外发布)
 Phase 3  T+3月起,长期     生产级打磨      v1.0    (协议冻结,生态渠道)
 ```
 
-> Phase 1 与 Phase 2 时间重叠:M1 是 M2 的纵向切片,先跑通再铺全。
-
----
-
-## Phase 0 · Spike 与脚手架(T+0 ~ T+1 周)
-
-**目标**:用最小代价验证五个最险场景,把"未知未知"变成坑清单;搭好工程骨架。
-
-**范围**:
-- Rust probe 验证(`crates/actl-uia/examples/probe.rs`,实测结论见 [spike-findings.md](spike-findings.md)):① Electron 应用 UIA 树质量;② 管理员窗口/UIPI 跨完整性级别行为;③ 中文 UIA 树;④ Canvas/游戏(UIA 不可达,物理兜底是唯一路径);⑤ RDP 会话内行为
-- Rust workspace 脚手架(已完成:五 crates、CI、hooks、envelope v1 契约测试)
-- 金任务集定义文档化([07-golden-tasks.md](07-golden-tasks.md))
-
-**退出标准**:坑清单入库(每项:场景、现象、绕行方案);CI 绿;uiautomation crate 采用/弃用决策。
-
-**风险出口**:若 ②(管理员窗口)证明无法安全绕行 → 降级为文档化的已知限制,不阻塞后续。
-
-## Phase 1 · M1 激进 MVP v0.1.0(T+1 ~ T+5 周,5–8k 行)
-
-> **状态(2026-09-26):功能完成。** 17/17 命令落地;金任务 1、2 双双 10/10(同一日以最终代码复验);冷启动实测 P95 53.9ms(达标 < 80ms)。
-> 已知边界(M2 输入,见 spike-findings):中文 IME 文本须 `type --paste`;UWP 后台挂起时单命令可 stall ~2s(激活感知目标解析待做);活动桌面上并发真人输入会与注入交错(输入占用协调待做)。
-
-**目标**:纵向跑通"snapshot → 定位 → 操作 → 反馈"全链路,自己每天用。
-
-**范围(in)**:
-- 命令(~17):`snapshot` `find` `get` / `click` `type` `press` `set-value` / `launch` `focus-window` `close-window` `list-windows` / `get-clipboard` `set-clipboard` `status` `commands` / `wait --element` / `batch`
-- 协议:envelope v1、错误码初版、`@eN` ref + snapshot_id、STALE_REF(无 fallback 链)、退出码三态
-- UIA 后端:树遍历 + 可交互判定 + Invoke/Value/Selection pattern 分发;物理兜底 `--physical`(仅 click/type/press)
-
-**范围(out,铁律)**:fallback 定位链、verify/extract、skeleton、evidence、通知命令。
-
-**退出标准(金任务)****:
-1. "打开计算器,完成 `123×456+789` 并读出结果" 10/10;
-2. "记事本输入多行文本,ctrl+s 保存到指定路径,verify 文件存在" 10/10;
-3. 冷启动 P95 < 50ms(100 次采样)。
+> M1 是 M2 的纵向切片,先跑通再铺全——时间线上 Phase 1 与 Phase 2 重叠。
 
 ## Phase 2 · M2 认真 MVP v0.3.0(T+1 ~ T+3 月,累计 12–22k 行)
 
@@ -99,8 +66,6 @@ Phase 3  T+3月起,长期     生产级打磨      v1.0    (协议冻结,生态�
 
 | 里程碑 | 版本 | 核心交付 | 验收 |
 |---|---|---|---|
-| M0 | — | 坑清单 + 骨架 + CI | 五场景验证完毕 |
-| M1 | v0.1.0 | 20 命令全链路 | 两个金任务 10/10 |
 | M2 | v0.3.0 | 45+ 命令 + fallback 链 + 分发 | 金任务 ≥90% + 三项 NFR |
 | M3 | v1.0 | 协议冻结 + 长尾打磨 | 发布标准如上 |
 

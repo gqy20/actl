@@ -19,6 +19,7 @@
 - 提交:Conventional Commits `<type>(<scope>): <subject>`,首行 ≤100 字符(hook 校验;type 全集以 `hooks/commit-msg` 正则为最终权威,本列表须与之同步);
   type: `feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert|spec`(spec = 协议变更,触发硬规则 8);scope: `core|uia|physical|cli|protocol|release`;破坏性加 `!`;
 - **门禁单点**:`pre-push` hook 与 CI 都执行 `cargo xtask gate`;门禁命令的**唯一实现在 `crates/xtask`**,改门禁只改那一处;
+- **push 是阶段性动作**:完成一批相关提交后才 push,不为单个提交即时 push;唯一例外是发版流程(push main → CI 绿 → 打 tag,见 TECH_STACK §6);
 - 跳过门禁仅限紧急:`git push --no-verify`,且在 PR 说明。
 
 ## 环境
