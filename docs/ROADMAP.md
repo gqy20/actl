@@ -46,10 +46,12 @@ Phase 3  T+3月起,长期     生产级打磨      v1.0    (协议冻结,生态�
 - 集成测试 fixtures(计算器/记事本/ms-settings);envelope 契约测试
 - 分发:cargo install、GitHub Releases 单 exe、scoop manifest
 
-**收尾状态(2026-09-26)**:README 示例化 ✓ · scoop manifest ✓ · Agent Skill ✓ ·
-crates.io 已发布(三 crate @0.1.1,cargo install actl-cli)✓ ·
+**收尾状态(2026-09-26,v0.1.2 并入)**:README 示例化 ✓ · scoop manifest ✓ ·
+Agent Skill ✓ · crates.io 已发布且 tag 自动同步(三 crate;cargo install actl-cli)✓ ·
 **US1 十次重跑 10/10(100%)** ✓ · NFR:P95 73.3ms<80 ✓(P50 54.9 微超 50,信号层
-状态写的有意权衡)· 外部机器复现 US3 待非开发机验证。
+状态写的有意权衡)· 信号条交互(菜单/品牌图标/拖动+位置记忆/字重打磨)✓ ·
+时序评估闭环(Timing 旋钮 + 画像/扫描 fixtures + 三默认值维持,docs/timing-2026-09.md)✓ ·
+外部机器复现 US3 待非开发机验证。
 
 **退出标准**:
 - 金任务集全过,US1"跨 3 应用数据搬运"成功率 ≥ 90%(10 次重跑);
