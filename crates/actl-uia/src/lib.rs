@@ -23,8 +23,13 @@ pub mod input;
 pub mod kbd;
 pub mod mouse;
 
-pub use action::{InputResult, TypeOutcome, click, press_half, press_keys, set_value, type_text};
-pub use locate::{Located, locate, wait_element, wait_gone};
+pub use action::{
+    InputResult, TypeOutcome, click, press_half, press_keys, select_option, set_value,
+    toggle_element, type_text,
+};
+pub use locate::{
+    Located, WaitPredicate, WaitProp, locate, wait_element, wait_gone, wait_property,
+};
 pub use pointer::{PointerAction, click_physical, drag_physical, pointer_physical, scroll_element};
 pub use read::{
     PROPS, PropertyInfo, VerifyKind, VerifyOutcome, extract_table, get_clipboard_text,

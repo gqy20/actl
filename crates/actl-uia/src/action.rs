@@ -284,3 +284,125 @@ pub fn set_value(
     pattern.set_value(value).map_err(internal)?;
     Ok((&loc).into())
 }
+
+/// select:在容器内按选项名选中一项(SelectionItem pattern;06 §3.6 与
+/// set-value 的分工——离散选项 vs 文本值)。选项匹配:精确 Name,落空后
+/// 子串兜底(与定位链 L1/L2 同哲学);多命中 → AMBIGUOUS(如实上报)。
+pub fn select_option(
+    app: Option<&str>,
+    container: &Target,
+    option: &str,
+    near: Option<&str>,
+) -> Result<(Located, String, &'static str), CtlError> {
+    let loc = locate(app, container, near)?;
+    let hits = selection_items_under(&loc.element, option, false);
+    let (items, level) = if hits.len() == 1 {
+        (hits, "exact-name")
+    } else if hits.is_empty() {
+        let fuzzy = selection_items_under(&loc.element, option, true);
+        if fuzzy.is_empty() {
+            return Err(CtlError::new(
+                ErrorCode::NotFound,
+                format!(
+                    "no selectable item named {option:?} under {} (exact and substring)",
+                    container.describe()
+                ),
+            ));
+        }
+        (fuzzy, "substring-name")
+    } else {
+        (hits, "exact-name")
+    };
+    if items.len() > 1 {
+        let names: Vec<String> = items
+            .iter()
+            .filter_map(|e| e.get_name().ok())
+            .take(5)
+            .collect();
+        return Err(CtlError::with_evidence(
+            ErrorCode::Ambiguous,
+            format!("{option:?} matches {} selectable items", items.len()),
+            serde_json::json!({ "candidates": names }),
+        ));
+    }
+    let item = &items[0];
+    let name = item.get_name().unwrap_or_default();
+    item.get_pattern::<UISelectionItemPattern>()
+        .map_err(|_| {
+            CtlError::new(
+                ErrorCode::NotActionable,
+                format!("{name:?} exposes no SelectionItem pattern"),
+            )
+        })?
+        .select()
+        .map_err(internal)?;
+    Ok((loc, name, level))
+}
+
+/// 容器子树内收集支持 SelectionItem 且名字匹配的元素。
+fn selection_items_under(elem: &UIElement, option: &str, substring: bool) -> Vec<UIElement> {
+    let auto = match UIAutomation::new() {
+        Ok(a) => a,
+        Err(_) => return Vec::new(),
+    };
+    let walker = match auto.create_tree_walker() {
+        Ok(w) => w,
+        Err(_) => return Vec::new(),
+    };
+    fn dfs(
+        walker: &UITreeWalker,
+        elem: &UIElement,
+        option: &str,
+        substring: bool,
+        out: &mut Vec<UIElement>,
+    ) {
+        use uiautomation::patterns::UISelectionItemPattern;
+        if out.len() >= 32 {
+            return;
+        }
+        if let Ok(name) = elem.get_name() {
+            let hit = if substring {
+                name.contains(option)
+            } else {
+                name == option
+            };
+            if hit && elem.get_pattern::<UISelectionItemPattern>().is_ok() {
+                out.push(elem.clone());
+            }
+        }
+        let mut child = walker.get_first_child(elem).ok();
+        while let Some(c) = child {
+            dfs(walker, &c, option, substring, out);
+            child = walker.get_next_sibling(&c).ok();
+        }
+    }
+    let mut out = Vec::new();
+    dfs(&walker, elem, option, substring, &mut out);
+    out
+}
+
+/// toggle:翻转 Toggle 状态并上报翻转后状态(与 click 的分工:toggle 无点击
+/// 副作用、可读状态;复选框/开关的语义动作)。
+pub fn toggle_element(
+    app: Option<&str>,
+    target: &Target,
+    near: Option<&str>,
+) -> Result<(Located, String), CtlError> {
+    let loc = locate(app, target, near)?;
+    let pattern = loc.element.get_pattern::<UITogglePattern>().map_err(|_| {
+        CtlError::new(
+            ErrorCode::NotActionable,
+            format!(
+                "{} ({}) exposes no Toggle pattern; `click` dispatches toggle semantics for checkboxes",
+                target.describe(),
+                loc.role
+            ),
+        )
+    })?;
+    pattern.toggle().map_err(internal)?;
+    let state = pattern
+        .get_toggle_state()
+        .map(|s| format!("{s:?}"))
+        .unwrap_or_else(|_| "unknown".into());
+    Ok((loc, state))
+}

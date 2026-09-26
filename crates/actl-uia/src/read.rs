@@ -117,7 +117,7 @@ fn read_value_via(elem: &UIElement) -> (Option<String>, Option<&'static str>) {
     (text.clone(), text.is_some().then_some("text-pattern"))
 }
 
-fn read_value(elem: &UIElement) -> Option<String> {
+pub(crate) fn read_value(elem: &UIElement) -> Option<String> {
     read_value_via(elem).0
 }
 

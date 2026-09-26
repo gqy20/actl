@@ -585,3 +585,157 @@ mod tests {
         assert!(container_query_for(&Target::Ref(7)).is_none());
     }
 }
+
+/// wait --property:轮询直到元素可解析且属性满足期望(06 §3.4 完整谓词语法)。
+/// 谓词:`value=<expected>`(Value/TextPattern 双通道)| `name=<substr>` | `checked=on|off`;
+/// contains=true 时 value/name 用子串语义。元素尚未可解析视为"未满足"继续等
+/// (与 --element 的分工:property 隐含存在性)。
+pub fn wait_property(
+    app: Option<&str>,
+    target: &Target,
+    predicate: &WaitPredicate,
+    timeout_ms: u64,
+) -> Result<String, CtlError> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
+    let mut last: Option<String> = None;
+    loop {
+        if let Ok(loc) = locate(app, target, None) {
+            let actual = predicate.read(&loc.element);
+            if predicate.satisfied(actual.as_deref()) {
+                return Ok(actual.unwrap_or_default());
+            }
+            last = actual;
+        }
+        if std::time::Instant::now() >= deadline {
+            return Err(CtlError::with_evidence(
+                ErrorCode::Timeout,
+                format!(
+                    "{} did not satisfy {} within {timeout_ms}ms",
+                    target.describe(),
+                    predicate.describe()
+                ),
+                serde_json::json!({ "last_actual": last }),
+            ));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(timing().poll_ms));
+    }
+}
+
+/// wait/verify 共用的属性谓词(解析与判定分离,便于单测)。
+pub struct WaitPredicate {
+    pub prop: WaitProp,
+    pub expected: String,
+    pub contains: bool,
+}
+
+pub enum WaitProp {
+    Value,
+    Name,
+    Checked,
+}
+
+impl WaitPredicate {
+    /// 解析 "prop=expected" 形态(prop ∈ value|name|checked;checked 期望 on/off)
+    pub fn parse(raw: &str) -> Result<Self, CtlError> {
+        let Some((prop, expected)) = raw.split_once('=') else {
+            return Err(CtlError::protocol(format!(
+                "invalid predicate {raw:?}: expected <prop>=<expected> with prop in value|name|checked"
+            )));
+        };
+        let prop = match prop.trim() {
+            "value" => WaitProp::Value,
+            "name" => WaitProp::Name,
+            "checked" => WaitProp::Checked,
+            other => {
+                return Err(CtlError::protocol(format!(
+                    "unknown predicate property {other:?}: expected value|name|checked"
+                )));
+            }
+        };
+        let expected = expected.trim().to_string();
+        if expected.is_empty() {
+            return Err(CtlError::protocol(format!(
+                "predicate {raw:?} has an empty expectation"
+            )));
+        }
+        if matches!(prop, WaitProp::Checked) && !matches!(expected.as_str(), "on" | "off") {
+            return Err(CtlError::protocol(
+                "checked predicate expects on|off (e.g. checked=on)",
+            ));
+        }
+        Ok(Self {
+            prop,
+            expected,
+            contains: false,
+        })
+    }
+
+    pub fn describe(&self) -> String {
+        let p = match self.prop {
+            WaitProp::Value => "value",
+            WaitProp::Name => "name",
+            WaitProp::Checked => "checked",
+        };
+        format!("{p}={}", self.expected)
+    }
+
+    /// 读元素当前值(Checked 读 Toggle 状态,Value 走双通道,Name 读 UIA Name)
+    pub fn read(&self, elem: &uiautomation::UIElement) -> Option<String> {
+        match self.prop {
+            WaitProp::Value => crate::read::read_value(elem),
+            WaitProp::Name => elem.get_name().ok().filter(|n| !n.is_empty()),
+            WaitProp::Checked => elem
+                .get_pattern::<uiautomation::patterns::UITogglePattern>()
+                .ok()
+                .and_then(|t| t.get_toggle_state().ok())
+                .map(|s| if s.to_string() == "On" { "on" } else { "off" }.to_string()),
+        }
+    }
+
+    /// 判定(读不到值 = 未满足,fail-closed)
+    pub fn satisfied(&self, actual: Option<&str>) -> bool {
+        let Some(a) = actual else { return false };
+        match (&self.prop, self.contains) {
+            (WaitProp::Checked, _) | (WaitProp::Value, false) | (WaitProp::Name, false) => {
+                a == self.expected
+            }
+            (WaitProp::Value, true) | (WaitProp::Name, true) => a.contains(&self.expected),
+        }
+    }
+}
+
+#[cfg(test)]
+mod wait_tests {
+    use super::*;
+    use actl_core::CtlError;
+
+    #[test]
+    fn predicate_parses_and_rejects() {
+        let p = WaitPredicate::parse("value=OK").unwrap();
+        assert!(p.satisfied(Some("OK")));
+        assert!(!p.satisfied(Some("ok"))); // exact by default
+        let p = WaitPredicate::parse("checked=on").unwrap();
+        assert!(p.satisfied(Some("on")));
+        assert!(WaitPredicate::parse("checked=maybe").is_err());
+        assert!(WaitPredicate::parse("bogus=1").is_err());
+        assert!(WaitPredicate::parse("noequalsign").is_err());
+        assert!(WaitPredicate::parse("value=").is_err());
+    }
+
+    #[test]
+    fn contains_semantics_apply_to_value_and_name_only() {
+        let mut p = WaitPredicate::parse("value=56,877").unwrap();
+        p.contains = true;
+        assert!(p.satisfied(Some("显示为 56,877")));
+        let mut p = WaitPredicate::parse("name=保存").unwrap();
+        p.contains = true;
+        assert!(p.satisfied(Some("另存为 - 保存")));
+    }
+
+    #[test]
+    fn missing_actual_is_unsatisfied() {
+        let p = WaitPredicate::parse("name=x").unwrap();
+        assert!(!p.satisfied(None));
+        let _ = CtlError::protocol(""); // silence unused import in tests
+    }
+}
