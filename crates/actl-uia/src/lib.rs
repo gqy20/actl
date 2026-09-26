@@ -404,7 +404,7 @@ pub struct Located {
     pub name: Option<String>,
     pub automation_id: Option<String>,
     /// 定位链实际命中级别:"primary" | "fuzzy-name" | "role-ordinal" |
-    /// "anchor" | "ref-replay"——agent 据此判断置信度并决定是否加验证
+    /// "anchor" | "ref-replay" | "item-container"——agent 据此判断置信度并决定是否加验证
     pub resolved_by: &'static str,
     pub(crate) element: UIElement,
 }
@@ -449,8 +449,32 @@ pub fn locate(app: Option<&str>, target: &Target, near: Option<&str>) -> Result<
     }
 
     // L1 精确:全量收集(ref 编号与 snapshot 同源,候选可直接重放)
+    // id: 快路径:provider 侧条件匹配(TreeScope::Subtree,单次 COM 往返替代
+    // 逐元素三连读)——AutomationId 语义 = 精确匹配,与属性条件语义一致;
+    // name: 的子串语义 provider 做不了,不走快路径。
     let mut counter = 0u32;
     let mut matches = Vec::new();
+    if let Target::Id(_) = target {
+        match fast_exact_ids(&auto, &root, target) {
+            Some(hits) if hits.len() == 1 => {
+                return Ok(located_from(hits[0].clone(), window_title, "primary"));
+            }
+            Some(hits) if hits.is_empty() => {
+                // L1 确定空手(id: 无 fuzzy 层),直落 L4 虚拟化容器
+                if let Some(hit) = locate_virtualized(&walker, &root, target) {
+                    return Ok(located_from(hit, window_title, "item-container"));
+                }
+                return Err(CtlError::new(
+                    ErrorCode::NotFound,
+                    format!(
+                        "no element matches {} (exact and virtualized-container levels)",
+                        target.describe()
+                    ),
+                ));
+            }
+            _ => {} // 多命中(候选需 ref 编号)或快路径不可用 → 全遍历
+        }
+    }
     collect_matches(&walker, &root, 0, target, false, &mut counter, &mut matches);
 
     // L2 名称模糊(仅 name: 目标且 L1 空手时):大小写/空白不敏感
@@ -471,10 +495,15 @@ pub fn locate(app: Option<&str>, target: &Target, near: Option<&str>) -> Result<
                 );
             }
         }
+        // L4 虚拟化容器(spike 2026-09-26 证真:Explorer 文件列表的 ListItem 不物化,
+        // walker 遍历恒 0 命中;ItemContainerPattern::FindItemByProperty 精确命中)
+        if let Some(hit) = locate_virtualized(&walker, &root, target) {
+            return Ok(located_from(hit, window_title, "item-container"));
+        }
         return Err(CtlError::new(
             ErrorCode::NotFound,
             format!(
-                "no element matches {} (exact and fuzzy levels)",
+                "no element matches {} (exact, fuzzy and virtualized-container levels)",
                 target.describe()
             ),
         ));
@@ -659,6 +688,8 @@ fn collect_until_ref(
 
 /// 全量收集语义匹配(不做提前退出——AMBIGUOUS 判定与候选上报需要全集)。
 /// fuzzy=true 时 name 走 L2 模糊匹配(core::fuzzy_contains)。
+/// 性能:属性惰性读——非命中元素只读定位所需属性(每元素 2 次 COM 往返,
+/// 替代旧的无差别三连读;命中元素读全量供候选上报)。
 fn collect_matches(
     walker: &UITreeWalker,
     elem: &UIElement,
@@ -678,8 +709,42 @@ fn collect_matches(
     } else {
         0 // 非交互匹配仍可作候选上报,但不可 ref 重放
     };
-    let name = elem.get_name().ok().filter(|n| !n.is_empty());
-    let id = elem.get_automation_id().ok().filter(|a| !a.is_empty());
+    // 惰性属性读:按目标类型先读匹配所需的那一个属性
+    let (name, id) = match target {
+        Target::Name(s) => {
+            let name = elem.get_name().ok().filter(|n| !n.is_empty());
+            let hit = match (&name, fuzzy) {
+                (Some(n), true) => actl_core::target::fuzzy_contains(n, s),
+                (Some(n), false) => n.contains(s.as_str()),
+                (None, _) => false,
+            };
+            if hit {
+                (
+                    name,
+                    elem.get_automation_id().ok().filter(|a| !a.is_empty()),
+                )
+            } else {
+                return dfs_children(walker, elem, depth, target, fuzzy, counter, out);
+            }
+        }
+        Target::Id(s) => {
+            let id = elem.get_automation_id().ok().filter(|a| !a.is_empty());
+            if id.as_deref() != Some(s.as_str()) {
+                return dfs_children(walker, elem, depth, target, fuzzy, counter, out);
+            }
+            (elem.get_name().ok().filter(|n| !n.is_empty()), id)
+        }
+        Target::Role(s) | Target::RoleAt(s, _) => {
+            if role != *s {
+                return dfs_children(walker, elem, depth, target, fuzzy, counter, out);
+            }
+            (
+                elem.get_name().ok().filter(|n| !n.is_empty()),
+                elem.get_automation_id().ok().filter(|a| !a.is_empty()),
+            )
+        }
+        Target::Ref(_) => (None, None),
+    };
     let hit = match target {
         Target::Ref(_) => false,
         Target::Name(s) => match (&name, fuzzy) {
@@ -699,6 +764,18 @@ fn collect_matches(
             automation_id: id.clone(),
         });
     }
+    dfs_children(walker, elem, depth, target, fuzzy, counter, out);
+}
+
+fn dfs_children(
+    walker: &UITreeWalker,
+    elem: &UIElement,
+    depth: u32,
+    target: &Target,
+    fuzzy: bool,
+    counter: &mut u32,
+    out: &mut Vec<Candidate>,
+) {
     let mut child = walker.get_first_child(elem).ok();
     while let Some(c) = child {
         collect_matches(walker, &c, depth + 1, target, fuzzy, counter, out);
@@ -711,6 +788,105 @@ fn role_of(elem: &UIElement) -> String {
         "{:?}",
         elem.get_control_type().unwrap_or(ControlType::Custom)
     )
+}
+
+/// id: 目标的 provider 侧精确匹配(UIA FindAll + AutomationId 属性条件,
+/// TreeScope::Subtree 与 DFS 全遍历同覆盖含根自身)。
+/// None = 条件创建/查询失败,调用方回退全遍历(正确性优先)。
+fn fast_exact_ids(
+    auto: &UIAutomation,
+    root: &UIElement,
+    target: &Target,
+) -> Option<Vec<UIElement>> {
+    use uiautomation::types::{TreeScope, UIProperty};
+    use uiautomation::variants::Variant;
+
+    let Target::Id(s) = target else { return None };
+    let cond = auto
+        .create_property_condition(UIProperty::AutomationId, Variant::from(s.clone()), None)
+        .ok()?;
+    root.find_all(TreeScope::Subtree, &cond).ok()
+}
+
+// ─── L4 虚拟化容器兜底(M2 观察层强化,spike 2026-09-26 证真) ───────────────
+// Explorer/任务管理器等大列表的 ListItem 不物化(US1 实测:等 6s + F5 后 walker
+// 遍历仍 0 命中),ItemContainerPattern::FindItemByProperty 由 provider 侧
+// 直接命中未物化条目(61 文件目录实测:树内 0 命中 → 精确查询命中末位文件)。
+
+/// L4 支持的属性查询映射:Name → UIA Name 精确;Id → AutomationId 精确。
+/// Role/Ref 无属性查询语义(Name/AutomationId 之外的属性 provider 普遍不支持),
+/// 返回 None(定位链保持原 NotFound/STALE_REF 语义)。
+fn container_query_for(
+    target: &Target,
+) -> Option<(windows::Win32::UI::Accessibility::UIA_PROPERTY_ID, String)> {
+    use windows::Win32::UI::Accessibility::{UIA_AutomationIdPropertyId, UIA_NamePropertyId};
+    match target {
+        Target::Name(s) => Some((UIA_NamePropertyId, s.clone())),
+        Target::Id(s) => Some((UIA_AutomationIdPropertyId, s.clone())),
+        _ => None,
+    }
+}
+
+/// L4 执行体:窗口内收集 ItemContainer 容器,逐个精确查询。
+/// 仅在 L1/L2 双落空后进入(不在热路径);无命中返回 None → NotFound。
+/// FindItemByProperty 为**精确匹配**(provider 侧无子串语义)——name: 的
+/// 子串语义在 L1/L2 已消耗,进入 L4 的 name 值必须是完整名称(如完整文件名)。
+///
+/// unsafe 理由(AGENTS §5,crate 豁免点):crate 安全包装不接受 NULL 起查元素
+/// (MS 文档语义 = "从头查",且零值 UIElement 的 Drop 会 Release(null) 崩溃),
+/// 经 `UIElement::as_ref()` 取原生 IUIAutomationElement 直调 GetCurrentPattern
+/// + FindItemByProperty(None, ...);类型与 crate 同源(均 windows 0.62)。
+fn locate_virtualized(
+    walker: &UITreeWalker,
+    root: &UIElement,
+    target: &Target,
+) -> Option<UIElement> {
+    use uiautomation::variants::Variant;
+    use windows::Win32::UI::Accessibility::{
+        IUIAutomationItemContainerPattern, UIA_ItemContainerPatternId,
+    };
+
+    let (prop, value) = container_query_for(target)?;
+    let mut containers = Vec::new();
+    collect_containers(walker, root, 0, &mut containers);
+    let value = Variant::from(value);
+    for c in &containers {
+        let pattern: Option<IUIAutomationItemContainerPattern> = (|| unsafe {
+            use windows::core::Interface;
+            let raw = c.as_ref();
+            raw.GetCurrentPattern(UIA_ItemContainerPatternId)
+                .ok()?
+                .cast()
+                .ok()
+        })();
+        let Some(pattern) = pattern else { continue };
+        // 无命中:provider 返回 null 元素(crate 包装为 Err)→ 试下一个容器
+        if let Ok(elem) = unsafe { pattern.FindItemByProperty(None, prop, value.as_ref()) } {
+            return Some(UIElement::from(elem));
+        }
+    }
+    None
+}
+
+/// DFS 收集实现 ItemContainerPattern 的元素(容器数上限防失控 UI)。
+fn collect_containers(
+    walker: &UITreeWalker,
+    elem: &UIElement,
+    depth: u32,
+    out: &mut Vec<UIElement>,
+) {
+    use uiautomation::patterns::UIItemContainerPattern;
+    if depth > MAX_DEPTH || out.len() >= 32 {
+        return;
+    }
+    if elem.get_pattern::<UIItemContainerPattern>().is_ok() {
+        out.push(elem.clone());
+    }
+    let mut child = walker.get_first_child(elem).ok();
+    while let Some(c) = child {
+        collect_containers(walker, &c, depth + 1, out);
+        child = walker.get_next_sibling(&c).ok();
+    }
 }
 
 /// click:语义执行分发(06 M1 范围:Invoke/Value/Selection)。
@@ -752,7 +928,16 @@ pub fn click(
 }
 
 /// get:读取元素属性;`property` 白名单,缺省返回基本全集。
-pub const PROPS: &[&str] = &["name", "role", "automation_id", "offscreen", "value"];
+/// 属性白名单。`value` = ValuePattern 直读;`text` = TextPattern 文档正文
+/// (专用通道:Chromium 的 Document Value=URL 会掩盖正文,value 与 text 分工)。
+pub const PROPS: &[&str] = &[
+    "name",
+    "role",
+    "automation_id",
+    "offscreen",
+    "value",
+    "text",
+];
 
 pub struct PropertyInfo {
     pub name: Option<String>,
@@ -760,6 +945,10 @@ pub struct PropertyInfo {
     pub automation_id: Option<String>,
     pub offscreen: Option<bool>,
     pub value: Option<String>,
+    /// value 的读取通道:value-pattern | text-pattern(value 为空时的兜底)
+    pub value_via: Option<&'static str>,
+    /// TextPattern 文档正文(--property text 专用)
+    pub text: Option<String>,
 }
 
 pub fn read_property(
@@ -777,13 +966,25 @@ pub fn read_property(
     }
     let loc = locate(app, target, near)?;
     let want = |p: &str| property.map(|sel| sel == p).unwrap_or(true);
+    let mut value_via = None;
     let value = want("value")
         .then(|| {
+            let (v, via) = read_value_via(&loc.element);
+            value_via = via;
+            v
+        })
+        .flatten();
+    // text = TextPattern 文档正文专用通道(Chromium Document 的 Value=URL,
+    // 正文只能走这里)
+    let text = want("text")
+        .then(|| {
+            use uiautomation::patterns::UITextPattern;
             loc.element
-                .get_pattern::<UIValuePattern>()
+                .get_pattern::<UITextPattern>()
                 .ok()
-                .and_then(|pat| pat.get_value().ok())
-                .filter(|v| !v.is_empty())
+                .and_then(|t| t.get_document_range().ok())
+                .and_then(|r| r.get_text(-1).ok())
+                .filter(|t| !t.is_empty())
         })
         .flatten();
     Ok(PropertyInfo {
@@ -800,6 +1001,8 @@ pub fn read_property(
             .then(|| loc.element.is_offscreen().ok())
             .flatten(),
         value,
+        value_via,
+        text,
     })
 }
 
@@ -1126,9 +1329,71 @@ pub fn focus_window(pattern: &str) -> Result<String, CtlError> {
 }
 
 /// list-windows:枚举顶层窗口 + owned dialog(title/class/pid),供 agent 选择目标。
-pub fn list_windows() -> Result<Vec<(String, String, u32)>, CtlError> {
+/// list-windows 条目:title/class/pid 来自 UIA(与定位链同源),叠放事实
+/// 来自 Win32 物理层——agent 据此回答"谁在最上面/是否被挡/弹窗挂在谁下面"。
+#[derive(Debug, Clone)]
+pub struct WindowEntry {
+    pub title: String,
+    pub class: String,
+    pub pid: u32,
+    /// 物理前台(GetForegroundWindow 的根;注入护栏的同一判据)
+    pub foreground: bool,
+    /// WS_EX_TOPMOST("总在最前"弹窗:输入法悬浮/overlay 等)
+    pub topmost: bool,
+    pub minimized: bool,
+    /// 注意:UWP 后台挂起时 CoreWindow 被 cloak,visible=false 属预期(不代表已死)
+    pub visible: bool,
+    /// Win32 Z 序(0 = 最顶);无原生句柄的窗口为 None
+    pub z_order: Option<u32>,
+    /// 窗口矩形 [left, top, right, bottom](虚拟桌面坐标,多屏可为负)
+    pub rect: Option<[i32; 4]>,
+    /// owned dialog 的宿主窗口标题(None = 顶层窗口)
+    pub owner_title: Option<String>,
+}
+
+/// list-windows:枚举顶层窗口 + owned dialog,附物理层叠放事实。
+/// Z 序 = GetTopWindow→GetWindow(GW_HWNDNEXT) 链的位次;前台比对沿用
+/// 标题兜底先例(WinUI 三件套分属不同 HWND,严格比对会漏)。
+pub fn list_windows() -> Result<Vec<WindowEntry>, CtlError> {
+    use std::collections::HashMap;
+    use windows::Win32::Foundation::{HWND, RECT};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GA_ROOT, GW_HWNDNEXT, GW_OWNER, GWL_EXSTYLE, GetAncestor, GetForegroundWindow,
+        GetTopWindow, GetWindow, GetWindowLongW, GetWindowRect, IsIconic, IsWindowVisible,
+        WS_EX_TOPMOST,
+    };
+
     let auto = UIAutomation::new().map_err(internal)?;
     let walker = auto.create_tree_walker().map_err(internal)?;
+
+    // Z 链一次取全:HWND → 位次(0 = 最顶)
+    let mut z_rank: HashMap<usize, u32> = HashMap::new();
+    unsafe {
+        let null = HWND::default();
+        let mut h = GetTopWindow(None).unwrap_or(null);
+        let mut i = 0u32;
+        while !h.0.is_null() {
+            z_rank.insert(h.0 as usize, i);
+            i += 1;
+            h = GetWindow(h, GW_HWNDNEXT).unwrap_or(null);
+        }
+    }
+    // 物理前台(根 + 标题双判据,WinUI 兜底同 pointer_physical 先例)
+    let (fg_root, fg_title) = unsafe {
+        let fg = GetForegroundWindow();
+        let root = GetAncestor(fg, GA_ROOT);
+        (
+            if root.0.is_null() { fg } else { root },
+            window_title_of(fg).unwrap_or_default(),
+        )
+    };
+
+    let rank_of_root = |hwnd: HWND| -> Option<u32> {
+        let root = unsafe { GetAncestor(hwnd, GA_ROOT) };
+        let key = if root.0.is_null() { hwnd } else { root }.0 as usize;
+        z_rank.get(&key).copied()
+    };
+
     Ok(top_windows(&auto, &walker)
         .into_iter()
         .filter_map(|w| {
@@ -1136,11 +1401,45 @@ pub fn list_windows() -> Result<Vec<(String, String, u32)>, CtlError> {
             if title.is_empty() {
                 return None;
             }
-            Some((
+            let hwnd = native_hwnd(&w);
+            let (foreground, topmost, minimized, visible, z_order, rect, owner_title) = match hwnd {
+                Some(h) => unsafe {
+                    let root = GetAncestor(h, GA_ROOT);
+                    let root = if root.0.is_null() { h } else { root };
+                    let is_fg = root.0 == fg_root.0
+                        || window_title_of(h)
+                            .zip(Some(fg_title.clone()))
+                            .is_some_and(|(t, f)| !f.is_empty() && t == f);
+                    let ex_style = GetWindowLongW(h, GWL_EXSTYLE);
+                    let mut r = RECT::default();
+                    let has_rect = GetWindowRect(h, &mut r).is_ok();
+                    let owner = GetWindow(h, GW_OWNER).unwrap_or_default();
+                    (
+                        is_fg,
+                        (ex_style as u32) & WS_EX_TOPMOST.0 != 0,
+                        IsIconic(h).as_bool(),
+                        IsWindowVisible(h).as_bool(),
+                        rank_of_root(h),
+                        has_rect.then_some([r.left, r.top, r.right, r.bottom]),
+                        (!owner.0.is_null())
+                            .then(|| window_title_of(owner).unwrap_or_default())
+                            .filter(|t| !t.is_empty()),
+                    )
+                },
+                None => (false, false, false, true, None, None, None),
+            };
+            Some(WindowEntry {
                 title,
-                w.get_classname().unwrap_or_default(),
-                w.get_process_id().unwrap_or_default(),
-            ))
+                class: w.get_classname().unwrap_or_default(),
+                pid: w.get_process_id().unwrap_or_default(),
+                foreground,
+                topmost,
+                minimized,
+                visible,
+                z_order,
+                rect,
+                owner_title,
+            })
         })
         .collect())
 }
@@ -1280,10 +1579,13 @@ pub fn set_clipboard_text(text: &str) -> Result<(), CtlError> {
 }
 
 /// 指针物理动作(泛化自 click --physical;doc 09 §6 七步链)。
-/// ①语义定位唯一目标 ②取 UIA clickable point(无 → 拒绝,绝不猜中心点)
+/// ①语义定位唯一目标 ①b offscreen 则 ScrollItem 滚入视野(虚拟化列表定位的
+/// 配套:L4 命中的条目常在视口外,clickable point 会取不到/取错)
+/// ②取 UIA clickable point(无 → 拒绝,绝不猜中心点)
 /// ③命中检查:该坐标的最顶层窗口须属于目标根(标题比对;遮挡/最小化 → 拒绝)
 /// ④持输入占用锁 + 修饰键空置检查 ⑤单批注入(竞态窗最小化)。
 /// 命中检查与注入之间仍有竞态,如实设计:检查紧贴注入,不承诺零竞态。
+/// 返回 (定位结果, 坐标, 是否执行过滚入视野)。
 pub enum PointerAction {
     LeftClick,
     RightClick,
@@ -1298,11 +1600,12 @@ pub fn pointer_physical(
     target: &Target,
     near: Option<&str>,
     action: PointerAction,
-) -> Result<(Located, (i32, i32)), CtlError> {
+) -> Result<(Located, (i32, i32), bool), CtlError> {
     use windows::Win32::Foundation::POINT;
     use windows::Win32::UI::WindowsAndMessaging::{GA_ROOT, GetAncestor, WindowFromPoint};
 
     let loc = locate(app, target, near)?;
+    let scrolled = ensure_visible(&loc.element);
     let Some(point) = loc.element.get_clickable_point().ok().flatten() else {
         return Err(CtlError::new(
             ErrorCode::NotActionable,
@@ -1376,7 +1679,26 @@ pub fn pointer_physical(
         PointerAction::Drag { to: (tx, ty) } => mouse::drag_to(px, py, tx, ty)?,
         PointerAction::Wheel { notches } => mouse::wheel_at(px, py, notches)?,
     }
-    Ok((loc, (px, py)))
+    Ok((loc, (px, py), scrolled))
+}
+
+/// offscreen 元素尝试 ScrollItemPattern::ScrollIntoView(P1,虚拟化定位配套)。
+/// 返回是否执行过滚动;滚动失败静默跳过——由后续 clickable point / 命中检查
+/// 如实失败,不做"看不见也硬打"的猜测。滚动后等一拍让容器重绘再取坐标。
+fn ensure_visible(elem: &UIElement) -> bool {
+    use uiautomation::patterns::UIScrollItemPattern;
+
+    if !elem.is_offscreen().unwrap_or(false) {
+        return false;
+    }
+    let scrolled = elem
+        .get_pattern::<UIScrollItemPattern>()
+        .and_then(|p| p.scroll_into_view())
+        .is_ok();
+    if scrolled {
+        std::thread::sleep(std::time::Duration::from_millis(timing().poll_ms));
+    }
+    scrolled
 }
 
 /// click --physical 的便捷入口(物理左键)。
@@ -1384,7 +1706,7 @@ pub fn click_physical(
     app: Option<&str>,
     target: &Target,
     near: Option<&str>,
-) -> Result<(Located, (i32, i32)), CtlError> {
+) -> Result<(Located, (i32, i32), bool), CtlError> {
     pointer_physical(app, target, near, PointerAction::LeftClick)
 }
 
@@ -1395,14 +1717,12 @@ pub fn drag_physical(
     from_near: Option<&str>,
     to: &Target,
     to_near: Option<&str>,
-) -> Result<(Located, (i32, i32)), CtlError> {
-    let (_, (fx, fy)) = pointer_physical(app, from, from_near, PointerAction::Hover)?;
-    let Some(dest) = locate(app, to, to_near)?
-        .element
-        .get_clickable_point()
-        .ok()
-        .flatten()
-    else {
+) -> Result<(Located, (i32, i32), bool), CtlError> {
+    let (_, (fx, fy), from_scrolled) =
+        pointer_physical(app, from, from_near, PointerAction::Hover)?;
+    let to_loc = locate(app, to, to_near)?;
+    let to_scrolled = ensure_visible(&to_loc.element);
+    let Some(dest) = to_loc.element.get_clickable_point().ok().flatten() else {
         return Err(CtlError::new(
             ErrorCode::NotActionable,
             format!(
@@ -1414,7 +1734,11 @@ pub fn drag_physical(
     let point = (dest.get_x(), dest.get_y());
     let _lock = input::InputLock::acquire(timing().lock_wait_ms)?;
     mouse::drag_to(fx, fy, point.0, point.1)?;
-    Ok((locate(app, from, from_near)?, (fx, fy)))
+    Ok((
+        locate(app, from, from_near)?,
+        (fx, fy),
+        from_scrolled || to_scrolled,
+    ))
 }
 
 /// resize-window:标题唯一匹配窗口 → SetWindowPos(不动位置,只改尺寸)。
@@ -1489,7 +1813,7 @@ pub fn scroll_element(
         }
     }
     // 物理兜底:滚轮打在元素 clickable point 上
-    let (_, _) = pointer_physical(app, target, near, PointerAction::Wheel { notches })?;
+    let _ = pointer_physical(app, target, near, PointerAction::Wheel { notches })?;
     Ok((loc, "physical-wheel"))
 }
 
@@ -1573,10 +1897,31 @@ pub fn verify(
     }
 }
 
-fn read_value(elem: &UIElement) -> Option<String> {
-    elem.get_pattern::<UIValuePattern>()
+/// 元素文本读取双通道:ValuePattern 直读 → TextPattern 文档范围兜底。
+/// 富文本(浏览器页面/Word 文档)不暴露 Value pattern,TextPattern 是唯一通道;
+/// 返回值附带来源标记(get 的 via 上报,与 type --paste 同风格)。
+fn read_value_via(elem: &UIElement) -> (Option<String>, Option<&'static str>) {
+    use uiautomation::patterns::UITextPattern;
+
+    if let Some(v) = elem
+        .get_pattern::<UIValuePattern>()
         .ok()
-        .and_then(|v| v.get_value().ok())
+        .and_then(|p| p.get_value().ok())
+        .filter(|v| !v.is_empty())
+    {
+        return (Some(v), Some("value-pattern"));
+    }
+    let text = elem
+        .get_pattern::<UITextPattern>()
+        .ok()
+        .and_then(|t| t.get_document_range().ok())
+        .and_then(|r| r.get_text(-1).ok())
+        .filter(|t| !t.is_empty());
+    (text.clone(), text.is_some().then_some("text-pattern"))
+}
+
+fn read_value(elem: &UIElement) -> Option<String> {
+    read_value_via(elem).0
 }
 
 /// wait --gone:轮询直到目标**不再**可解析(消失;TIMEOUT 语义)。
@@ -1599,10 +1944,50 @@ pub fn wait_gone(app: Option<&str>, target: &Target, timeout_ms: u64) -> Result<
     }
 }
 
-/// extract --table:容器 → 行(DataItem/ListItem)→ 单元格(Text/Edit 值)。
-/// 通用树表扁平化:行的所有 Text 后代按 DFS 序作为单元格。
-pub fn extract_table(app: Option<&str>, target: &Target) -> Result<Vec<Vec<String>>, CtlError> {
+/// extract --table:GridPattern 直读优先(带 row/col 语义,虚拟化行可达),
+/// 树扁平化兜底(容器 → 行(DataItem/ListItem)→ 单元格(Text/Edit 值))。
+/// 返回 (行数据, 来源标记);来源随结果上报,agent 可判断结构可信度。
+pub fn extract_table(
+    app: Option<&str>,
+    target: &Target,
+) -> Result<(Vec<Vec<String>>, &'static str), CtlError> {
+    use uiautomation::patterns::UIGridPattern;
+
     let loc = locate(app, target, None)?;
+    // 直读路径:GridPattern.GetItemAt(row, col)——provider 侧行列寻址;
+    // 单元格值优先 Value pattern,退 Name。pattern 宣称支持但读不全
+    // → 如实走兜底路径,不输出半张表
+    if let Ok(grid) = loc.element.get_pattern::<UIGridPattern>() {
+        let rows = grid.get_row_count().unwrap_or(0);
+        let cols = grid.get_column_count().unwrap_or(0);
+        if rows > 0 && cols > 0 && (rows * cols) as usize <= MAX_ELEMENTS {
+            let mut table = Vec::with_capacity(rows as usize);
+            let mut ok = true;
+            for r in 0..rows {
+                let mut row = Vec::with_capacity(cols as usize);
+                for c in 0..cols {
+                    match grid.get_item(r, c) {
+                        Ok(cell) => row.push(
+                            read_value(&cell)
+                                .unwrap_or_else(|| cell.get_name().unwrap_or_default()),
+                        ),
+                        Err(_) => {
+                            ok = false;
+                            break;
+                        }
+                    }
+                }
+                if !ok {
+                    break;
+                }
+                table.push(row);
+            }
+            if ok && !table.is_empty() {
+                return Ok((table, "grid-pattern"));
+            }
+        }
+    }
+
     let auto = UIAutomation::new().map_err(internal)?;
     let walker = auto.create_tree_walker().map_err(internal)?;
 
@@ -1658,7 +2043,7 @@ pub fn extract_table(app: Option<&str>, target: &Target) -> Result<Vec<Vec<Strin
             table.push(cells);
         }
     }
-    Ok(table)
+    Ok((table, "tree-flatten"))
 }
 
 /// check_snapshot_freshness 的按模式入口:解析窗口后比对 RuntimeId。
@@ -1670,4 +2055,29 @@ pub fn check_snapshot_freshness_by_pattern(
     let walker = auto.create_tree_walker().map_err(internal)?;
     let win = find_window(&auto, &walker, pattern)?;
     check_snapshot_freshness(snapshot_id, &win)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::container_query_for;
+    use actl_core::target::Target;
+    use windows::Win32::UI::Accessibility::{UIA_AutomationIdPropertyId, UIA_NamePropertyId};
+
+    #[test]
+    fn l4_maps_name_and_id_to_exact_property_queries() {
+        let (prop, v) = container_query_for(&Target::Name("report.xlsx".into())).expect("name");
+        assert_eq!(prop, UIA_NamePropertyId);
+        assert_eq!(v, "report.xlsx");
+
+        let (prop, v) = container_query_for(&Target::Id("SystemListItem".into())).expect("id");
+        assert_eq!(prop, UIA_AutomationIdPropertyId);
+        assert_eq!(v, "SystemListItem");
+    }
+
+    #[test]
+    fn l4_excludes_role_and_ref_targets() {
+        assert!(container_query_for(&Target::Role("ListItem".into())).is_none());
+        assert!(container_query_for(&Target::RoleAt("ListItem".into(), 2)).is_none());
+        assert!(container_query_for(&Target::Ref(7)).is_none());
+    }
 }

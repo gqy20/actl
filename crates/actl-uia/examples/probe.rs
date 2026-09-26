@@ -32,8 +32,15 @@ fn main() {
             Ok(())
         }
         "tree" => dump_tree(&auto, args.get(1).map(String::as_str), args.get(2)),
+        "ic" => item_container(
+            &auto,
+            args.get(1).map(String::as_str),
+            args.get(2).map(String::as_str),
+        ),
         _ => {
-            eprintln!("modes: windows | focused | tree <pid|name-substr> [max_depth]");
+            eprintln!(
+                "modes: windows | focused | tree <pid|name-substr> [max_depth] | ic <window-substr> <name>"
+            );
             Ok(())
         }
     };
@@ -241,4 +248,138 @@ mod fginfo {
             }
         }
     }
+}
+
+#[allow(unsafe_code)] // 诊断工具:原生 COM 直调 FindItemByProperty
+/// 虚拟化列表探测(P0 spike):验证目标窗口内
+/// ① 有哪些元素实现 ItemContainerPattern;
+/// ② 原生 FindItemByProperty(NULL 起查,Name 精确匹配)能否命中未物化条目;
+/// ③ 普通 walker 遍历是否看不见该条目(复现虚拟化缺口)。
+///
+/// 起查元素传 NULL 是 MS 文档语义("从头查"),uiautomation crate 的安全包装
+/// 不接受空 UIElement,故经 UIElement::as_ref() 拿原生 IUIAutomationElement
+/// 直调 GetCurrentPattern + FindItemByProperty。
+fn item_container(auto: &UIAutomation, window: Option<&str>, needle: Option<&str>) -> Result<()> {
+    use uiautomation::patterns::UIItemContainerPattern;
+    use uiautomation::variants::Variant;
+    use windows::Win32::UI::Accessibility::{
+        IUIAutomationItemContainerPattern, UIA_ItemContainerPatternId, UIA_NamePropertyId,
+    };
+    use windows::core::Interface;
+
+    let (Some(window), Some(needle)) = (window, needle) else {
+        eprintln!("ic 需要参数:<window-substr> <name-to-find>");
+        return Ok(());
+    };
+    let walker = auto.create_tree_walker()?;
+    let root = auto.get_root_element()?;
+    let mut child = walker.get_first_child(&root).ok();
+    let start = loop {
+        let Some(w) = child else {
+            eprintln!("未找到匹配窗口:{window}");
+            return Ok(());
+        };
+        if w.get_name().map(|n| n.contains(window)).unwrap_or(false) {
+            break w;
+        }
+        child = walker.get_next_sibling(&w).ok();
+    };
+    println!(
+        "window: {:?} class={:?} pid={}",
+        start.get_name().unwrap_or_default(),
+        start.get_classname().unwrap_or_default(),
+        start.get_process_id().unwrap_or_default()
+    );
+
+    // ① + ③:一遍 DFS——记录 ItemContainer 容器,同时数普通遍历能否看到 needle
+    let mut containers: Vec<UIElement> = Vec::new();
+    let mut realized_hits = 0usize;
+    let mut total = 0usize;
+    fn dfs(
+        walker: &UITreeWalker,
+        elem: &UIElement,
+        depth: usize,
+        needle: &str,
+        containers: &mut Vec<UIElement>,
+        realized_hits: &mut usize,
+        total: &mut usize,
+    ) {
+        if depth > 40 || *total > 5000 {
+            return;
+        }
+        *total += 1;
+        let name = elem.get_name().unwrap_or_default();
+        if name.contains(needle) {
+            *realized_hits += 1;
+        }
+        if elem.get_pattern::<UIItemContainerPattern>().is_ok() {
+            containers.push(elem.clone());
+        }
+        let mut c = walker.get_first_child(elem).ok();
+        while let Some(x) = c {
+            dfs(
+                walker,
+                &x,
+                depth + 1,
+                needle,
+                containers,
+                realized_hits,
+                total,
+            );
+            c = walker.get_next_sibling(&x).ok();
+        }
+    }
+    dfs(
+        &walker,
+        &start,
+        0,
+        needle,
+        &mut containers,
+        &mut realized_hits,
+        &mut total,
+    );
+    println!(
+        "walker: total={total} containers={} realized_name_hits={realized_hits}",
+        containers.len()
+    );
+    for c in containers.iter().take(5) {
+        println!(
+            "  container: {:?} [{:?}] class={:?}",
+            c.get_name().unwrap_or_default(),
+            c.get_control_type()
+                .map(|t| format!("{t:?}"))
+                .unwrap_or_default(),
+            c.get_classname().unwrap_or_default()
+        );
+    }
+
+    // ②:对每个容器做原生 FindItemByProperty(NULL, Name, needle)
+    let value = Variant::from(needle.to_string());
+    for c in &containers {
+        let raw = c.as_ref();
+        let pattern: IUIAutomationItemContainerPattern =
+            match (|| unsafe { raw.GetCurrentPattern(UIA_ItemContainerPatternId)?.cast() })() {
+                Ok(p) => p,
+                Err(e) => {
+                    println!("  ! GetCurrentPattern failed: {e:?}");
+                    continue;
+                }
+            };
+        let hit = unsafe { pattern.FindItemByProperty(None, UIA_NamePropertyId, value.as_ref()) };
+        match hit.map(UIElement::from) {
+            Ok(elem) => {
+                println!(
+                    "  ✓ FindItemByProperty HIT: name={:?} role={:?} class={:?} offscreen={:?}",
+                    elem.get_name().unwrap_or_default(),
+                    elem.get_control_type()
+                        .map(|t| format!("{t:?}"))
+                        .unwrap_or_default(),
+                    elem.get_classname().unwrap_or_default(),
+                    elem.is_offscreen().unwrap_or(true)
+                );
+            }
+            Err(e) => println!("  ✗ no hit: {e:?}"),
+        }
+    }
+    Ok(())
 }
