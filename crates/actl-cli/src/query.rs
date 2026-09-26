@@ -236,6 +236,8 @@ pub(crate) fn wait_cmd(
     element: Option<&str>,
     window: Option<&str>,
     gone: Option<&str>,
+    property: Option<&str>,
+    contains: bool,
     app: Option<&str>,
     timeout: Option<u64>,
 ) -> Result<CommandOutput, CtlError> {
@@ -244,8 +246,16 @@ pub(crate) fn wait_cmd(
     let what = match (element, window, gone) {
         (Some(t), _, _) => {
             let target = actl_core::parse_target(t)?;
-            actl_uia::wait_element(app, &target, timeout)?;
-            json!({ "element": target.describe() })
+            // --property:谓词等待(隐含存在性;元素未解析继续等)
+            if let Some(raw) = property {
+                let mut pred = actl_uia::WaitPredicate::parse(raw)?;
+                pred.contains = contains;
+                let actual = actl_uia::wait_property(app, &target, &pred, timeout)?;
+                json!({ "element": target.describe(), "predicate": pred.describe(), "actual": actual })
+            } else {
+                actl_uia::wait_element(app, &target, timeout)?;
+                json!({ "element": target.describe() })
+            }
         }
         (None, Some(w), _) => {
             let title = actl_uia::wait_window(w, timeout)?;

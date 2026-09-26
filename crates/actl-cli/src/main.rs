@@ -12,7 +12,7 @@ mod query;
 use std::time::Instant;
 
 use actl_core::{CtlError, Envelope, ErrorEnvelope};
-use clap::Parser;
+use clap::FromArgMatches;
 use serde_json::Value;
 
 use crate::cli::{Cli, Command, app_of, command_name};
@@ -34,19 +34,26 @@ impl From<Value> for CommandOutput {
 }
 
 fn main() {
-    let cli = Cli::parse();
+    // clap 树注入 after_help 后再 parse(Example/Errors 进 -h;06 §3.5)
+    let matches = crate::cli::build_cli().get_matches();
+    let cli = Cli::from_arg_matches(&matches).expect("clap-validated matches");
     let command_name = command_name(&cli.command);
     let started = Instant::now();
     let signals = actl_core::state::SignalPaths::default();
 
-    // 显示信号协议:命令开始即落状态(消费端 actl-signal 轮询渲染)
-    signals.write_state(&actl_core::state::SessionState::now(
-        std::process::id(),
-        command_name,
-        app_of(&cli.command).as_deref(),
-        None,
-        actl_core::state::Phase::Running,
-    ));
+    // 显示信号协议:命令开始即落状态(消费端 actl-signal 轮询渲染)。
+    // P50 优化(读类命令跳过 begin 态):瞬时观察命令的 begin 写对信号条无意义
+    // (250ms 轮询几乎必然错过)却占冷启动路径;动作/等待类命令保持双写。
+    // 终态写所有命令都保留(消费端靠它回到空闲/失败展示)。
+    if !is_instant_read(command_name) {
+        signals.write_state(&actl_core::state::SessionState::now(
+            std::process::id(),
+            command_name,
+            app_of(&cli.command).as_deref(),
+            None,
+            actl_core::state::Phase::Running,
+        ));
+    }
 
     let result = dispatch(&cli.command);
 
@@ -204,6 +211,15 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             near.as_deref(),
         ),
         Command::Extract { target, app } => extract_cmd(target, app.as_deref()),
+        Command::Select {
+            target,
+            name,
+            app,
+            near,
+        } => select_cmd(target, name, app.as_deref(), near.as_deref()),
+        Command::Toggle { target, app, near } => {
+            toggle_cmd(target, app.as_deref(), near.as_deref())
+        }
         Command::FocusWindow { pattern } => focus_window_cmd(pattern),
         Command::CloseWindow { pattern } => close_window_cmd(pattern),
         Command::ListWindows => list_windows_cmd(),
@@ -226,12 +242,16 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             element,
             window,
             gone,
+            property,
+            contains,
             app,
             timeout,
         } => wait_cmd(
             element.as_deref(),
             window.as_deref(),
             gone.as_deref(),
+            property.as_deref(),
+            *contains,
             app.as_deref(),
             *timeout,
         ),
@@ -266,4 +286,14 @@ fn finish(command_name: &'static str, result: Result<CommandOutput, CtlError>, d
             std::process::exit(code);
         }
     }
+}
+
+/// 瞬时读类命令:begin 态跳过(P50 优化)。判定按命令名,集合只收"亚百毫秒
+/// 级、无副作用"的观察命令;snapshot/find/extract 等慢读保持双写(信号条
+/// 有展示价值)。
+fn is_instant_read(cmd: &str) -> bool {
+    matches!(
+        cmd,
+        "status" | "commands" | "list-windows" | "get-clipboard"
+    )
 }

@@ -351,3 +351,41 @@ pub(crate) fn close_window_cmd(pattern: &str) -> Result<CommandOutput, CtlError>
     let title = actl_uia::close_window(pattern)?;
     Ok(json!({ "action": "close-window", "window": title }).into())
 }
+
+/// select:容器内按选项名选中(SelectionItem;上报实际选中的名字与匹配层级)。
+pub(crate) fn select_cmd(
+    target_raw: &str,
+    name: &str,
+    app: Option<&str>,
+    near: Option<&str>,
+) -> Result<CommandOutput, CtlError> {
+    let target = actl_core::parse_target(target_raw)?;
+    let (loc, selected, level) = actl_uia::select_option(app, &target, name, near)?;
+    Ok(json!({
+        "action": "select",
+        "target": target.describe(),
+        "resolved_by": loc.resolved_by,
+        "option": selected,
+        "matched_by": level,
+        "input_effects": { "keyboard": "none", "clipboard": "untouched", "pointer": "none" },
+    })
+    .into())
+}
+
+/// toggle:翻转 Toggle 状态(上报翻转后状态,On/Off)。
+pub(crate) fn toggle_cmd(
+    target_raw: &str,
+    app: Option<&str>,
+    near: Option<&str>,
+) -> Result<CommandOutput, CtlError> {
+    let target = actl_core::parse_target(target_raw)?;
+    let (loc, state) = actl_uia::toggle_element(app, &target, near)?;
+    Ok(json!({
+        "action": "toggle",
+        "target": target.describe(),
+        "resolved_by": loc.resolved_by,
+        "state": state,
+        "input_effects": { "keyboard": "none", "clipboard": "untouched", "pointer": "none" },
+    })
+    .into())
+}

@@ -88,6 +88,8 @@ fn self_describing_commands_schema() {
         "resize-window",
         "verify",
         "extract",
+        "select",
+        "toggle",
     ] {
         assert!(names.contains(&must), "commands schema must list {must}");
     }
@@ -156,4 +158,28 @@ fn actl_trace_goes_to_stderr_and_stdout_stays_pure() {
     let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
     let v: serde_json::Value = serde_json::from_str(stdout.trim()).expect("stdout is pure JSON");
     assert_eq!(v["ok"], true);
+}
+
+#[test]
+fn wait_property_predicate_validated_at_protocol_level() {
+    // 谓词语法错误 = 参数错误 → PROTOCOL exit 2(离线可测,不触桌面)
+    let (code, stdout) = actl(&[
+        "wait",
+        "--element",
+        "name:whatever",
+        "--property",
+        "bogus=1",
+    ]);
+    assert_eq!(code, 2);
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
+    assert_eq!(v["error"]["code"], "PROTOCOL");
+    // checked 谓词只接受 on|off
+    let (code, _) = actl(&[
+        "wait",
+        "--element",
+        "name:whatever",
+        "--property",
+        "checked=maybe",
+    ]);
+    assert_eq!(code, 2);
 }
