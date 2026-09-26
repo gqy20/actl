@@ -74,6 +74,10 @@ M2 第三批 · 观察层强化(接入面:虚拟化大列表 + 老 Win32 报表 
   (物理指针 + scroll,212)、`read`(get/verify/extract + 剪贴板,380),lib.rs 收敛为
   49 行模块中枢。纯代码搬移无语义改动;公共 API 经 `pub use` 汇聚 crate 根,crate 外
   路径不变;跨模块原私有 helper 按需升 `pub(crate)`。
+- **actl-cli/src/main.rs(1376 行)按职责拆为三模块**:`cli`(clap 参数面 + help 文本
+  同源 doc comment,373)、`interact`(操作类执行体 + 注入护栏,353)、`query`
+  (观察/编排类执行体,421),main.rs 收敛为 269 行入口(状态信号 + dispatch + envelope
+  落盘)。envelope 输出与 `--help` 文本零变化(doc comment 原样搬移),契约测试不改自绿。
 - **版本口径修订**:里程碑版本 = 0.<里程碑号>.0——M2 完成 = 0.2.0、M3 完成 = 0.3.0
   (协议冻结),1.0 保留给协议冻结后的正式稳定版、不再是里程碑承诺;取代 ROADMAP
   早期"M2=v0.3.0 / M3=v1.0"的写法,与 M1 期 0.1.x 的实际发版序列衔接。
