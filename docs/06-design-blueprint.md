@@ -98,7 +98,9 @@ list-notifications              # 系统通知读取
 wait --element @e3 --predicate actionable [--timeout 5s]
 wait --window "保存" | --gone @e3 | --property @e3 value="OK"
 verify --exists @e3 / --value @e3 "x" / --checked @e8 / --order ...
-batch --json '<commands>'   # 单进程内顺序执行,共享 snapshot
+batch --json '<commands>'   # 单进程内顺序执行,共享 snapshot;每步结果与耗时进 steps[]
+                             # (i/cmd/ok/duration_ms,失败步附 error),首错即停时
+                             # 已执行步随错误 evidence 带出(部分结果不丢失)
 ```
 
 ### 3.5 帮助系统规范(`-h` 的设计与层级)
@@ -131,6 +133,12 @@ L2  actl commands     机器 schema:全命令+参数的 JSON(agent 自发现入�
 | `launch` vs `focus-window` | launch 默认启动**新实例**(不做已运行检测);前置已有窗口是 focus-window 的职责 |
 
 ## 4. 输出协议
+
+**stdout 不变量**:要么 envelope JSON,要么 `--help/--version` 文本,无第三形态。
+诊断旁路两条,均不碰 stdout:① 结构化字段随 envelope 返回(`duration_ms`/`wake_ms`/
+`waited_ms`/`resolved_by`/`via`/`input_effects`/batch `steps[]`——机器消费的常态数据);
+② `ACTL_TRACE=1` 时引擎阶段耗时打点(`[actl-trace] locate.window 2036ms` 形态,stderr,
+人类诊断按需启用;慢环境把命令总耗时分解到窗口解析/唤醒/树遍历/L4/pattern 各段)。
 
 ### 成功 envelope
 

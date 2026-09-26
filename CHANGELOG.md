@@ -42,6 +42,13 @@ M2 第三批 · 观察层强化(接入面:虚拟化大列表 + 老 Win32 报表 
   绝对值不可跨日比较),收益绝对值待正常日 timing fixture 复测;
 - 金任务 1 fixture:12 键改单次 batch 执行(@eN ref 重放语义保留,进程冷启动 13 次 → 1 次);
   默认轮数 10 → 3(日常回归;正式 M2 验收 RUNS=10)。
+- **batch 每步结果与耗时上报(spec,加法)**:`steps[]`(i/cmd/ok/duration_ms,失败步附
+  error.code/message)——编排层的"捕获衔接"变成可观测(哪步慢、哪步开始等待);
+  首错即停时已执行步随错误 evidence 带出,不再丢失部分结果(M1 遗留的"batch 无 partial"补齐);
+- **ACTL_TRACE=1 引擎阶段打点**:stderr 旁路(`[actl-trace] <stage> <ms>ms`),覆盖
+  capture.window/wake/walk、locate.window/wake/fastpath/dfs/l4、click.pattern——慢环境
+  把命令总耗时分解归因(启用当日即实证:1.8s 命令中 locate.window 段占 2036ms,fastpath 5ms)。
+  stdout 契约不变(ACTL_TRACE 只进 stderr,契约测试锁定);禁用时零输出。
 
 ### Fixed
 - probe 探测工具补 `ic` 模式(ItemContainer 容器发现 + 原生查询验证,spike 载体)。
