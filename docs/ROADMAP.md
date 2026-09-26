@@ -29,6 +29,9 @@ Phase 3  T+3月起,长期     生产级打磨      v1.0    (协议冻结,生态�
 > 只清自己按下的、Toggle/ExpandCollapse/ScrollItem 分发、`snapshot_id` ref
 > 版本化校验(后移第二批:依赖快照持久化/会话状态设计,与 fallback 定位链同做)。
 > **第二批·命令面与定位链**:45+ 命令补全、fallback 定位链(resolved_by)。
+> **追加·显示信号层**(2026-09-26 用户需求,已随第二批落地):状态快照/停止标志/
+> 输入锁观测/失联判定四原语 + `actl-signal` 伴随程序(置顶状态条+托盘+
+> Ctrl+Alt+F12 紧急停止,状态灯取市场通行色);规范见 06 §7.5。
 > **收尾·对外发布**:README 示例、crates.io、scoop;同步发布 Agent Skill
 > (SKILL.md + envelope 生成的错误码恢复指南,docs/12 §3.4:品类空缺、成本极低)。
 > 协议评审候选(docs/12 §4):AMBIGUOUS/STALE_REF 携带结构化 evidence。

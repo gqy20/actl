@@ -163,11 +163,12 @@ L2  actl commands     机器 schema:全命令+参数的 JSON(agent 自发现入�
 | `NOT_FOUND` | 选择器无匹配 | 用 find 放宽条件 |
 | `PERM_DENIED` | 权限不足(UIPI/管理员窗口) | 提示用户以管理员重开,勿重试 |
 | `TIMEOUT` | wait/谓词超时 | 重估前置状态 |
-| `AMBIGUOUS` | 匹配到多个元素 | 收紧条件或用 nth |
+| `AMBIGUOUS` | 匹配到多个元素(附候选 evidence,含可重放 @eN) | 收紧条件 / `--near` 锚点 / `role:X#N` 序数 |
 | `NOT_ACTIONABLE` | 元素存在但不可操作(disabled/offscreen) | 先 scroll/focus;hint 会指向 `set-value` |
 | `ASSERTION_FAILED` | `verify`/`--expect` 断言未成立 | 检查前置步骤(`--expect` 默认 2s 轮询后判定) |
 | `PROTOCOL` | 协议/参数错误(不可恢复) | 修正命令参数 |
 | `INTERNAL` | 内部/UIA/系统层错误(非协议非目标问题) | 重试一次;持续出现附 evidence 报 issue |
+| `ABORTED` | 用户主动停止(紧急热键/停止文件,v0.1.1) | 清除停止标志(actl-signal 点击或删文件)后重试 |
 
 退出码:`0` 成功 · `1` 业务失败(可恢复) · `2` 协议/参数错误(不可恢复)。
 
@@ -192,6 +193,22 @@ L2  actl commands     机器 schema:全命令+参数的 JSON(agent 自发现入�
 - 物理指针注入(真实移动/点击鼠标)必须显式 `--physical`,默认仅 UIA 后台调用;键盘注入的授权是强制 `--app` + 护栏 + 输入占用锁(见 §2 规则 2);
 - 管理员窗口/跨完整性级别受 UIPI 限制时返回 `PERM_DENIED` 而非静默失败;
 - 敏感命令白名单(clipboard-set 到密码框等场景)留给上层 agent 策略,CLI 不做内容审查,但 `--dry-run` 全局可用。
+
+## 7.5 显示信号协议(v0.1.1;docs/11 显示层 / docs/13 拉取哲学的落地)
+
+stdout envelope 保持纯净(不塞进度文本);状态走旁路四原语,消费端全拉取、零订阅:
+
+1. **状态快照** `%LOCALAPPDATA%ctl\state.json`:命令开始/结束/batch 步间写入
+   `{pid, command, app, step, phase(running|done|error|stopped), ts_ms}`;
+2. **停止标志** `stop-requested`(粘性,存在即停止):输入锁获取点与 batch 步间
+   检查 → `ABORTED`;只有显式动作清除(actl-signal 点击);
+3. **输入占用锁** `actl-input-lock`(命名互斥体):"正在操控物理输入"的权威信号,
+   外部程序可 OpenMutex+Wait(0) 观测;
+4. **失联判定**:状态心跳 >10s → 消费端如实显示"失联",不显示成功。
+
+伴随程序 `actl-signal`(actl-uia 第二 bin,纯 Win32 零新依赖):置顶状态条
+(`WS_EX_NOACTIVATE` 不抢焦点)+ 托盘 + **Ctrl+Alt+F12 紧急停止**(被占时降级为
+点击停止);状态灯取市场通行色:绿=执行中 · 琥珀=注入 · 红=停止 · 灰=空闲 · 暗=失联。
 
 ## 8. 里程碑
 

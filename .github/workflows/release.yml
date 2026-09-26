@@ -50,8 +50,8 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Build release binary
-        run: cargo build --release --bin actl
+      - name: Build release binaries
+        run: cargo build --release --bin actl --bin actl-signal
 
       - name: Package and smoke test
         shell: bash
@@ -68,6 +68,7 @@ jobs:
           artifact_base="actl_${VERSION}_windows_amd64"
           mkdir -p "package/${artifact_base}" dist
           cp target/release/actl.exe "package/${artifact_base}/actl.exe"
+          cp target/release/actl-signal.exe "package/${artifact_base}/actl-signal.exe"
           cp README.md "package/${artifact_base}/README.md" 2>/dev/null || true
           cp LICENSE "package/${artifact_base}/LICENSE" 2>/dev/null || true
 
@@ -109,9 +110,9 @@ jobs:
               echo
               echo "| 文件 | 说明 |"
               echo "|------|------|"
-              echo "| \`actl_${GITHUB_REF_NAME}_windows_amd64.exe\` | Windows x64 单文件,下载即用 |"
-              echo "| \`actl_${GITHUB_REF_NAME}_windows_amd64.zip\` | Windows 完整包(exe + README + LICENSE) |"
-              echo "| \`checksums.txt\` | SHA-256 校验 |"
+              echo "| `actl_${GITHUB_REF_NAME}_windows_amd64.exe` | Windows x64 主程序,下载即用 |"
+              echo "| `actl_${GITHUB_REF_NAME}_windows_amd64.zip` | 完整包(actl + actl-signal 状态条 + README + LICENSE) |"
+              echo "| `checksums.txt` | SHA-256 校验 |"
               echo
               cat changelog_section.md
             } > release_notes.md
