@@ -9,6 +9,7 @@
 
 pub mod input;
 pub mod kbd;
+pub mod mouse;
 
 use actl_core::keys::KeySpec;
 use actl_core::{CtlError, ErrorCode, UiNode};
@@ -108,6 +109,17 @@ fn ensure_window_responsive(elem: &UIElement) -> u32 {
 
 /// 元素的原生 HWND(None = 无句柄/无效)。crate 的 Handle 未暴露原始值;
 /// Handle/HANDLE/HWND 均为单指针包装,布局一致(同 close_window 的先例)。
+/// HWND 的窗口标题(命中检查的比对键;空标题返回 None)。
+fn window_title_of(hwnd: windows::Win32::Foundation::HWND) -> Option<String> {
+    use windows::Win32::UI::WindowsAndMessaging::GetWindowTextW;
+    let mut buf = [0u16; 256];
+    let len = unsafe { GetWindowTextW(hwnd, &mut buf) };
+    if len <= 0 {
+        return None;
+    }
+    Some(String::from_utf16_lossy(&buf[..len as usize]))
+}
+
 fn native_hwnd(elem: &UIElement) -> Option<windows::Win32::Foundation::HWND> {
     let handle = elem.get_native_window_handle().ok()?;
     if handle.is_invalid() {
@@ -932,4 +944,76 @@ pub fn set_clipboard_text(text: &str) -> Result<(), CtlError> {
         }
         Ok(())
     }
+}
+
+/// click --physical:物理左键点击(doc 09 §6 七步链的 M1 子集)。
+/// ①语义定位唯一目标 ②取 UIA clickable point(无 → 拒绝,绝不猜中心点)
+/// ③命中检查:该坐标的最顶层窗口须属于目标根窗口(遮挡/最小化 → 拒绝)
+/// ④持输入占用锁 ⑤move+down+up 一批注入(竞态窗最小化)。
+/// 命中检查与注入之间仍有竞态(目标可能移动),如实设计:检查紧贴注入,
+/// 不承诺零竞态。
+pub fn click_physical(
+    app: Option<&str>,
+    target: &Target,
+) -> Result<(Located, (i32, i32)), CtlError> {
+    use windows::Win32::Foundation::POINT;
+    use windows::Win32::UI::WindowsAndMessaging::{GA_ROOT, GetAncestor, WindowFromPoint};
+
+    let loc = locate(app, target)?;
+    let Some(point) = loc.element.get_clickable_point().ok().flatten() else {
+        return Err(CtlError::new(
+            ErrorCode::NotActionable,
+            format!(
+                "{} ({}) exposes no clickable point; refusing to guess a center point",
+                target.describe(),
+                loc.role
+            ),
+        ));
+    };
+    let (px, py) = (point.get_x(), point.get_y());
+
+    // 命中检查:坐标处最顶层窗口的根标题 == 目标窗口根标题。
+    // ①目标侧从元素沿父链上溯到窗口根(WinUI 控件本身没有 HWND);
+    // ②两侧取根标题比对而非严格 HWND——WinUI 三件套(框架/CoreWindow
+    //   分属不同 HWND)会让同窗口的严格比对必然失败(实测)。
+    let auto = UIAutomation::new().map_err(internal)?;
+    let walker = auto.create_tree_walker().map_err(internal)?;
+    // 爬到第一个拥有 HWND 的元素为止(= 窗口本身;爬到桌面根会丢句柄)
+    let mut root = loc.element.clone();
+    while native_hwnd(&root).is_none() {
+        match walker.get_parent(&root) {
+            Ok(p) => root = p,
+            Err(_) => break,
+        }
+    }
+    let target_title = native_hwnd(&root)
+        .and_then(window_title_of)
+        .ok_or_else(|| {
+            CtlError::new(
+                ErrorCode::NotActionable,
+                "target window has no native handle for hit-checking",
+            )
+        })?;
+    let root_of = |hwnd: windows::Win32::Foundation::HWND| {
+        let r = unsafe { GetAncestor(hwnd, GA_ROOT) };
+        (!r.0.is_null()).then_some(r)
+    };
+    let hit = unsafe { WindowFromPoint(POINT { x: px, y: py }) };
+    let hit_title = (!hit.0.is_null())
+        .then_some(hit)
+        .and_then(root_of)
+        .and_then(window_title_of);
+    if hit_title.as_deref() != Some(target_title.as_str()) {
+        return Err(CtlError::new(
+            ErrorCode::NotActionable,
+            format!(
+                "clickable point ({px},{py}) is occupied by another window \
+                 (occluded or minimized); refusing physical click"
+            ),
+        ));
+    }
+
+    let _lock = input::InputLock::acquire(input::LOCK_TIMEOUT_MS)?;
+    mouse::left_click_at(px, py)?;
+    Ok((loc, (px, py)))
 }

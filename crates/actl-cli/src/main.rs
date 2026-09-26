@@ -36,13 +36,17 @@ enum Command {
         #[arg(long)]
         skeleton: bool,
     },
-    /// Click an element via UIA Invoke (background, no physical mouse)
+    /// Click an element (UIA Invoke by default; --physical for a real mouse click)
     Click {
         /// Target: @eN (needs --app) | name:<substr> | id:<AutomationId> | role:<Type>
         target: String,
         /// Target window by title substring (@eN refs require it; otherwise focused window)
         #[arg(long)]
         app: Option<String>,
+        /// Physically move the mouse and click at the UIA clickable point
+        /// (uses the real pointer + input lock; UIA Invoke is the default)
+        #[arg(long)]
+        physical: bool,
     },
     /// Read properties of an element
     Get {
@@ -194,7 +198,11 @@ fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
         Command::Commands => commands().map(Into::into),
         Command::Status => status().map(Into::into),
         Command::Snapshot { app, skeleton } => snapshot(app.as_deref(), *skeleton),
-        Command::Click { target, app } => click(target, app.as_deref()),
+        Command::Click {
+            target,
+            app,
+            physical,
+        } => click(target, app.as_deref(), *physical),
         Command::Get {
             target,
             property,
@@ -360,14 +368,29 @@ fn snapshot(app: Option<&str>, skeleton: bool) -> Result<CommandOutput, CtlError
     })
 }
 
-fn click(target_raw: &str, app: Option<&str>) -> Result<CommandOutput, CtlError> {
+fn click(target_raw: &str, app: Option<&str>, physical: bool) -> Result<CommandOutput, CtlError> {
     let target = actl_core::parse_target(target_raw)?;
+    if physical {
+        let (loc, (px, py)) = actl_uia::click_physical(app, &target)?;
+        return Ok(json!({
+            "action": "click",
+            "target": target.describe(),
+            "resolved_by": "primary",
+            "pattern": "physical-left",
+            "point": [px, py],
+            "input_effects": { "keyboard": "none", "clipboard": "untouched", "pointer": "move_and_click" },
+            "resolved": { "role": loc.role, "name": loc.name, "automation_id": loc.automation_id },
+            "window": loc.window_title,
+        })
+        .into());
+    }
     let (loc, pattern) = actl_uia::click(app, &target)?;
     Ok(json!({
         "action": "click",
         "target": target.describe(),
         "resolved_by": "primary",
         "pattern": pattern,
+        "input_effects": { "keyboard": "none", "clipboard": "untouched", "pointer": "none" },
         "resolved": {
             "role": loc.role,
             "name": loc.name,

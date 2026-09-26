@@ -16,7 +16,7 @@
 ## 2. 架构原则
 
 1. **无状态原子命令**:每次调用独立进程,无隐藏会话;状态只存在于两个地方——屏幕本身,和 agent 的上下文。
-2. **UIA 优先,物理兜底**:默认走 UIA pattern 调用(后台执行、不抢物理鼠标键盘);UIA 拿不到(Canvas/游戏/部分 Electron)时物理模拟(SendInput)必须显式授权(`--physical` 或全局配置)。
+2. **UIA 优先,物理兜底(2026-09-26 裁定修订)**:默认走 UIA pattern 调用(后台执行、不抢物理鼠标键盘)。物理模拟(SendInput)按输入通道分治授权:**键盘**(press/type 本体即注入)的授权 = 强制 `--app` 绑定 + verify-then-inject 护栏 + 进程间输入占用锁,不另设 `--physical`;**指针**(真实移动/点击鼠标,独占用户的物理指针)必须显式 `--physical`(`click --physical`,后续 right-click/drag/hover 同)。
 3. **为自愈设计**:错误返回携带恢复线索(变化线索、evidence 引用),目标是最小化 agent 下一轮恢复成本。求韧不求稳。
 4. **token 是一等约束**:默认返回紧凑语义树;大 UI 用 skeleton 投影;不做"全树 dump"这种默认行为。
 
@@ -189,7 +189,7 @@ L2  actl commands     机器 schema:全命令+参数的 JSON(agent 自发现入�
 
 ## 7. 安全边界
 
-- 物理输入(真实移动鼠标/敲键盘)必须显式 `--physical`,默认仅 UIA 后台调用;
+- 物理指针注入(真实移动/点击鼠标)必须显式 `--physical`,默认仅 UIA 后台调用;键盘注入的授权是强制 `--app` + 护栏 + 输入占用锁(见 §2 规则 2);
 - 管理员窗口/跨完整性级别受 UIPI 限制时返回 `PERM_DENIED` 而非静默失败;
 - 敏感命令白名单(clipboard-set 到密码框等场景)留给上层 agent 策略,CLI 不做内容审查,但 `--dry-run` 全局可用。
 
