@@ -5,7 +5,7 @@
 
 ## [Unreleased]
 
-### Added(0.2.0 清账批)
+### Added
 - **一键回归入口**:`cargo xtask regress` / `make regress`——release 构建 + 顺序跑全部六个
   live fixtures(金任务 1/2、US1、验收 A/B/C)并汇总。Windows 陷阱实录:裸 "bash"
   解析到 System32 的 WSL bash(fixture 全线假败,报 WSL_E_DEFAULT_DISTRO_NOT_FOUND)——
@@ -47,7 +47,7 @@ M2 收官批:命令面补齐(wait 谓词/select/toggle)+ skeleton 单链折叠 +
   begin 态写入(250ms 轮询必然错过的瞬时态,却占冷启动路径;终态写保留)。同环境对照:
   单次 state 写 ≈11ms(慢日值);绝对收益待正常日复测(慢日纪律:绝对值不可跨日)。
 
-### Added(清账批)
+### 搁置
 - `list-notifications`:WinRT(Windows.UI.Notifications)依赖超出纯 Win32 边界且
   真实通知验收难造——裁定移出 M2 命令面收官,登记 M3 候选(蓝图 FR4 留位)。
 
