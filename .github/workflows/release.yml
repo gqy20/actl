@@ -57,8 +57,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          # 冒烟:release 二进制必须可执行、正常退出(M1 后升级为 `actl status` / `actl commands`)
-          ./target/release/actl.exe
+          # 冒烟:release 二进制必须正常执行核心只读命令(envelope 输出 + exit 0)。
+          # 注意:裸跑 actl(缺子命令)是 clap 错误路径,退出码 2,不能当冒烟
+          ./target/release/actl.exe status
+          ./target/release/actl.exe commands
 
           artifact_base="actl_${VERSION}_windows_amd64"
           mkdir -p "package/${artifact_base}" dist
