@@ -91,7 +91,7 @@ fn state_line(s: &SessionState) -> String {
     let app = s
         .app
         .as_deref()
-        .map(|a| format!(" → {a}"))
+        .map(|a| format!(" · {a}"))
         .unwrap_or_default();
     format!("{}{}{}", s.command, app, step)
 }
@@ -182,18 +182,19 @@ fn wide(s: &str) -> Vec<u16> {
 
 /// Source Code Pro 三级字阶(进程生命周期内只建一次)。
 /// DEFAULT_CHARSET 让中文走系统 font-linking(否则乱码方框)。
+/// 主行 SEMIBOLD(用户反馈细字发虚)、状态行 NORMAL、提示行 NORMAL。
 unsafe fn font(height: i32) -> windows::Win32::Graphics::Gdi::HFONT {
     static BIG: std::sync::OnceLock<isize> = std::sync::OnceLock::new();
     static MID: std::sync::OnceLock<isize> = std::sync::OnceLock::new();
     static DIM: std::sync::OnceLock<isize> = std::sync::OnceLock::new();
     use windows::Win32::Graphics::Gdi::{
         CLEARTYPE_QUALITY, CLIP_DEFAULT_PRECIS, CreateFontW, DEFAULT_CHARSET, FIXED_PITCH,
-        FW_NORMAL, OUT_DEFAULT_PRECIS,
+        FW_NORMAL, FW_SEMIBOLD, OUT_DEFAULT_PRECIS,
     };
-    let slot = match height {
-        17 => &BIG,
-        13 => &MID,
-        _ => &DIM,
+    let (slot, weight) = match height {
+        17 => (&BIG, FW_SEMIBOLD.0 as i32),
+        13 => (&MID, FW_NORMAL.0 as i32),
+        _ => (&DIM, FW_NORMAL.0 as i32),
     };
     let h = *slot.get_or_init(|| {
         CreateFontW(
@@ -201,7 +202,7 @@ unsafe fn font(height: i32) -> windows::Win32::Graphics::Gdi::HFONT {
             0,
             0,
             0,
-            FW_NORMAL.0 as i32,
+            weight,
             0,
             0,
             0,
@@ -617,15 +618,16 @@ fn main() {
         nid.szTip[..tip.len() - 1].copy_from_slice(&tip[..tip.len() - 1]);
         let _ = Shell_NotifyIconW(NIM_ADD, &nid);
 
-        assert!(
+        // 热键被占不致命:降级运行(提示行自适应),绝不 panic 掉整个信号条
+        HOTKEY_OK.store(
             RegisterHotKey(
                 Some(hwnd),
                 HOTKEY_ID,
                 MOD_CONTROL | MOD_ALT,
-                VK_F12.0 as u32
+                VK_F12.0 as u32,
             )
             .is_ok(),
-            "RegisterHotKey(Ctrl+Alt+F12) failed - another program owns it"
+            std::sync::atomic::Ordering::Relaxed,
         );
 
         SetTimer(Some(hwnd), TIMER_ID, TIMER_MS, None);
