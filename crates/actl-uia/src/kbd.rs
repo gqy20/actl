@@ -295,6 +295,34 @@ pub fn wait_modifiers_clear() -> Result<(), CtlError> {
     }
 }
 
+/// 半事件注入(key-down/key-up 命令):只发编译产物中的 DOWN 或 UP 半边。
+/// 用于按住类操作(shift 拖拽、游戏按键)。**必须与配对命令成对使用**:
+/// 进程异常退出会留下按住状态——后续注入会被修饰键空置检查拒绝
+/// (held_modifiers),用户敲一下该键即可恢复,这是有意的 fail-closed。
+pub fn send_key_partial(spec: &KeySpec, down: bool) -> Result<(), CtlError> {
+    if down {
+        wait_modifiers_clear()?;
+    }
+    let inputs: Vec<INPUT> = compile_key_spec(spec)?
+        .into_iter()
+        .filter(|i| {
+            let ki = unsafe { i.Anonymous.ki };
+            ki.dwFlags.contains(KEYEVENTF_KEYUP) != down
+        })
+        .collect();
+    if inputs.is_empty() {
+        return Err(CtlError::protocol("nothing to send for this half"));
+    }
+    let sent = unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) };
+    if sent == inputs.len() as u32 {
+        Ok(())
+    } else {
+        Err(CtlError::internal(format!(
+            "SendInput delivered {sent}/{} events; key state is now unknown",
+            inputs.len()
+        )))
+    }
+}
 #[cfg(test)]
 mod tests {
     //! 编译层回归(doc 09 §8 第一批):只断言事件序列,不注入。

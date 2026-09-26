@@ -50,6 +50,12 @@ enum Command {
         /// (uses the real pointer + input lock; UIA Invoke is the default)
         #[arg(long)]
         physical: bool,
+        /// Post-condition: window:<substr> must NEWLY appear after the click
+        #[arg(long)]
+        expect: Option<String>,
+        /// Timeout for --expect in milliseconds (default 2000)
+        #[arg(long)]
+        timeout: Option<u64>,
     },
     /// Read properties of an element
     Get {
@@ -117,6 +123,130 @@ enum Command {
         #[arg(long)]
         near: Option<String>,
     },
+    /// Right-click an element (physical; opens context menus)
+    RightClick {
+        /// Target: @eN | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N
+        target: String,
+        /// Target window by title substring
+        #[arg(long)]
+        app: Option<String>,
+        /// Disambiguate multi-matches by picking the one nearest to this anchor
+        #[arg(long)]
+        near: Option<String>,
+    },
+    /// Double-click an element (physical)
+    DoubleClick {
+        /// Target: @eN | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N
+        target: String,
+        /// Target window by title substring
+        #[arg(long)]
+        app: Option<String>,
+        /// Disambiguate multi-matches by picking the one nearest to this anchor
+        #[arg(long)]
+        near: Option<String>,
+    },
+    /// Move the pointer onto an element (hover; physical)
+    Hover {
+        /// Target: @eN | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N
+        target: String,
+        /// Target window by title substring
+        #[arg(long)]
+        app: Option<String>,
+        /// Disambiguate multi-matches by picking the one nearest to this anchor
+        #[arg(long)]
+        near: Option<String>,
+    },
+    /// Drag from one element onto another (physical, left button held)
+    Drag {
+        /// Drag source target
+        target: String,
+        /// Drag destination target
+        to: String,
+        /// Target window by title substring
+        #[arg(long)]
+        app: Option<String>,
+        /// Anchor disambiguation for the source
+        #[arg(long)]
+        near: Option<String>,
+        /// Anchor disambiguation for the destination
+        #[arg(long)]
+        to_near: Option<String>,
+    },
+    /// Scroll an element (UIA Scroll pattern first, physical wheel fallback)
+    Scroll {
+        /// Target: scrollable container
+        target: String,
+        /// Scroll down N notches
+        #[arg(long, conflicts_with = "up")]
+        down: Option<u32>,
+        /// Scroll up N notches
+        #[arg(long)]
+        up: Option<u32>,
+        /// Target window by title substring
+        #[arg(long)]
+        app: Option<String>,
+        /// Disambiguate multi-matches by picking the one nearest to this anchor
+        #[arg(long)]
+        near: Option<String>,
+    },
+    /// Press and HOLD a key (pair with key-up; abnormal exit leaves it held)
+    KeyDown {
+        /// Key expression (single key or combo, e.g. shift, ctrl+a)
+        keys: String,
+        /// Target window by title substring (required: injection is fail-closed)
+        #[arg(long)]
+        app: Option<String>,
+    },
+    /// Release a key held by key-down (must pair)
+    KeyUp {
+        /// Key expression (same as the paired key-down)
+        keys: String,
+        /// Target window by title substring (required: injection is fail-closed)
+        #[arg(long)]
+        app: Option<String>,
+    },
+    /// Resize a window (keeps its position)
+    ResizeWindow {
+        /// Window title substring (must match exactly one window)
+        pattern: String,
+        /// New width in pixels
+        #[arg(long)]
+        width: i32,
+        /// New height in pixels
+        #[arg(long)]
+        height: i32,
+    },
+    /// Immediate assertion (unlike wait): exists / value / checked
+    Verify {
+        /// Assert the element resolves
+        #[arg(long, conflicts_with_all = ["value", "checked"])]
+        exists: Option<String>,
+        /// Assert the element's value (expected string is positional)
+        #[arg(long, requires = "expected")]
+        value: Option<String>,
+        /// Expected value (exact unless --contains)
+        expected: Option<String>,
+        /// Substring match instead of exact
+        #[arg(long)]
+        contains: bool,
+        /// Assert a toggle is On
+        #[arg(long)]
+        checked: Option<String>,
+        /// Target window by title substring
+        #[arg(long)]
+        app: Option<String>,
+        /// Disambiguate multi-matches by picking the one nearest to this anchor
+        #[arg(long)]
+        near: Option<String>,
+    },
+    /// Extract a table from a container element as JSON rows
+    Extract {
+        /// Container target (role:Table / DataGrid / list that owns rows)
+        target: String,
+        /// Target window by title substring
+        #[arg(long)]
+        app: Option<String>,
+    },
     /// Bring a window to the foreground (keyboard commands act on global focus)
     FocusWindow {
         /// Window title substring
@@ -162,6 +292,9 @@ enum Command {
         /// Wait until a window whose title contains this substring exists
         #[arg(long)]
         window: Option<String>,
+        /// Wait until this element target NO LONGER resolves
+        #[arg(long)]
+        gone: Option<String>,
         /// Target window by title substring (for --element)
         #[arg(long)]
         app: Option<String>,
@@ -215,7 +348,16 @@ fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             app,
             near,
             physical,
-        } => click(target, app.as_deref(), near.as_deref(), *physical),
+            expect,
+            timeout,
+        } => click(
+            target,
+            app.as_deref(),
+            near.as_deref(),
+            *physical,
+            expect.as_deref(),
+            *timeout,
+        ),
         Command::Get {
             target,
             property,
@@ -242,6 +384,72 @@ fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             app,
             near,
         } => set_value_cmd(target, value, app.as_deref(), near.as_deref()),
+        Command::RightClick { target, app, near } => pointer_cmd(
+            "right-click",
+            target,
+            app.as_deref(),
+            near.as_deref(),
+            PointerKind::Right,
+        ),
+        Command::DoubleClick { target, app, near } => pointer_cmd(
+            "double-click",
+            target,
+            app.as_deref(),
+            near.as_deref(),
+            PointerKind::Double,
+        ),
+        Command::Hover { target, app, near } => pointer_cmd(
+            "hover",
+            target,
+            app.as_deref(),
+            near.as_deref(),
+            PointerKind::Hover,
+        ),
+        Command::Drag {
+            target,
+            to,
+            app,
+            near,
+            to_near,
+        } => drag_cmd(
+            target,
+            to,
+            app.as_deref(),
+            near.as_deref(),
+            to_near.as_deref(),
+        ),
+        Command::Scroll {
+            target,
+            down,
+            up,
+            app,
+            near,
+        } => scroll_cmd(target, *down, *up, app.as_deref(), near.as_deref()),
+        Command::KeyDown { keys, app } => key_half_cmd("key-down", keys, app.as_deref(), true),
+        Command::KeyUp { keys, app } => key_half_cmd("key-up", keys, app.as_deref(), false),
+        Command::ResizeWindow {
+            pattern,
+            width,
+            height,
+        } => resize_window_cmd(pattern, *width, *height),
+        Command::Verify {
+            exists,
+            value,
+            expected,
+            contains,
+            checked,
+            app,
+            near,
+        } => verify_cmd(
+            exists.as_deref(),
+            value.as_deref(),
+            expected.as_deref(),
+            *contains,
+            checked.as_deref(),
+            app.as_deref(),
+            near.as_deref(),
+        ),
+        Command::Extract { target, app } => extract_cmd(target, app.as_deref()),
         Command::FocusWindow { pattern } => focus_window_cmd(pattern),
         Command::CloseWindow { pattern } => close_window_cmd(pattern),
         Command::ListWindows => list_windows_cmd(),
@@ -263,11 +471,13 @@ fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
         Command::Wait {
             element,
             window,
+            gone,
             app,
             timeout,
         } => wait_cmd(
             element.as_deref(),
             window.as_deref(),
+            gone.as_deref(),
             app.as_deref(),
             *timeout,
         ),
@@ -315,6 +525,16 @@ fn command_name(cmd: &Command) -> &'static str {
         Command::Type { .. } => "type",
         Command::Press { .. } => "press",
         Command::SetValue { .. } => "set-value",
+        Command::RightClick { .. } => "right-click",
+        Command::DoubleClick { .. } => "double-click",
+        Command::Hover { .. } => "hover",
+        Command::Drag { .. } => "drag",
+        Command::Scroll { .. } => "scroll",
+        Command::KeyDown { .. } => "key-down",
+        Command::KeyUp { .. } => "key-up",
+        Command::ResizeWindow { .. } => "resize-window",
+        Command::Verify { .. } => "verify",
+        Command::Extract { .. } => "extract",
         Command::FocusWindow { .. } => "focus-window",
         Command::CloseWindow { .. } => "close-window",
         Command::ListWindows => "list-windows",
@@ -393,11 +613,24 @@ fn click(
     app: Option<&str>,
     near: Option<&str>,
     physical: bool,
+    expect: Option<&str>,
+    timeout: Option<u64>,
 ) -> Result<CommandOutput, CtlError> {
     let target = actl_core::parse_target(target_raw)?;
-    if physical {
+    // --expect = 新窗口断言:动作前取 RuntimeId 基线(与 press 相同语义)
+    let expect_substr = match expect {
+        Some(raw) => Some(parse_expect(raw)?),
+        None => None,
+    };
+    let baseline = if expect_substr.is_some() {
+        actl_uia::window_identities()?
+    } else {
+        Vec::new()
+    };
+
+    let data = if physical {
         let (loc, (px, py)) = actl_uia::click_physical(app, &target, near)?;
-        return Ok(json!({
+        json!({
             "action": "click",
             "target": target.describe(),
             "resolved_by": loc.resolved_by,
@@ -407,23 +640,28 @@ fn click(
             "resolved": { "role": loc.role, "name": loc.name, "automation_id": loc.automation_id },
             "window": loc.window_title,
         })
-        .into());
+    } else {
+        let (loc, pattern) = actl_uia::click(app, &target, near)?;
+        json!({
+            "action": "click",
+            "target": target.describe(),
+            "resolved_by": loc.resolved_by,
+            "pattern": pattern,
+            "input_effects": { "keyboard": "none", "clipboard": "untouched", "pointer": "none" },
+            "resolved": {
+                "role": loc.role,
+                "name": loc.name,
+                "automation_id": loc.automation_id,
+            },
+            "window": loc.window_title,
+        })
+    };
+
+    // 06 §4:--expect = 执行后隐式 wait(默认 2s),失败 ASSERTION_FAILED
+    if let Some(substr) = expect_substr {
+        actl_uia::wait_new_window(&substr, timeout.unwrap_or(2000), &baseline)?;
     }
-    let (loc, pattern) = actl_uia::click(app, &target, near)?;
-    Ok(json!({
-        "action": "click",
-        "target": target.describe(),
-        "resolved_by": loc.resolved_by,
-        "pattern": pattern,
-        "input_effects": { "keyboard": "none", "clipboard": "untouched", "pointer": "none" },
-        "resolved": {
-            "role": loc.role,
-            "name": loc.name,
-            "automation_id": loc.automation_id,
-        },
-        "window": loc.window_title,
-    })
-    .into())
+    Ok(data.into())
 }
 
 fn get(
@@ -670,25 +908,29 @@ fn set_clipboard_cmd(text: &str) -> Result<CommandOutput, CtlError> {
 fn wait_cmd(
     element: Option<&str>,
     window: Option<&str>,
+    gone: Option<&str>,
     app: Option<&str>,
     timeout: Option<u64>,
 ) -> Result<CommandOutput, CtlError> {
     let timeout = timeout.unwrap_or(5000);
     let started = Instant::now();
-    let what = match (element, window) {
-        (Some(t), _) => {
+    let what = match (element, window, gone) {
+        (Some(t), _, _) => {
             let target = actl_core::parse_target(t)?;
             actl_uia::wait_element(app, &target, timeout)?;
             json!({ "element": target.describe() })
         }
-        (None, Some(w)) => {
+        (None, Some(w), _) => {
             let title = actl_uia::wait_window(w, timeout)?;
             json!({ "window": title })
         }
-        (None, None) => {
-            return Err(CtlError::protocol(
-                "wait needs --element <target> or --window <substr>",
-            ));
+        (None, None, Some(g)) => {
+            let target = actl_core::parse_target(g)?;
+            actl_uia::wait_gone(app, &target, timeout)?;
+            json!({ "gone": target.describe() })
+        }
+        (None, None, None) => {
+            return Err(CtlError::protocol("wait needs --element/--window/--gone"));
         }
     };
     Ok(json!({
@@ -741,4 +983,178 @@ fn list_windows_cmd() -> Result<CommandOutput, CtlError> {
         .map(|(title, class, pid)| json!({ "title": title, "class": class, "pid": pid }))
         .collect();
     Ok(json!({ "windows": list, "count": list.len() }).into())
+}
+
+// ─── M2 第二批命令处理器 ──────────────────────────────────────────────────
+
+enum PointerKind {
+    Right,
+    Double,
+    Hover,
+}
+
+fn pointer_cmd(
+    name: &str,
+    target_raw: &str,
+    app: Option<&str>,
+    near: Option<&str>,
+    kind: PointerKind,
+) -> Result<CommandOutput, CtlError> {
+    let target = actl_core::parse_target(target_raw)?;
+    let action = match kind {
+        PointerKind::Right => actl_uia::PointerAction::RightClick,
+        PointerKind::Double => actl_uia::PointerAction::DoubleClick,
+        PointerKind::Hover => actl_uia::PointerAction::Hover,
+    };
+    let effects = match kind {
+        PointerKind::Hover => "move",
+        _ => "move_and_click",
+    };
+    let (loc, (px, py)) = actl_uia::pointer_physical(app, &target, near, action)?;
+    Ok(json!({
+        "action": name,
+        "target": target.describe(),
+        "resolved_by": loc.resolved_by,
+        "point": [px, py],
+        "input_effects": { "keyboard": "none", "clipboard": "untouched", "pointer": effects },
+        "resolved": { "role": loc.role, "name": loc.name },
+        "window": loc.window_title,
+    })
+    .into())
+}
+
+fn drag_cmd(
+    from_raw: &str,
+    to_raw: &str,
+    app: Option<&str>,
+    near: Option<&str>,
+    to_near: Option<&str>,
+) -> Result<CommandOutput, CtlError> {
+    let from = actl_core::parse_target(from_raw)?;
+    let to = actl_core::parse_target(to_raw)?;
+    let (loc, (fx, fy)) = actl_uia::drag_physical(app, &from, near, &to, to_near)?;
+    Ok(json!({
+        "action": "drag",
+        "from": from.describe(),
+        "to": to.describe(),
+        "resolved_by": loc.resolved_by,
+        "point": [fx, fy],
+        "input_effects": { "keyboard": "none", "clipboard": "untouched", "pointer": "move_drag_click" },
+        "resolved": { "role": loc.role, "name": loc.name },
+        "window": loc.window_title,
+    })
+    .into())
+}
+
+fn scroll_cmd(
+    target_raw: &str,
+    down: Option<u32>,
+    up: Option<u32>,
+    app: Option<&str>,
+    near: Option<&str>,
+) -> Result<CommandOutput, CtlError> {
+    let notches = match (down, up) {
+        (Some(n), None) => -(n as i32),
+        (None, Some(n)) => n as i32,
+        (Some(_), Some(_)) => return Err(CtlError::protocol("use only one of --down/--up")),
+        (None, None) => return Err(CtlError::protocol("scroll needs --down N or --up N")),
+    };
+    let target = actl_core::parse_target(target_raw)?;
+    let (loc, via) = actl_uia::scroll_element(app, &target, near, notches)?;
+    let pointer = if via == "physical-wheel" {
+        "move_and_wheel"
+    } else {
+        "none"
+    };
+    Ok(json!({
+        "action": "scroll",
+        "target": target.describe(),
+        "resolved_by": loc.resolved_by,
+        "notches": notches,
+        "via": via,
+        "input_effects": { "keyboard": "none", "clipboard": "untouched", "pointer": pointer },
+    })
+    .into())
+}
+
+fn key_half_cmd(
+    name: &str,
+    keys: &str,
+    app: Option<&str>,
+    down: bool,
+) -> Result<CommandOutput, CtlError> {
+    let app = require_app(app, name)?;
+    let spec = actl_core::parse_key_expr(keys)?;
+    // 与 press 相同的护栏链:置焦 + 物理前台核对
+    actl_uia::press_half(&spec, Some(app))?;
+    Ok(json!({
+        "action": name,
+        "keys": keys,
+        "input_effects": {
+            "keyboard": if down { "key-down held" } else { "key-up released" },
+            "clipboard": "untouched",
+            "pointer": "none",
+        },
+    })
+    .into())
+}
+
+fn resize_window_cmd(pattern: &str, width: i32, height: i32) -> Result<CommandOutput, CtlError> {
+    let title = actl_uia::resize_window(pattern, width, height)?;
+    Ok(json!({
+        "action": "resize-window",
+        "window": title,
+        "size": [width, height],
+    })
+    .into())
+}
+
+fn verify_cmd(
+    exists: Option<&str>,
+    value_target: Option<&str>,
+    expected: Option<&str>,
+    contains: bool,
+    checked: Option<&str>,
+    app: Option<&str>,
+    near: Option<&str>,
+) -> Result<CommandOutput, CtlError> {
+    let (raw, kind) = if let Some(t) = exists {
+        (t, actl_uia::VerifyKind::Exists)
+    } else if let Some(t) = value_target {
+        (
+            t,
+            actl_uia::VerifyKind::Value {
+                expected: expected.unwrap_or_default().to_string(),
+                contains,
+            },
+        )
+    } else if let Some(t) = checked {
+        (t, actl_uia::VerifyKind::Checked)
+    } else {
+        return Err(CtlError::protocol(
+            "verify needs one of --exists/--value/--checked",
+        ));
+    };
+    let target = actl_core::parse_target(raw)?;
+    let out = actl_uia::verify(app, &target, near, kind)?;
+    Ok(json!({
+        "action": "verify",
+        "mode": out.mode,
+        "target": target.describe(),
+        "resolved_by": out.located.resolved_by,
+        "actual": out.actual,
+    })
+    .into())
+}
+
+fn extract_cmd(target_raw: &str, app: Option<&str>) -> Result<CommandOutput, CtlError> {
+    let target = actl_core::parse_target(target_raw)?;
+    let rows = actl_uia::extract_table(app, &target)?;
+    Ok(json!({
+        "action": "extract",
+        "target": target.describe(),
+        "rows": rows.len(),
+        "table": rows,
+    })
+    .into())
 }
