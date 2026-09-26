@@ -6,7 +6,7 @@
 
 use std::time::Instant;
 
-use actl_core::{CtlError, Envelope, ErrorEnvelope, SnapshotBuilder};
+use actl_core::{CtlError, Envelope, ErrorCode, ErrorEnvelope, SnapshotBuilder};
 use clap::{CommandFactory, Parser, Subcommand};
 use serde_json::{Value, json};
 
@@ -36,6 +36,31 @@ enum Command {
         #[arg(long)]
         skeleton: bool,
     },
+    /// Click an element via UIA Invoke (background, no physical mouse)
+    Click {
+        /// Target: @eN | name:<substr> | id:<AutomationId> | role:<Type>
+        target: String,
+        /// Target window by title substring (default: focused window)
+        #[arg(long)]
+        app: Option<String>,
+    },
+    /// Read properties of an element
+    Get {
+        /// Target: @eN | name:<substr> | id:<AutomationId> | role:<Type>
+        target: String,
+        /// Property: name | role | automation_id | offscreen | value (default: all)
+        #[arg(long)]
+        property: Option<String>,
+        /// Target window by title substring (default: focused window)
+        #[arg(long)]
+        app: Option<String>,
+    },
+    /// Launch a program with optional arguments
+    Launch {
+        /// Program and arguments (everything after `launch`)
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
 }
 
 /// 命令执行产物:data 进 envelope,`snapshot_id` 存在时附加到顶层(06 §4)。
@@ -62,6 +87,13 @@ fn main() {
         Command::Commands => commands().map(Into::into),
         Command::Status => status().map(Into::into),
         Command::Snapshot { app, skeleton } => snapshot(app.as_deref(), skeleton),
+        Command::Click { target, app } => click(&target, app.as_deref()),
+        Command::Get {
+            target,
+            property,
+            app,
+        } => get(&target, property.as_deref(), app.as_deref()),
+        Command::Launch { args } => launch(&args),
     };
 
     let duration_ms = started.elapsed().as_millis() as u64;
@@ -82,7 +114,13 @@ fn main() {
                 "{}",
                 serde_json::to_string(&env).expect("envelope serializes")
             );
-            std::process::exit(1);
+            // 退出码契约(06 §4):PROTOCOL 不可恢复 → 2;其余业务失败 → 1
+            let code = if err.code == actl_core::ErrorCode::Protocol {
+                2
+            } else {
+                1
+            };
+            std::process::exit(code);
         }
     }
 }
@@ -92,6 +130,9 @@ fn command_name(cmd: &Command) -> &'static str {
         Command::Commands => "commands",
         Command::Status => "status",
         Command::Snapshot { .. } => "snapshot",
+        Command::Click { .. } => "click",
+        Command::Get { .. } => "get",
+        Command::Launch { .. } => "launch",
     }
 }
 
@@ -153,4 +194,63 @@ fn snapshot(app: Option<&str>, skeleton: bool) -> Result<CommandOutput, CtlError
         data,
         snapshot_id: Some(out.snapshot_id),
     })
+}
+
+fn click(target_raw: &str, app: Option<&str>) -> Result<CommandOutput, CtlError> {
+    let target = actl_core::parse_target(target_raw)?;
+    let loc = actl_uia::click(app, &target)?;
+    Ok(json!({
+        "action": "click",
+        "target": target.describe(),
+        "resolved_by": "primary",
+        "resolved": {
+            "role": loc.role,
+            "name": loc.name,
+            "automation_id": loc.automation_id,
+        },
+        "window": loc.window_title,
+    })
+    .into())
+}
+
+fn get(
+    target_raw: &str,
+    property: Option<&str>,
+    app: Option<&str>,
+) -> Result<CommandOutput, CtlError> {
+    let target = actl_core::parse_target(target_raw)?;
+    let info = actl_uia::read_property(app, &target, property)?;
+    let mut props = serde_json::Map::new();
+    if let Some(v) = &info.name {
+        props.insert("name".into(), json!(v));
+    }
+    if !info.role.is_empty() {
+        props.insert("role".into(), json!(info.role));
+    }
+    if let Some(v) = &info.automation_id {
+        props.insert("automation_id".into(), json!(v));
+    }
+    if let Some(v) = info.offscreen {
+        props.insert("offscreen".into(), json!(v));
+    }
+    if let Some(v) = &info.value {
+        props.insert("value".into(), json!(v));
+    }
+    Ok(json!({ "target": target.describe(), "properties": props }).into())
+}
+
+fn launch(args: &[String]) -> Result<CommandOutput, CtlError> {
+    let Some(program) = args.first() else {
+        return Err(CtlError::protocol("launch requires a program name"));
+    };
+    let child = std::process::Command::new(program)
+        .args(&args[1..])
+        .spawn()
+        .map_err(|e| {
+            CtlError::new(
+                ErrorCode::NotFound,
+                format!("cannot launch {program:?}: {e}"),
+            )
+        })?;
+    Ok(json!({ "pid": child.id(), "program": program }).into())
 }

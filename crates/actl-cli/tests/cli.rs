@@ -83,3 +83,32 @@ fn snapshot_missing_window_emits_not_found_envelope() {
     assert!(v["error"]["hint"].is_string());
     assert!(v.get("snapshot_id").is_none());
 }
+
+#[test]
+fn bare_target_is_a_protocol_error_with_exit_2() {
+    let (code, stdout, _) = actl(&["click", "button"]);
+    assert_eq!(code, 2);
+    let v = parse_envelope(&stdout);
+    assert_eq!(v["error"]["code"], "PROTOCOL");
+}
+
+#[test]
+fn unknown_property_is_a_protocol_error() {
+    let (code, stdout, _) = actl(&[
+        "get",
+        "@e1",
+        "--property",
+        "bogus",
+        "--app",
+        "no-such-window-xyz",
+    ]);
+    assert_eq!(code, 2);
+    assert_eq!(parse_envelope(&stdout)["error"]["code"], "PROTOCOL");
+}
+
+#[test]
+fn launch_unknown_program_is_not_found_exit_1() {
+    let (code, stdout, _) = actl(&["launch", "definitely-not-a-program-xyz"]);
+    assert_eq!(code, 1);
+    assert_eq!(parse_envelope(&stdout)["error"]["code"], "NOT_FOUND");
+}
