@@ -6,8 +6,8 @@ members = ["crates/*"]
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
-license = "TBD"
-repository = "TBD"
+license = "MIT"
+repository = "https://github.com/gqy20/actl"
 
 # 版本统一声明点:windows crate 加入时必须且只能在这里(ADR-003)
 [workspace.dependencies]
