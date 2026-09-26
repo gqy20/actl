@@ -5,7 +5,11 @@
 
 ## [Unreleased]
 
-(空;下个开发周期的变更先落此处,发版时移入版本节)
+### Added
+- **输入占用协调(M2 第一批,doc 09 §6.2)**:多 actl 实例互斥的会话级命名互斥体 `actl-input-lock`(RAII 释放,ABANDONED 接管,忙 → TIMEOUT 附恢复建议),press/type 注入动作段全程持锁;type 键盘通道**分批注入**(32 字符/批)批间复核物理前台,焦点被抢即停在批边界并如实上报(`delivered`/`stopped_early`);envelope 新增 `input_effects`(keyboard/clipboard/pointer,部分送达 = ok:true + keyboard:"partial")。单测 4 项:跨线程锁互斥、分批发完、边界停止、注入错误传播。
+- MIT LICENSE(对齐 zotero_cli/article-mcp);workspace license/repository 元数据修正。
+
+(下个开发周期的变更先落此处,发版时移入版本节)
 
 ## [0.1.0] - 2026-09-26
 

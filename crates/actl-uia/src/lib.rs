@@ -7,6 +7,7 @@
 
 #![allow(unsafe_code)] // 豁免点(AGENTS.md §5.5):kbd 模块的 SendInput/MapVirtualKeyW 注入
 
+pub mod input;
 pub mod kbd;
 
 use actl_core::keys::KeySpec;
@@ -442,7 +443,7 @@ pub fn type_text(
     target: &Target,
     text: &str,
     paste: bool,
-) -> Result<InputResult, CtlError> {
+) -> Result<TypeOutcome, CtlError> {
     let loc = locate(app, target)?;
     loc.element.set_focus().map_err(|_| {
         CtlError::new(
@@ -469,22 +470,65 @@ pub fn type_text(
             ));
         }
     }
+    // 输入占用锁(doc 09 §6.2):多 actl 实例互斥;持锁覆盖整个注入动作段
+    let _lock = input::InputLock::acquire(input::LOCK_TIMEOUT_MS)?;
+    let total = text.chars().count();
+    let outcome = |delivered: usize, stopped_early: bool| TypeOutcome {
+        located: (&loc).into(),
+        delivered,
+        total,
+        stopped_early,
+    };
     if paste {
         set_clipboard_text(text)?;
-        // ctrl+v 走 VK 组合通道(IME 不拦截带修饰键组合)
+        // ctrl+v 走 VK 组合通道(IME 不拦截带修饰键组合);单次原子动作不分批
         kbd::send_key_spec(&KeySpec {
             modifiers: vec!["ctrl".into()],
             keys: vec![actl_core::keys::Key::Char('v')],
         })?;
+        Ok(outcome(total, false))
     } else {
-        // 自建管线(uiautomation crate 的 Keyboard 有 wScan=0 缺陷,见 kbd.rs 模块注释)
-        kbd::send_key_spec(&KeySpec {
-            modifiers: Vec::new(),
-            keys: text.chars().map(actl_core::keys::Key::Char).collect(),
-        })?;
+        // 键盘逐字通道:分批注入,批间复核物理前台——焦点被抢(真人点走/弹窗
+        // 夺焦)即停在批边界并如实上报已送达量(并发输入损坏注入的四次活体
+        // 实证结论,docs/spike-findings)
+        let chars: Vec<char> = text.chars().collect();
+        let pattern = app.map(str::to_string);
+        let delivered = input::send_in_segments(
+            &chars,
+            TYPE_SEGMENT_CHARS,
+            |seg| {
+                kbd::send_key_spec(&KeySpec {
+                    modifiers: Vec::new(),
+                    keys: seg.iter().map(|c| actl_core::keys::Key::Char(*c)).collect(),
+                })
+            },
+            || {
+                pattern
+                    .as_ref()
+                    .map(|p| {
+                        kbd::foreground_title()
+                            .map(|t| t.contains(p.as_str()))
+                            .unwrap_or(false)
+                    })
+                    .unwrap_or(false)
+            },
+        )?;
+        Ok(outcome(delivered, delivered < total))
     }
-    Ok((&loc).into())
 }
+
+/// type 的结果:注入了多少、是否中途被焦点抢占截断(部分送达是如实上报,
+/// 不是失败——ok:true + input_effects.keyboard="partial")。
+pub struct TypeOutcome {
+    pub located: InputResult,
+    pub delivered: usize,
+    pub total: usize,
+    pub stopped_early: bool,
+}
+
+/// 键盘逐字通道的分批大小:批间有一次物理前台复核,批越小反应越快、
+/// 事件越碎;32 字符≈一次短句,实测取中。
+const TYPE_SEGMENT_CHARS: usize = 32;
 
 /// press:可选先置前台(--app)。实测链路(docs/spike-findings.md):窗口级 SetFocus
 /// 只激活窗口、不建立键盘焦点(键会被丢);必须再对窗口内内容元素做**元素级** SetFocus。
@@ -517,6 +561,8 @@ pub fn press_keys(spec: &KeySpec, app: Option<&str>) -> Result<Option<String>, C
         }
         None => None,
     };
+    // 输入占用锁(doc 09 §6.2):护栏之后、注入之前取得,覆盖整个按键序列
+    let _lock = input::InputLock::acquire(input::LOCK_TIMEOUT_MS)?;
     kbd::send_key_spec(spec)?;
     Ok(focused)
 }

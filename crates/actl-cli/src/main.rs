@@ -427,12 +427,24 @@ fn type_cmd(
     let app = require_app(app, "type")?;
     let target = actl_core::parse_target(target_raw)?;
     let res = actl_uia::type_text(Some(app), &target, text, paste)?;
+    let keyboard = if res.stopped_early {
+        "partial"
+    } else {
+        "injected"
+    };
     Ok(json!({
         "action": "type",
         "target": target.describe(),
-        "chars": text.chars().count(),
+        "chars": res.total,
+        "delivered": res.delivered,
+        "stopped_early": res.stopped_early,
         "via": if paste { "clipboard-paste" } else { "keyboard" },
-        "resolved": { "role": res.role, "name": res.name },
+        "input_effects": {
+            "keyboard": keyboard,
+            "clipboard": if paste { "used" } else { "untouched" },
+            "pointer": "none",
+        },
+        "resolved": { "role": res.located.role, "name": res.located.name },
     })
     .into())
 }
@@ -470,6 +482,11 @@ fn press(
         "keys": keys,
         "focused": focused,
         "expect": expect_window,
+        "input_effects": {
+            "keyboard": "injected",
+            "clipboard": "untouched",
+            "pointer": "none",
+        },
     })
     .into())
 }
