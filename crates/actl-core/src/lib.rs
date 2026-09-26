@@ -75,6 +75,9 @@ impl ErrorCode {
 pub struct CtlError {
     pub code: ErrorCode,
     pub message: String,
+    /// 结构化证据(如 AMBIGUOUS 的候选列表,docs/12 §4 协议评审项):
+    /// agent 可免重取 snapshot 直接裁决。
+    pub evidence: Option<serde_json::Value>,
 }
 
 impl CtlError {
@@ -82,6 +85,19 @@ impl CtlError {
         Self {
             code,
             message: message.into(),
+            evidence: None,
+        }
+    }
+
+    pub fn with_evidence(
+        code: ErrorCode,
+        message: impl Into<String>,
+        evidence: serde_json::Value,
+    ) -> Self {
+        Self {
+            code,
+            message: message.into(),
+            evidence: Some(evidence),
         }
     }
 
@@ -158,7 +174,7 @@ impl ErrorEnvelope {
                 code: err.code,
                 message: err.message.clone(),
                 hint: Some(err.code.recovery_hint().to_owned()),
-                evidence: None,
+                evidence: err.evidence.clone(),
             },
             duration_ms,
         }

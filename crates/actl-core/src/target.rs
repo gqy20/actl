@@ -16,6 +16,8 @@ pub enum Target {
     Id(String),
     /// ControlType 精确匹配(如 Button)
     Role(String),
+    /// ControlType + 1 起序数(`role:Button#2` = 第 2 个 Button;fallback 链 L3)
+    RoleAt(String, u32),
 }
 
 impl Target {
@@ -26,6 +28,7 @@ impl Target {
             Target::Name(s) => format!("name:{s}"),
             Target::Id(s) => format!("id:{s}"),
             Target::Role(s) => format!("role:{s}"),
+            Target::RoleAt(s, n) => format!("role:{s}#{n}"),
         }
     }
 }
@@ -51,6 +54,16 @@ pub fn parse_target(raw: &str) -> Result<Target, CtlError> {
             if rest.is_empty() {
                 return Err(bad(raw));
             }
+            // role:Type#N → 序数形式(fallback 链 L3;#0 非法)
+            if prefix == "role:" {
+                if let Some((role, idx)) = rest.rsplit_once('#') {
+                    let n: u32 = idx.parse().map_err(|_| bad(raw))?;
+                    if !role.is_empty() && n >= 1 {
+                        return Ok(Target::RoleAt(role.to_string(), n));
+                    }
+                    return Err(bad(raw));
+                }
+            }
             return Ok(build(rest.to_string()));
         }
     }
@@ -61,6 +74,20 @@ fn bad(raw: &str) -> CtlError {
     CtlError::protocol(format!(
         "invalid target {raw:?}: expected @eN, name:<substr>, id:<AutomationId> or role:<Type>"
     ))
+}
+
+/// L2 模糊匹配:大小写不敏感 + 空白归一(连续空白折成一格 + 去首尾)。
+/// 名称动态变化的界面(尾缀计数、对齐空格)靠它兜住。
+pub fn fuzzy_contains(haystack: &str, needle: &str) -> bool {
+    let norm = |s: &str| {
+        s.split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .to_lowercase()
+    };
+    let h = norm(haystack);
+    let n = norm(needle);
+    !n.is_empty() && h.contains(&n)
 }
 
 #[cfg(test)]
@@ -83,6 +110,25 @@ mod tests {
             parse_target("role:Button").unwrap(),
             Target::Role("Button".into())
         );
+        assert_eq!(
+            parse_target("role:Button#2").unwrap(),
+            Target::RoleAt("Button".into(), 2)
+        );
+    }
+
+    #[test]
+    fn role_ordinal_edges() {
+        for bad in ["role:Button#0", "role:#2", "role:Button#", "role:Button#x"] {
+            assert!(parse_target(bad).is_err(), "{bad:?} should be rejected");
+        }
+    }
+
+    #[test]
+    fn fuzzy_matches_case_and_whitespace_insensitive() {
+        assert!(fuzzy_contains("保存  设置", "保存 设置"));
+        assert!(fuzzy_contains("Open File", "open   file"));
+        assert!(!fuzzy_contains("Open", "open file"));
+        assert!(!fuzzy_contains("anything", ""));
     }
 
     #[test]

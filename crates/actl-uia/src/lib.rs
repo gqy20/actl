@@ -316,12 +316,15 @@ pub struct Located {
     pub role: String,
     pub name: Option<String>,
     pub automation_id: Option<String>,
+    /// 定位链实际命中级别:"primary" | "fuzzy-name" | "role-ordinal" |
+    /// "anchor" | "ref-replay"——agent 据此判断置信度并决定是否加验证
+    pub resolved_by: &'static str,
     pub(crate) element: UIElement,
 }
 
 /// 在目标窗口内按 Target 定位元素(遍历可提前退出,优于全量 capture)。
 /// `Ref(n)` 数不到 = 树已变化 → STALE_REF;语义选择器无命中 → NOT_FOUND(06 §4)。
-pub fn locate(app: Option<&str>, target: &Target) -> Result<Located, CtlError> {
+pub fn locate(app: Option<&str>, target: &Target, near: Option<&str>) -> Result<Located, CtlError> {
     let auto = UIAutomation::new().map_err(internal)?;
     let walker = auto.create_tree_walker().map_err(internal)?;
     let root = match app {
@@ -343,82 +346,295 @@ pub fn locate(app: Option<&str>, target: &Target) -> Result<Located, CtlError> {
     // 激活感知:挂起目标先唤醒(有界),避免 DFS 里逐调用 stall
     let _wake_ms = ensure_window_responsive(&root);
 
-    let mut counter: u32 = 0;
-    if let Some(hit) = locate_walk(&walker, &root, 0, target, &mut counter)? {
-        Ok(Located {
-            window_title,
-            role: format!(
-                "{:?}",
-                hit.get_control_type().unwrap_or(ControlType::Custom)
-            ),
-            name: hit.get_name().ok().filter(|n| !n.is_empty()),
-            automation_id: hit.get_automation_id().ok().filter(|a| !a.is_empty()),
-            element: hit,
-        })
-    } else if matches!(target, Target::Ref(_)) {
-        Err(CtlError::new(
-            ErrorCode::StaleRef,
+    // @eN:计数重放,不参与 fallback(ref 漂移 = STALE_REF,模糊化反而危险)
+    if let Target::Ref(n) = target {
+        let mut counter = 0u32;
+        return match collect_until_ref(&walker, &root, 0, *n, &mut counter) {
+            Some(hit) => Ok(located_from(hit, window_title, "ref-replay")),
+            None => Err(CtlError::new(
+                ErrorCode::StaleRef,
+                format!(
+                    "{} does not resolve — the tree changed since the snapshot",
+                    target.describe()
+                ),
+            )),
+        };
+    }
+
+    // L1 精确:全量收集(ref 编号与 snapshot 同源,候选可直接重放)
+    let mut counter = 0u32;
+    let mut matches = Vec::new();
+    collect_matches(&walker, &root, 0, target, false, &mut counter, &mut matches);
+
+    // L2 名称模糊(仅 name: 目标且 L1 空手时):大小写/空白不敏感
+    if matches.is_empty() {
+        if let Target::Name(_) = target {
+            let mut fuzzy = Vec::new();
+            collect_matches(&walker, &root, 0, target, true, &mut counter, &mut fuzzy);
+            if !fuzzy.is_empty() {
+                fuzzy.sort_by_key(|c: &Candidate| c.ref_no);
+                return select(
+                    fuzzy,
+                    target,
+                    near,
+                    &walker,
+                    &root,
+                    window_title,
+                    "fuzzy-name",
+                );
+            }
+        }
+        return Err(CtlError::new(
+            ErrorCode::NotFound,
             format!(
-                "{} does not resolve — the tree changed since the snapshot",
+                "no element matches {} (exact and fuzzy levels)",
                 target.describe()
             ),
-        ))
-    } else {
-        Err(CtlError::new(
-            ErrorCode::NotFound,
-            format!("no element matches {}", target.describe()),
-        ))
+        ));
+    }
+    matches.sort_by_key(|c: &Candidate| c.ref_no);
+    select(
+        matches,
+        target,
+        near,
+        &walker,
+        &root,
+        window_title,
+        "primary",
+    )
+}
+
+/// 分级裁决:唯一命中 → 命中;多命中且有锚点 → 最近者;多命中 → AMBIGUOUS
+/// 附结构化候选(ref/role/name,docs/12 §4 协议评审项);RoleAt 越界 → NOT_FOUND。
+fn select(
+    matches: Vec<Candidate>,
+    target: &Target,
+    near: Option<&str>,
+    walker: &UITreeWalker,
+    root: &UIElement,
+    window_title: String,
+    level: &'static str,
+) -> Result<Located, CtlError> {
+    // L3 序数直选
+    if let Target::RoleAt(_, n) = target {
+        return match matches.get((*n as usize).saturating_sub(1)) {
+            Some(c) => Ok(located_from(
+                c.element.clone(),
+                window_title,
+                "role-ordinal",
+            )),
+            None => Err(CtlError::new(
+                ErrorCode::NotFound,
+                format!(
+                    "{}: only {} match(es) in the window",
+                    target.describe(),
+                    matches.len()
+                ),
+            )),
+        };
+    }
+    if matches.len() == 1 {
+        return Ok(located_from(
+            matches[0].element.clone(),
+            window_title,
+            level,
+        ));
+    }
+    // 多命中 + 锚点:取与锚点矩形中心距最近者
+    if let Some(anchor_pat) = near {
+        let mut counter = 0u32;
+        let mut anchors = Vec::new();
+        // 锚点接受完整选择器语法;裸串按 name: 子串兜底
+        let anchor_target =
+            actl_core::parse_target(anchor_pat).unwrap_or(Target::Name(anchor_pat.to_string()));
+        collect_matches(
+            walker,
+            root,
+            0,
+            &anchor_target,
+            false,
+            &mut counter,
+            &mut anchors,
+        );
+        if anchors.len() != 1 {
+            return Err(CtlError::new(
+                ErrorCode::NotFound,
+                format!(
+                    "--near anchor {anchor_pat:?} must match exactly one element, got {}",
+                    anchors.len()
+                ),
+            ));
+        }
+        if let Ok(ar) = anchors[0].element.get_bounding_rectangle() {
+            let (ax, ay) = center(&ar);
+            let mut best: Option<(f64, usize)> = None;
+            for (i, c) in matches.iter().enumerate() {
+                if let Ok(r) = c.element.get_bounding_rectangle() {
+                    let (cx, cy) = center(&r);
+                    let dx = (cx - ax) as f64;
+                    let dy = (cy - ay) as f64;
+                    let d = dx * dx + dy * dy;
+                    if best.map(|(bd, _)| d < bd).unwrap_or(true) {
+                        best = Some((d, i));
+                    }
+                }
+            }
+            if let Some((_, i)) = best {
+                return Ok(located_from(
+                    matches[i].element.clone(),
+                    window_title,
+                    "anchor",
+                ));
+            }
+        }
+    }
+    // AMBIGUOUS + 结构化候选(每个含可重放的 ref)
+    let evidence: Vec<serde_json::Value> = matches
+        .iter()
+        .take(8)
+        .map(|c| {
+            serde_json::json!({
+                "ref": format!("@e{}", c.ref_no),
+                "role": c.role,
+                "name": c.name,
+                "automation_id": c.automation_id,
+            })
+        })
+        .collect();
+    Err(CtlError::with_evidence(
+        ErrorCode::Ambiguous,
+        format!(
+            "{} matches {} elements in the window; pick one by @eN or role ordinal              (--near anchor also applies)",
+            target.describe(),
+            matches.len()
+        ),
+        serde_json::json!({ "candidates": evidence }),
+    ))
+}
+
+fn center(r: &uiautomation::types::Rect) -> (i32, i32) {
+    (
+        (r.get_left() + r.get_right()) / 2,
+        (r.get_top() + r.get_bottom()) / 2,
+    )
+}
+
+fn located_from(elem: UIElement, window_title: String, resolved_by: &'static str) -> Located {
+    Located {
+        window_title,
+        role: format!(
+            "{:?}",
+            elem.get_control_type().unwrap_or(ControlType::Custom)
+        ),
+        name: elem.get_name().ok().filter(|n| !n.is_empty()),
+        automation_id: elem.get_automation_id().ok().filter(|a| !a.is_empty()),
+        resolved_by,
+        element: elem,
     }
 }
 
-fn locate_walk(
+/// 定位链候选(ref 与 snapshot 同源编号,可直接重放)
+struct Candidate {
+    element: UIElement,
+    ref_no: u32,
+    role: String,
+    name: Option<String>,
+    automation_id: Option<String>,
+}
+
+/// @eN 重放的提前退出收集(语义同旧 locate_walk 的 Ref 分支)
+fn collect_until_ref(
+    walker: &UITreeWalker,
+    elem: &UIElement,
+    depth: u32,
+    want: u32,
+    counter: &mut u32,
+) -> Option<UIElement> {
+    if depth > MAX_DEPTH {
+        return None;
+    }
+    let role = role_of(elem);
+    if actl_core::is_interactive_role(&role) {
+        *counter += 1;
+        if *counter == want {
+            return Some(elem.clone());
+        }
+    }
+    let mut child = walker.get_first_child(elem).ok();
+    while let Some(c) = child {
+        if let Some(hit) = collect_until_ref(walker, &c, depth + 1, want, counter) {
+            return Some(hit);
+        }
+        child = walker.get_next_sibling(&c).ok();
+    }
+    None
+}
+
+/// 全量收集语义匹配(不做提前退出——AMBIGUOUS 判定与候选上报需要全集)。
+/// fuzzy=true 时 name 走 L2 模糊匹配(core::fuzzy_contains)。
+fn collect_matches(
     walker: &UITreeWalker,
     elem: &UIElement,
     depth: u32,
     target: &Target,
+    fuzzy: bool,
     counter: &mut u32,
-) -> Result<Option<UIElement>, CtlError> {
+    out: &mut Vec<Candidate>,
+) {
     if depth > MAX_DEPTH {
-        return Ok(None);
+        return;
     }
-    let role = format!(
-        "{:?}",
-        elem.get_control_type().unwrap_or(ControlType::Custom)
-    );
+    let role = role_of(elem);
+    let ref_no = if actl_core::is_interactive_role(&role) {
+        *counter += 1;
+        *counter
+    } else {
+        0 // 非交互匹配仍可作候选上报,但不可 ref 重放
+    };
+    let name = elem.get_name().ok().filter(|n| !n.is_empty());
+    let id = elem.get_automation_id().ok().filter(|a| !a.is_empty());
     let hit = match target {
-        Target::Ref(n) => {
-            if actl_core::is_interactive_role(&role) {
-                *counter += 1;
-                *counter == *n
-            } else {
-                false
-            }
-        }
-        Target::Name(s) => elem
-            .get_name()
-            .map(|n| n.contains(s.as_str()))
-            .unwrap_or(false),
-        Target::Id(s) => elem.get_automation_id().map(|a| a == *s).unwrap_or(false),
-        Target::Role(s) => role == *s,
+        Target::Ref(_) => false,
+        Target::Name(s) => match (&name, fuzzy) {
+            (Some(n), true) => actl_core::target::fuzzy_contains(n, s),
+            (Some(n), false) => n.contains(s.as_str()),
+            (None, _) => false,
+        },
+        Target::Id(s) => id.as_deref() == Some(s.as_str()),
+        Target::Role(s) | Target::RoleAt(s, _) => role == *s,
     };
     if hit {
-        return Ok(Some(elem.clone()));
+        out.push(Candidate {
+            element: elem.clone(),
+            ref_no,
+            role: role.clone(),
+            name: name.clone(),
+            automation_id: id.clone(),
+        });
     }
     let mut child = walker.get_first_child(elem).ok();
     while let Some(c) = child {
-        if let Some(found) = locate_walk(walker, &c, depth + 1, target, counter)? {
-            return Ok(Some(found));
-        }
+        collect_matches(walker, &c, depth + 1, target, fuzzy, counter, out);
         child = walker.get_next_sibling(&c).ok();
     }
-    Ok(None)
+}
+
+fn role_of(elem: &UIElement) -> String {
+    format!(
+        "{:?}",
+        elem.get_control_type().unwrap_or(ControlType::Custom)
+    )
 }
 
 /// click:语义执行分发(06 M1 范围:Invoke/Value/Selection)。
 /// Invoke 优先;无 Invoke 但支持 SelectionItem(列表项/树项/选项卡)→ select(),
 /// 语义同为"点击选中"。实际使用的 pattern 随结果上报,agent 可归因。
-pub fn click(app: Option<&str>, target: &Target) -> Result<(Located, &'static str), CtlError> {
-    let loc = locate(app, target)?;
+pub fn click(
+    app: Option<&str>,
+    target: &Target,
+    near: Option<&str>,
+) -> Result<(Located, &'static str), CtlError> {
+    let loc = locate(app, target, near)?;
     if let Ok(invoke) = loc.element.get_pattern::<UIInvokePattern>() {
         invoke.invoke().map_err(internal)?;
         return Ok((loc, "invoke"));
@@ -463,6 +679,7 @@ pub fn read_property(
     app: Option<&str>,
     target: &Target,
     property: Option<&str>,
+    near: Option<&str>,
 ) -> Result<PropertyInfo, CtlError> {
     if let Some(p) = property {
         if !PROPS.contains(&p) {
@@ -471,7 +688,7 @@ pub fn read_property(
             )));
         }
     }
-    let loc = locate(app, target)?;
+    let loc = locate(app, target, near)?;
     let want = |p: &str| property.map(|sel| sel == p).unwrap_or(true);
     let value = want("value")
         .then(|| {
@@ -528,8 +745,9 @@ pub fn type_text(
     target: &Target,
     text: &str,
     paste: bool,
+    near: Option<&str>,
 ) -> Result<TypeOutcome, CtlError> {
-    let loc = locate(app, target)?;
+    let loc = locate(app, target, near)?;
     loc.element.set_focus().map_err(|_| {
         CtlError::new(
             ErrorCode::NotActionable,
@@ -699,8 +917,13 @@ fn find_editable_element(pattern: &str) -> Option<UIElement> {
 }
 
 /// set-value:UIValue pattern 直写,不经键盘(与 type 的分工见 06 §3.6)。
-pub fn set_value(app: Option<&str>, target: &Target, value: &str) -> Result<InputResult, CtlError> {
-    let loc = locate(app, target)?;
+pub fn set_value(
+    app: Option<&str>,
+    target: &Target,
+    value: &str,
+    near: Option<&str>,
+) -> Result<InputResult, CtlError> {
+    let loc = locate(app, target, near)?;
     let pattern = loc.element.get_pattern::<UIValuePattern>().map_err(|_| {
         CtlError::new(
             ErrorCode::NotActionable,
@@ -862,7 +1085,7 @@ pub fn close_window(pattern: &str) -> Result<String, CtlError> {
 pub fn wait_element(app: Option<&str>, target: &Target, timeout_ms: u64) -> Result<(), CtlError> {
     let deadline = std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
     loop {
-        if locate(app, target).is_ok() {
+        if locate(app, target, None).is_ok() {
             return Ok(());
         }
         if std::time::Instant::now() >= deadline {
@@ -968,11 +1191,12 @@ pub fn set_clipboard_text(text: &str) -> Result<(), CtlError> {
 pub fn click_physical(
     app: Option<&str>,
     target: &Target,
+    near: Option<&str>,
 ) -> Result<(Located, (i32, i32)), CtlError> {
     use windows::Win32::Foundation::POINT;
     use windows::Win32::UI::WindowsAndMessaging::{GA_ROOT, GetAncestor, WindowFromPoint};
 
-    let loc = locate(app, target)?;
+    let loc = locate(app, target, near)?;
     let Some(point) = loc.element.get_clickable_point().ok().flatten() else {
         return Err(CtlError::new(
             ErrorCode::NotActionable,

@@ -38,11 +38,14 @@ enum Command {
     },
     /// Click an element (UIA Invoke by default; --physical for a real mouse click)
     Click {
-        /// Target: @eN (needs --app) | name:<substr> | id:<AutomationId> | role:<Type>
+        /// Target: @eN (needs --app) | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N
         target: String,
         /// Target window by title substring (@eN refs require it; otherwise focused window)
         #[arg(long)]
         app: Option<String>,
+        /// Disambiguate multi-matches by picking the one nearest to this anchor element's name
+        #[arg(long)]
+        near: Option<String>,
         /// Physically move the mouse and click at the UIA clickable point
         /// (uses the real pointer + input lock; UIA Invoke is the default)
         #[arg(long)]
@@ -50,7 +53,7 @@ enum Command {
     },
     /// Read properties of an element
     Get {
-        /// Target: @eN (needs --app) | name:<substr> | id:<AutomationId> | role:<Type>
+        /// Target: @eN (needs --app) | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N
         target: String,
         /// Property: name | role | automation_id | offscreen | value (default: all)
         #[arg(long)]
@@ -58,6 +61,9 @@ enum Command {
         /// Target window by title substring (@eN refs require it; otherwise focused window)
         #[arg(long)]
         app: Option<String>,
+        /// Disambiguate multi-matches by picking the one nearest to this anchor element's name
+        #[arg(long)]
+        near: Option<String>,
     },
     /// Launch a program with optional arguments
     Launch {
@@ -67,13 +73,16 @@ enum Command {
     },
     /// Type text into an element via keyboard (focuses the element first)
     Type {
-        /// Target: @eN | name:<substr> | id:<AutomationId> | role:<Type>
+        /// Target: @eN | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N
         target: String,
         /// Text to type (literal)
         text: String,
         /// Target window by title substring (required: keyboard injection is fail-closed)
         #[arg(long)]
         app: Option<String>,
+        /// Disambiguate multi-matches by picking the one nearest to this anchor element's name
+        #[arg(long)]
+        near: Option<String>,
         /// Deliver via clipboard + ctrl+v (the only reliable text channel
         /// under a Chinese-mode IME; uses the shared clipboard, reported in output)
         #[arg(long)]
@@ -97,13 +106,16 @@ enum Command {
     },
     /// Set an element's value directly via UIA Value pattern (no keyboard)
     SetValue {
-        /// Target: @eN (needs --app) | name:<substr> | id:<AutomationId> | role:<Type>
+        /// Target: @eN (needs --app) | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N
         target: String,
         /// Value to set
         value: String,
         /// Target window by title substring (@eN refs require it; otherwise focused window)
         #[arg(long)]
         app: Option<String>,
+        /// Disambiguate multi-matches by picking the one nearest to this anchor element's name
+        #[arg(long)]
+        near: Option<String>,
     },
     /// Bring a window to the foreground (keyboard commands act on global focus)
     FocusWindow {
@@ -201,27 +213,35 @@ fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
         Command::Click {
             target,
             app,
+            near,
             physical,
-        } => click(target, app.as_deref(), *physical),
+        } => click(target, app.as_deref(), near.as_deref(), *physical),
         Command::Get {
             target,
             property,
             app,
-        } => get(target, property.as_deref(), app.as_deref()),
+            near,
+        } => get(target, property.as_deref(), app.as_deref(), near.as_deref()),
         Command::Launch { args } => launch(args),
         Command::Type {
             target,
             text,
             app,
+            near,
             paste,
-        } => type_cmd(target, text, app.as_deref(), *paste),
+        } => type_cmd(target, text, app.as_deref(), near.as_deref(), *paste),
         Command::Press {
             keys,
             app,
             expect,
             timeout,
         } => press(keys, app.as_deref(), expect.as_deref(), *timeout),
-        Command::SetValue { target, value, app } => set_value_cmd(target, value, app.as_deref()),
+        Command::SetValue {
+            target,
+            value,
+            app,
+            near,
+        } => set_value_cmd(target, value, app.as_deref(), near.as_deref()),
         Command::FocusWindow { pattern } => focus_window_cmd(pattern),
         Command::CloseWindow { pattern } => close_window_cmd(pattern),
         Command::ListWindows => list_windows_cmd(),
@@ -368,14 +388,19 @@ fn snapshot(app: Option<&str>, skeleton: bool) -> Result<CommandOutput, CtlError
     })
 }
 
-fn click(target_raw: &str, app: Option<&str>, physical: bool) -> Result<CommandOutput, CtlError> {
+fn click(
+    target_raw: &str,
+    app: Option<&str>,
+    near: Option<&str>,
+    physical: bool,
+) -> Result<CommandOutput, CtlError> {
     let target = actl_core::parse_target(target_raw)?;
     if physical {
-        let (loc, (px, py)) = actl_uia::click_physical(app, &target)?;
+        let (loc, (px, py)) = actl_uia::click_physical(app, &target, near)?;
         return Ok(json!({
             "action": "click",
             "target": target.describe(),
-            "resolved_by": "primary",
+            "resolved_by": loc.resolved_by,
             "pattern": "physical-left",
             "point": [px, py],
             "input_effects": { "keyboard": "none", "clipboard": "untouched", "pointer": "move_and_click" },
@@ -384,11 +409,11 @@ fn click(target_raw: &str, app: Option<&str>, physical: bool) -> Result<CommandO
         })
         .into());
     }
-    let (loc, pattern) = actl_uia::click(app, &target)?;
+    let (loc, pattern) = actl_uia::click(app, &target, near)?;
     Ok(json!({
         "action": "click",
         "target": target.describe(),
-        "resolved_by": "primary",
+        "resolved_by": loc.resolved_by,
         "pattern": pattern,
         "input_effects": { "keyboard": "none", "clipboard": "untouched", "pointer": "none" },
         "resolved": {
@@ -405,9 +430,10 @@ fn get(
     target_raw: &str,
     property: Option<&str>,
     app: Option<&str>,
+    near: Option<&str>,
 ) -> Result<CommandOutput, CtlError> {
     let target = actl_core::parse_target(target_raw)?;
-    let info = actl_uia::read_property(app, &target, property)?;
+    let info = actl_uia::read_property(app, &target, property, near)?;
     let mut props = serde_json::Map::new();
     if let Some(v) = &info.name {
         props.insert("name".into(), json!(v));
@@ -447,11 +473,12 @@ fn type_cmd(
     target_raw: &str,
     text: &str,
     app: Option<&str>,
+    near: Option<&str>,
     paste: bool,
 ) -> Result<CommandOutput, CtlError> {
     let app = require_app(app, "type")?;
     let target = actl_core::parse_target(target_raw)?;
-    let res = actl_uia::type_text(Some(app), &target, text, paste)?;
+    let res = actl_uia::type_text(Some(app), &target, text, paste, near)?;
     let keyboard = if res.stopped_early {
         "partial"
     } else {
@@ -531,9 +558,10 @@ fn set_value_cmd(
     target_raw: &str,
     value: &str,
     app: Option<&str>,
+    near: Option<&str>,
 ) -> Result<CommandOutput, CtlError> {
     let target = actl_core::parse_target(target_raw)?;
-    let res = actl_uia::set_value(app, &target, value)?;
+    let res = actl_uia::set_value(app, &target, value, near)?;
     Ok(json!({
         "action": "set-value",
         "target": target.describe(),

@@ -30,6 +30,7 @@ name = "actl-uia"
 version = "0.1.0"
 dependencies = [
  "actl-core",
+ "serde_json",
  "uiautomation",
  "windows",
 ]
