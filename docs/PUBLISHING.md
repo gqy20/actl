@@ -1,4 +1,7 @@
-# crates.io 发布手册(需维护者 token:`cargo login` 后执行)
+# crates.io 发布手册(v0.1.1 已发布:actl-core / actl-uia / actl-cli 均 0.1.1;
+# `cargo install actl-cli` → bin `actl` 全链路验收通过)
+
+下次发版(版本 bump 后按序重跑;前置:token 已在 CARGO_HOME/credentials.toml):
 
 `actl` 名已被 2018 年的旧包占用,使用 `actl-cli`(bin 名仍是 `actl`)。
 按依赖顺序:

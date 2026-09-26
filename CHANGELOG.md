@@ -18,7 +18,8 @@
 - NFR 实测:冷启动 P50 54.9ms / P95 73.3ms(P95<80 达标;P50 微超 50——信号层两次
   状态写+锁探测的有意权衡,后续可优化为仅长命令写 begin 态);snapshot 全量 3.9KB /
   skeleton 2.4KB(削减 38%,记事本 23 个交互引用);
-- 外部机器 US3 复现留待非开发机验证(README 安装三渠道已具备)。 -->
+- 外部机器 US3 复现留待非开发机验证(README 安装三渠道已具备);
+- crates.io 已发布:actl-core/actl-uia/actl-cli @ 0.1.1(cargo install actl-cli → bin actl,全链路验收通过)。 -->
 
 ## [0.1.1] - 2026-09-26
 
