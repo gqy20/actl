@@ -79,7 +79,7 @@ CI(GitHub Actions,`windows-latest`):`fmt --check` → `clippy -D warnings` → `
 
 1. **手动部分**:整理 CHANGELOG(`Unreleased` → `## [vX.Y.Z] - 日期`,注意吸收合并历史条目、清理被取代的中间里程碑)、bump 根 Cargo.toml 的 `version`,一个 `chore(release)` 提交;
 2. **先 push 再打 tag(顺序纪律,不许跳步)**:`git push origin main` → **等 CI 在该 commit 上全绿**(`gh run watch` 或 Actions 页确认)→ 才 `git tag vX.Y.Z && git push origin vX.Y.Z`。禁止 commit+tag 一步推:tag 指向未经 CI 验证的 commit,一旦红的就要删 tag 重打;release.yml 的 verify 段虽会重跑门禁,但那是最后防线而非流程依据;
-3. tag 推送 → workflow 三段:**verify**(与 CI 完全同门禁)→ **build**(release 构建 + 打包 + 冒烟)→ **publish**(仅真 tag 执行:生成 checksums.txt + 从 CHANGELOG 提取对应版本段作 release notes,缺段落时回退自动生成);
+3. tag 推送 → workflow 两段:**verify**(与 CI 完全同门禁)→ **release**(打包+冒烟+checksums+发布同 job 直传;仅真 tag 执行 gh release,从 CHANGELOG 提取对应版本段作 notes,缺段落回退自动生成)。**不经 actions/artifact 中转**——artifact 存储是账号级共享配额,且删除后 6-12h 才重算,曾阻断 v0.1.0 发版;
 4. 产物命名对齐 zotero_cli 体系:`actl_vX.Y.Z_windows_amd64.zip` + 裸 `actl_vX.Y.Z_windows_amd64.exe` + `checksums.txt`;
 5. **不使用 UPX 压缩**:解压开销损害冷启动(违反 PRD 冷启动 P95 < 50ms 的 NFR);
 6. 版本号单源于 Cargo.toml(`CARGO_PKG_VERSION` 编译期注入,无需 ldflags 类机制);commit/buildDate 注入 M2 需要时再加 build.rs;
