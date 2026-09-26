@@ -350,6 +350,8 @@ fn snapshot(app: Option<&str>, skeleton: bool) -> Result<CommandOutput, CtlError
             "pid": cap.window.pid,
         },
         "truncated": cap.truncated || out.truncated,
+        // 激活感知:目标曾挂起并被唤醒时如实上报等待量(0/未挂起时省略)
+        "wake_ms": cap.wake_ms,
         "elements": serde_json::to_value(&out.elements).expect("elements serialize"),
     });
     Ok(CommandOutput {
@@ -595,6 +597,7 @@ fn find_cmd(
         },
         "total": total,
         "returned": elements.len(),
+        "wake_ms": cap.wake_ms,
         "elements": elements,
     });
     Ok(CommandOutput {

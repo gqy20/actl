@@ -30,6 +30,8 @@ pub struct CaptureResult {
     /// DFS 序节点流,`parent` 指向同流索引(供 core 层 skeleton 投影)
     pub nodes: Vec<UiNode>,
     pub truncated: bool,
+    /// 激活感知等待的毫秒数(0 = 目标本就在响应;>0 = 目标曾挂起,已唤醒)
+    pub wake_ms: u32,
 }
 
 /// 捕获一个顶层窗口的 UIA 子树。
@@ -48,6 +50,7 @@ pub fn capture(app: Option<&str>) -> Result<CaptureResult, CtlError> {
         class: target.get_classname().unwrap_or_default(),
         pid: target.get_process_id().unwrap_or_default(),
     };
+    let wake_ms = ensure_window_responsive(&target);
 
     let mut nodes = Vec::new();
     walk(&walker, &target, 0, None, &mut nodes);
@@ -56,7 +59,62 @@ pub fn capture(app: Option<&str>) -> Result<CaptureResult, CtlError> {
         window,
         nodes,
         truncated,
+        wake_ms,
     })
+}
+
+/// 激活感知目标解析(M2 第一批,docs/spike-findings"UWP 挂起 = UIA 停摆"):
+/// 挂起应用的每个跨进程 UIA 属性调用都会 stall ~2s(DCOM 等待应用恢复)。
+/// 先用不阻塞调用方的 WM_NULL 探针测目标是否在泵消息;不在 → ShowWindowAsync
+/// 异步唤醒 + 有界等待(≤1.6s)。把隐形的逐调用 stall 变成一次有界的、
+/// 可上报的等待。无原生句柄的元素(UIA-only)直接放行。
+fn ensure_window_responsive(elem: &UIElement) -> u32 {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SMTO_ABORTIFHUNG, SW_SHOW, SendMessageTimeoutW, ShowWindowAsync, WM_NULL,
+    };
+
+    let Some(hwnd) = native_hwnd(elem) else {
+        return 0;
+    };
+    // 探针 60ms:不影响正常路径,挂起应用恰好被这 60ms 暴露
+    let pumps = |timeout_ms: u32| unsafe {
+        SendMessageTimeoutW(
+            hwnd,
+            WM_NULL,
+            windows::Win32::Foundation::WPARAM(0),
+            windows::Win32::Foundation::LPARAM(0),
+            SMTO_ABORTIFHUNG,
+            timeout_ms,
+            None,
+        )
+        .0 != 0
+    };
+    if pumps(60) {
+        return 0;
+    }
+    let started = std::time::Instant::now();
+    unsafe {
+        // 异步投递不等待应用;激活请求本身是 UWP 恢复的最常见触发器
+        let _ = ShowWindowAsync(hwnd, SW_SHOW);
+    }
+    while started.elapsed() < std::time::Duration::from_millis(1600) {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        if pumps(60) {
+            break;
+        }
+    }
+    started.elapsed().as_millis() as u32
+}
+
+/// 元素的原生 HWND(None = 无句柄/无效)。crate 的 Handle 未暴露原始值;
+/// Handle/HANDLE/HWND 均为单指针包装,布局一致(同 close_window 的先例)。
+fn native_hwnd(elem: &UIElement) -> Option<windows::Win32::Foundation::HWND> {
+    let handle = elem.get_native_window_handle().ok()?;
+    if handle.is_invalid() {
+        return None;
+    }
+    let raw: windows::Win32::Foundation::HANDLE = unsafe { std::mem::transmute(handle) };
+    Some(windows::Win32::Foundation::HWND(raw.0))
 }
 
 /// 顶层窗口 + 挂靠宿主的 owned dialog(IFileSaveDialog 等不是 root 的直接子节点,
@@ -267,6 +325,8 @@ pub fn locate(app: Option<&str>, target: &Target) -> Result<Located, CtlError> {
         }
     };
     let window_title = root.get_name().unwrap_or_default();
+    // 激活感知:挂起目标先唤醒(有界),避免 DFS 里逐调用 stall
+    let _wake_ms = ensure_window_responsive(&root);
 
     let mut counter: u32 = 0;
     if let Some(hit) = locate_walk(&walker, &root, 0, target, &mut counter)? {
@@ -748,25 +808,21 @@ const CF_UNICODETEXT: u32 = 13;
 /// close-window:优雅关闭标题匹配的唯一窗口(WM_CLOSE 异步投递;未保存内容
 /// 由应用自行弹提示——语义关闭,不是强杀)。
 pub fn close_window(pattern: &str) -> Result<String, CtlError> {
-    use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_CLOSE};
 
     let auto = UIAutomation::new().map_err(internal)?;
     let walker = auto.create_tree_walker().map_err(internal)?;
     let win = find_window(&auto, &walker, pattern)?;
     let title = win.get_name().unwrap_or_default();
-    let handle = win.get_native_window_handle().map_err(internal)?;
-    if handle.is_invalid() {
+    let Some(hwnd) = native_hwnd(&win) else {
         return Err(CtlError::new(
             ErrorCode::NotActionable,
             format!("window {pattern:?} exposes no native handle"),
         ));
-    }
-    // crate 的 Handle 未暴露原始 HWND;Handle/HANDLE 均为单指针包装,布局一致
-    let raw: windows::Win32::Foundation::HANDLE = unsafe { std::mem::transmute(handle) };
+    };
     unsafe {
         PostMessageW(
-            Some(HWND(raw.0)),
+            Some(hwnd),
             WM_CLOSE,
             windows::Win32::Foundation::WPARAM(0),
             windows::Win32::Foundation::LPARAM(0),
