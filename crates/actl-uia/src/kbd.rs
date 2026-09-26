@@ -161,10 +161,14 @@ fn char_vk(c: char) -> Option<(VIRTUAL_KEY, bool)> {
     Some((VIRTUAL_KEY((r & 0xFF) as u16), hi & 1 != 0))
 }
 
-/// 注入一个按键规格:先清场幽灵修饰键 → mods DOWN → 逐键 → mods UP → 再清场。
-pub fn send_key_spec(spec: &KeySpec) -> Result<(), CtlError> {
-    // 开场清场:清除历史注入可能残留的修饰键按下状态
-    release_all_modifiers();
+/// 纯编译:KeySpec → 事件序列(不注入,可单测)。双通道规则在此落地:
+/// - 带修饰键(ctrl+s 等)→ 字符必须经 VkKeyScanW 映射为 VK 事件:VK 通道才
+///   吃修饰键状态,且 IME 不拦截 ctrl+字母这类组合键。映射不出(如 CJK、
+///   死键)直接 PROTOCOL 报错——静默降级 UNICODE 会把组合键退化成裸字符
+///   (实测:ctrl+s 打出孤立 's')。
+/// - 无修饰键(纯文本)→ UNICODE 包:绕过 IME(空格不被当上屏确认吞掉、
+///   标点不被全角化),WM_CHAR 直达。
+fn compile_key_spec(spec: &KeySpec) -> Result<Vec<INPUT>, CtlError> {
     let mut inputs: Vec<INPUT> = Vec::new();
     for m in &spec.modifiers {
         inputs.push(vk_event(modifier_vk(m), false));
@@ -172,33 +176,32 @@ pub fn send_key_spec(spec: &KeySpec) -> Result<(), CtlError> {
     for key in &spec.keys {
         match key {
             Key::Char(c) => {
-                // 双通道规则(IME 实测教训,docs/spike-findings.md):
-                // - 带修饰键(ctrl+s 等)→ 字符经 VkKeyScanW 映射为 VK 事件:
-                //   VK 通道才吃修饰键状态;且 IME 不拦截 ctrl+字母这类组合键。
-                // - 无修饰键(纯文本)→ UNICODE 包:绕过 IME(否则空格被当作
-                //   组合上屏键吞掉、半角标点被全角化),WM_CHAR 直达。
-                let vk_channel = !spec.modifiers.is_empty();
-                if vk_channel {
-                    if let Some((vk, needs_shift)) = char_vk(*c) {
-                        let shift_held = spec.modifiers.iter().any(|m| m == "shift");
-                        if needs_shift && !shift_held {
-                            inputs.push(vk_event(VK_SHIFT, false));
-                        }
-                        inputs.push(vk_event(vk, false));
-                        inputs.push(vk_event(vk, true));
-                        if needs_shift && !shift_held {
-                            inputs.push(vk_event(VK_SHIFT, true));
-                        }
-                        continue;
+                if !spec.modifiers.is_empty() {
+                    let (vk, needs_shift) = char_vk(*c).ok_or_else(|| {
+                        CtlError::protocol(format!(
+                            "char {c:?} cannot be mapped to a virtual key for combo use \
+                             (layout or dead key); send it as text via `type` instead, \
+                             or use a named key"
+                        ))
+                    })?;
+                    let shift_held = spec.modifiers.iter().any(|m| m == "shift");
+                    if needs_shift && !shift_held {
+                        inputs.push(vk_event(VK_SHIFT, false));
                     }
-                }
-                let mut buf = [0u16; 2];
-                for unit in c.encode_utf16(&mut buf) {
-                    if *unit == 0 {
-                        continue;
+                    inputs.push(vk_event(vk, false));
+                    inputs.push(vk_event(vk, true));
+                    if needs_shift && !shift_held {
+                        inputs.push(vk_event(VK_SHIFT, true));
                     }
-                    inputs.push(uni_event(*unit, false));
-                    inputs.push(uni_event(*unit, true));
+                } else {
+                    let mut buf = [0u16; 2];
+                    for unit in c.encode_utf16(&mut buf) {
+                        if *unit == 0 {
+                            continue;
+                        }
+                        inputs.push(uni_event(*unit, false));
+                        inputs.push(uni_event(*unit, true));
+                    }
                 }
             }
             Key::Named(n) => {
@@ -213,6 +216,15 @@ pub fn send_key_spec(spec: &KeySpec) -> Result<(), CtlError> {
     for m in spec.modifiers.iter().rev() {
         inputs.push(vk_event(modifier_vk(m), true));
     }
+    Ok(inputs)
+}
+
+/// 注入一个按键规格:先清场幽灵修饰键 → 编译 → 注入 → 再清场。
+pub fn send_key_spec(spec: &KeySpec) -> Result<(), CtlError> {
+    // 开场清场:清除历史注入可能残留的修饰键按下状态
+    release_all_modifiers();
+    // 编译在注入前完成:报错时保证零事件发出(fail before side effects)
+    let mut inputs = compile_key_spec(spec)?;
 
     // 结尾清场:把全部修饰键 UP 一遍,杜绝任何 UP 丢失导致的幽灵修饰键
     // (实测事故:一次残留会让后续所有注入被解释为 ctrl+key 而被目标丢弃)
@@ -228,5 +240,126 @@ pub fn send_key_spec(spec: &KeySpec) -> Result<(), CtlError> {
             "SendInput delivered {sent}/{} events",
             inputs.len()
         )))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! 编译层回归(doc 09 §8 第一批):只断言事件序列,不注入。
+    //! 布局依赖说明:字母的 VkKeyScanW 映射在 en-US / zh-CN 等标准布局下一致。
+    use super::*;
+    use actl_core::keys::parse_key_expr;
+
+    fn compile(expr: &str) -> Vec<INPUT> {
+        let spec = parse_key_expr(expr).unwrap();
+        compile_key_spec(&spec).unwrap()
+    }
+
+    /// (VK 码, 是否 UP) 序列;UNICODE 事件 wVk=0,不会与 VK 断言混淆。
+    fn vk_seq(events: &[INPUT]) -> Vec<(u16, bool)> {
+        events
+            .iter()
+            .map(|i| {
+                let ki = unsafe { i.Anonymous.ki };
+                (ki.wVk.0, ki.dwFlags.contains(KEYEVENTF_KEYUP))
+            })
+            .collect()
+    }
+
+    fn is_unicode(i: &INPUT) -> bool {
+        unsafe { i.Anonymous.ki.dwFlags.contains(KEYEVENTF_UNICODE) }
+    }
+
+    #[test]
+    fn combo_chars_go_vk_channel() {
+        // 回归:UNICODE 包不吃修饰键,ctrl+s 曾退化成裸 's'(战记 #2)
+        let ev = compile("ctrl+s");
+        assert_eq!(
+            ev.len(),
+            4,
+            "ctrl↓ s↓ s↑ ctrl↑;清场事件属于发送层,不进编译产物"
+        );
+        assert!(
+            ev.iter().all(|e| !is_unicode(e)),
+            "组合键成员禁止 UNICODE 通道"
+        );
+        assert_eq!(
+            vk_seq(&ev),
+            vec![(0x11, false), (0x53, false), (0x53, true), (0x11, true)]
+        );
+    }
+
+    #[test]
+    fn plain_text_goes_unicode_channel() {
+        // 回归:纯文本走 VK 会被 IME 改写(空格吞成上屏、标点全角化,战记 #3)。
+        // 键表达式不支持多字符("ab" 非法),这里手工构词——type 命令就是这么做的
+        let spec = KeySpec {
+            modifiers: vec![],
+            keys: vec![Key::Char('a'), Key::Char('b')],
+        };
+        let ev = compile_key_spec(&spec).unwrap();
+        assert_eq!(ev.len(), 4);
+        assert!(ev.iter().all(is_unicode), "纯文本固定 UNICODE 通道");
+        let units: Vec<u16> = ev.iter().map(|i| unsafe { i.Anonymous.ki.wScan }).collect();
+        assert_eq!(
+            units,
+            vec![b'a' as u16, b'a' as u16, b'b' as u16, b'b' as u16]
+        );
+    }
+
+    #[test]
+    fn unmappable_combo_char_is_rejected() {
+        // 静默降级 = 组合键退化裸字符;必须 PROTOCOL 报错(doc 09 §3.1 剩余项)
+        let spec = KeySpec {
+            modifiers: vec!["ctrl".into()],
+            keys: vec![Key::Char('中')],
+        };
+        let err = match compile_key_spec(&spec) {
+            Err(e) => e,
+            Ok(_) => panic!("unmappable combo char must be rejected, got events"),
+        };
+        assert_eq!(err.code, ErrorCode::Protocol);
+        assert!(err.message.contains("type"));
+    }
+
+    #[test]
+    fn combo_with_shift_required_char_adds_shift() {
+        // 键表达式大小写不敏感(to_lowercase),"ctrl+A" 会归一成 ctrl+a;
+        // 大写语义必须显式写 ctrl+shift+a。shift 包裹路径用无大小写但
+        // VkKeyScanW 声明需要 shift 的字符触达:'!' → VK 0x31 + shift
+        let ev = compile("ctrl+!");
+        let seq = vk_seq(&ev);
+        assert_eq!(
+            seq,
+            vec![
+                (0x11, false),       // ctrl ↓
+                (VK_SHIFT.0, false), // shift ↓(VkKeyScanW 补位)
+                (0x31, false),       // '1' 键 ↓('!' 所在键)
+                (0x31, true),        // ↑
+                (VK_SHIFT.0, true),
+                (0x11, true),
+            ]
+        );
+    }
+
+    #[test]
+    fn f10_to_f12_compile_to_vk() {
+        // 与 actl-core 解析层回归联动:后端 VK 段 1..=12 必须全可达
+        for (name, vk) in [("f1", 0x70u16), ("f10", 0x79), ("f12", 0x7B)] {
+            let seq = vk_seq(&compile(name));
+            assert_eq!(seq, vec![(vk, false), (vk, true)], "{name}");
+        }
+    }
+
+    #[test]
+    fn named_keys_and_multi_key_sequences() {
+        let ev = compile("enter");
+        assert_eq!(vk_seq(&ev), vec![(VK_RETURN.0, false), (VK_RETURN.0, true)]);
+        // 多键序列:mods 只在整段两端
+        let ev = compile("ctrl+a+b");
+        let seq = vk_seq(&ev);
+        assert_eq!(seq.first().copied(), Some((0x11, false)));
+        assert_eq!(seq.last().copied(), Some((0x11, true)));
+        assert_eq!(seq.len(), 6);
     }
 }

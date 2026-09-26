@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # 金任务 2:键盘输入 → 组合键 → 系统另存为对话框 → UIA 写值 → 磁盘验证。
-# 覆盖能力:type(键盘文本)、press(组合键)、--expect 窗口断言、owned-dialog
+# 覆盖能力:type(键盘文本)、press(组合键)、--expect 窗口断言、owned dialog
 # 可见性、set-value(ValuePattern)、跨窗口护栏。
 # 前置:可交互 Windows 桌面会话;Win11 新记事本(单实例多标签)。
+# ⚠ 需要桌面空闲:本流程多次抢前台,若有人在打字,其键入会与注入交错进编辑器
+#   (2026-09-26 四次实测:并发输入下 readback 出现重复字母/无关字符群)。
 # 安全:所有注入都带 --app(verify-then-inject 护栏),键只进 Notepad/另存为。
 set -uo pipefail
 cd "$(dirname "$0")/.."

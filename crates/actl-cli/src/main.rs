@@ -63,11 +63,11 @@ enum Command {
     },
     /// Type text into an element via keyboard (focuses the element first)
     Type {
-        /// Target: @eN (needs --app) | name:<substr> | id:<AutomationId> | role:<Type>
+        /// Target: @eN | name:<substr> | id:<AutomationId> | role:<Type>
         target: String,
         /// Text to type (literal)
         text: String,
-        /// Target window by title substring (@eN refs require it; otherwise focused window)
+        /// Target window by title substring (required: keyboard injection is fail-closed)
         #[arg(long)]
         app: Option<String>,
     },
@@ -75,11 +75,12 @@ enum Command {
     Press {
         /// Key expression: ctrl+s, ctrl+shift+t, enter, f5 ...
         keys: String,
-        /// Focus this window first (title substring) — keys go to the OS foreground,
-        /// so multi-window flows must set the target before pressing
+        /// Target window by title substring (required: injection is global and
+        /// unguarded without a pinned target — fail-closed)
         #[arg(long)]
         app: Option<String>,
-        /// Post-condition predicate: window:<substr> (polls up to 2s by default)
+        /// Post-condition: window:<substr> must NEWLY appear (pre-existing
+        /// same-title windows do not satisfy it; polls up to 2s by default)
         #[arg(long)]
         expect: Option<String>,
         /// Timeout for --expect in milliseconds (default 2000)
@@ -313,8 +314,9 @@ fn launch(args: &[String]) -> Result<CommandOutput, CtlError> {
 }
 
 fn type_cmd(target_raw: &str, text: &str, app: Option<&str>) -> Result<CommandOutput, CtlError> {
+    let app = require_app(app, "type")?;
     let target = actl_core::parse_target(target_raw)?;
-    let res = actl_uia::type_text(app, &target, text)?;
+    let res = actl_uia::type_text(Some(app), &target, text)?;
     Ok(json!({
         "action": "type",
         "target": target.describe(),
@@ -330,15 +332,26 @@ fn press(
     expect: Option<&str>,
     timeout: Option<u64>,
 ) -> Result<CommandOutput, CtlError> {
+    let app = require_app(app, "press")?;
     let spec = actl_core::parse_key_expr(keys)?;
+    // --expect = "本动作导致新窗口":注入前先取窗口基线,断言时排除既有同名窗口
+    // (存在性检查会被预先打开的同名窗口恒真欺骗,doc 09 §2)
+    let expect_substr = match expect {
+        Some(raw) => Some(parse_expect(raw)?),
+        None => None,
+    };
+    let baseline = if expect_substr.is_some() {
+        actl_uia::window_identities()?
+    } else {
+        Vec::new()
+    };
     // 键盘作用于全局焦点:裸 SendInput 会打进当下前台(实测坑)。
     // press_keys 内部在 --app 时先置前台并稳定窗(--app 语义,focus+delay 在 uia 层)。
-    let focused = actl_uia::press_keys(&spec, app)?;
+    let focused = actl_uia::press_keys(&spec, Some(app))?;
     let mut expect_window = None;
-    if let Some(raw) = expect {
-        let substr = parse_expect(raw)?;
+    if let Some(substr) = expect_substr {
         // 06 §4:--expect = 执行后隐式 wait(默认 2s),失败 ASSERTION_FAILED
-        actl_uia::wait_window(&substr, timeout.unwrap_or(2000))?;
+        actl_uia::wait_new_window(&substr, timeout.unwrap_or(2000), &baseline)?;
         expect_window = Some(substr);
     }
     Ok(json!({
@@ -348,6 +361,17 @@ fn press(
         "expect": expect_window,
     })
     .into())
+}
+
+/// 键盘注入命令的 fail-closed 门:必须显式 --app 绑定目标窗口。
+/// 裸注入打进"当下恰好前台"的窗口是事故 #1 的路径之一;护栏随 --app 生效。
+fn require_app<'a>(app: Option<&'a str>, cmd: &str) -> Result<&'a str, CtlError> {
+    app.filter(|a| !a.trim().is_empty()).ok_or_else(|| {
+        CtlError::protocol(format!(
+            "{cmd} requires --app <title-substr>: keyboard injection is global and \
+                 unguarded without a pinned target window (fail-closed)"
+        ))
+    })
 }
 
 fn set_value_cmd(

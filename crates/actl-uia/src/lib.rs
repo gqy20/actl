@@ -61,27 +61,35 @@ pub fn capture(app: Option<&str>) -> Result<CaptureResult, CtlError> {
 /// 在顶层窗口中按标题子串定位首个匹配;无匹配 → NOT_FOUND(06 §4)。
 /// 顶层窗口 + 挂靠宿主的 owned dialog(IFileSaveDialog 等不是 root 的直接子节点,
 /// 实测新记事本的"另存为"在宿主窗口的 depth-1,以 role=Window 挂靠)。
-fn scan_top_window(auto: &UIAutomation, walker: &UITreeWalker, pattern: &str) -> Option<UIElement> {
-    let root = auto.get_root_element().ok()?;
+/// 顶层窗口 + 挂靠宿主的 owned dialog(IFileSaveDialog 等不是 root 的直接子节点,
+/// 实测新记事本的"另存为"在宿主窗口的 depth-1,以 role=Window 挂靠)。
+fn top_windows(auto: &UIAutomation, walker: &UITreeWalker) -> Vec<UIElement> {
+    let mut out = Vec::new();
+    let Ok(root) = auto.get_root_element() else {
+        return out;
+    };
     let mut child = walker.get_first_child(&root).ok();
     while let Some(w) = child {
-        if name_matches(&w, pattern) {
-            return Some(w);
-        }
+        out.push(w.clone());
         let mut sub = walker.get_first_child(&w).ok();
         while let Some(d) = sub {
             if d.get_control_type()
                 .map(|t| t == ControlType::Window)
                 .unwrap_or(false)
-                && name_matches(&d, pattern)
             {
-                return Some(d);
+                out.push(d.clone());
             }
             sub = walker.get_next_sibling(&d).ok();
         }
         child = walker.get_next_sibling(&w).ok();
     }
-    None
+    out
+}
+
+fn scan_top_window(auto: &UIAutomation, walker: &UITreeWalker, pattern: &str) -> Option<UIElement> {
+    top_windows(auto, walker)
+        .into_iter()
+        .find(|w| name_matches(w, pattern))
 }
 
 fn name_matches(elem: &UIElement, pattern: &str) -> bool {
@@ -503,6 +511,56 @@ pub fn wait_window(substr: &str, timeout_ms: u64) -> Result<String, CtlError> {
     }
 }
 
+/// 当前全部顶层窗口(含 owned dialog)的 UIA RuntimeId——--expect 的"新窗口"基线。
+/// 用 RuntimeId 而非标题:标题是可变身份(如记事本脏标记"*无标题"、保存后改名),
+/// 按标题比对会把标题变化的既有窗口误判为"新窗口"(实测踩坑)。
+pub fn window_identities() -> Result<Vec<Vec<i32>>, CtlError> {
+    let auto = UIAutomation::new().map_err(internal)?;
+    let walker = auto.create_tree_walker().map_err(internal)?;
+    Ok(top_windows(&auto, &walker)
+        .into_iter()
+        .filter_map(|w| w.get_runtime_id().ok())
+        .collect())
+}
+
+/// 等待一个**基线中不存在**、标题包含 `substr` 的新窗口出现。
+/// --expect 的后置断言语义:证明"本动作导致了新窗口",而不是"存在同名窗口"
+/// (后者会被预先打开的同名窗口恒真欺骗,doc 09 §2)。
+/// 基线按 RuntimeId 比对:同名新窗口能通过,标题变化的既有窗口不会误判。
+pub fn wait_new_window(
+    substr: &str,
+    timeout_ms: u64,
+    baseline: &[Vec<i32>],
+) -> Result<String, CtlError> {
+    let auto = UIAutomation::new().map_err(internal)?;
+    let walker = auto.create_tree_walker().map_err(internal)?;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
+    loop {
+        if let Some(title) = top_windows(&auto, &walker)
+            .into_iter()
+            .filter(|w| name_matches(w, substr))
+            .find(|w| {
+                w.get_runtime_id()
+                    .map(|id| !baseline.contains(&id))
+                    .unwrap_or(false) // 读不到身份 → 无法证明"新",不当作命中
+            })
+            .and_then(|w| w.get_name().ok())
+        {
+            return Ok(title);
+        }
+        if std::time::Instant::now() >= deadline {
+            return Err(CtlError::new(
+                ErrorCode::AssertionFailed,
+                format!(
+                    "no NEW window containing {substr:?} appeared within {timeout_ms}ms \
+                     (a pre-existing window with that title does not satisfy --expect)"
+                ),
+            ));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+}
+
 fn scan_top_windows(auto: &UIAutomation, walker: &UITreeWalker, substr: &str) -> Option<String> {
     scan_top_window(auto, walker, substr).and_then(|w| w.get_name().ok())
 }
@@ -522,44 +580,22 @@ pub fn focus_window(pattern: &str) -> Result<String, CtlError> {
     Ok(win.get_name().unwrap_or_default())
 }
 
-/// list-windows:枚举顶层窗口(title/class/pid),供 agent 选择目标。
+/// list-windows:枚举顶层窗口 + owned dialog(title/class/pid),供 agent 选择目标。
 pub fn list_windows() -> Result<Vec<(String, String, u32)>, CtlError> {
     let auto = UIAutomation::new().map_err(internal)?;
     let walker = auto.create_tree_walker().map_err(internal)?;
-    let root = auto.get_root_element().map_err(internal)?;
-    let mut out = Vec::new();
-    let mut child = walker.get_first_child(&root).ok();
-    while let Some(w) = child {
-        if let Ok(title) = w.get_name() {
-            if !title.is_empty() {
-                out.push((
-                    title,
-                    w.get_classname().unwrap_or_default(),
-                    w.get_process_id().unwrap_or_default(),
-                ));
+    Ok(top_windows(&auto, &walker)
+        .into_iter()
+        .filter_map(|w| {
+            let title = w.get_name().ok()?;
+            if title.is_empty() {
+                return None;
             }
-        }
-        // owned dialog(挂靠宿主的 depth-1 Window,如"另存为")也要列出来,
-        // 否则 agent 选目标时会漏掉当前真正的前台对话框
-        let mut sub = walker.get_first_child(&w).ok();
-        while let Some(d) = sub {
-            if d.get_control_type()
-                .map(|t| t == ControlType::Window)
-                .unwrap_or(false)
-            {
-                if let Ok(t) = d.get_name() {
-                    if !t.is_empty() {
-                        out.push((
-                            t,
-                            d.get_classname().unwrap_or_default(),
-                            d.get_process_id().unwrap_or_default(),
-                        ));
-                    }
-                }
-            }
-            sub = walker.get_next_sibling(&d).ok();
-        }
-        child = walker.get_next_sibling(&w).ok();
-    }
-    Ok(out)
+            Some((
+                title,
+                w.get_classname().unwrap_or_default(),
+                w.get_process_id().unwrap_or_default(),
+            ))
+        })
+        .collect())
 }

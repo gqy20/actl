@@ -66,7 +66,8 @@ pub fn parse_key_expr(expr: &str) -> Result<KeySpec, CtlError> {
             "back" => "backspace",
             other => other,
         };
-        let is_fkey = p.len() == 2
+        // f1..f12:数字段长度 1-2(曾因 p.len()==2 拒绝 f10-f12,回归见 tests)
+        let is_fkey = (2..=3).contains(&p.len())
             && p.starts_with('f')
             && p[1..].chars().all(|c| c.is_ascii_digit())
             && (1..=12).contains(&p[1..].parse::<u8>().unwrap_or(0));
@@ -140,14 +141,27 @@ mod tests {
 
     #[test]
     fn rejects_garbage() {
+        // 注:"f" 是合法单字符(Char('f')),"f01" 归一为 f1,均不该在此列
         for bad in [
-            "", "ctrl", "foo+bar", "ctrl+", "+a", "notakey", "f13", "f99",
+            "", "ctrl", "foo+bar", "ctrl+", "+a", "notakey", "f0", "f13", "f99",
         ] {
             assert_eq!(
                 parse_key_expr(bad).unwrap_err().code,
                 ErrorCode::Protocol,
                 "{bad:?} should be PROTOCOL"
             );
+        }
+    }
+
+    #[test]
+    fn fkeys_f1_through_f12_all_parse() {
+        // 回归:旧条件 p.len()==2 把 f10/f11/f12 挡在解析层,后端却支持 1..=12
+        for name in [
+            "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12",
+        ] {
+            let spec = parse_key_expr(name).unwrap_or_else(|e| panic!("{name}: {e:?}"));
+            assert_eq!(spec.keys, vec![Key::Named(name.into())], "{name}");
+            assert!(spec.modifiers.is_empty());
         }
     }
 }

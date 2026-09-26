@@ -6,6 +6,10 @@
 ## [Unreleased]
 
 ### Added
+- **doc 09 评审第一批修复落地**(P0 立即档):
+  - 键盘编译层纯函数化 `compile_key_spec`(注入前编译,报错时零事件发出)+ actl-uia 首批单测(双通道断言/shift 包裹/f 键/多键序列/不可映射组合拒绝)。
+  - `--expect window:<substr>` 升级为**新窗口语义**:注入前取全部窗口 UIA RuntimeId 基线,断言"本动作导致的新窗口";预存同名窗口不再恒真(标题基线会被脏标记"*"改名骗过,故用 RuntimeId)。
+  - 并发真人输入损坏注入文本四次活体实证入档(docs/spike-findings.md):输入占用协调与粘贴路径升级为实测需要的手段。
 - **M1 键盘/文本命令族**:`type`(元素置焦+护栏+逐字注入)、`press`(组合键,`--expect window:<substr>` 后置断言轮询)、`set-value`(UIValuePattern 写值)、`focus-window`、`list-windows`;自建 SendInput 管线 `actl-uia::kbd` 取代 uiautomation crate 的 Keyboard。
 - **金任务 2 达成 7/7**(fixtures/golden-task-2.sh):type → ctrl+s → 另存为对话框(--expect 断言)→ set-value 文件名 → enter → **磁盘内容逐字一致终验**;覆盖键盘文本、组合键、系统对话框、ValuePattern、跨窗口护栏五类能力。
 - 双通道注入规则(实测驱动,docs/spike-findings.md):组合键成员 → VK 通道(VkKeyScanW 映射,IME 不拦 ctrl+键);纯文本 → KEYEVENTF_UNICODE(绕 IME)。修饰键用通用 VK_CONTROL/VK_MENU/VK_SHIFT(AHK/pywinauto 同款),清场全集 11 键。
@@ -25,6 +29,9 @@
 - pre-commit hook 增加 merge-conflict 标记检查(等价 pre-commit-hooks 官方集)。
 
 ### Fixed
+- **f10/f11/f12 解析边界**(doc 09 §3.6):旧条件 `p.len()==2` 把 f10-f12 挡在解析层而后端支持 1..=12;修复并补 f1-f12 全段回归测试(f0/f13/f99 仍拒绝)。
+- **组合键不可映射字符静默降级**(doc 09 §3.1 剩余项):带修饰键但 VkKeyScanW 映射不出的字符(如 CJK)此前退回 UNICODE 通道(修饰键语义丢失),现直接 PROTOCOL 报错并提示改用 `type`。
+- **[BC] `press`/`type` 强制 `--app`**(fail-closed):无 `--app` 的键盘注入打进"当下恰好前台"的窗口,是事故 #1 的路径之一;现返回 PROTOCOL(exit 2)。
 - **[BC] `@eN` ref 未指定 `--app` 直接 PROTOCOL 拒绝**(exit 2):ref 绑定快照来源窗口的遍历顺序,前台漂移时曾静默点进无关应用;跨步骤定位改用语义选择器(如 `id:1001`)。
 - **owned dialog 不可见**:"另存为"等 IFileSaveDialog 挂靠宿主窗口 depth-1,不在 UIA root 直接子节点——`find_window`/`list-windows`/`--expect` 轮询此前全部漏扫;现同时扫 root 子节点 + 各顶层窗口的直接子 Window。
 - **组合键退化裸键**:`ctrl+s` 被目标当文本打出孤立 's'(KEYEVENTF_UNICODE 不携带修饰键语义);组合键成员改走 VK 通道。
