@@ -9,6 +9,28 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 ACTL="${ACTL:-target/release/actl.exe}"
 APP="计算器"
+# ── 失败安全清理:trap EXIT 必执行(成败/中断都跑);优雅关闭 + 对话框处理,GUI 应用禁 taskkill(会话复活)──
+close_all_by_title() {
+  local n=0 H
+  while [ $n -lt 12 ]; do
+    n=$((n+1))
+    H=$("$ACTL" list-windows 2>/dev/null | grep -o "{[^{}]*\"title\":\"[^\"]*$1[^\"]*\"[^{}]*}" | grep -o '"hwnd":[0-9]*' | head -1 | grep -o '[0-9]*')
+    [ -z "$H" ] && break
+    "$ACTL" close-window --hwnd "$H" >/dev/null 2>&1 || break
+    sleep 0.7
+    "$ACTL" press n --app "是否" >/dev/null 2>&1
+    sleep 0.3
+  done
+}
+cleanup() { close_all_by_title "计算器"; }
+trap cleanup EXIT
+
+# 前置断言:残留会让 --app AMBIGUOUS;脏则 fail-fast(trap 顺手清掉,重跑即净)
+WINCNT=$("$ACTL" list-windows 2>/dev/null | grep -o "{[^{}]*\"title\":\"[^\"]*计算器[^\"]*\"[^{}]*}" | wc -l)
+if [ "$WINCNT" -gt 0 ]; then
+  echo "ENV-DIRTY: 计算器窗口已存在 ×$WINCNT——已清理,请重跑本 fixture"; exit 1
+fi
+cmd //c "start shell:AppsFolder\Microsoft.WindowsCalculator_8wekyb3d8bbwe!App"
 RUNS="${RUNS:-3}"
 BUTTONS=(num1Button num2Button num3Button multiplyButton num4Button num5Button
          num6Button plusButton num7Button num8Button num9Button equalButton)

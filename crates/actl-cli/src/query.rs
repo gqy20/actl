@@ -292,6 +292,14 @@ pub(crate) fn batch_cmd(json_str: &str) -> Result<CommandOutput, CtlError> {
     let signals = actl_core::state::SignalPaths::default();
     let mut executed = 0usize;
     let mut steps: Vec<Value> = Vec::with_capacity(cmds.len());
+    // 窗口基线(进入时的 hwnd 集):结束时差集 = 本轮新开的窗口。
+    // 如实上报(windows_created: title/pid/hwnd),不代管生命周期——
+    // 关不关是编排层(agent/fixture)的决定,清理武器是 close-window --pid/--hwnd。
+    let baseline: std::collections::HashSet<isize> = actl_uia::list_windows()
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|w| w.hwnd)
+        .collect();
     for (i, line) in cmds.iter().enumerate() {
         // 步间双闸门:停止标志(用户热键)优先;随后步级状态落盘(阶段信号)
         if signals.stop_requested() {
@@ -336,13 +344,34 @@ pub(crate) fn batch_cmd(json_str: &str) -> Result<CommandOutput, CtlError> {
                         "batch[{i}] {:?} failed after {executed} ok: {}",
                         line, err.message
                     ),
-                    json!({ "executed": executed, "steps": steps }),
+                    json!({
+                        "executed": executed,
+                        "steps": steps,
+                        "windows_created": windows_created_since(&baseline),
+                    }),
                 ));
             }
         }
         executed += 1;
     }
-    Ok(json!({ "executed": executed, "steps": steps }).into())
+    let mut data = json!({ "executed": executed, "steps": steps });
+    let created = windows_created_since(&baseline);
+    if created.as_array().is_some_and(|a| !a.is_empty()) {
+        data["windows_created"] = created;
+    }
+    Ok(data.into())
+}
+
+/// 基线差集:本轮 batch 新开的窗口(title/pid/hwnd)。空省略(token);
+/// 失败路径必带(evidence)——那是清理地基。
+fn windows_created_since(baseline: &std::collections::HashSet<isize>) -> Value {
+    let created: Vec<Value> = actl_uia::list_windows()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|w| w.hwnd.map(|h| !baseline.contains(&h)).unwrap_or(false))
+        .map(|w| json!({ "title": w.title, "pid": w.pid, "hwnd": w.hwnd }))
+        .collect();
+    json!(created)
 }
 
 pub(crate) fn list_windows_cmd() -> Result<CommandOutput, CtlError> {

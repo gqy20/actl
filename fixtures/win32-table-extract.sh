@@ -32,8 +32,25 @@ assert_contains() {
 
 # ── 1. 启动 msinfo32(老 Win32,#32770 dialog;冷启动慢) ───────────────
 # 幂等:残留的同名窗口会让 --app AMBIGUOUS,先关净
-taskkill //IM msinfo32.exe //F >/dev/null 2>&1
+"$ACTL" close-window "系统信息" >/dev/null 2>&1
 sleep 1
+# ── 失败安全清理 + 前置断言(优雅关闭;禁 taskkill)──
+close_all_by_title() {
+  local n=0 H
+  while [ $n -lt 12 ]; do
+    n=$((n+1))
+    H=$("$ACTL" list-windows 2>/dev/null | grep -o "{[^{}]*\"title\":\"[^\"]*$1[^\"]*\"[^{}]*}" | grep -o '"hwnd":[0-9]*' | head -1 | grep -o '[0-9]*')
+    [ -z "$H" ] && break
+    "$ACTL" close-window --hwnd "$H" >/dev/null 2>&1 || break
+    sleep 0.7
+  done
+}
+cleanup() { close_all_by_title "系统信息"; }
+trap cleanup EXIT
+WINCNT=$("$ACTL" list-windows 2>/dev/null | grep -o "{[^{}]*\"title\":\"[^\"]*系统信息[^\"]*\"[^{}]*}" | wc -l)
+if [ "$WINCNT" -gt 0 ]; then
+  echo "ENV-DIRTY: 系统信息窗口已存在 ×$WINCNT——已清理,请重跑本 fixture"; exit 1
+fi
 cmd //c "start msinfo32"
 step "wait msinfo32 window" $ACTL wait --window "系统信息" --timeout 20000
 
@@ -60,7 +77,7 @@ else
 fi
 
 # ── 3. 清理 ───────────────────────────────────────────────────────────
-taskkill //IM msinfo32.exe //F >/dev/null 2>&1; PASS=$((PASS+1)); echo "PASS: close msinfo32"
+close_all_by_title "系统信息"; PASS=$((PASS+1)); echo "PASS: close msinfo32"
 
 echo "──"
 echo "win32-table-extract: PASS=$PASS FAIL=$FAIL"

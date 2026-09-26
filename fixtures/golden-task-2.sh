@@ -26,6 +26,25 @@ DOCS="${DOCS//\\//}" # 统一为正斜杠,避免与 $MARK 拼接出混合分隔�
 MARK="actl_golden2_$(date +%H%M%S).txt"
 TEXT="golden task 2: keyboard + dialog + value pattern"
 
+# ── 失败安全清理 + 前置断言(同金任务 1 模板;GUI 禁 taskkill——记事本会话复活)──
+close_all_by_title() {
+  local n=0 H
+  while [ $n -lt 12 ]; do
+    n=$((n+1))
+    H=$("$ACTL" list-windows 2>/dev/null | grep -o "{[^{}]*\"title\":\"[^\"]*$1[^\"]*\"[^{}]*}" | grep -o '"hwnd":[0-9]*' | head -1 | grep -o '[0-9]*')
+    [ -z "$H" ] && break
+    "$ACTL" close-window --hwnd "$H" >/dev/null 2>&1 || break
+    sleep 0.7
+    "$ACTL" press n --app "是否" >/dev/null 2>&1
+    sleep 0.3
+  done
+}
+cleanup() { close_all_by_title "Notepad"; }
+trap cleanup EXIT
+WINCNT=$("$ACTL" list-windows 2>/dev/null | grep -o "{[^{}]*\"title\":\"[^\"]*Notepad[^\"]*\"[^{}]*}" | wc -l)
+if [ "$WINCNT" -gt 0 ]; then
+  echo "ENV-DIRTY: Notepad 窗口已存在 ×$WINCNT——已清理,请重跑本 fixture"; exit 1
+fi
 # 0. 确保 Notepad 在(有窗口就复用)
 $ACTL list-windows 2>/dev/null | grep -q Notepad || cmd //c start notepad
 sleep 1

@@ -45,6 +45,11 @@ cat > "$HTML_UX" << EOF
 <ul><li>Alpha item</li><li>Beta item</li></ul>
 <button id="btn-primary">Submit form</button></main></body></html>
 EOF
+cleanup() {
+  "$ACTL" close-window "$WIN" >/dev/null 2>&1
+  rm -f "$HTML_UX" /tmp/edge_full_$STAMP.json /tmp/edge_skel_$STAMP.json
+}
+trap cleanup EXIT
 # HTML_UX 形如 C:/Users/<user>/AppData/Local/Temp/<win>.html(已正斜杠)
 "$EDGE" --new-window "file:///$HTML_UX" >/dev/null 2>&1 &
 step "wait edge window" $ACTL wait --window "$WIN" --timeout 12000
@@ -70,8 +75,7 @@ else
 fi
 
 # ── 4. 清理 ───────────────────────────────────────────────────────────
-step "close edge window" $ACTL close-window "$WIN"
-rm -f "$HTML_UX" /tmp/edge_full_$STAMP.json /tmp/edge_skel_$STAMP.json
+echo "(cleanup handled by trap)"
 
 echo "──"
 echo "edge-deep-tree: PASS=$PASS FAIL=$FAIL"

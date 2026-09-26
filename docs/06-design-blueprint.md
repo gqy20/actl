@@ -101,7 +101,9 @@ wait --window "保存" | --gone @e3                        # 等窗口出现 | �
 verify --exists @e3 / --value @e3 "x" / --checked @e8 / --order ...
 batch --json '<commands>'   # 单进程内顺序执行,共享 snapshot;每步结果与耗时进 steps[]
                              # (i/cmd/ok/duration_ms,失败步附 error),首错即停时
-                             # 已执行步随错误 evidence 带出(部分结果不丢失)
+                             # 已执行步随错误 evidence 带出(部分结果不丢失);
+                             # 本轮新开窗口差集上报 windows_created(title/pid/hwnd,
+                             # 清理地基;生命周期归编排层,CLI 不代管)
 ```
 
 ### 3.5 帮助系统规范(`-h` 的设计与层级)

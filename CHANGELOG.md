@@ -6,6 +6,16 @@
 ## [Unreleased]
 
 ### Added
+- **batch 窗口差集上报(spec,加法)**:进入时取窗口 hwnd 基线,结束时差集 = 本轮新开窗口,
+  非空时 data 与失败 evidence 携带 `windows_created: [{title,pid,hwnd}]`——生命周期仍归
+  编排层(原子 CLI 不代管、不悄悄关窗),清理地基闭环(list-windows 发现 → close-window
+  --pid/--hwnd 清除);
+- **fixtures 失败安全清理改造(窗口治理)**:全部 live fixture 换 trap EXIT 清理(成败/
+  中断必执行;hwnd 精确优雅关闭 + "不保存"对话框处理)、前置断言(环境脏即 ENV-DIRTY
+  fail-fast 并顺手清理)、**全面弃用 taskkill**(GUI 会话复活的根源:记事本 TabState+
+  云同步、计算器僵尸框架)。金任务 1 顺带自启化(不再依赖预开计算器);timing 两 fixture
+  的 taskkill 一并清除。实战:regress 六 fixture 全绿后**窗口/临时目录零残留**,
+  US1 16/16 恢复(此前环境阻塞)。
 - **一键回归入口**:`cargo xtask regress` / `make regress`——release 构建 + 顺序跑全部六个
   live fixtures(金任务 1/2、US1、验收 A/B/C)并汇总。Windows 陷阱实录:裸 "bash"
   解析到 System32 的 WSL bash(fixture 全线假败,报 WSL_E_DEFAULT_DISTRO_NOT_FOUND)——

@@ -203,3 +203,18 @@ fn window_commands_without_selector_is_protocol() {
     let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
     assert_eq!(v["error"]["code"], "PROTOCOL");
 }
+
+#[test]
+fn batch_reports_no_windows_created_on_headless_run() {
+    // windows_created:空差集时省略(token);CI 安全路径(status 不开窗)
+    let (code, stdout) = actl(&["batch", "--json", r#"["status"]"#]);
+    assert_eq!(code, 0);
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
+    let data = &v["data"];
+    assert!(
+        data.get("windows_created").is_none()
+            || data["windows_created"]
+                .as_array()
+                .is_some_and(|a| a.is_empty())
+    );
+}

@@ -37,6 +37,19 @@ assert_contains() {
 }
 
 # ── 1. 准备:60 个 padding(目标按字母序必在首屏外)+ 开窗 ───────────────
+# ── 失败安全清理(trap:目录窗口优雅关 + 临时目录删除)──
+close_all_by_title() {
+  local n=0 H
+  while [ $n -lt 12 ]; do
+    n=$((n+1))
+    H=$("$ACTL" list-windows 2>/dev/null | grep -o "{[^{}]*\"title\":\"[^\"]*$1[^\"]*\"[^{}]*}" | grep -o '"hwnd":[0-9]*' | head -1 | grep -o '[0-9]*')
+    [ -z "$H" ] && break
+    "$ACTL" close-window --hwnd "$H" >/dev/null 2>&1 || break
+    sleep 0.7
+  done
+}
+cleanup() { close_all_by_title "$DIR_NAME"; rm -rf "$DIR_UX"; }
+trap cleanup EXIT
 rm -rf "$DIR_UX"; mkdir -p "$DIR_UX"
 for i in $(seq -w 1 60); do echo "pad $i" > "$DIR_UX/f${i}_padding.txt"; done
 explorer "$DIR_WIN" &
@@ -56,9 +69,7 @@ assert_contains "get returns the file name" "\"$TARGET\""
 step "verify exists via L4" $ACTL verify --exists "name:$TARGET" --app "$DIR_NAME"
 
 # ── 5. 清理:关窗(优雅)+ 删目录 ───────────────────────────────────────
-step "close explorer window" $ACTL close-window "$DIR_NAME"
-sleep 1
-rm -rf "$DIR_UX"
+echo "(cleanup handled by trap)"
 
 echo "──"
 echo "virtualized-list: PASS=$PASS FAIL=$FAIL"

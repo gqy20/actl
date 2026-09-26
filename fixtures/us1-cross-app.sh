@@ -23,6 +23,31 @@ step() {
 }
 
 # ── 1. 计算器:123×456 → 读出结果 ─────────────────────────────────────
+# ── 失败安全清理 + 前置断言(三应用;GUI 禁 taskkill——记事本/计算器会话复活)──
+close_all_by_title() {
+  local n=0 H
+  while [ $n -lt 12 ]; do
+    n=$((n+1))
+    H=$("$ACTL" list-windows 2>/dev/null | grep -o "{[^{}]*\"title\":\"[^\"]*$1[^\"]*\"[^{}]*}" | grep -o '"hwnd":[0-9]*' | head -1 | grep -o '[0-9]*')
+    [ -z "$H" ] && break
+    "$ACTL" close-window --hwnd "$H" >/dev/null 2>&1 || break
+    sleep 0.7
+    "$ACTL" press n --app "是否" >/dev/null 2>&1
+    sleep 0.3
+  done
+}
+cleanup() {
+  close_all_by_title "Notepad"
+  close_all_by_title "计算器"
+  close_all_by_title "Documents"
+}
+trap cleanup EXIT
+for PAT in "Notepad" "计算器"; do
+  WINCNT=$("$ACTL" list-windows 2>/dev/null | grep -o "{[^{}]*\"title\":\"[^\"]*$PAT[^\"]*\"[^{}]*}" | wc -l)
+  if [ "$WINCNT" -gt 0 ]; then
+    echo "ENV-DIRTY: $PAT 窗口已存在 ×$WINCNT——已清理,请重跑本 fixture"; exit 1
+  fi
+done
 cmd //c "start shell:AppsFolder\\Microsoft.WindowsCalculator_8wekyb3d8bbwe!App"
 step "wait calculator window" $ACTL wait --window 计算器 --timeout 8000
 step "clear"            $ACTL click id:clearButton --app 计算器
@@ -73,7 +98,7 @@ step "verify explorer opened on Documents" \
 step "close saved tab" $ACTL press ctrl+w --app Notepad
 $ACTL close-window Documents >/dev/null 2>&1
 $ACTL close-window 计算 >/dev/null 2>&1
-sleep 1; taskkill //IM CalculatorApp.exe //F >/dev/null 2>&1
+sleep 1; "$ACTL" close-window "计算器" >/dev/null 2>&1
 rm -f "$F"
 
 echo "----"

@@ -57,7 +57,7 @@ sleep 2
 CALC_OK=$($ACTL find --role Button --app 计算器 --limit 40 2>/dev/null | grep -o '"total":[0-9]*' | cut -d: -f2)
 if [ "${CALC_OK:-0}" -lt 10 ]; then
   echo "calc-click: 跳过——计算器内容树未物化(buttons=${CALC_OK:-0};已知环境坑:僵尸框架后实例坏状态)" | tee -a "$OUT"
-  taskkill //IM CalculatorApp.exe //F >/dev/null 2>&1
+  "$ACTL" close-window "计算器" >/dev/null 2>&1
 else
   R=$(run_n "calc-click" 30 $ACTL click id:clearButton --app 计算器)
   stats "${R%% *}" ${R#* } | tee -a "$OUT"
@@ -92,7 +92,7 @@ else
 fi
 
 # ── 场景4:挂起计算器首命令(机会性;Windows 挂起时机不可控)───────────
-taskkill //IM CalculatorApp.exe //F >/dev/null 2>&1; sleep 1
+"$ACTL" close-window "计算器" >/dev/null 2>&1; sleep 1
 cmd //c "start shell:AppsFolder\\Microsoft.WindowsCalculator_8wekyb3d8bbwe!App" >/dev/null 2>&1
 "$ACTL" wait --window 计算器 --timeout 8000 >/dev/null 2>&1
 echo "等待 45s 观察 UWP 挂起(机会采样)…" >&2
@@ -102,7 +102,7 @@ if grep -q '"ok":true' /tmp/_tp.json; then
   W=$(grep -o '"wake_ms":[0-9]*' /tmp/_tp.json | cut -d: -f2 || echo "0")
   echo "calc-after-45s: $(dur /tmp/_tp.json)ms wake_ms=${W:-N/A}(wake_ms=0 表示未挂起,样本作废)" | tee -a "$OUT"
 fi
-taskkill //IM CalculatorApp.exe //F >/dev/null 2>&1
+"$ACTL" close-window "计算器" >/dev/null 2>&1
 
 echo >> "$OUT"
 echo "## 原始数据" >> "$OUT"

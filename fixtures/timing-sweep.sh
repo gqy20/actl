@@ -26,11 +26,11 @@ median() { printf '%s\n' "$@" | sort -n | awk '{a[NR]=$1} END {print a[int((NR+1
 # ── Q2:轮询间隔 → wait --window 检出延迟 ──────────────────────────────
 # 构造确定延迟事件:后台延时 1.5s 启动记事本,测 wait 从发令到检出(应≈1500+轮询粒度)
 echo "## Q2 轮询间隔 × wait 检出延迟(理论下限 = 间隔/2)" | tee -a "$OUT"
-taskkill //IM Notepad.exe //F >/dev/null 2>&1; sleep 1
+"$ACTL" close-window Notepad >/dev/null 2>&1; sleep 1
 for P in 50 100 250; do
   TIMES=""
   for _ in 1 2 3 4 5; do
-    taskkill //IM Notepad.exe //F >/dev/null 2>&1; sleep 1
+    "$ACTL" close-window Notepad >/dev/null 2>&1; sleep 1
     ( sleep 1.5 && cmd //c start notepad >/dev/null 2>&1 ) &
     ACTL_POLL_MS=$P "$ACTL" wait --window Notepad --timeout 10000 > /tmp/_sw.json 2>&1
     if grep -q '"ok":true' /tmp/_sw.json; then
@@ -41,7 +41,7 @@ for P in 50 100 250; do
   [ -n "$TIMES" ] && echo "poll=${P}ms: 中位检出开销 $(median $TIMES)ms(样本: $TIMES)" | tee -a "$OUT" \
                    || echo "poll=${P}ms: 无有效样本" | tee -a "$OUT"
 done
-taskkill //IM Notepad.exe //F >/dev/null 2>&1
+"$ACTL" close-window Notepad >/dev/null 2>&1
 
 # ── Q3:分批大小 → type 键盘通道吞吐(300 字符)────────────────────────
 echo >> "$OUT"; echo "## Q3 分批大小 × type 吞吐(300 字符键盘通道;停止粒度=批大小)" | tee -a "$OUT"
