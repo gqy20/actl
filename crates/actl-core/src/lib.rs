@@ -5,9 +5,11 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod keys;
 pub mod snapshot;
 pub mod target;
 
+pub use keys::{Key, KeySpec, parse_key_expr};
 pub use snapshot::{
     ElementOut, INTERACTIVE_ROLES, SnapshotBuilder, SnapshotOutput, UiNode, is_interactive_role,
     new_snapshot_id,

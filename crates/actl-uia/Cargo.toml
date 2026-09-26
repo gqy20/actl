@@ -10,6 +10,7 @@ license.workspace = true
 actl-core = { path = "../actl-core" }
 # M0 评估通过,升为正式依赖(docs/spike-findings.md);版本统一由根 Cargo.toml 管理(ADR-003)
 uiautomation.workspace = true
+windows = { workspace = true, features = ["Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"] }
 
 [lints]
 workspace = true

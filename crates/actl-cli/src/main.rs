@@ -61,6 +61,48 @@ enum Command {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
+    /// Type text into an element via keyboard (focuses the element first)
+    Type {
+        /// Target: @eN | name:<substr> | id:<AutomationId> | role:<Type>
+        target: String,
+        /// Text to type (literal)
+        text: String,
+        /// Target window by title substring (default: focused window)
+        #[arg(long)]
+        app: Option<String>,
+    },
+    /// Press a key combination acting on the current focus (e.g. ctrl+s)
+    Press {
+        /// Key expression: ctrl+s, ctrl+shift+t, enter, f5 ...
+        keys: String,
+        /// Focus this window first (title substring) — keys go to the OS foreground,
+        /// so multi-window flows must set the target before pressing
+        #[arg(long)]
+        app: Option<String>,
+        /// Post-condition predicate: window:<substr> (polls up to 2s by default)
+        #[arg(long)]
+        expect: Option<String>,
+        /// Timeout for --expect in milliseconds (default 2000)
+        #[arg(long)]
+        timeout: Option<u64>,
+    },
+    /// Set an element's value directly via UIA Value pattern (no keyboard)
+    SetValue {
+        /// Target: @eN | name:<substr> | id:<AutomationId> | role:<Type>
+        target: String,
+        /// Value to set
+        value: String,
+        /// Target window by title substring (default: focused window)
+        #[arg(long)]
+        app: Option<String>,
+    },
+    /// Bring a window to the foreground (keyboard commands act on global focus)
+    FocusWindow {
+        /// Window title substring
+        pattern: String,
+    },
+    /// List top-level windows (title, class, pid)
+    ListWindows,
 }
 
 /// 命令执行产物:data 进 envelope,`snapshot_id` 存在时附加到顶层(06 §4)。
@@ -94,6 +136,16 @@ fn main() {
             app,
         } => get(&target, property.as_deref(), app.as_deref()),
         Command::Launch { args } => launch(&args),
+        Command::Type { target, text, app } => type_cmd(&target, &text, app.as_deref()),
+        Command::Press {
+            keys,
+            app,
+            expect,
+            timeout,
+        } => press(&keys, app.as_deref(), expect.as_deref(), timeout),
+        Command::SetValue { target, value, app } => set_value_cmd(&target, &value, app.as_deref()),
+        Command::FocusWindow { pattern } => focus_window_cmd(&pattern),
+        Command::ListWindows => list_windows_cmd(),
     };
 
     let duration_ms = started.elapsed().as_millis() as u64;
@@ -133,6 +185,11 @@ fn command_name(cmd: &Command) -> &'static str {
         Command::Click { .. } => "click",
         Command::Get { .. } => "get",
         Command::Launch { .. } => "launch",
+        Command::Type { .. } => "type",
+        Command::Press { .. } => "press",
+        Command::SetValue { .. } => "set-value",
+        Command::FocusWindow { .. } => "focus-window",
+        Command::ListWindows => "list-windows",
     }
 }
 
@@ -253,4 +310,83 @@ fn launch(args: &[String]) -> Result<CommandOutput, CtlError> {
             )
         })?;
     Ok(json!({ "pid": child.id(), "program": program }).into())
+}
+
+fn type_cmd(target_raw: &str, text: &str, app: Option<&str>) -> Result<CommandOutput, CtlError> {
+    let target = actl_core::parse_target(target_raw)?;
+    let res = actl_uia::type_text(app, &target, text)?;
+    Ok(json!({
+        "action": "type",
+        "target": target.describe(),
+        "chars": text.chars().count(),
+        "resolved": { "role": res.role, "name": res.name },
+    })
+    .into())
+}
+
+fn press(
+    keys: &str,
+    app: Option<&str>,
+    expect: Option<&str>,
+    timeout: Option<u64>,
+) -> Result<CommandOutput, CtlError> {
+    let spec = actl_core::parse_key_expr(keys)?;
+    // 键盘作用于全局焦点:裸 SendInput 会打进当下前台(实测坑)。
+    // press_keys 内部在 --app 时先置前台并稳定窗(--app 语义,focus+delay 在 uia 层)。
+    let focused = actl_uia::press_keys(&spec, app)?;
+    let mut expect_window = None;
+    if let Some(raw) = expect {
+        let substr = parse_expect(raw)?;
+        // 06 §4:--expect = 执行后隐式 wait(默认 2s),失败 ASSERTION_FAILED
+        actl_uia::wait_window(&substr, timeout.unwrap_or(2000))?;
+        expect_window = Some(substr);
+    }
+    Ok(json!({
+        "action": "press",
+        "keys": keys,
+        "focused": focused,
+        "expect": expect_window,
+    })
+    .into())
+}
+
+fn set_value_cmd(
+    target_raw: &str,
+    value: &str,
+    app: Option<&str>,
+) -> Result<CommandOutput, CtlError> {
+    let target = actl_core::parse_target(target_raw)?;
+    let res = actl_uia::set_value(app, &target, value)?;
+    Ok(json!({
+        "action": "set-value",
+        "target": target.describe(),
+        "resolved": { "role": res.role, "name": res.name },
+    })
+    .into())
+}
+
+/// --expect 谓词 v1:仅 `window:<substr>`。
+fn parse_expect(raw: &str) -> Result<String, CtlError> {
+    raw.strip_prefix("window:")
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+        .ok_or_else(|| {
+            CtlError::protocol(format!(
+                "invalid --expect {raw:?}: only window:<substr> is supported"
+            ))
+        })
+}
+
+fn focus_window_cmd(pattern: &str) -> Result<CommandOutput, CtlError> {
+    let title = actl_uia::focus_window(pattern)?;
+    Ok(json!({ "action": "focus-window", "window": title }).into())
+}
+
+fn list_windows_cmd() -> Result<CommandOutput, CtlError> {
+    let wins = actl_uia::list_windows()?;
+    let list: Vec<Value> = wins
+        .into_iter()
+        .map(|(title, class, pid)| json!({ "title": title, "class": class, "pid": pid }))
+        .collect();
+    Ok(json!({ "windows": list, "count": list.len() }).into())
 }
