@@ -10,7 +10,7 @@ env:
 
 jobs:
   check:
-    name: fmt + clippy + test (windows-latest)
+    name: gate: file-lines + fmt + clippy + test (windows-latest)
     runs-on: windows-latest
     # 门禁单点:与 pre-push hook 同一实现(crates/xtask 的 gate 命令)
     steps:
@@ -23,5 +23,5 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Quality gate (fmt + clippy + test, single definition in xtask)
+      - name: Quality gate (file-lines + fmt + clippy + test, single definition in xtask)
         run: cargo xtask gate

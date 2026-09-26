@@ -63,7 +63,7 @@ computer_cli/
 | 集成 | fixtures 驱动(`cargo test --test integration`) | 真实驱动计算器/记事本/ms-settings 跑金任务的脚本化子集;CI 上跑,失败自动附 evidence |
 | 性能 | 手动基准脚本 | 冷启动 100 次采样 / snapshot 耗时;M1、M2 退出时记录,不进常规 CI |
 
-CI(GitHub Actions,`windows-latest`):`fmt --check` → `clippy -D warnings` → `test` →(main 分支)构建单 exe 上传 artifact。
+CI(GitHub Actions,`windows-latest`):`cargo xtask gate`(file-lines 单文件行数门禁 → `fmt --check` → `clippy -D warnings` → `test`)→(main 分支)构建单 exe 上传 artifact。行数门禁:crates/*/src 下 .rs 文件 >800 行警告、>1500 行失败(社区惯例手写代码 400–800 行/文件为宜;examples/tests 不扫,生成代码如引入须在 xtask 登记豁免)。
 
 ## 6. 构建与分发
 
