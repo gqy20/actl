@@ -10,6 +10,7 @@ pub mod snapshot;
 pub mod state;
 pub mod target;
 pub mod timing;
+pub mod trace;
 
 pub use keys::{Key, KeySpec, parse_key_expr};
 pub use snapshot::{

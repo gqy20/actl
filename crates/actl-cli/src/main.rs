@@ -314,8 +314,9 @@ enum Command {
         #[arg(long)]
         timeout: Option<u64>,
     },
-    /// Run multiple commands in one process (cold-start amortization;
-    /// stops on first error, prior results are lost from output)
+    /// Run multiple commands in one process (cold-start amortization);
+    /// stops on first error — per-step results and timings in `steps[]`,
+    /// partial steps ride the error evidence on failure
     Batch {
         /// JSON array of command strings, e.g. '["focus-window Notepad","press enter --app Notepad"]'
         #[arg(long)]
@@ -1096,7 +1097,8 @@ fn wait_cmd(
 }
 
 /// batch:单进程顺序执行(--json '["cmd args", ...]'),首错即停。
-/// 退出码沿用失败子命令的错误契约;M1 不带出部分结果(M2 加 partial)。
+/// 每步结果与耗时进 `steps[]`(编排层可观测:哪步慢、哪步开始等待);
+/// 失败时部分步骤随错误 evidence 带出(失败前的已执行步不再丢失)。
 fn batch_cmd(json_str: &str) -> Result<CommandOutput, CtlError> {
     let cmds: Vec<String> = serde_json::from_str(json_str).map_err(|e| {
         CtlError::protocol(format!(
@@ -1108,6 +1110,7 @@ fn batch_cmd(json_str: &str) -> Result<CommandOutput, CtlError> {
     }
     let signals = actl_core::state::SignalPaths::default();
     let mut executed = 0usize;
+    let mut steps: Vec<Value> = Vec::with_capacity(cmds.len());
     for (i, line) in cmds.iter().enumerate() {
         // 步间双闸门:停止标志(用户热键)优先;随后步级状态落盘(阶段信号)
         if signals.stop_requested() {
@@ -1132,18 +1135,33 @@ fn batch_cmd(json_str: &str) -> Result<CommandOutput, CtlError> {
         if let Command::Batch { .. } = sub.command {
             return Err(CtlError::protocol("batch cannot nest batch"));
         }
-        if let Err(err) = dispatch(&sub.command) {
-            return Err(CtlError::new(
-                err.code,
-                format!(
-                    "batch[{i}] {:?} failed after {executed} ok: {}",
-                    line, err.message
-                ),
-            ));
+        let step_started = Instant::now();
+        match dispatch(&sub.command) {
+            Ok(_) => {
+                steps.push(json!({
+                    "i": i, "cmd": line, "ok": true,
+                    "duration_ms": step_started.elapsed().as_millis() as u64,
+                }));
+            }
+            Err(err) => {
+                steps.push(json!({
+                    "i": i, "cmd": line, "ok": false,
+                    "duration_ms": step_started.elapsed().as_millis() as u64,
+                    "error": { "code": err.code, "message": err.message },
+                }));
+                return Err(CtlError::with_evidence(
+                    err.code,
+                    format!(
+                        "batch[{i}] {:?} failed after {executed} ok: {}",
+                        line, err.message
+                    ),
+                    json!({ "executed": executed, "steps": steps }),
+                ));
+            }
         }
         executed += 1;
     }
-    Ok(json!({ "executed": executed }).into())
+    Ok(json!({ "executed": executed, "steps": steps }).into())
 }
 
 fn list_windows_cmd() -> Result<CommandOutput, CtlError> {

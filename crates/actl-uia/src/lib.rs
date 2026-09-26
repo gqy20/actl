@@ -43,9 +43,12 @@ pub fn capture(app: Option<&str>) -> Result<CaptureResult, CtlError> {
     let auto = UIAutomation::new().map_err(internal)?;
     let walker = auto.create_tree_walker().map_err(internal)?;
 
-    let target = match app {
-        Some(pattern) => find_window(&auto, &walker, pattern)?,
-        None => top_level_of_focused(&auto, &walker)?,
+    let target = {
+        let _t = actl_core::trace::scope("capture.window");
+        match app {
+            Some(pattern) => find_window(&auto, &walker, pattern)?,
+            None => top_level_of_focused(&auto, &walker)?,
+        }
     };
 
     let window = WindowInfo {
@@ -53,11 +56,17 @@ pub fn capture(app: Option<&str>) -> Result<CaptureResult, CtlError> {
         class: target.get_classname().unwrap_or_default(),
         pid: target.get_process_id().unwrap_or_default(),
     };
-    let wake_ms = ensure_window_responsive(&target);
+    let wake_ms = {
+        let _t = actl_core::trace::scope("capture.wake");
+        ensure_window_responsive(&target)
+    };
     let window_runtime_id = target.get_runtime_id().unwrap_or_default();
 
     let mut nodes = Vec::new();
-    walk(&walker, &target, 0, None, &mut nodes);
+    {
+        let _t = actl_core::trace::scope("capture.walk");
+        walk(&walker, &target, 0, None, &mut nodes);
+    }
     let truncated = nodes.len() >= MAX_ELEMENTS;
     Ok(CaptureResult {
         window,
@@ -414,28 +423,35 @@ pub struct Located {
 pub fn locate(app: Option<&str>, target: &Target, near: Option<&str>) -> Result<Located, CtlError> {
     let auto = UIAutomation::new().map_err(internal)?;
     let walker = auto.create_tree_walker().map_err(internal)?;
-    let root = match app {
-        Some(pattern) => find_window(&auto, &walker, pattern)?,
-        None => {
-            // fail-closed:@eN 的编号只对快照来源窗口的遍历顺序有意义;对着
-            // "当前恰好聚焦的窗口"重放,前台一变就会静默点进别的应用(已实际发生)。
-            if matches!(target, Target::Ref(_)) {
-                return Err(CtlError::protocol(format!(
-                    "{} requires --app: refs are scoped to the window the snapshot came from; \
-                     pass --app <title-substr> or re-snapshot",
-                    target.describe()
-                )));
+    let root = {
+        let _t = actl_core::trace::scope("locate.window");
+        match app {
+            Some(pattern) => find_window(&auto, &walker, pattern)?,
+            None => {
+                // fail-closed:@eN 的编号只对快照来源窗口的遍历顺序有意义;对着
+                // "当前恰好聚焦的窗口"重放,前台一变就会静默点进别的应用(已实际发生)。
+                if matches!(target, Target::Ref(_)) {
+                    return Err(CtlError::protocol(format!(
+                        "{} requires --app: refs are scoped to the window the snapshot came from; \
+                         pass --app <title-substr> or re-snapshot",
+                        target.describe()
+                    )));
+                }
+                top_level_of_focused(&auto, &walker)?
             }
-            top_level_of_focused(&auto, &walker)?
         }
     };
     let window_title = root.get_name().unwrap_or_default();
     // 激活感知:挂起目标先唤醒(有界),避免 DFS 里逐调用 stall
-    let _wake_ms = ensure_window_responsive(&root);
+    let _wake_ms = {
+        let _t = actl_core::trace::scope("locate.wake");
+        ensure_window_responsive(&root)
+    };
 
     // @eN:计数重放,不参与 fallback(ref 漂移 = STALE_REF,模糊化反而危险)
     if let Target::Ref(n) = target {
         let mut counter = 0u32;
+        let _t = actl_core::trace::scope("locate.ref-replay");
         return match collect_until_ref(&walker, &root, 0, *n, &mut counter) {
             Some(hit) => Ok(located_from(hit, window_title, "ref-replay")),
             None => Err(CtlError::new(
@@ -455,12 +471,17 @@ pub fn locate(app: Option<&str>, target: &Target, near: Option<&str>) -> Result<
     let mut counter = 0u32;
     let mut matches = Vec::new();
     if let Target::Id(_) = target {
-        match fast_exact_ids(&auto, &root, target) {
+        let hits = {
+            let _t = actl_core::trace::scope("locate.fastpath");
+            fast_exact_ids(&auto, &root, target)
+        };
+        match hits {
             Some(hits) if hits.len() == 1 => {
                 return Ok(located_from(hits[0].clone(), window_title, "primary"));
             }
             Some(hits) if hits.is_empty() => {
                 // L1 确定空手(id: 无 fuzzy 层),直落 L4 虚拟化容器
+                let _t = actl_core::trace::scope("locate.l4");
                 if let Some(hit) = locate_virtualized(&walker, &root, target) {
                     return Ok(located_from(hit, window_title, "item-container"));
                 }
@@ -475,7 +496,10 @@ pub fn locate(app: Option<&str>, target: &Target, near: Option<&str>) -> Result<
             _ => {} // 多命中(候选需 ref 编号)或快路径不可用 → 全遍历
         }
     }
-    collect_matches(&walker, &root, 0, target, false, &mut counter, &mut matches);
+    {
+        let _t = actl_core::trace::scope("locate.dfs");
+        collect_matches(&walker, &root, 0, target, false, &mut counter, &mut matches);
+    }
 
     // L2 名称模糊(仅 name: 目标且 L1 空手时):大小写/空白不敏感
     if matches.is_empty() {
@@ -497,7 +521,11 @@ pub fn locate(app: Option<&str>, target: &Target, near: Option<&str>) -> Result<
         }
         // L4 虚拟化容器(spike 2026-09-26 证真:Explorer 文件列表的 ListItem 不物化,
         // walker 遍历恒 0 命中;ItemContainerPattern::FindItemByProperty 精确命中)
-        if let Some(hit) = locate_virtualized(&walker, &root, target) {
+        let l4 = {
+            let _t = actl_core::trace::scope("locate.l4");
+            locate_virtualized(&walker, &root, target)
+        };
+        if let Some(hit) = l4 {
             return Ok(located_from(hit, window_title, "item-container"));
         }
         return Err(CtlError::new(
@@ -898,6 +926,7 @@ pub fn click(
     near: Option<&str>,
 ) -> Result<(Located, &'static str), CtlError> {
     let loc = locate(app, target, near)?;
+    let _t = actl_core::trace::scope("click.pattern");
     if let Ok(invoke) = loc.element.get_pattern::<UIInvokePattern>() {
         invoke.invoke().map_err(internal)?;
         return Ok((loc, "invoke"));
