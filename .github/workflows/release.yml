@@ -82,6 +82,24 @@ jobs:
           cat checksums.txt
           ls -la
 
+      # ── 原 artifact 中转路径(2026-09-26 因账号级存储配额暂停,保留备用)──
+      # 配额恢复后想切回三段式:取消下两段注释,并把本 job 拆回 build/publish 两 job
+      # (publish 用 download-artifact 取回 dist 后再 gh release create)。
+      # 配额实况:删除 artifact 后 6-12h 才重算,v0.1.0 发版曾连续两次被阻断。
+      #
+      # - name: Upload packaged artifact
+      #   uses: actions/upload-artifact@v7
+      #   with:
+      #     name: release-windows-amd64
+      #     path: dist/*
+      #     if-no-files-found: error
+      #
+      # publish job 的取回步骤(ubuntu):
+      # - uses: actions/download-artifact@v8
+      #   with:
+      #     path: dist
+      #     merge-multiple: true
+
       - name: Extract release notes from CHANGELOG
         shell: bash
         run: |
