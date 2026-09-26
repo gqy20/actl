@@ -14,7 +14,8 @@ use actl_core::state::{Phase, SessionState, SignalPaths};
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, RECT, WAIT_OBJECT_0, WPARAM};
 use windows::Win32::Graphics::Gdi::{
     BeginPaint, CreateSolidBrush, DT_END_ELLIPSIS, DT_LEFT, DT_SINGLELINE, DT_VCENTER,
-    DeleteObject, DrawTextW, EndPaint, FillRect, HGDIOBJ, InvalidateRect,
+    DeleteObject, DrawTextW, Ellipse, EndPaint, FillRect, GetStockObject, HGDIOBJ, InvalidateRect,
+    NULL_PEN,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Threading::OpenMutexW;
@@ -36,6 +37,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::w;
 
+static HOTKEY_OK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 const WIDTH: i32 = 420;
 const HEIGHT: i32 = 96;
 
@@ -79,12 +81,12 @@ fn state_line(s: &SessionState) -> String {
     let step = s
         .step
         .as_deref()
-        .map(|x| format!(" · 步 {x}"))
+        .map(|x| format!(" {x}"))
         .unwrap_or_default();
     let app = s
         .app
         .as_deref()
-        .map(|a| format!(" · 目标 {a}"))
+        .map(|a| format!(" → {a}"))
         .unwrap_or_default();
     format!("{}{}{}", s.command, app, step)
 }
@@ -94,8 +96,8 @@ fn poll() -> Snapshot {
     if paths.stop_requested() {
         return Snapshot {
             mode: Mode::Stopped,
-            line1: "已请求停止 · 在途动作将在边界退出".into(),
-            line2: "点击本条清除停止标志后可恢复".into(),
+            line1: "停止请求".into(),
+            line2: "点击解除".into(),
         };
     }
     let lock_held = input_lock_held();
@@ -111,37 +113,34 @@ fn poll() -> Snapshot {
                 .as_ref()
                 .map(state_line)
                 .unwrap_or_else(|| "未知命令".into()),
-            line2: "正在操控物理输入(键盘/鼠标)".into(),
+            line2: "注入中".into(),
         };
     }
     match st {
         Some(s) if age <= STALE_MS && s.phase == Phase::Running => Snapshot {
             mode: Mode::Busy,
             line1: state_line(&s),
-            line2: "命令执行中 · 未占用物理输入".into(),
+            line2: "执行中".into(),
         },
         Some(s) if age <= STALE_MS => Snapshot {
             mode: Mode::Idle,
             line1: state_line(&s),
-            line2: format!(
-                "最近命令已结束({})",
-                match s.phase {
-                    Phase::Done => "成功",
-                    Phase::Error => "失败",
-                    Phase::Stopped => "被停止",
-                    Phase::Running => unreachable!(),
-                }
-            ),
+            line2: match s.phase {
+                Phase::Done => "✓ 完成".to_string(),
+                Phase::Error => "✗ 失败".to_string(),
+                Phase::Stopped => "已停止".to_string(),
+                Phase::Running => unreachable!(),
+            },
         },
         Some(_) => Snapshot {
             mode: Mode::Stale,
-            line1: "状态失联(超过 10 秒无心跳)".into(),
-            line2: "不显示成功或安全;请自行确认桌面状态".into(),
+            line1: "actl".into(),
+            line2: "失联 >10s".into(),
         },
         None => Snapshot {
             mode: Mode::Idle,
-            line1: "actl 信号".into(),
-            line2: "空闲 · Ctrl+Alt+F12 紧急停止".into(),
+            line1: "actl".into(),
+            line2: "空闲".into(),
         },
     }
 }
@@ -225,13 +224,14 @@ unsafe fn draw(hwnd: HWND, snap: &Snapshot) {
 
     // BGR 恒定深底
     const BG: u32 = 0x001E_1E1E;
-    // (accent 色条, 状态行文字)按模式
-    let (accent, state_fg) = match snap.mode {
-        Mode::Stopped => (0x0040_40b0u32, 0x006A_6AFFu32), // 红
-        Mode::Active => (0x0078_5020u32, 0x0050_a0ffu32),  // 琥珀
-        Mode::Busy => (0x0096_9696u32, 0x00c8_c8c8u32),    // 浅灰
-        Mode::Idle => (0x0050_5050u32, 0x00a0_a0a0u32),    // 灰
-        Mode::Stale => (0x0028_2828u32, 0x0080_8080u32),   // 暗
+    // (状态点色, 状态行文字色)——市场通行信号色(GitHub/VS Code/CI 状态灯):
+    // 绿=正常执行中 · 琥珀=占用物理输入(需留意) · 红=停止 · 灰=空闲 · 暗=失联
+    let (dot, state_fg) = match snap.mode {
+        Mode::Stopped => (0x0049_51F8u32, 0x0049_51F8u32), // 红 #F85149
+        Mode::Active => (0x0041_B3E3u32, 0x0041_B3E3u32),  // 琥珀 #E3B341
+        Mode::Busy => (0x0050_B93Fu32, 0x0050_B93Fu32),    // 绿 #3FB950
+        Mode::Idle => (0x009E_948Bu32, 0x009E_948Bu32),    // 灰 #8B949E
+        Mode::Stale => (0x0081_766Eu32, 0x0081_766Eu32),   // 暗 #6E7681
     };
 
     let fill = |r: &RECT, color: u32| {
@@ -240,16 +240,6 @@ unsafe fn draw(hwnd: HWND, snap: &Snapshot) {
         let _ = DeleteObject(HGDIOBJ(b.0));
     };
     fill(&rc, BG);
-    // 左侧 6px 模式色条
-    fill(
-        &RECT {
-            left: 0,
-            top: 0,
-            right: 6,
-            bottom: rc.bottom,
-        },
-        accent,
-    );
 
     let dt = DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS | DT_VCENTER;
     let left = scale(18);
@@ -270,8 +260,11 @@ unsafe fn draw(hwnd: HWND, snap: &Snapshot) {
         right: rc.right - scale(12),
         bottom: scale(38),
     };
+    // 状态行:圆点 + 文字(dot 直径 ~ 状态字号,垂直居中于状态行)
+    let dot_d = scale(11);
+    let dot_y = scale(54) - dot_d / 2;
     let mut r2 = RECT {
-        left,
+        left: left + dot_d + scale(9),
         top: scale(44),
         right: rc.right - scale(12),
         bottom: scale(64),
@@ -282,14 +275,24 @@ unsafe fn draw(hwnd: HWND, snap: &Snapshot) {
         right: rc.right - scale(12),
         bottom: scale(88),
     };
-    line(&mut r1, &snap.line1, 17, 0x00E8_E8E8);
+    line(&mut r1, &snap.line1, 17, 0x00F3_EDE6);
+    // 状态点:实心圆 + 无边框(NULL_PEN),深底上的信号灯
+    {
+        let b = CreateSolidBrush(COLORREF(dot));
+        let old_br = SelectObject(hdc, HGDIOBJ(b.0));
+        let old_pen = SelectObject(hdc, GetStockObject(NULL_PEN));
+        let _ = Ellipse(hdc, left, dot_y, left + dot_d, dot_y + dot_d);
+        SelectObject(hdc, old_pen);
+        SelectObject(hdc, old_br);
+        let _ = DeleteObject(HGDIOBJ(b.0));
+    }
     line(&mut r2, &snap.line2, 13, state_fg);
-    line(
-        &mut r3,
-        "Ctrl+Alt+F12 紧急停止 · 点击本条=清除停止 · 关闭窗口=退出",
-        11,
-        0x006E_6E6E,
-    );
+    let hint = if HOTKEY_OK.load(std::sync::atomic::Ordering::Relaxed) {
+        "Ctrl+Alt+F12 停止 · 点击解除 · ✕ 退出"
+    } else {
+        "点击本条=停止 · 再点=解除 · ✕ 退出"
+    };
+    line(&mut r3, hint, 11, 0x006E_6E6E);
     let _ = EndPaint(hwnd, &ps);
 }
 
