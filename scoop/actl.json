@@ -1,12 +1,12 @@
 {
-    "version": "0.1.1",
+    "version": "0.1.2",
     "description": "Let AI agents operate Windows desktop apps via UIA - structured, verifiable, no screenshots",
     "homepage": "https://github.com/gqy20/actl",
     "license": "MIT",
     "architecture": {
         "64bit": {
-            "url": "https://github.com/gqy20/actl/releases/download/v0.1.1/actl_v0.1.1_windows_amd64.exe#/actl.exe",
-            "hash": "ba6df8912e764de232311fdf3f8a608bf7332b46213ff8b5710f537a77e99d4c",
+            "url": "https://github.com/gqy20/actl/releases/download/v0.1.2/actl_v0.1.2_windows_amd64.exe#/actl.exe",
+            "hash": "7a67a7a795af08417192d866de5bad9894d41e28204b3845967b872804d31a3b",
             "bin": "actl.exe"
         }
     },
