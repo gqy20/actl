@@ -29,7 +29,7 @@ enum Command {
     Status,
     /// Capture the interactive element tree of a window as refs (@e1..)
     Snapshot {
-        /// Target window by title substring (default: focused window)
+        /// Target window by title substring (@eN refs require it; otherwise focused window)
         #[arg(long)]
         app: Option<String>,
         /// Keep only interactive elements and their ancestor chain (token saver)
@@ -38,20 +38,20 @@ enum Command {
     },
     /// Click an element via UIA Invoke (background, no physical mouse)
     Click {
-        /// Target: @eN | name:<substr> | id:<AutomationId> | role:<Type>
+        /// Target: @eN (needs --app) | name:<substr> | id:<AutomationId> | role:<Type>
         target: String,
-        /// Target window by title substring (default: focused window)
+        /// Target window by title substring (@eN refs require it; otherwise focused window)
         #[arg(long)]
         app: Option<String>,
     },
     /// Read properties of an element
     Get {
-        /// Target: @eN | name:<substr> | id:<AutomationId> | role:<Type>
+        /// Target: @eN (needs --app) | name:<substr> | id:<AutomationId> | role:<Type>
         target: String,
         /// Property: name | role | automation_id | offscreen | value (default: all)
         #[arg(long)]
         property: Option<String>,
-        /// Target window by title substring (default: focused window)
+        /// Target window by title substring (@eN refs require it; otherwise focused window)
         #[arg(long)]
         app: Option<String>,
     },
@@ -63,11 +63,11 @@ enum Command {
     },
     /// Type text into an element via keyboard (focuses the element first)
     Type {
-        /// Target: @eN | name:<substr> | id:<AutomationId> | role:<Type>
+        /// Target: @eN (needs --app) | name:<substr> | id:<AutomationId> | role:<Type>
         target: String,
         /// Text to type (literal)
         text: String,
-        /// Target window by title substring (default: focused window)
+        /// Target window by title substring (@eN refs require it; otherwise focused window)
         #[arg(long)]
         app: Option<String>,
     },
@@ -88,11 +88,11 @@ enum Command {
     },
     /// Set an element's value directly via UIA Value pattern (no keyboard)
     SetValue {
-        /// Target: @eN | name:<substr> | id:<AutomationId> | role:<Type>
+        /// Target: @eN (needs --app) | name:<substr> | id:<AutomationId> | role:<Type>
         target: String,
         /// Value to set
         value: String,
-        /// Target window by title substring (default: focused window)
+        /// Target window by title substring (@eN refs require it; otherwise focused window)
         #[arg(long)]
         app: Option<String>,
     },

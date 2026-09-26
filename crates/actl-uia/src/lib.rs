@@ -59,23 +59,48 @@ pub fn capture(app: Option<&str>) -> Result<CaptureResult, CtlError> {
 }
 
 /// 在顶层窗口中按标题子串定位首个匹配;无匹配 → NOT_FOUND(06 §4)。
+/// 顶层窗口 + 挂靠宿主的 owned dialog(IFileSaveDialog 等不是 root 的直接子节点,
+/// 实测新记事本的"另存为"在宿主窗口的 depth-1,以 role=Window 挂靠)。
+fn scan_top_window(auto: &UIAutomation, walker: &UITreeWalker, pattern: &str) -> Option<UIElement> {
+    let root = auto.get_root_element().ok()?;
+    let mut child = walker.get_first_child(&root).ok();
+    while let Some(w) = child {
+        if name_matches(&w, pattern) {
+            return Some(w);
+        }
+        let mut sub = walker.get_first_child(&w).ok();
+        while let Some(d) = sub {
+            if d.get_control_type()
+                .map(|t| t == ControlType::Window)
+                .unwrap_or(false)
+                && name_matches(&d, pattern)
+            {
+                return Some(d);
+            }
+            sub = walker.get_next_sibling(&d).ok();
+        }
+        child = walker.get_next_sibling(&w).ok();
+    }
+    None
+}
+
+fn name_matches(elem: &UIElement, pattern: &str) -> bool {
+    elem.get_name()
+        .map(|n| n.contains(pattern))
+        .unwrap_or(false)
+}
+
 fn find_window(
     auto: &UIAutomation,
     walker: &UITreeWalker,
     pattern: &str,
 ) -> Result<UIElement, CtlError> {
-    let root = auto.get_root_element().map_err(internal)?;
-    let mut child = walker.get_first_child(&root).ok();
-    while let Some(w) = child {
-        if w.get_name().map(|n| n.contains(pattern)).unwrap_or(false) {
-            return Ok(w);
-        }
-        child = walker.get_next_sibling(&w).ok();
-    }
-    Err(CtlError::new(
-        ErrorCode::NotFound,
-        format!("no top-level window title contains {pattern:?}"),
-    ))
+    scan_top_window(auto, walker, pattern).ok_or_else(|| {
+        CtlError::new(
+            ErrorCode::NotFound,
+            format!("no top-level window title contains {pattern:?}"),
+        )
+    })
 }
 
 /// 焦点元素沿父链上行到顶层窗口。
@@ -146,7 +171,18 @@ pub fn locate(app: Option<&str>, target: &Target) -> Result<Located, CtlError> {
     let walker = auto.create_tree_walker().map_err(internal)?;
     let root = match app {
         Some(pattern) => find_window(&auto, &walker, pattern)?,
-        None => top_level_of_focused(&auto, &walker)?,
+        None => {
+            // fail-closed:@eN 的编号只对快照来源窗口的遍历顺序有意义;对着
+            // "当前恰好聚焦的窗口"重放,前台一变就会静默点进别的应用(已实际发生)。
+            if matches!(target, Target::Ref(_)) {
+                return Err(CtlError::protocol(format!(
+                    "{} requires --app: refs are scoped to the window the snapshot came from; \
+                     pass --app <title-substr> or re-snapshot",
+                    target.describe()
+                )));
+            }
+            top_level_of_focused(&auto, &walker)?
+        }
     };
     let window_title = root.get_name().unwrap_or_default();
 
@@ -291,8 +327,6 @@ pub fn read_property(
 
 // ---------- 输入组(type / press / set-value)与窗口等待 ----------
 
-use uiautomation::inputs::Keyboard;
-
 /// 键盘命令家族说明:type/press 走 SendInput 键盘事件(键盘语义命令的执行本体,
 /// 非物理"兜底",ADR-007 的 --physical 约束针对 click/scroll 等 UIA 等价物的兜底路径)。
 pub struct InputResult {
@@ -324,7 +358,27 @@ pub fn type_text(app: Option<&str>, target: &Target, text: &str) -> Result<Input
             ),
         )
     })?;
-    Keyboard::new().send_text(text).map_err(internal)?;
+    // 护栏与 press 相同:元素置焦后仍要物理前台核对,文本才允许注入
+    if let Some(pattern) = app {
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        let fg = kbd::foreground_title().unwrap_or_default();
+        if !fg.contains(pattern) {
+            return Err(CtlError::new(
+                ErrorCode::PermDenied,
+                format!(
+                    "text injection ABORTED by verify-then-inject guard: \
+                     physical foreground is {fg:?}, expected a window matching {pattern:?}; \
+                     no text was sent"
+                ),
+            ));
+        }
+    }
+    // 自建管线(uiautomation crate 的 Keyboard 有 wScan=0 缺陷,见 kbd.rs 模块注释)
+    let spec = KeySpec {
+        modifiers: Vec::new(),
+        keys: text.chars().map(actl_core::keys::Key::Char).collect(),
+    };
+    kbd::send_key_spec(&spec)?;
     Ok((&loc).into())
 }
 
@@ -339,11 +393,10 @@ pub fn press_keys(spec: &KeySpec, app: Option<&str>) -> Result<Option<String>, C
     let focused = match app {
         Some(pattern) => {
             let title = focus_window(pattern)?;
-            std::thread::sleep(std::time::Duration::from_millis(150));
-            if let Some(edit) = find_editable_element(pattern) {
-                edit.set_focus().map_err(internal)?;
-                std::thread::sleep(std::time::Duration::from_millis(50));
-            }
+            std::thread::sleep(std::time::Duration::from_millis(120));
+            // 元素聚焦是异步请求且存在竞态(实测固定延时忽好忽坏):
+            // 反复 SetFocus 并验证 UIA 焦点元素真的变为可编辑角色,最多 3 轮
+            ensure_element_focus(pattern)?;
             // 护栏:物理前台必须是目标窗口,否则注入会打进别处(已发生过真实事故)
             let fg = kbd::foreground_title().unwrap_or_default();
             if !fg.contains(pattern) {
@@ -362,6 +415,29 @@ pub fn press_keys(spec: &KeySpec, app: Option<&str>) -> Result<Option<String>, C
     };
     kbd::send_key_spec(spec)?;
     Ok(focused)
+}
+
+/// 反复对窗口内可编辑元素 SetFocus,直到 UIA 焦点元素确为 Document/Edit(SetFocus
+/// 是异步请求,单次调用+固定延时存在竞态)。窗口无可编辑元素时(纯按钮面板)直接通过。
+fn ensure_element_focus(pattern: &str) -> Result<(), CtlError> {
+    for _ in 0..3 {
+        if let Some(edit) = find_editable_element(pattern) {
+            let _ = edit.set_focus();
+        }
+        std::thread::sleep(std::time::Duration::from_millis(120));
+        if let Ok(auto) = UIAutomation::new() {
+            if let Ok(f) = auto.get_focused_element() {
+                if let Ok(ct) = f.get_control_type() {
+                    let role = format!("{ct:?}");
+                    if role == "Document" || role == "Edit" {
+                        return Ok(());
+                    }
+                }
+            }
+        }
+    }
+    // 无可编辑元素的窗口(计算器等)不算失败:窗口前置 + 护栏已足够
+    Ok(())
 }
 
 /// 在标题匹配的窗口内找首个 Document/Edit(元素级键盘焦点的落点)。
@@ -428,17 +504,7 @@ pub fn wait_window(substr: &str, timeout_ms: u64) -> Result<String, CtlError> {
 }
 
 fn scan_top_windows(auto: &UIAutomation, walker: &UITreeWalker, substr: &str) -> Option<String> {
-    let root = auto.get_root_element().ok()?;
-    let mut child = walker.get_first_child(&root).ok();
-    while let Some(w) = child {
-        if let Ok(n) = w.get_name() {
-            if n.contains(substr) {
-                return Some(n);
-            }
-        }
-        child = walker.get_next_sibling(&w).ok();
-    }
-    None
+    scan_top_window(auto, walker, substr).and_then(|w| w.get_name().ok())
 }
 
 /// focus-window:把标题匹配的顶层窗口带到前台(UIA SetFocus,即等效前台)。
@@ -472,6 +538,26 @@ pub fn list_windows() -> Result<Vec<(String, String, u32)>, CtlError> {
                     w.get_process_id().unwrap_or_default(),
                 ));
             }
+        }
+        // owned dialog(挂靠宿主的 depth-1 Window,如"另存为")也要列出来,
+        // 否则 agent 选目标时会漏掉当前真正的前台对话框
+        let mut sub = walker.get_first_child(&w).ok();
+        while let Some(d) = sub {
+            if d.get_control_type()
+                .map(|t| t == ControlType::Window)
+                .unwrap_or(false)
+            {
+                if let Ok(t) = d.get_name() {
+                    if !t.is_empty() {
+                        out.push((
+                            t,
+                            d.get_classname().unwrap_or_default(),
+                            d.get_process_id().unwrap_or_default(),
+                        ));
+                    }
+                }
+            }
+            sub = walker.get_next_sibling(&d).ok();
         }
         child = walker.get_next_sibling(&w).ok();
     }

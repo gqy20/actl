@@ -27,6 +27,10 @@ fn main() {
     let result = match mode {
         "windows" => list_windows(&auto),
         "focused" => show_focused(&auto),
+        "fginfo" => {
+            fginfo::run();
+            Ok(())
+        }
         "tree" => dump_tree(&auto, args.get(1).map(String::as_str), args.get(2)),
         _ => {
             eprintln!("modes: windows | focused | tree <pid|name-substr> [max_depth]");
@@ -197,5 +201,44 @@ fn walk(
     while let Some(c) = child {
         walk(walker, &c, depth + 1, max_depth, stats, printed);
         child = walker.get_next_sibling(&c).ok();
+    }
+}
+
+// fginfo:物理层焦点诊断(GetForegroundWindow + GetGUIThreadInfo.hwndFocus)
+// fginfo:物理层焦点诊断(GetForegroundWindow + GetGUIThreadInfo.hwndFocus 的真实类名)
+mod fginfo {
+    #![allow(unsafe_code)] // 诊断工具,Win32 直调
+
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GUITHREADINFO, GetClassNameW, GetForegroundWindow, GetGUIThreadInfo, GetWindowTextW,
+    };
+
+    pub fn run() {
+        unsafe {
+            let fg = GetForegroundWindow();
+            let mut buf = [0u16; 256];
+            GetWindowTextW(fg, &mut buf);
+            println!("foreground : {}", String::from_utf16_lossy(&buf));
+            let mut class = [0u16; 256];
+            GetClassNameW(fg, &mut class);
+            println!("fg class   : {}", String::from_utf16_lossy(&class));
+
+            let mut info = GUITHREADINFO {
+                cbSize: std::mem::size_of::<GUITHREADINFO>() as u32,
+                ..Default::default()
+            };
+            // 0 = 前台线程
+            if GetGUIThreadInfo(0, &mut info).is_ok() {
+                let mut cbuf = [0u16; 256];
+                let n = GetClassNameW(info.hwndFocus, &mut cbuf);
+                println!(
+                    "focus hwnd : {} class={}",
+                    info.hwndFocus.0 as usize,
+                    String::from_utf16_lossy(&cbuf[..n.max(0) as usize])
+                );
+            } else {
+                println!("GetGUIThreadInfo failed");
+            }
+        }
     }
 }

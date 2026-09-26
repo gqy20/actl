@@ -6,6 +6,10 @@
 ## [Unreleased]
 
 ### Added
+- **M1 键盘/文本命令族**:`type`(元素置焦+护栏+逐字注入)、`press`(组合键,`--expect window:<substr>` 后置断言轮询)、`set-value`(UIValuePattern 写值)、`focus-window`、`list-windows`;自建 SendInput 管线 `actl-uia::kbd` 取代 uiautomation crate 的 Keyboard。
+- **金任务 2 达成 7/7**(fixtures/golden-task-2.sh):type → ctrl+s → 另存为对话框(--expect 断言)→ set-value 文件名 → enter → **磁盘内容逐字一致终验**;覆盖键盘文本、组合键、系统对话框、ValuePattern、跨窗口护栏五类能力。
+- 双通道注入规则(实测驱动,docs/spike-findings.md):组合键成员 → VK 通道(VkKeyScanW 映射,IME 不拦 ctrl+键);纯文本 → KEYEVENTF_UNICODE(绕 IME)。修饰键用通用 VK_CONTROL/VK_MENU/VK_SHIFT(AHK/pywinauto 同款),清场全集 11 键。
+- `type` 补齐 verify-then-inject 护栏(此前仅 press 有)。
 - 命名决策:项目定名 **actl**(agent control);bin `actl`、crate `actl-cli`(冲突查证见 docs/06 §1)。
 - 命令面设计定稿:扁平动词式 + 命名四规则 + `commands` 自发现命令 + L1/L2/L3 分层模型与解耦/整合原则(docs/06 §3)。
 - 帮助系统规范:`-h` 三级层级、stdout 协议例外条款(--help/--version)、help 英文与同源生成(docs/06 §3.5)。
@@ -19,6 +23,13 @@
 - `cargo xtask` 任务入口(setup/gate/fmt):门禁实现收敛为 xtask 单点,pre-push 与 CI 均调用 `cargo xtask gate`;Makefile 作为惯例入口保留(纯转发层)。
 - tag 驱动的 release 流水线(verify→build→publish,对齐 zotero_cli 体系;流程文档 docs/TECH_STACK §6)。
 - pre-commit hook 增加 merge-conflict 标记检查(等价 pre-commit-hooks 官方集)。
+
+### Fixed
+- **[BC] `@eN` ref 未指定 `--app` 直接 PROTOCOL 拒绝**(exit 2):ref 绑定快照来源窗口的遍历顺序,前台漂移时曾静默点进无关应用;跨步骤定位改用语义选择器(如 `id:1001`)。
+- **owned dialog 不可见**:"另存为"等 IFileSaveDialog 挂靠宿主窗口 depth-1,不在 UIA root 直接子节点——`find_window`/`list-windows`/`--expect` 轮询此前全部漏扫;现同时扫 root 子节点 + 各顶层窗口的直接子 Window。
+- **组合键退化裸键**:`ctrl+s` 被目标当文本打出孤立 's'(KEYEVENTF_UNICODE 不携带修饰键语义);组合键成员改走 VK 通道。
+- **纯文本被 IME 改写**:空格吞成上屏确认、半角标点全角化;纯文本固定走 UNICODE 通道。
+- **窗口标题假信号**:效果断言改用 UIA Value 内容读回 + 磁盘终验(金任务 2 第 3/7 步);新记事本设置页打开时标题仍是文档名,视图判据改用 UIA 树中 Document 元素存在性。
 
 ### Changed
 - **[BC]** 全部 crate 由 `ctl-*` 更名为 `actl-*`,bin 名 `actl`。
