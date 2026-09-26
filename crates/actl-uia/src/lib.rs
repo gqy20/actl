@@ -305,7 +305,10 @@ fn internal(e: impl std::fmt::Debug) -> CtlError {
 // ---------- 定位与交互(locate / click / read_property) ----------
 
 use actl_core::target::Target;
-use uiautomation::patterns::{UIInvokePattern, UISelectionItemPattern, UIValuePattern};
+use uiautomation::patterns::{
+    UIExpandCollapsePattern, UIInvokePattern, UISelectionItemPattern, UITogglePattern,
+    UIValuePattern,
+};
 
 /// 定位结果:命中元素 + 所在窗口。
 pub struct Located {
@@ -424,11 +427,21 @@ pub fn click(app: Option<&str>, target: &Target) -> Result<(Located, &'static st
         sel.select().map_err(internal)?;
         return Ok((loc, "selection-item"));
     }
+    // 复选框/开关:点击语义 = Toggle(状态翻转)
+    if let Ok(toggle) = loc.element.get_pattern::<UITogglePattern>() {
+        toggle.toggle().map_err(internal)?;
+        return Ok((loc, "toggle"));
+    }
+    // 折叠面板/树节点:点击语义 = ExpandCollapse
+    if let Ok(exp) = loc.element.get_pattern::<UIExpandCollapsePattern>() {
+        exp.expand().map_err(internal)?;
+        return Ok((loc, "expand-collapse"));
+    }
     Err(CtlError::new(
         ErrorCode::NotActionable,
         format!(
-            "{} ({}) exposes neither Invoke nor SelectionItem pattern; scroll/focus first, \
-             or try `set-value` — physical fallback arrives with --physical (M2)",
+            "{} ({}) exposes none of Invoke/SelectionItem/Toggle/ExpandCollapse; \
+             scroll/focus first, try `set-value`, or `--physical` for a real click",
             target.describe(),
             loc.role
         ),
@@ -1014,6 +1027,8 @@ pub fn click_physical(
     }
 
     let _lock = input::InputLock::acquire(input::LOCK_TIMEOUT_MS)?;
+    // 修饰键空置检查:ctrl 按住时的物理点击 = ctrl+click(语义劫持)
+    kbd::wait_modifiers_clear()?;
     mouse::left_click_at(px, py)?;
     Ok((loc, (px, py)))
 }

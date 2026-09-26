@@ -27,7 +27,7 @@ Phase 3  T+3月起,长期     生产级打磨      v1.0    (协议冻结,生态�
 > stall ~2s,操作前探测唤醒);③`--physical` 规范裁定(06 蓝图)+物理鼠标链
 > (doc 09 §6 七步:right-click/drag/hover/scroll 的共同前置);④小项:修饰键
 > 只清自己按下的、Toggle/ExpandCollapse/ScrollItem 分发、`snapshot_id` ref
-> 版本化校验。
+> 版本化校验(后移第二批:依赖快照持久化/会话状态设计,与 fallback 定位链同做)。
 > **第二批·命令面与定位链**:45+ 命令补全、fallback 定位链(resolved_by)。
 > **收尾·对外发布**:README 示例、crates.io、scoop;同步发布 Agent Skill
 > (SKILL.md + envelope 生成的错误码恢复指南,docs/12 §3.4:品类空缺、成本极低)。

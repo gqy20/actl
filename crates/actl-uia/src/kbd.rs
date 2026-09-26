@@ -114,7 +114,7 @@ fn modifier_vk(name: &str) -> VIRTUAL_KEY {
     }
 }
 
-/// 清场全集:通用 + 左右手变体,共 11 个。
+/// 检测全集:通用 + 左右手变体,共 11 个(held_modifiers 的检测范围)。
 fn all_modifier_vks() -> [VIRTUAL_KEY; 11] {
     [
         VK_CONTROL,
@@ -131,17 +131,20 @@ fn all_modifier_vks() -> [VIRTUAL_KEY; 11] {
     ]
 }
 
-/// 对全部修饰键发送 UP(幂等):清除任何残留的按下状态。
-pub fn release_all_modifiers() {
-    let ups: Vec<INPUT> = all_modifier_vks()
+/// 当前物理按下的修饰键名字(用户按住,或历史注入残留——两者不可靠区分,
+/// doc 09 §3.4)。GetKeyState 高位 = 按下。
+pub fn held_modifiers() -> Vec<&'static str> {
+    use windows::Win32::UI::Input::KeyboardAndMouse::GetKeyState;
+    all_modifier_vks()
         .iter()
-        .map(|vk| vk_event(*vk, true))
-        .collect();
-    if !ups.is_empty() {
-        unsafe {
-            SendInput(&ups, std::mem::size_of::<INPUT>() as i32);
-        }
-    }
+        .filter(|vk| unsafe { GetKeyState(vk.0 as i32) } as u16 & 0x8000 != 0)
+        .map(|vk| match vk.0 {
+            0x11 | 0xA2 | 0xA3 => "ctrl",
+            0x10 | 0xA0 | 0xA1 => "shift",
+            0x12 | 0xA4 | 0xA5 => "alt",
+            _ => "win",
+        })
+        .collect()
 }
 
 fn named_vk(name: &str) -> Option<VIRTUAL_KEY> {
@@ -247,27 +250,48 @@ fn compile_key_spec(spec: &KeySpec) -> Result<Vec<INPUT>, CtlError> {
     Ok(inputs)
 }
 
-/// 注入一个按键规格:先清场幽灵修饰键 → 编译 → 注入 → 再清场。
+/// 注入一个按键规格:等修饰键空闲 → 编译 → 单批注入(自拥有自释放)。
 pub fn send_key_spec(spec: &KeySpec) -> Result<(), CtlError> {
-    // 开场清场:清除历史注入可能残留的修饰键按下状态
-    release_all_modifiers();
-    // 编译在注入前完成:报错时保证零事件发出(fail before side effects)
-    let mut inputs = compile_key_spec(spec)?;
-
-    // 结尾清场:把全部修饰键 UP 一遍,杜绝任何 UP 丢失导致的幽灵修饰键
-    // (实测事故:一次残留会让后续所有注入被解释为 ctrl+key 而被目标丢弃)
-    for vk in all_modifier_vks() {
-        inputs.push(vk_event(vk, true));
-    }
-
+    // 修饰键治理(doc 09 §3.4,2026-09-26 修订):不再无条件清场 11 键——
+    // 那会踩掉用户物理按住的修饰键。改为:①开场检测,有按住(用户或历史
+    // 残留,两者不可区分)则等待后有界拒绝;②注入序列内自拥有自释放
+    // (mods DOWN → keys → mods UP,同批原子);③部分发送失败如实报错。
+    wait_modifiers_clear()?;
+    let inputs = compile_key_spec(spec)?;
     let sent = unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) };
     if sent == inputs.len() as u32 {
         Ok(())
     } else {
         Err(CtlError::internal(format!(
-            "SendInput delivered {sent}/{} events",
+            "SendInput delivered {sent}/{} events; modifier/key state is now unknown \
+             — do not retry blindly, re-observe the target first",
             inputs.len()
         )))
+    }
+}
+
+/// 等待修饰键物理释放(≤1.5s);到时仍按住 → NOT_ACTIONABLE。
+/// click_physical 同样调用:用户按住 ctrl 时物理点击会被劫持成 ctrl+click。
+/// 用户按住 ctrl 时注入 's' 会变成 ctrl+s 被劫持成快捷键——宁可拒绝。
+pub fn wait_modifiers_clear() -> Result<(), CtlError> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(1500);
+    loop {
+        let held = held_modifiers();
+        if held.is_empty() {
+            return Ok(());
+        }
+        if std::time::Instant::now() >= deadline {
+            let held = held.join("/");
+            return Err(CtlError::new(
+                ErrorCode::NotActionable,
+                format!(
+                    "modifier key(s) physically held: {held}; injection would be \
+                     hijacked into shortcuts — release them (or tap the key to clear \
+                     a stale state) and retry"
+                ),
+            ));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
     }
 }
 
