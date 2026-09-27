@@ -133,3 +133,7 @@ CLI 增加命令后，clap 调试构建超过 MSVC 默认 1 MiB 栈保留；buil
 本轮显示补充仍复用现有 Win32 依赖：popup 的 SetWindowSubclass 保留静态文本原生可访问角色，
 仅跳过重复绘制；controls 的字体随 DPI 更新并在销毁时释放。shell --replace 使用进程同步句柄、
 WM_CLOSE 和有界等待完成正常替换；句柄在成功/失败路径均释放。以上 unsafe 仅位于 actl-uia。
+
+屏幕边缘提示复用 actl-uia 的原生 layered window 与 paint 的预乘 Alpha 提交函数，无新增依赖。
+perimeter 内 unsafe 用于显示器枚举、各屏 DPI、窗口生命周期与绘制；枚举回调只同步写入调用栈内 Vec，
+窗口失败时清理已创建部分，隐藏/退出/截图均销毁。每屏仅存四条窄边像素，不分配全屏动画缓冲。

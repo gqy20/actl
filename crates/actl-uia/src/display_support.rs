@@ -77,7 +77,10 @@ pub fn is_display_window(hwnd: HWND) -> bool {
     let class = String::from_utf16_lossy(&name[..len.max(0) as usize]);
     if matches!(
         class.as_str(),
-        "actl_signal_window" | "actl_signal_marker" | "actl_signal_controls"
+        "actl_signal_window"
+            | "actl_signal_marker"
+            | "actl_signal_controls"
+            | "actl_signal_perimeter"
     ) {
         return true;
     }

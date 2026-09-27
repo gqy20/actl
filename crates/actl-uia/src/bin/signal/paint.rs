@@ -179,6 +179,17 @@ unsafe fn raster(view: &View, hovered: bool, dpi: u32) -> Result<Vec<u8>> {
 }
 
 unsafe fn present(hwnd: HWND, data: &[u8], dpi: u32, width: i32, height: i32) -> Result<()> {
+    present_alpha(hwnd, data, dpi, width, height, 255)
+}
+
+pub(super) unsafe fn present_alpha(
+    hwnd: HWND,
+    data: &[u8],
+    dpi: u32,
+    width: i32,
+    height: i32,
+    alpha: u8,
+) -> Result<()> {
     let size = SIZE {
         cx: pixels(width, dpi),
         cy: pixels(height, dpi),
@@ -206,7 +217,7 @@ unsafe fn present(hwnd: HWND, data: &[u8], dpi: u32, width: i32, height: i32) ->
         std::ptr::copy_nonoverlapping(data.as_ptr(), bits.cast::<u8>(), data.len());
         let blend = BLENDFUNCTION {
             BlendOp: AC_SRC_OVER as u8,
-            SourceConstantAlpha: 255,
+            SourceConstantAlpha: alpha,
             AlphaFormat: AC_SRC_ALPHA as u8,
             BlendFlags: 0,
         };

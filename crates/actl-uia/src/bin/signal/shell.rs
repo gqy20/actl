@@ -179,8 +179,10 @@ unsafe fn tick(hwnd: HWND) {
         .unwrap_or_default();
     if suppressed || !visible {
         overlay::hide();
+        super::perimeter::hide();
         return;
     }
+    super::perimeter::update(hwnd, &v, &states, now, ready);
     let key = preparing
         .map(|(s, a)| format!("{}:{}", s.call_id, a.id))
         .unwrap_or_default();
@@ -452,6 +454,7 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
         WM_ENTERSIZEMOVE => {
             SignalPaths::default().request_stop();
             overlay::hide();
+            super::perimeter::hide();
             LRESULT(0)
         }
         WM_EXITSIZEMOVE => {
@@ -510,6 +513,7 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
             }
             let _ = ShowWindow(hwnd, SW_HIDE);
             overlay::hide();
+            super::perimeter::hide();
             LRESULT(1)
         }
         CAPTURE_RESTORE => {
@@ -535,6 +539,7 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
         WM_DESTROY => {
             super::popup::hide();
             overlay::hide();
+            super::perimeter::hide();
             let _ = KillTimer(Some(hwnd), 1);
             let _ = UnregisterHotKey(Some(hwnd), 1);
             let _ = Shell_NotifyIconW(NIM_DELETE, &tray(hwnd));

@@ -11,6 +11,8 @@ mod model;
 mod overlay;
 #[path = "signal/paint.rs"]
 mod paint;
+#[path = "signal/perimeter.rs"]
+mod perimeter;
 #[path = "signal/popup.rs"]
 mod popup;
 #[path = "signal/shell.rs"]
