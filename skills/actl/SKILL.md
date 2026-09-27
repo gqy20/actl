@@ -68,7 +68,8 @@ actl verify --value <target> "<期望>" --app <app> # 确认:立即断言
 ## 应用路线(Office 实测背书)
 
 操作 Excel/Word/微信前先读对应档案:`apps/excel.yml`、`apps/word.yml`、`apps/wechat.yml`(含路线
-steps、quirks 与解法、验证方法)。要点速记:
+steps、quirks 与解法、验证方法;路线的 `status` 是信任分级,`unverified` 不得直接执行)。
+为其他应用写档案:格式契约、模板与贡献红线见 [PACKS.md](PACKS.md)。要点速记:
 
 - **Excel 单元格**:名称框 `id:1001` 导航 + 剪贴板直灌(`set-clipboard` →
   `paste --app`)——网格单元格不是 UIA 元素,name 是坐标不是内容;表格抠数用
@@ -86,7 +87,7 @@ steps、quirks 与解法、验证方法)。要点速记:
 当 UIA 树不暴露内容(图片消息、自绘菜单、Canvas 画布)时,截图是最后的兜底通道:
 
 ```
-actl screenshot --element <ref> --app <win>     # 元素级裁剪(经定位链)
+actl screenshot --element <ref> --sapp <win>    # 元素级裁剪(经定位链;作用域是 --sapp)
 actl screenshot --app <win>                     # 整窗(抗遮挡)
 actl screenshot --rect <x,y,w,h>               # 区域(配合 right-click 返回的 point)
 ```

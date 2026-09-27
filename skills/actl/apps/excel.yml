@@ -1,9 +1,12 @@
-# actl 应用档案 pack v1 —— agent 消费的数据(核心 CLI 保持原子,不读此文件)
+# actl 应用档案 pack(pack_format: 1)—— agent 消费的数据(核心 CLI 保持原子,不读此文件)
 # 路线知识来源:docs/14-office-scenarios.md(2026-09-27 真机实测)
+pack_format: 1
 name: excel
 display: Excel
 launch: EXCEL            # App Paths 注册表解析,无需完整路径
 window: "Excel"          # 标题子串;打开文件后为 "<文件名> - Excel"
+app_version: "2021 家庭和学生版"
+verified_date: 2026-09-27
 quirks:
   - id: protected_view
     note: 不可信位置(TEMP/下载)文件以受保护视图打开——UIA 读写正常但编辑被静默拒绝
@@ -15,6 +18,7 @@ quirks:
 routes:
   - id: cell_write        # 变量 {cell} {value} {window} 由调用方替换
     description: 写入单元格(剪贴板直灌 + 名称框导航 + paste)
+    status: verified
     steps:
       - ["set-clipboard", "{value}"]
       - ["type", "id:1001", "{cell}", "--app", "{window}"]
@@ -23,6 +27,7 @@ routes:
       - ["press", "enter", "--app", "{window}"]
   - id: cell_read
     description: 读单元格(名称框往返 + ctrl+c + 剪贴板读回)
+    status: verified
     steps:
       - ["type", "id:1001", "{cell}", "--app", "{window}"]
       - ["press", "enter", "--app", "{window}"]
@@ -30,6 +35,7 @@ routes:
       - ["get-clipboard"]
   - id: table_extract
     description: 表格抠数(GridPattern 直读;须先有数据物化,空簿无网格)
+    status: verified
     steps:
       - ["extract", "role:DataGrid", "--app", "{window}"]
 verify: 磁盘终验(COM GetActiveObject 读运行实例 / 文件 mtime);保存 = press ctrl+s 原地保存(不弹窗,勿等窗口)
