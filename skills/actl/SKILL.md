@@ -81,6 +81,19 @@ steps、quirks 与解法、验证方法)。要点速记:
   先 `click name:启用编辑`。
 - **启动**:Office/商店应用裸名即可(`launch WINWORD`,App Paths 注册表解析)。
 
+## 工具分工:actl × wechat-ui-collector
+
+同机互补,按任务选工具:
+
+- **actl**(本 skill):**实时操作**——发消息、搜索、传文件、联系人、朋友圈、
+  任何桌面应用。UIA 驱动,逐条原子命令。
+- **wechat-ui-collector**:**存量检索**——海量聊天记录(数据库直解析,314 万条
+  ~17 分钟,UIA 滚动差三个数量级)、联系人画像、公众号文章、导出 Markdown/JSON。
+  CLI:`WechatUiCollector.exe`,随包自带 wechat-records skill。
+
+规则:**"现在要做什么"用 actl;"过去说过什么"用 collector**。两者可组合:
+collector 检索到结论 → actl 实时发消息回应。
+
 ## 更多
 
 错误码与恢复动作全表:[references/error-codes.md](references/error-codes.md)

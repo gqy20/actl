@@ -28,6 +28,15 @@ quirks:
          发送按钮与 发送表情/收藏/文件 同名前缀,find 后按 ref 精点;文件气泡 name 形态与
          文本不同(时间戳邻近,靠会话预览[文件]+时间戳双证);联系人详情页会令 通讯录 锚点
          重名,回聊天页换 name:发现 锚点
+  - id: context_menu_invisible
+    note: 右键菜单是 mmui 自绘,UIA 树不可见(find MenuItem 空)——菜单操作需键盘导航或截图+坐标
+         (M3 候选);自己消息的菜单无"引用"项(复制/转发/收藏/提醒/删除)
+  - id: mention_object
+    note: @人引用以 U+FFFC 内嵌对象插入,输入框 Value 读回显示为对象符非纯文本——
+         含 @ 的草稿读回核对只对文本部分有效
+  - id: file_bubble_name
+    note: 文件消息气泡的 name 不含文件名(时间戳邻近元素)——文件定位靠会话预览[文件]
+         或发送侧记录;接收侧点击/另存为留开放项
   - id: safety_no_blind_send
     note: 真实聊天应用——发送前必须读回输入框 value 并核对会话标题;严禁盲发
   - id: background_ops
@@ -115,3 +124,18 @@ verify: 输入框 value 读回比对(draft_message 最后一步);发送后新气
       - ["snapshot", "--app", "{window}"]
       - ["press", "escape", "--app", "{window}"]
       - ["click", "name:微信", "--app", "{window}", "--near", "name:发现", "--physical"]
+  - id: mention_member
+    description: @人(群输入 @ → 选择器 UIA 可见按名点选;@引用是 U+FFFC 内嵌对象,Value 读回非纯文本;不发送)
+    steps:
+      - ["click", "id:chat_input_field", "--app", "{window}"]
+      - ["set-clipboard", "@"]
+      - ["paste", "--app", "{window}"]
+      - ["snapshot", "--app", "{window}"]
+      - ["click", "name:{member}", "--app", "{window}", "--physical"]
+  - id: group_info
+    description: 群信息面板(群名+成员数;深读成员列表用 wechat-ui-collector)
+    steps:
+      - ["find", "--name", "聊天信息", "--app", "{window}"]
+      - ["click", "@{info_ref}", "--app", "{window}", "--physical"]
+      - ["snapshot", "--app", "{window}"]
+      - ["press", "escape", "--app", "{window}"]
