@@ -10,6 +10,7 @@ impl IsolatedCommand {
         let dir = std::env::temp_dir().join(format!("actl-contract-{}-{n}", std::process::id()));
         let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_actl"));
         command.env("LOCALAPPDATA", &dir);
+        command.env_remove("ACTL_TASK_ID");
         Self { command, dir }
     }
 }

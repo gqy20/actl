@@ -39,10 +39,18 @@ fn main() {
     let cli = Cli::from_arg_matches(&matches).expect("clap-validated matches");
     let command_name = command_name(&cli.command);
     let started = Instant::now();
-    let mut signal = actl_core::signal_session::SignalSession::start(
+    let task = match actl_core::history::task_from_env() {
+        Ok(task) => task,
+        Err(error) => {
+            finish(command_name, Err(error), 0);
+            return;
+        }
+    };
+    let mut signal = actl_core::signal_session::SignalSession::start_with_task(
         actl_core::state::SignalPaths::default(),
         command_name,
         app_of(&cli.command).as_deref(),
+        task,
     );
 
     let result = dispatch(&cli.command);
@@ -68,6 +76,21 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
     match command {
         Command::Commands => commands().map(Into::into),
         Command::Status => status().map(Into::into),
+        Command::Desktop(DesktopCommand::History { task, limit }) => {
+            actl_core::history::read_history(
+                &actl_core::state::SignalPaths::default().dir,
+                task.as_deref(),
+                *limit,
+            )
+            .map(Into::into)
+        }
+        Command::Desktop(DesktopCommand::TaskArchive { file }) => {
+            let path = actl_core::history::archive(
+                &actl_core::state::SignalPaths::default().dir,
+                std::path::Path::new(file),
+            )?;
+            Ok(serde_json::json!({"archived":true,"path":path,"source":"caller"}).into())
+        }
         Command::Desktop(DesktopCommand::DisplayStatus) => {
             let paths = actl_core::state::SignalPaths::default();
             let lease = paths.display_lease();

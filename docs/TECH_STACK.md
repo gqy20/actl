@@ -120,3 +120,7 @@ CLI 增加命令后，clap 调试构建超过 MSVC 默认 1 MiB 栈保留；buil
 页面按需提交。已有 CLI 启动/契约测试覆盖此前栈溢出复现。
 显示端为 Windows GUI 子系统；自动启动使用 CreateProcessW 禁止句柄继承，避免常驻子进程持有
 调用者管道而令 PowerShell 等待。该原生启动只位于 actl-uia/display_gate，按既有 unsafe 豁免执行。
+
+操作历史与任务报告使用 actl-core 的 std 文件 IO + 已有 serde_json，零新依赖、零 unsafe。
+每调用独立 JSONL，避免跨进程共享追加流；写入处清理，不增加后台服务。
+存储失败用 stderr 诊断；显式归档命令返回统一错误 envelope。保留与容量边界见 docs/06 §7.6。

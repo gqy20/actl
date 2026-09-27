@@ -1,0 +1,7 @@
+[
+  {"version":1,"call_id":"call-1","task_id":"task-1","seq":1,"ts_ms":0,"event":"call_started","data":{"command":"type","version":"test"}},
+  {"version":1,"call_id":"call-1","task_id":"task-1","seq":2,"ts_ms":0,"event":"action","data":{"action_id":2,"kind":"type","phase":"preparing","effects":{"keyboard":false,"pointer":false,"clipboard":"untouched","focus":false}}},
+  {"version":1,"call_id":"call-1","task_id":"task-1","seq":3,"ts_ms":0,"event":"action","data":{"action_id":2,"kind":"type","phase":"executing","effects":{"keyboard":false,"pointer":false,"clipboard":"untouched","focus":false}}},
+  {"version":1,"call_id":"call-1","task_id":"task-1","seq":4,"ts_ms":0,"event":"action","data":{"action_id":2,"kind":"type","phase":"delivered","effects":{"keyboard":false,"pointer":false,"clipboard":"untouched","focus":false}}},
+  {"version":1,"call_id":"call-1","task_id":"task-1","seq":5,"ts_ms":0,"event":"call_finished","data":{"phase":"done","error_code":null,"duration_ms":0}}
+]

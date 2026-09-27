@@ -4,6 +4,45 @@
 mod support;
 
 #[test]
+fn history_and_task_archive_contract() {
+    let (code, text) = actl(&["history"]);
+    assert_eq!(code, 0);
+    let mut result: serde_json::Value = serde_json::from_str(&text).unwrap();
+    result.as_object_mut().unwrap().remove("duration_ms");
+    assert_eq!(
+        result,
+        serde_json::from_str::<serde_json::Value>(include_str!("golden/history.json")).unwrap()
+    );
+    assert_eq!(actl(&["history", "--limit", "0"]).0, 2);
+    assert_eq!(actl(&["history", "--task", "../bad"]).0, 2);
+    let mut bad_env = support::IsolatedCommand::new();
+    let out = bad_env
+        .command
+        .env("ACTL_TASK_ID", "../bad")
+        .arg("status")
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&out.stdout).unwrap()["error"]["code"],
+        "PROTOCOL"
+    );
+    let report = std::env::temp_dir().join(format!("actl-report-{}.json", std::process::id()));
+    std::fs::write(&report, r#"{"task_id":"task-1","outcome":"completed","summary":"done","verification":"read back","call_ids":[],"feedback":[]}"#).unwrap();
+    let (code, text) = actl(&["task-archive", "--file", report.to_str().unwrap()]);
+    assert_eq!(code, 0, "{text}");
+    let mut result: serde_json::Value = serde_json::from_str(&text).unwrap();
+    result.as_object_mut().unwrap().remove("duration_ms");
+    result["data"]["path"] = serde_json::json!("<archive>");
+    assert_eq!(
+        result,
+        serde_json::from_str::<serde_json::Value>(include_str!("golden/task_archive.json"))
+            .unwrap()
+    );
+    std::fs::remove_file(report).unwrap();
+}
+
+#[test]
 fn display_and_desktop_commands_contract() {
     let (code, text) = actl(&["display-status"]);
     let mut result: serde_json::Value = serde_json::from_str(&text).unwrap();

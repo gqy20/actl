@@ -291,6 +291,56 @@ stdout 保持原有单个 JSON envelope。显示通道是旁路、拉取式；�
 附带修正：`key-up` 将 release 方向传递到输入执行体；带修饰键的物理 click 在
 stdout `input_effects.keyboard` 如实返回 `injected`（原先错误地返回 `none`）。
 
+## 7.6 操作历史与任务归档 v1
+
+`ACTL_TASK_ID` 可选，值为 1–80 位 ASCII 字母/数字/`-`/`_`，执行前验证，无效值返回
+PROTOCOL。它只关联记录，不提供任务调度或暂停恢复。
+
+每次调用写 `%LOCALAPPDATA%/actl/history/<call_id>.jsonl`。事件字段为
+`version:1, call_id, task_id(null 可用), seq, ts_ms, event, data`。
+event 包括 `call_started`（command/version）、`step`（command/index/total）、
+`action`（action_id/kind/phase/effects）、`call_finished`（phase/error_code/duration_ms）。
+动作阶段沿用显示协议。不记录参数、标题、输入正文、剪贴板、截图或心跳。
+参数解析失败不建记录；history 查询自身不写历史。日志失败在 stderr 输出 INTERNAL
+诊断，不改变原命令结果；缺少终态不能推断为成功或失败。
+
+```text
+actl history [--task <id>] [--limit <1..100>]   # 默认 20，最近写入的调用优先
+actl task-archive --file <report.json>          # UTF-8 JSON，最大 64 KiB
+```
+
+history 的 data 为 `{calls:[{complete,events:[...]}],incomplete_files}`。
+complete 只表示事件可解析且有结束记录。incomplete_files 统计本次扫描到的空/损坏文件及
+返回的无终态调用；过期记录可能尚未清理。非法 ID/limit 返回 PROTOCOL，读取失败返回 INTERNAL。
+
+任务报告示例：
+
+```json
+{
+  "task_id": "report-01",
+  "outcome": "partial",
+  "summary": "已完成 8 项，2 项待处理",
+  "verification": "已回读前 8 项；其余结果未确认",
+  "call_ids": ["call-1"],
+  "feedback": [{"source":"agent","text":"页面切换后需重新定位","verified":false}],
+  "evidence": ["results/report.csv"]
+}
+```
+
+outcome 为 completed/partial/stopped/failed；feedback.source 为 agent/user；
+evidence 可省略，其余字段必填，未知字段拒绝。summary/verification 必须非空。
+task_id/call_ids 遵循同一 ID 规则，引用不要求仍存在。evidence 只存引用，不打开或复制。
+verified 是提交者声明；报告内容由提交者简化，不自动脱敏。
+
+归档成功 data 为 `{archived:true,path:<绝对路径>,source:"caller"}`；文档为
+`{version:1,archived_ms,source:"caller",report:<规范化报告>}`，每次新增修订，不覆盖旧报告。
+归档成功只确认保存，不核验结论。格式/大小错误为 PROTOCOL，文件与写入失败为 INTERNAL。
+
+默认保留：history 7 天/64 MiB，tasks 30 天/32 MiB；单调用日志最大 1 MiB。
+写入前机会式清理，保护最近一小时文件及具有新鲜运行心跳的调用；并发/在途增长可暂时超限，
+无法释放容量时报告失败。没有后台清理器，不清理 desktop 恢复记录。
+日志不保证防篡改或断电完整性。完整设计见 [19](19-history-and-user-experience.md)。
+
 ## 8. 里程碑
 
 各阶段范围、工期、验收的**唯一来源**:[ROADMAP](ROADMAP.md)。本文不重复维护版本计划。

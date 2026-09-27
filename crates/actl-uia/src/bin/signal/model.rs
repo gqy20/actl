@@ -47,11 +47,13 @@ pub fn action_name(command: &str) -> &str {
         "launch" => "启动应用",
         "display-start" => "显示已就绪",
         "display-status" => "检查显示",
+        "history" => "查看记录",
+        "task-archive" => "归档报告",
         "desktop-prepare" => "整理桌面",
         "desktop-restore" => "恢复桌面",
         "status" => "检查状态",
         "list-windows" => "查看窗口",
-        s if s.starts_with("wait") => "等待",
+        s if s.starts_with("wait") => "等待条件满足",
         s => s,
     }
 }
@@ -226,6 +228,18 @@ pub fn view(states: &[SessionState], now: u64, stop_ms: Option<u64>, busy: Optio
         details.push(format!("{live} 项操作进行中"));
     }
     if let Some(error) = &s.error_code {
+        let guidance = match error.as_str() {
+            "STALE_REF" => "重新读取界面后再试",
+            "NOT_FOUND" => "检查目标是否已打开",
+            "AMBIGUOUS" => "需要确定操作对象",
+            "PERM_DENIED" => "检查窗口焦点与权限",
+            "NOT_ACTIONABLE" => "检查窗口与显示状态",
+            "TIMEOUT" => "检查应用是否已就绪",
+            "ASSERTION_FAILED" => "结果未确认，请先检查",
+            "ABORTED" => "已中断，请先检查已完成操作",
+            _ => "查看操作记录以了解原因",
+        };
+        details.push(guidance.into());
         details.push(format!("错误：{error}"));
     }
     if mode == Mode::StopRequested {
@@ -249,6 +263,15 @@ pub fn view(states: &[SessionState], now: u64, stop_ms: Option<u64>, busy: Optio
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn failure_details_offer_a_next_step_without_claiming_a_specific_cause() {
+        let mut s = SessionState::now(1, "click", None, None, Phase::Error);
+        s.error_code = Some("STALE_REF".into());
+        let v = view(&[s], 0, None, Some(false));
+        assert!(v.details.contains("重新读取界面"));
+        assert!(v.details.contains("STALE_REF"));
+        assert_eq!(action_name("wait"), "等待条件满足");
+    }
     #[test]
     fn unknown_input_observation_never_looks_idle() {
         assert_eq!(view(&[], 0, None, None).mode, Mode::Unknown);

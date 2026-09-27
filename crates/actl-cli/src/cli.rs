@@ -24,6 +24,21 @@ pub(crate) enum ViewMode {
 
 #[derive(Subcommand)]
 pub(crate) enum DesktopCommand {
+    /// Read recent local call events, newest calls first
+    History {
+        /// Filter by the caller-provided ACTL_TASK_ID
+        #[arg(long)]
+        task: Option<String>,
+        /// Maximum calls (1-100)
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+    },
+    /// Archive a caller-authored task report; does not verify task completion
+    TaskArchive {
+        /// UTF-8 JSON report, up to 64 KiB; see docs/06 for schema
+        #[arg(long)]
+        file: String,
+    },
     /// Inspect the companion lease without starting or changing it
     DisplayStatus,
     /// Start the matching companion if missing and wait for its visible rendered frame
@@ -513,6 +528,8 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
         Command::Commands => "commands",
         Command::Status => "status",
         Command::Desktop(DesktopCommand::DisplayStatus) => "display-status",
+        Command::Desktop(DesktopCommand::TaskArchive { .. }) => "task-archive",
+        Command::Desktop(DesktopCommand::History { .. }) => "history",
         Command::Desktop(DesktopCommand::DisplayStart) => "display-start",
         Command::Desktop(DesktopCommand::MinimizeWindow { .. }) => "minimize-window",
         Command::Desktop(DesktopCommand::RestoreWindow { .. }) => "restore-window",
@@ -557,6 +574,12 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
 /// 与 doc comment 同为 help 单一事实来源的一部分(改这里 = 改 -h)。
 fn after_help_for(name: &str) -> Option<&'static str> {
     Some(match name {
+        "task-archive" => {
+            "Example:\n  actl task-archive --file report.json\nImmutable caller report, retained 30 days; never implies verified task success.\nErrors: PROTOCOL invalid report | INTERNAL file/storage failure"
+        }
+        "history" => {
+            "Example:\n  actl history --task report-01 --limit 20\nContent-minimal events, newest calls first. Incomplete means running, interrupted or truncated.\nErrors: PROTOCOL invalid task/limit | INTERNAL storage failure"
+        }
         "display-status" => {
             "Example:\n  actl display-status\nReports readiness, lease, and sticky stop state; never starts the companion.\nErrors: INTERNAL unavailable state storage"
         }

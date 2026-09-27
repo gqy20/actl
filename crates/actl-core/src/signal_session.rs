@@ -9,8 +9,21 @@ use std::time::Duration;
 struct Publisher {
     paths: SignalPaths,
     state: SessionState,
+    journal: Option<crate::history::Journal>,
 }
 impl Publisher {
+    fn event(&mut self, event: &str, data: serde_json::Value) {
+        if let Some(journal) = &mut self.journal {
+            journal.record(event, data);
+        }
+    }
+    fn action_event(&mut self) {
+        if let Some(a) = &self.state.action {
+            // Window titles, selectors, text and clipboard contents are deliberately omitted.
+            let data = serde_json::json!({"action_id":a.id,"kind":a.kind,"phase":a.phase,"effects":a.effects});
+            self.event("action", data);
+        }
+    }
     fn publish(&mut self) {
         self.state.ts_ms = unix_ms();
         self.state.seq += 1;
@@ -26,6 +39,14 @@ pub struct SignalSession {
 }
 impl SignalSession {
     pub fn start(paths: SignalPaths, command: &str, app: Option<&str>) -> Self {
+        Self::start_with_task(paths, command, app, None)
+    }
+    pub fn start_with_task(
+        paths: SignalPaths,
+        command: &str,
+        app: Option<&str>,
+        task: Option<String>,
+    ) -> Self {
         let _ = paths.read_calls();
         let mut state = SessionState::now(std::process::id(), command, app, None, Phase::Running);
         state.version = 2;
@@ -35,9 +56,28 @@ impl SignalSession {
             crate::snapshot::new_snapshot_id()
         );
         state.started_ms = state.ts_ms;
-        let publisher = Arc::new(Mutex::new(Publisher { paths, state }));
+        let journal = if command == "history" {
+            None
+        } else {
+            match crate::history::Journal::open(&paths.dir, &state.call_id, task) {
+                Ok(journal) => Some(journal),
+                Err(e) => {
+                    eprintln!("[actl-history] INTERNAL: history unavailable: {e}");
+                    None
+                }
+            }
+        };
+        let publisher = Arc::new(Mutex::new(Publisher {
+            paths,
+            state,
+            journal,
+        }));
         CURRENT.with(|c| *c.borrow_mut() = Arc::downgrade(&publisher));
         if let Ok(mut p) = publisher.lock() {
+            p.event(
+                "call_started",
+                serde_json::json!({"command":command,"version":env!("CARGO_PKG_VERSION")}),
+            );
             p.publish();
         }
         let (stop, rx) = mpsc::channel();
@@ -67,6 +107,11 @@ impl SignalSession {
             p.state.phase = phase;
             p.state.finished_ms = Some(unix_ms());
             p.state.error_code = error.map(str::to_owned);
+            let elapsed = unix_ms().saturating_sub(p.state.started_ms);
+            p.event(
+                "call_finished",
+                serde_json::json!({"phase":phase,"error_code":error,"duration_ms":elapsed}),
+            );
             p.publish();
         }
         CURRENT.with(|c| *c.borrow_mut() = Weak::new());
@@ -94,6 +139,10 @@ pub fn step(command: &str, app: Option<&str>, index: usize, total: usize) {
             p.state.app = app.map(str::to_owned);
             p.state.step = Some(format!("{index}/{total}"));
             p.state.action = None;
+            p.event(
+                "step",
+                serde_json::json!({"command":command,"index":index,"total":total}),
+            );
             p.publish();
         }
     }
@@ -130,6 +179,7 @@ impl ActionGuard {
                     ts_ms: now,
                     expires_ms: now + 6000,
                 });
+                p.action_event();
                 p.publish();
             }
         }
@@ -179,6 +229,7 @@ impl ActionGuard {
                 p.state.recent_actions.remove(0);
             }
         }
+        p.action_event();
         p.publish();
     }
 }
