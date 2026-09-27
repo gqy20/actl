@@ -133,18 +133,35 @@ impl Drop for SignalSession {
 }
 
 pub fn step(command: &str, app: Option<&str>, index: usize, total: usize) {
-    if let Some(shared) = CURRENT.with(|c| c.borrow().upgrade()) {
-        if let Ok(mut p) = shared.lock() {
-            p.state.command = command.into();
-            p.state.app = app.map(str::to_owned);
-            p.state.step = Some(format!("{index}/{total}"));
-            p.state.action = None;
-            p.event(
-                "step",
-                serde_json::json!({"command":command,"index":index,"total":total}),
-            );
-            p.publish();
-        }
+    if let Some(shared) = CURRENT.with(|c| c.borrow().upgrade())
+        && let Ok(mut p) = shared.lock()
+    {
+        p.state.command = command.into();
+        p.state.app = app.map(str::to_owned);
+        p.state.step = Some(format!("{index}/{total}"));
+        p.state.action = None;
+        p.event(
+            "step",
+            serde_json::json!({"command":command,"index":index,"total":total}),
+        );
+        p.publish();
+    }
+}
+
+pub fn workflow(run_id: &str, title: &str, status: &str) {
+    if let Some(shared) = CURRENT.with(|c| c.borrow().upgrade())
+        && let Ok(mut p) = shared.lock()
+    {
+        p.state.workflow = Some(crate::state::WorkflowProgress {
+            run_id: run_id.into(),
+            title: title.into(),
+            status: status.into(),
+        });
+        p.event(
+            "workflow",
+            serde_json::json!({"run_id":run_id,"status":status}),
+        );
+        p.publish();
     }
 }
 
@@ -158,30 +175,30 @@ impl ActionGuard {
     pub fn begin(kind: &str, effects: InputEffects, target: ActionTarget) -> Self {
         let shared = CURRENT.with(|c| c.borrow().upgrade());
         let mut id = 0;
-        if let Some(shared) = &shared {
-            if let Ok(mut p) = shared.lock() {
-                if p.state.action.as_ref().is_some_and(ActionState::active) {
-                    return Self {
-                        shared: None,
-                        id,
-                        ended: false,
-                    };
-                }
-                id = p.state.seq + 1;
-                let now = unix_ms();
-                p.state.action = Some(ActionState {
+        if let Some(shared) = &shared
+            && let Ok(mut p) = shared.lock()
+        {
+            if p.state.action.as_ref().is_some_and(ActionState::active) {
+                return Self {
+                    shared: None,
                     id,
-                    seq: id,
-                    kind: kind.into(),
-                    phase: ActionPhase::Preparing,
-                    effects,
-                    target,
-                    ts_ms: now,
-                    expires_ms: now + 6000,
-                });
-                p.action_event();
-                p.publish();
+                    ended: false,
+                };
             }
+            id = p.state.seq + 1;
+            let now = unix_ms();
+            p.state.action = Some(ActionState {
+                id,
+                seq: id,
+                kind: kind.into(),
+                phase: ActionPhase::Preparing,
+                effects,
+                target,
+                ts_ms: now,
+                expires_ms: now + 6000,
+            });
+            p.action_event();
+            p.publish();
         }
         Self {
             shared,

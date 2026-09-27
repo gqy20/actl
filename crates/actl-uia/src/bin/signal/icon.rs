@@ -69,7 +69,13 @@ mod tests {
             let pixels = super::pixels(size, 0xD4B879);
             assert_eq!(pixels.len(), size * size * 4);
             assert_eq!(pixels[3], 0);
-            assert!(pixels.chunks_exact(4).any(|p| p[3] > 0 && p[3] < 255));
+            assert!(
+                pixels
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .any(|p| p[3] > 0 && p[3] < 255)
+            );
         }
     }
 }

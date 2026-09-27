@@ -10,6 +10,10 @@
 ## [Unreleased]
 
 ### Added
+- **YAML 流程 v1**：新增独立 actl-flow 与 flow-validate/run/status/pause/resume。
+  全步骤预检、参数数组、不可覆盖计划、写前记录、命令边界暂停、恢复前验证；
+  写操作不自动重试，未确认结果需核对或显式授权。托盘提供当前流程暂停/继续入口。
+  YAML 解析器与标准文件锁要求提高声明的 MSRV，实际构建工具链仍由 rust-toolchain.toml 锁定。
 - **操作历史与任务反馈归档**：按调用记录关键事件，`ACTL_TASK_ID` 关联跨调用任务；
   新增 `history` 查询与 `task-archive` 报告归档，区分执行事实和调用方判断。
   有限保留与容量清理，不自动记录正文、标题或剪贴板；不清理桌面恢复记录。

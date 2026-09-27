@@ -28,6 +28,8 @@ pub enum Phase {
 /// 一次命令执行的状态快照(单写者:当前 actl 进程;多读者)。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionState {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow: Option<WorkflowProgress>,
     #[serde(default)]
     pub version: u32,
     #[serde(default)]
@@ -64,6 +66,7 @@ impl SessionState {
         phase: Phase,
     ) -> Self {
         Self {
+            workflow: None,
             version: 1,
             call_id: String::new(),
             seq: 0,
@@ -80,6 +83,13 @@ impl SessionState {
             ts_ms: unix_ms(),
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkflowProgress {
+    pub run_id: String,
+    pub title: String,
+    pub status: String,
 }
 
 pub fn unix_ms() -> u64 {
@@ -164,10 +174,10 @@ impl SignalPaths {
                 }
             }
         }
-        if states.is_empty() {
-            if let Some(st) = self.read_state() {
-                states.push(st);
-            }
+        if states.is_empty()
+            && let Some(st) = self.read_state()
+        {
+            states.push(st);
         }
         states.sort_by_key(|s| s.ts_ms);
         let terminal_count = states.iter().filter(|s| s.phase != Phase::Running).count();

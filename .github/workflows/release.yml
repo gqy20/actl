@@ -68,6 +68,8 @@ jobs:
         run: cargo publish -p actl-core
       - name: Publish actl-uia
         run: cargo publish -p actl-uia
+      - name: Publish actl-flow
+        run: cargo publish -p actl-flow
       - name: Publish actl-cli
         run: cargo publish -p actl-cli
 

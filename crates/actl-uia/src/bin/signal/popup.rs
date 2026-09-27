@@ -91,15 +91,15 @@ pub unsafe fn show(owner: HWND, lines: Vec<String>, menu: bool) {
     let _ = SetForegroundWindow(hwnd);
 }
 unsafe fn choose(p: &Popup) {
-    if p.menu {
-        if let Some(i) = p.selected {
-            let _ = PostMessageW(
-                Some(HWND(p.owner as *mut _)),
-                CHOOSE,
-                WPARAM(i + 1),
-                LPARAM(0),
-            );
-        }
+    if p.menu
+        && let Some(i) = p.selected
+    {
+        let _ = PostMessageW(
+            Some(HWND(p.owner as *mut _)),
+            CHOOSE,
+            WPARAM(i + 1),
+            LPARAM(0),
+        );
     }
     hide();
 }
@@ -113,17 +113,17 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
             LRESULT(0)
         }
         WM_MOUSEMOVE => {
-            if let Some(p) = state {
-                if p.menu {
-                    let next = row_at(lp, GetDpiForWindow(hwnd), p.lines.len());
-                    if next != p.selected {
-                        if let Ok(mut s) = POPUP.lock() {
-                            if let Some(s) = s.as_mut() {
-                                s.selected = next;
-                            }
-                        }
-                        let _ = InvalidateRect(Some(hwnd), None, false);
+            if let Some(p) = state
+                && p.menu
+            {
+                let next = row_at(lp, GetDpiForWindow(hwnd), p.lines.len());
+                if next != p.selected {
+                    if let Ok(mut s) = POPUP.lock()
+                        && let Some(s) = s.as_mut()
+                    {
+                        s.selected = next;
                     }
+                    let _ = InvalidateRect(Some(hwnd), None, false);
                 }
             }
             LRESULT(0)

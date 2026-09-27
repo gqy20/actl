@@ -21,6 +21,10 @@
 
 **目标**:让任意 LLM agent(Claude Code、Codex、自研 agent)通过 shell 调用本 CLI,以确定性、可重试、token 高效的方式操作 Windows 桌面应用与系统。
 
+2026-09-27 用户授权扩展：增加独立 YAML 顺序流程层，用于预检、步骤验证、持久化进度及
+协作式暂停恢复；协议见 [20](20-yaml-workflow-protocol.md)。原子 CLI 继续可独立使用。
+可视化流程编辑器、常驻 agent、通用脚本引擎仍不在范围内。
+
 **非目标(明确不做,详见 [06 §9](06-design-blueprint.md))**:可视化编排、触发面板/热键、动作市场、MCP 进核心、截图视觉定位、常驻 agent、跨平台(Windows only 起步)。
 
 ---

@@ -79,6 +79,48 @@ pub(crate) enum DesktopCommand {
 }
 
 #[derive(Subcommand)]
+pub(crate) enum FlowCommand {
+    /// Validate YAML and every actl invocation without executing any step
+    #[command(name = "flow-validate")]
+    Validate {
+        #[arg(long)]
+        file: String,
+    },
+    /// Run a validated workflow and save resumable state under a unique ID
+    #[command(name = "flow-run")]
+    Run {
+        #[arg(long)]
+        file: String,
+        #[arg(long)]
+        id: String,
+        /// Save the plan and start paused for inspection
+        #[arg(long)]
+        paused: bool,
+    },
+    /// Inspect durable workflow state and whether its executor is alive
+    #[command(name = "flow-status")]
+    Status {
+        #[arg(long)]
+        id: String,
+    },
+    /// Request a pause at the next command boundary; does not interrupt in-flight input
+    #[command(name = "flow-pause")]
+    Pause {
+        #[arg(long)]
+        id: String,
+    },
+    /// Resume the saved plan, checking uncertain results before replay
+    #[command(name = "flow-resume")]
+    Resume {
+        #[arg(long)]
+        id: String,
+        /// Explicitly authorize repeating this uncertain step if verification fails
+        #[arg(long)]
+        retry_step: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
 pub(crate) enum Command {
     /// List every command with its argument schema (machine-readable self-description)
     Commands,
@@ -86,6 +128,8 @@ pub(crate) enum Command {
     Status,
     #[command(flatten)]
     Desktop(DesktopCommand),
+    #[command(flatten)]
+    Flow(FlowCommand),
     /// Capture the interactive element tree of a window as refs (@e1..)
     Snapshot {
         /// Target window by title substring or hwnd:<n> (@eN refs require it; otherwise focused window)
@@ -529,6 +573,11 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
         Command::Status => "status",
         Command::Desktop(DesktopCommand::DisplayStatus) => "display-status",
         Command::Desktop(DesktopCommand::TaskArchive { .. }) => "task-archive",
+        Command::Flow(FlowCommand::Validate { .. }) => "flow-validate",
+        Command::Flow(FlowCommand::Run { .. }) => "flow-run",
+        Command::Flow(FlowCommand::Status { .. }) => "flow-status",
+        Command::Flow(FlowCommand::Pause { .. }) => "flow-pause",
+        Command::Flow(FlowCommand::Resume { .. }) => "flow-resume",
         Command::Desktop(DesktopCommand::History { .. }) => "history",
         Command::Desktop(DesktopCommand::DisplayStart) => "display-start",
         Command::Desktop(DesktopCommand::MinimizeWindow { .. }) => "minimize-window",
@@ -574,6 +623,21 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
 /// 与 doc comment 同为 help 单一事实来源的一部分(改这里 = 改 -h)。
 fn after_help_for(name: &str) -> Option<&'static str> {
     Some(match name {
+        "flow-validate" => {
+            "Example:\n  actl flow-validate --file task.yml\nValidates all steps before any action; commands use argument arrays.\nErrors: PROTOCOL invalid YAML/command/policy | INTERNAL file error"
+        }
+        "flow-run" => {
+            "Example:\n  actl flow-run --file task.yml --id report-01 --paused\nUnique ID; saves immutable plan and durable state. Physical actions retain explicit authorization.\nErrors: PROTOCOL invalid/reused ID | NOT_ACTIONABLE executor busy | ABORTED stop | INTERNAL storage"
+        }
+        "flow-status" => {
+            "Example:\n  actl flow-status --id report-01\nReports run state, pause request and runner_active. An inactive running record is interrupted.\nErrors: PROTOCOL invalid ID/state | INTERNAL storage"
+        }
+        "flow-pause" => {
+            "Example:\n  actl flow-pause --id report-01\nRequests a boundary pause; only status=paused confirms it. Does not stop other CLI calls.\nErrors: PROTOCOL invalid ID/state | INTERNAL storage"
+        }
+        "flow-resume" => {
+            "Example:\n  actl flow-resume --id report-01\nUses the saved plan; never clears emergency stop. --retry-step explicitly permits repeating an uncertain action after verification fails.\nErrors: PROTOCOL invalid state/step | NOT_ACTIONABLE executor busy | ABORTED stop | INTERNAL storage"
+        }
         "task-archive" => {
             "Example:\n  actl task-archive --file report.json\nImmutable caller report, retained 30 days; never implies verified task success.\nErrors: PROTOCOL invalid report | INTERNAL file/storage failure"
         }

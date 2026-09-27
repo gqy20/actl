@@ -359,7 +359,7 @@ mod tests {
             let lines = vec!["详情".to_owned(), "允许后续操作".to_owned()];
             let data = unsafe { raster_popup(&lines, menu, Some(1), 192) }.unwrap();
             assert_eq!(data[3], 0);
-            assert!(data.chunks_exact(4).any(|p| p[3] == 255));
+            assert!(data.as_chunks::<4>().0.iter().any(|p| p[3] == 255));
         }
     }
     #[test]
@@ -425,9 +425,16 @@ mod tests {
             assert_eq!(data[3], 0);
             let center = ((pixels(17, dpi) as usize * width) + pixels(100, dpi) as usize) * 4;
             assert_eq!(data[center + 3], 255);
-            assert!(data.chunks_exact(4).any(|p| p[3] > 0 && p[3] < 255));
             assert!(
-                data.chunks_exact(4)
+                data.as_chunks::<4>()
+                    .0
+                    .iter()
+                    .any(|p| p[3] > 0 && p[3] < 255)
+            );
+            assert!(
+                data.as_chunks::<4>()
+                    .0
+                    .iter()
                     .all(|p| p[..3].iter().all(|c| *c <= p[3]))
             );
         }

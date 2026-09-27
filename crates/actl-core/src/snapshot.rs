@@ -233,10 +233,10 @@ impl SnapshotBuilder {
     fn collapse_single_chains(&self, keep: &mut [bool]) {
         let mut kept_children = vec![0usize; self.nodes.len()];
         for (i, n) in self.nodes.iter().enumerate() {
-            if keep[i] {
-                if let Some(pi) = n.parent {
-                    kept_children[pi] += 1;
-                }
+            if keep[i]
+                && let Some(pi) = n.parent
+            {
+                kept_children[pi] += 1;
             }
         }
         for i in (0..self.nodes.len()).rev() {

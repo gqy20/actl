@@ -137,13 +137,12 @@ pub fn view(states: &[SessionState], now: u64, stop_ms: Option<u64>, busy: Optio
     if mode == Mode::Done && action.is_some_and(|a| a.phase == ActionPhase::Partial) {
         mode = Mode::Partial;
     }
-    if let Some(t) = stop_ms {
-        if !(s.phase == Phase::Stopped
+    if let Some(t) = stop_ms
+        && !(s.phase == Phase::Stopped
             && s.ts_ms >= t
             && !states.iter().any(|s| s.phase == Phase::Running))
-        {
-            mode = Mode::StopRequested;
-        }
+    {
+        mode = Mode::StopRequested;
     }
     let active = action.filter(|a| a.active() && !stale && s.phase == Phase::Running);
     let mut effects = active.map(|a| a.effects).unwrap_or_default();
@@ -171,7 +170,7 @@ pub fn view(states: &[SessionState], now: u64, stop_ms: Option<u64>, busy: Optio
         target
     };
     let command = active.map(|a| a.kind.as_str()).unwrap_or(&s.command);
-    let text = match mode {
+    let mut text = match mode {
         Mode::Preparing => format!("即将{}", action_name(command)),
         Mode::Done => "调用完成".into(),
         Mode::Failed => "调用失败".into(),
@@ -181,6 +180,37 @@ pub fn view(states: &[SessionState], now: u64, stop_ms: Option<u64>, busy: Optio
         Mode::Unknown => "状态未知".into(),
         _ => action_name(command).into(),
     };
+    if !stale
+        && !matches!(mode, Mode::StopRequested | Mode::Preparing)
+        && let Some(flow) = &s.workflow
+    {
+        match flow.status.as_str() {
+            "paused" => {
+                mode = Mode::Idle;
+                text = "流程已暂停".into();
+            }
+            "needs_review" => {
+                mode = Mode::Partial;
+                text = "需要核对结果".into();
+            }
+            "completed" => {
+                mode = Mode::Done;
+                text = "流程已完成".into();
+            }
+            "failed" => {
+                mode = Mode::Failed;
+                text = "流程失败".into();
+            }
+            "stopped" => {
+                mode = Mode::Stopped;
+                text = "流程已停止".into();
+            }
+            "running" if active.is_none() && mode == Mode::Running => {
+                text = flow.title.clone();
+            }
+            _ => {}
+        }
+    }
     let elapsed = s
         .finished_ms
         .unwrap_or(now)
@@ -223,6 +253,12 @@ pub fn view(states: &[SessionState], now: u64, stop_ms: Option<u64>, busy: Optio
     }
     if let Some(step) = &s.step {
         details.push(format!("步骤 {step}"));
+    }
+    if let Some(flow) = &s.workflow {
+        details.push(flow.title.clone());
+        if flow.status == "paused" {
+            details.push("恢复前将重新检查目标".into());
+        }
     }
     if live > 1 {
         details.push(format!("{live} 项操作进行中"));

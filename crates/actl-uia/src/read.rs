@@ -45,12 +45,12 @@ pub fn read_property(
     property: Option<&str>,
     near: Option<&str>,
 ) -> Result<PropertyInfo, CtlError> {
-    if let Some(p) = property {
-        if !PROPS.contains(&p) {
-            return Err(CtlError::protocol(format!(
-                "unknown property {p:?}: expected one of {PROPS:?}"
-            )));
-        }
+    if let Some(p) = property
+        && !PROPS.contains(&p)
+    {
+        return Err(CtlError::protocol(format!(
+            "unknown property {p:?}: expected one of {PROPS:?}"
+        )));
     }
     let loc = locate(app, target, near)?;
     let want = |p: &str| property.map(|sel| sel == p).unwrap_or(true);
@@ -266,10 +266,10 @@ pub fn extract_table(
             return;
         }
         let role = role_of(elem);
-        if role == "Text" || role == "Edit" {
-            if let Some(n) = elem.get_name().ok().filter(|n| !n.is_empty()) {
-                out.push(n);
-            }
+        if (role == "Text" || role == "Edit")
+            && let Some(n) = elem.get_name().ok().filter(|n| !n.is_empty())
+        {
+            out.push(n);
         }
         let mut child = walker.get_first_child(elem).ok();
         while let Some(c) = child {

@@ -338,10 +338,10 @@ fn lint_packs(dir_arg: Option<&str>) -> ExitCode {
                     }
                     route = Some((id, None));
                 }
-            } else if let Some(v) = t.strip_prefix("status:") {
-                if let Some(r) = route.as_mut() {
-                    r.1 = Some(v.split('#').next().unwrap_or(v).trim().to_string());
-                }
+            } else if let Some(v) = t.strip_prefix("status:")
+                && let Some(r) = route.as_mut()
+            {
+                r.1 = Some(v.split('#').next().unwrap_or(v).trim().to_string());
             }
         }
         if let Some((id, status)) = route.take() {

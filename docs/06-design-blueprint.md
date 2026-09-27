@@ -341,6 +341,16 @@ verified 是提交者声明；报告内容由提交者简化，不自动脱敏�
 无法释放容量时报告失败。没有后台清理器，不清理 desktop 恢复记录。
 日志不保证防篡改或断电完整性。完整设计见 [19](19-history-and-user-experience.md)。
 
+## 7.7 YAML 顺序流程 v1
+
+新增 flow-validate/run/status/pause/resume，完整字段、状态与边界以
+[20](20-yaml-workflow-protocol.md) 为本节规范性扩展。
+独立流程层复用原子命令，run/resume 按运行 ID 关联操作历史。
+写操作要求后置 verify，自动重试仅限只读；暂停在命令边界确认，紧急停止保持粘性。
+未确认动作恢复时先验证，不能直接重放；显式 --retry-step 才允许重复写入。
+显示信号可选 workflow 字段为 `{run_id,title,status}`，缺失时保持旧调用级显示。
+JSON envelope 版本保持 1；CLI 使用结构化错误与 evidence 返回运行状态。
+
 ## 8. 里程碑
 
 各阶段范围、工期、验收的**唯一来源**:[ROADMAP](ROADMAP.md)。本文不重复维护版本计划。

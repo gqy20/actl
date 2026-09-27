@@ -39,13 +39,13 @@ impl Drop for KeyboardAnchor {
 }
 pub(crate) fn check_keyboard_anchor() -> Result<(), CtlError> {
     check_stop()?;
-    if let Some(expected) = KEYBOARD_ANCHOR.with(|a| a.get()) {
-        if physical_focus()? != expected {
-            return Err(CtlError::new(
-                ErrorCode::NotActionable,
-                "physical keyboard focus changed before injection",
-            ));
-        }
+    if let Some(expected) = KEYBOARD_ANCHOR.with(|a| a.get())
+        && physical_focus()? != expected
+    {
+        return Err(CtlError::new(
+            ErrorCode::NotActionable,
+            "physical keyboard focus changed before injection",
+        ));
     }
     Ok(())
 }

@@ -1,0 +1,12 @@
+version: 1
+name: Inspect desktop
+steps:
+  - id: system
+    title: Check system
+    run:
+      command: status
+  - id: windows
+    title: Inspect open windows
+    pause_before: true
+    run:
+      command: list-windows

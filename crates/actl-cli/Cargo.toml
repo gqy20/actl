@@ -12,6 +12,7 @@ categories = ["command-line-utilities"]
 
 [dependencies]
 actl-core = { path = "../actl-core", version = "0.1.4" }
+actl-flow = { path = "../actl-flow", version = "0.1.5" }
 actl-uia = { path = "../actl-uia", version = "0.1.4" }
 clap = { version = "4.6.7", features = ["derive"] }
 serde_json.workspace = true

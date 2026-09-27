@@ -28,6 +28,10 @@ computer_cli/
 
 分层原则:`actl-core` 不 import 任何 Windows crate → 协议层可在任何平台单测/契约测试;`actl-uia` 是唯一接触 COM 的地方,脏活全部圈死在这一个 crate。
 
+新增 actl-flow：YAML 协议、纯同步状态机与持久化，不依赖 Windows；CLI adapter 复用原子 dispatch。
+serde-saphyr 与标准文件锁要求的 MSRV 已同步根 Cargo.toml；实际工具链仍只在 rust-toolchain.toml 锁定。
+文件锁利用 OS 进程退出释放，不增加 unsafe、async 或后台服务。发布顺序增加 actl-flow → actl-cli。
+
 ## 3. 依赖清单
 
 | 用途 | crate | 版本策略 | 备注/备选 |
@@ -36,6 +40,7 @@ computer_cli/
 | UIA 高层封装 | `uiautomation`(**0.25,M0 评估期**:actl-uia 的 dev-dep,供 examples/probe 使用) | 评估结论(M1 采用或自写薄封装)写入 [spike-findings](spike-findings.md) |
 | CLI | `clap`(derive) | 4.6 | 子命令即契约;help 文本与 `commands` schema 从 doc comment 同源生成(06 §3.5) |
 | 序列化 | `serde` + `serde_json` | 跟 stable | envelope 唯一出口 |
+| 流程 YAML | `serde-saphyr` | =1.3.0 | actl-flow；预算限制、重复键拒绝；不启用 include/robotics；实际外部直接依赖去重为 7（含 UIA 开发依赖） |
 | 错误 | `thiserror` | 跟 stable | 单一 Error 枚举 → 错误码映射(ADR-004) |
 | 日志 | `tracing` + `tracing-subscriber` | 跟 stable | 仅写 **stderr**(ADR-002) |
 | 物理输入 | `enigo` | feature `actl-physical` 内 | SendInput 级 |

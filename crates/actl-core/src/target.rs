@@ -56,10 +56,10 @@ pub fn parse_target(raw: &str) -> Result<Target, CtlError> {
     }
     // xy:x,y(物理屏幕坐标;负 x 合法——虚拟桌面左侧屏)
     if let Some(rest) = raw.strip_prefix("xy:") {
-        if let Some((xs, ys)) = rest.split_once(',') {
-            if let (Ok(x), Ok(y)) = (xs.trim().parse::<i32>(), ys.trim().parse::<i32>()) {
-                return Ok(Target::Coord(x, y));
-            }
+        if let Some((xs, ys)) = rest.split_once(',')
+            && let (Ok(x), Ok(y)) = (xs.trim().parse::<i32>(), ys.trim().parse::<i32>())
+        {
+            return Ok(Target::Coord(x, y));
         }
         return Err(bad(raw));
     }
@@ -76,18 +76,18 @@ pub fn parse_target(raw: &str) -> Result<Target, CtlError> {
                 return Err(bad(raw));
             }
             // <Type|Id>#N → 序数形式(fallback 链 L3;#0 非法)
-            if prefix == "role:" || prefix == "id:" {
-                if let Some((key, idx)) = rest.rsplit_once('#') {
-                    let n: u32 = idx.parse().map_err(|_| bad(raw))?;
-                    if key.is_empty() || n < 1 {
-                        return Err(bad(raw));
-                    }
-                    return Ok(if prefix == "role:" {
-                        Target::RoleAt(key.to_string(), n)
-                    } else {
-                        Target::IdAt(key.to_string(), n)
-                    });
+            if (prefix == "role:" || prefix == "id:")
+                && let Some((key, idx)) = rest.rsplit_once('#')
+            {
+                let n: u32 = idx.parse().map_err(|_| bad(raw))?;
+                if key.is_empty() || n < 1 {
+                    return Err(bad(raw));
                 }
+                return Ok(if prefix == "role:" {
+                    Target::RoleAt(key.to_string(), n)
+                } else {
+                    Target::IdAt(key.to_string(), n)
+                });
             }
             return Ok(build(rest.to_string()));
         }

@@ -178,28 +178,24 @@ pub(crate) fn find_cmd(
     // (ItemContainerPattern;Explorer 文件列表等,US1 开放项)。命中元素不在
     // 快照树内 → 无 @eN ref,返回 name/id 选择器语义(agent 重放走同一查询)。
     let mut virtual_hit: Option<(actl_core::snapshot::ElementOut, &'static str)> = None;
-    if matched.is_empty() {
-        if let Some(raw_target) = name
+    if matched.is_empty()
+        && let Some(raw_target) = name
             .map(|n| format!("name:{n}"))
             .or_else(|| id.map(|i| format!("id:{i}")))
-        {
-            if let Ok(target) = actl_core::parse_target(&raw_target) {
-                if let Ok(loc) = actl_uia::locate(app, &target, None) {
-                    if loc.resolved_by == "item-container" {
-                        virtual_hit = Some((
-                            actl_core::snapshot::ElementOut {
-                                ref_id: None,
-                                role: loc.role.clone(),
-                                name: loc.name.clone(),
-                                automation_id: loc.automation_id.clone(),
-                                depth: 0,
-                            },
-                            loc.resolved_by,
-                        ));
-                    }
-                }
-            }
-        }
+        && let Ok(target) = actl_core::parse_target(&raw_target)
+        && let Ok(loc) = actl_uia::locate(app, &target, None)
+        && loc.resolved_by == "item-container"
+    {
+        virtual_hit = Some((
+            actl_core::snapshot::ElementOut {
+                ref_id: None,
+                role: loc.role.clone(),
+                name: loc.name.clone(),
+                automation_id: loc.automation_id.clone(),
+                depth: 0,
+            },
+            loc.resolved_by,
+        ));
     }
     let total = matched.len() + virtual_hit.is_some() as usize;
     let limit = limit.unwrap_or(20);
@@ -378,8 +374,10 @@ pub(crate) fn batch_cmd(json_str: &str) -> Result<CommandOutput, CtlError> {
         }
         let sub = Cli::try_parse_from(std::iter::once("actl").chain(tokens.iter().copied()))
             .map_err(|e| CtlError::protocol(format!("batch[{i}] {line:?}: {e}")))?;
-        if let Command::Batch { .. } = sub.command {
-            return Err(CtlError::protocol("batch cannot nest batch"));
+        if matches!(sub.command, Command::Batch { .. } | Command::Flow(_)) {
+            return Err(CtlError::protocol(
+                "batch cannot nest batch or flow commands",
+            ));
         }
         actl_core::signal_session::step(
             crate::cli::command_name(&sub.command),

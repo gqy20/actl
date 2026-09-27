@@ -6,6 +6,7 @@
 //! `interact`(操作类)与 `query`(观察/编排类);本文件只做入口、分发与 envelope 落盘。
 
 mod cli;
+mod flow;
 mod interact;
 mod query;
 
@@ -39,7 +40,29 @@ fn main() {
     let cli = Cli::from_arg_matches(&matches).expect("clap-validated matches");
     let command_name = command_name(&cli.command);
     let started = Instant::now();
-    let task = match actl_core::history::task_from_env() {
+    // Control/query commands must not overwrite the workflow's desktop feedback.
+    if matches!(
+        &cli.command,
+        Command::Flow(
+            crate::cli::FlowCommand::Validate { .. }
+                | crate::cli::FlowCommand::Status { .. }
+                | crate::cli::FlowCommand::Pause { .. }
+        )
+    ) {
+        finish(
+            command_name,
+            dispatch(&cli.command),
+            started.elapsed().as_millis() as u64,
+        );
+        return;
+    }
+    let task = match &cli.command {
+        Command::Flow(
+            crate::cli::FlowCommand::Run { id, .. } | crate::cli::FlowCommand::Resume { id, .. },
+        ) => Ok(Some(id.clone())),
+        _ => actl_core::history::task_from_env(),
+    };
+    let task = match task {
         Ok(task) => task,
         Err(error) => {
             finish(command_name, Err(error), 0);
@@ -74,6 +97,7 @@ fn main() {
 /// 单命令执行体;batch 子命令复用同一入口(06 §3.7 唯一复合逃生舱)。
 pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
     match command {
+        Command::Flow(command) => flow::dispatch(command).map(Into::into),
         Command::Commands => commands().map(Into::into),
         Command::Status => status().map(Into::into),
         Command::Desktop(DesktopCommand::History { task, limit }) => {
