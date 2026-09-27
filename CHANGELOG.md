@@ -10,6 +10,15 @@
 ## [Unreleased]
 
 ### Added
+- **PointerSpec 模型化 + 输入面三缺口收口(spec)**:① pointer.rs 的扁平
+  PointerAction 枚举重构为 **PointerSpec**(button×clicks×modifiers 参数化,
+  键盘侧 KeySpec 的镜像)——新增操作 = 新数据而非新分支;② **middle-click**
+  (浏览器链接新标签/任务栏新实例)、**triple-click**(编辑器段落选,Notepad
+  实测:三击 → ctrl+c → 剪贴板得到整行"Third and final line.")、
+  **click --physical --with ctrl,shift**(修饰键与点击原子组合:按下修饰→
+  N 击→释放,一批注入自拥有自释放;多选/范围选的刚需通道);③ 修饰键保持
+  事件经 kbd::modifier_hold_events 复用编译层。契约 18/18。输入操作面至此
+  规范化完整(操作×通道×授权×护栏×input_effects 全覆盖)。
 - **裸修饰键 + 开始菜单可达(用户场景闭环)**:① `press win`/`press shift` 等
   裸修饰键此前被解析层拒("纯修饰键不是可按键")——放宽为修饰键本身即按键
   (与 key-down shift 同语义;单测+垃圾用例同步);② **开始菜单全可达**(更正

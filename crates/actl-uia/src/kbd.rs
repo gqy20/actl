@@ -251,6 +251,31 @@ fn compile_key_spec(spec: &KeySpec) -> Result<Vec<INPUT>, CtlError> {
 }
 
 /// 注入一个按键规格:等修饰键空闲 → 编译 → 单批注入(自拥有自释放)。
+/// 修饰键-点击原子组合的事件片段(pointer.rs PointerSpec::Click 用):
+/// `down=true` 产出修饰键按下事件,`down=false` 产出释放事件。
+/// 不做修饰键空置检查(调用方 pointer_physical 已查)。
+pub(crate) fn modifier_hold_events(
+    modifiers: &[String],
+    down: bool,
+) -> Result<Vec<INPUT>, CtlError> {
+    let spec = KeySpec {
+        modifiers: modifiers.to_vec(),
+        keys: vec![],
+    };
+    // 复用编译层:裸修饰键 → 每键一个 VK 事件
+    compile_modifier_events(&spec, down)
+}
+
+/// 编译裸修饰键为按下/释放事件序列。
+fn compile_modifier_events(spec: &KeySpec, down: bool) -> Result<Vec<INPUT>, CtlError> {
+    let mut inputs = Vec::new();
+    for m in &spec.modifiers {
+        let vk = modifier_vk(m);
+        inputs.push(vk_event(vk, !down)); // vk_event(down: bool) — 见其文档
+    }
+    Ok(inputs)
+}
+
 pub fn send_key_spec(spec: &KeySpec) -> Result<(), CtlError> {
     // 修饰键治理(doc 09 §3.4,2026-09-26 修订):不再无条件清场 11 键——
     // 那会踩掉用户物理按住的修饰键。改为:①开场检测,有按住(用户或历史

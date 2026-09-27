@@ -14,6 +14,7 @@ pub(crate) fn click(
     near: Option<&str>,
     snapshot: Option<&str>,
     physical: bool,
+    with: &[String],
     expect: Option<&str>,
     timeout: Option<u64>,
 ) -> Result<CommandOutput, CtlError> {
@@ -31,12 +32,20 @@ pub(crate) fn click(
     };
 
     let data = if physical {
-        let (loc, (px, py), scrolled) = actl_uia::click_physical(app, &target, near)?;
+        let action = if with.is_empty() {
+            actl_uia::PointerAction::LeftClick
+        } else {
+            actl_uia::PointerAction::ClickWith {
+                modifiers: with.to_vec(),
+            }
+        };
+        let (loc, (px, py), scrolled) = actl_uia::pointer_physical(app, &target, near, action)?;
         json!({
             "action": "click",
             "target": target.describe(),
             "resolved_by": loc.resolved_by,
-            "pattern": "physical-left",
+            "pattern": if with.is_empty() { "physical-left" } else { "physical-modified" },
+            "modifiers": with,
             "point": [px, py],
             "scrolled_into_view": scrolled,
             "input_effects": { "keyboard": "none", "clipboard": "untouched", "pointer": "move_and_click" },
@@ -246,6 +255,8 @@ pub(crate) enum PointerKind {
     Right,
     Double,
     Hover,
+    Middle,
+    Triple,
 }
 
 pub(crate) fn pointer_cmd(
@@ -260,6 +271,8 @@ pub(crate) fn pointer_cmd(
         PointerKind::Right => actl_uia::PointerAction::RightClick,
         PointerKind::Double => actl_uia::PointerAction::DoubleClick,
         PointerKind::Hover => actl_uia::PointerAction::Hover,
+        PointerKind::Middle => actl_uia::PointerAction::MiddleClick,
+        PointerKind::Triple => actl_uia::PointerAction::TripleClick,
     };
     let effects = match kind {
         PointerKind::Hover => "move",

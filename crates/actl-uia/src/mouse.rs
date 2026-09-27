@@ -9,8 +9,9 @@
 use actl_core::CtlError;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     INPUT, INPUT_0, INPUT_MOUSE, MOUSE_EVENT_FLAGS, MOUSEEVENTF_ABSOLUTE, MOUSEEVENTF_LEFTDOWN,
-    MOUSEEVENTF_LEFTUP, MOUSEEVENTF_MOVE, MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP,
-    MOUSEEVENTF_VIRTUALDESK, MOUSEEVENTF_WHEEL, MOUSEINPUT, SendInput,
+    MOUSEEVENTF_LEFTUP, MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_MOVE,
+    MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_VIRTUALDESK, MOUSEEVENTF_WHEEL,
+    MOUSEINPUT, SendInput,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
@@ -158,4 +159,52 @@ mod tests {
             assert!((fx - 65535).abs() <= 1 && (fy - 65535).abs() <= 1);
         }
     }
+}
+
+/// 物理中键点击(浏览器:链接新标签;任务栏:新实例)。
+pub fn middle_click_at(x: i32, y: i32) -> Result<(), CtlError> {
+    let (nx, ny) = normalize(x, y);
+    send_all(&[
+        mouse_event(abs(MOUSEEVENTF_MOVE), nx, ny, 0),
+        mouse_event(abs(MOUSEEVENTF_MIDDLEDOWN), nx, ny, 0),
+        mouse_event(MOUSEEVENTF_MIDDLEUP, nx, ny, 0),
+    ])
+}
+
+/// 物理三击(编辑器段落级选择:双击选词、三击选段;系统按三击时距识别)。
+pub fn triple_click_at(x: i32, y: i32) -> Result<(), CtlError> {
+    let (nx, ny) = normalize(x, y);
+    let click = || mouse_event(abs(MOUSEEVENTF_LEFTDOWN), nx, ny, 0);
+    let _ = click;
+    send_all(&[
+        mouse_event(abs(MOUSEEVENTF_MOVE), nx, ny, 0),
+        mouse_event(abs(MOUSEEVENTF_LEFTDOWN), nx, ny, 0),
+        mouse_event(MOUSEEVENTF_LEFTUP, nx, ny, 0),
+        mouse_event(abs(MOUSEEVENTF_LEFTDOWN), nx, ny, 0),
+        mouse_event(MOUSEEVENTF_LEFTUP, nx, ny, 0),
+        mouse_event(abs(MOUSEEVENTF_LEFTDOWN), nx, ny, 0),
+        mouse_event(MOUSEEVENTF_LEFTUP, nx, ny, 0),
+    ])
+}
+
+/// 按钮点击事件片段(不含移动;PointerSpec::Click 组合用)。
+
+/// 修饰键+点击的混合事件批(PointerSpec::Click 的执行体)。
+pub(crate) fn send_mixed(inputs: Vec<INPUT>) -> Result<(), CtlError> {
+    send_all(&inputs)
+}
+
+/// 按钮点击事件片段(物理像素坐标;每次 = move+按下+抬起,多次由调用方循环)。
+pub(crate) fn click_events_for(button: &crate::pointer::MouseButton, x: i32, y: i32) -> Vec<INPUT> {
+    let (nx, ny) = normalize(x, y);
+    let (down, up) = match button {
+        crate::pointer::MouseButton::Left => (MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP),
+        crate::pointer::MouseButton::Right => (MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP),
+        crate::pointer::MouseButton::Middle => (MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP),
+    };
+    vec![
+        mouse_event(abs(MOUSEEVENTF_MOVE), nx, ny, 0),
+        mouse_event(abs(down), nx, ny, 0),
+        mouse_event(up, nx, ny, 0),
+    ]
 }

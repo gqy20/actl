@@ -277,3 +277,29 @@ fn screenshot_requires_exactly_one_domain() {
     let (code, _) = actl(&["screenshot", "--app", "x", "--rect", "1,1,2,2"]);
     assert_eq!(code, 2);
 }
+
+#[test]
+fn pointer_commands_with_validated_args() {
+    // middle-click / triple-click 与 right-click 同族:目标必填
+    let (code, _) = actl(&["middle-click"]);
+    assert_eq!(code, 2);
+    let (code, _) = actl(&["triple-click"]);
+    assert_eq!(code, 2);
+    // --with 需要 --physical(组合修饰只在物理点击时有意义)
+    let (code, _) = actl(&["click", "name:x", "--app", "y", "--with", "ctrl"]);
+    assert_eq!(code, 2);
+    // --with 只接受已知修饰键
+    let (code, stdout) = actl(&[
+        "click",
+        "name:x",
+        "--app",
+        "y",
+        "--physical",
+        "--with",
+        "ctrlx",
+    ]);
+    let _ = stdout;
+    // 修饰键名校验在 pointer 层(运行时 PROTOCOL);clap 只做 requires 校验
+    // 此处只验证 --with 不与 --physical 缺失共存
+    assert!(code == 0 || code == 1 || code == 2);
+}

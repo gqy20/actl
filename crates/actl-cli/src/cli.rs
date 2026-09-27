@@ -51,6 +51,9 @@ pub(crate) enum Command {
         /// (uses the real pointer + input lock; UIA Invoke is the default)
         #[arg(long)]
         physical: bool,
+        /// Hold these modifier(s) atomically during a --physical click (ctrl = multi-select, shift = range)
+        #[arg(long, requires = "physical", value_delimiter = ',')]
+        with: Vec<String>,
         /// Post-condition: window:<substr> must NEWLY appear after the click
         #[arg(long)]
         expect: Option<String>,
@@ -176,6 +179,28 @@ pub(crate) enum Command {
     },
     /// Double-click an element (physical)
     DoubleClick {
+        /// Target: @eN | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N
+        target: String,
+        /// Target window by title substring
+        #[arg(long)]
+        app: Option<String>,
+        /// Disambiguate multi-matches by picking the one nearest to this anchor
+        #[arg(long)]
+        near: Option<String>,
+    },
+    /// Middle-click an element (browser: link in new tab; taskbar: new instance)
+    MiddleClick {
+        /// Target: @eN | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N
+        target: String,
+        /// Target window by title substring
+        #[arg(long)]
+        app: Option<String>,
+        /// Disambiguate multi-matches by picking the one nearest to this anchor
+        #[arg(long)]
+        near: Option<String>,
+    },
+    /// Triple-click an element (editors: paragraph-level selection)
+    TripleClick {
         /// Target: @eN | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N
         target: String,
         /// Target window by title substring
@@ -439,6 +464,8 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
         Command::RightClick { .. } => "right-click",
         Command::DoubleClick { .. } => "double-click",
         Command::Hover { .. } => "hover",
+        Command::MiddleClick { .. } => "middle-click",
+        Command::TripleClick { .. } => "triple-click",
         Command::Drag { .. } => "drag",
         Command::Scroll { .. } => "scroll",
         Command::KeyDown { .. } => "key-down",
@@ -472,7 +499,7 @@ fn after_help_for(name: &str) -> Option<&'static str> {
             "Example:\n  actl snapshot --app Notepad --skeleton\n--skeleton keeps interactive elements + collapsed ancestors (token saver).\nErrors: NOT_FOUND no window matches --app"
         }
         "click" => {
-            "Example:\n  actl click @e3 --app Notepad --snapshot s1a2b\nErrors: NOT_FOUND no match | AMBIGUOUS multi-match (candidates returned) | STALE_REF stale @eN (re-snapshot) | NOT_ACTIONABLE no pattern | PERM_DENIED foreground guard (--physical)"
+            "Example:\n  actl click @e3 --app Notepad --snapshot s1a2b\n  actl click name:item --app Explorer --physical --with ctrl\n(multi-select)\nErrors: NOT_FOUND no match | AMBIGUOUS multi-match (candidates returned) | STALE_REF stale @eN (re-snapshot) | NOT_ACTIONABLE no pattern | PERM_DENIED foreground guard (--physical)"
         }
         "get" => {
             "Example:\n  actl get name:状态 --app 设置 --property value\nProperties: name role automation_id offscreen value text (text = TextPattern body; Chromium Document value is the URL).\nErrors: PROTOCOL unknown property | NOT_FOUND no match | AMBIGUOUS multi-match"
@@ -520,6 +547,18 @@ Errors: PROTOCOL --app required | PERM_DENIED foreground guard | NOT_FOUND windo
         }
         "double-click" => {
             "Example:\n  actl double-click name:file.txt --app 项目\nErrors: NOT_FOUND / AMBIGUOUS | NOT_ACTIONABLE no clickable point or occluded"
+        }
+        "middle-click" => {
+            "Example:
+  actl middle-click name:link --app Browser
+Browser: open link in new tab; taskbar: new app instance.
+Errors: NOT_FOUND / AMBIGUOUS | NOT_ACTIONABLE no clickable point or occluded"
+        }
+        "triple-click" => {
+            "Example:
+  actl triple-click role:Document --app Notepad
+Editors: paragraph-level selection (double=word, triple=paragraph).
+Errors: NOT_FOUND / AMBIGUOUS | NOT_ACTIONABLE no clickable point or occluded"
         }
         "hover" => {
             "Example:\n  actl hover name:菜单 --app 应用\nMoves the real pointer onto the element (tooltips, hover menus).\nErrors: NOT_FOUND / AMBIGUOUS | NOT_ACTIONABLE no clickable point or occluded"

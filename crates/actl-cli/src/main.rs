@@ -108,6 +108,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             near,
             snapshot,
             physical,
+            with,
             expect,
             timeout,
         } => click(
@@ -116,6 +117,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             near.as_deref(),
             snapshot.as_deref(),
             *physical,
+            &with,
             expect.as_deref(),
             *timeout,
         ),
@@ -180,6 +182,20 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             app.as_deref(),
             near.as_deref(),
             PointerKind::Double,
+        ),
+        Command::MiddleClick { target, app, near } => pointer_cmd(
+            "middle-click",
+            target,
+            app.as_deref(),
+            near.as_deref(),
+            PointerKind::Middle,
+        ),
+        Command::TripleClick { target, app, near } => pointer_cmd(
+            "triple-click",
+            target,
+            app.as_deref(),
+            near.as_deref(),
+            PointerKind::Triple,
         ),
         Command::Hover { target, app, near } => pointer_cmd(
             "hover",

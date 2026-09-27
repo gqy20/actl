@@ -10,21 +10,82 @@ use crate::locate::{Located, locate};
 use crate::window::{find_window, native_hwnd, window_title_of};
 use crate::{input, internal, kbd, mouse, timing};
 
-/// 指针物理动作(泛化自 click --physical;doc 09 §6 七步链)。
-/// ①语义定位唯一目标 ①b offscreen 则 ScrollItem 滚入视野(虚拟化列表定位的
-/// 配套:L4 命中的条目常在视口外,clickable point 会取不到/取错)
-/// ②取 UIA clickable point(无 → 拒绝,绝不猜中心点)
-/// ③命中检查:该坐标的最顶层窗口须属于目标根(标题比对;遮挡/最小化 → 拒绝)
-/// ④持输入占用锁 + 修饰键空置检查 ⑤单批注入(竞态窗最小化)。
-/// 命中检查与注入之间仍有竞态,如实设计:检查紧贴注入,不承诺零竞态。
-/// 返回 (定位结果, 坐标, 是否执行过滚入视野)。
+/// 指针物理动作的参数化模型(PointerSpec,键盘侧 KeySpec 的镜像):
+/// 按钮 × 点击数 × 修饰键组合的有限空间,新增操作 = 新数据而非新实现分支。
+/// 修饰键与点击原子组合(按下修饰 → 点击 → 释放,自拥有自释放,同 type 纪律)。
+pub enum PointerSpec {
+    Click {
+        button: MouseButton,
+        clicks: u8,
+        /// 原子持有的修饰键(ctrl+click 多选 / shift+click 范围选)
+        modifiers: Vec<String>,
+    },
+    Hover,
+    Drag {
+        to: (i32, i32),
+    },
+    Wheel {
+        notches: i32,
+    },
+}
+
+pub enum MouseButton {
+    Left,
+    Right,
+    Middle,
+}
+
+/// 兼容层:旧扁平变体的构造便捷(PointerSpec 的数据糖)。
 pub enum PointerAction {
     LeftClick,
     RightClick,
     DoubleClick,
+    TripleClick,
+    MiddleClick,
+    ClickWith { modifiers: Vec<String> },
     Hover,
     Drag { to: (i32, i32) },
     Wheel { notches: i32 },
+}
+
+impl PointerAction {
+    pub fn to_spec(self) -> PointerSpec {
+        match self {
+            PointerAction::LeftClick => PointerSpec::Click {
+                button: MouseButton::Left,
+                clicks: 1,
+                modifiers: vec![],
+            },
+            PointerAction::RightClick => PointerSpec::Click {
+                button: MouseButton::Right,
+                clicks: 1,
+                modifiers: vec![],
+            },
+            PointerAction::DoubleClick => PointerSpec::Click {
+                button: MouseButton::Left,
+                clicks: 2,
+                modifiers: vec![],
+            },
+            PointerAction::TripleClick => PointerSpec::Click {
+                button: MouseButton::Left,
+                clicks: 3,
+                modifiers: vec![],
+            },
+            PointerAction::MiddleClick => PointerSpec::Click {
+                button: MouseButton::Middle,
+                clicks: 1,
+                modifiers: vec![],
+            },
+            PointerAction::ClickWith { modifiers } => PointerSpec::Click {
+                button: MouseButton::Left,
+                clicks: 1,
+                modifiers,
+            },
+            PointerAction::Hover => PointerSpec::Hover,
+            PointerAction::Drag { to } => PointerSpec::Drag { to },
+            PointerAction::Wheel { notches } => PointerSpec::Wheel { notches },
+        }
+    }
 }
 
 pub fn pointer_physical(
@@ -114,13 +175,23 @@ pub fn pointer_physical(
     let _lock = input::InputLock::acquire(timing().lock_wait_ms)?;
     // 修饰键空置检查:ctrl 按住时的物理点击 = ctrl+click(语义劫持)
     kbd::wait_modifiers_clear()?;
-    match action {
-        PointerAction::LeftClick => mouse::left_click_at(px, py)?,
-        PointerAction::RightClick => mouse::right_click_at(px, py)?,
-        PointerAction::DoubleClick => mouse::double_click_at(px, py)?,
-        PointerAction::Hover => mouse::move_to(px, py)?,
-        PointerAction::Drag { to: (tx, ty) } => mouse::drag_to(px, py, tx, ty)?,
-        PointerAction::Wheel { notches } => mouse::wheel_at(px, py, notches)?,
+    match action.to_spec() {
+        PointerSpec::Click {
+            button,
+            clicks,
+            modifiers,
+        } => {
+            // 修饰键与点击原子组合:按下修饰 → N 次点击 → 释放修饰,一批注入
+            let mut events = kbd::modifier_hold_events(&modifiers, true)?;
+            for _ in 0..clicks {
+                events.extend(mouse::click_events_for(&button, px, py));
+            }
+            events.extend(kbd::modifier_hold_events(&modifiers, false)?);
+            mouse::send_mixed(events)?;
+        }
+        PointerSpec::Hover => mouse::move_to(px, py)?,
+        PointerSpec::Drag { to: (tx, ty) } => mouse::drag_to(px, py, tx, ty)?,
+        PointerSpec::Wheel { notches } => mouse::wheel_at(px, py, notches)?,
     }
     Ok((loc, (px, py), scrolled))
 }
