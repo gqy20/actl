@@ -65,7 +65,7 @@ Agent Skill ✓ · crates.io 已发布且 tag 自动同步(三 crate;cargo insta
 (Excel GridPattern 直读+剪贴板直灌;Word TextPattern;docs/14)· 微信核心通道全通
 (发送/搜索/文件/联系人/朋友圈/@人/群信息;pack 路线+quirks)· 应用档案 pack v1
 (excel/word/wechat + lint-packs + actl×collector 分工协议)。
-0.2.0 剩余:正常日 timing/P50 复测、金任务 10 轮全量回归、外部机器 US3(用户侧)、actl-signal.rs 拆分(959 行已过 800 警告线;壳/轮询/渲染/几何四模块,登记于 docs/11 §14)。
+0.2.0 剩余:正常日 timing/P50 复测、金任务 10 轮全量回归、外部机器 US3(用户侧)、actl-signal.rs 拆分(959 行已过 800 警告线;壳/轮询/渲染/几何四模块,登记于 docs/11 §14)、信号条失联判定修正(age 阈值不分 phase,终态后静默误报"失联",docs/11 §15)。
 
 **追加批·浏览器内容通道 + 坐标寻址 + 打磨(v0.1.5 已发,2026-09-27)**:
 `--view content`/`--stable`/`xy:`(视觉兜底)/`id:#N`/`--app hwnd:` 五个
@@ -92,6 +92,7 @@ token 豁免项待实测数字复核。
 - Linux(AT-SPI2)/ macOS 后端(协议层已平台无关)
 - MCP 薄壳(独立 crate,不进核心)
 - 显示层面板化(docs/11 Phase B/C:介入卡/任务面板/Narrator)——先以 HTML/TS 原型做设计验证(不进发布链);面板化前按 [11 §14](11-desktop-interaction-and-display-research.md) 决策门 spike“现有 Rust 壳 + WebView2 内容层”(拉取协议不变,壳继续拥有窗口/焦点/热键/托盘);不采 Tauri(tokio,ADR-001 冲突)、不采 Electron(体量)
+- 游戏场景(Minecraft 建造灌入路线,规划见 [17](17-game-scenarios.md);命令通道灌入 + F2 截图验收,"手工搭"的输入保真度原语登记于 17 §3;依赖信号条失联修正)
 
 **v0.3.0 发布标准**:envelope 协议评审冻结;错误码全集文档化;破坏性变更仅随版本号递增
 并登记 spec(0.x 期破坏性演进常态,冻结后不再静默破坏);有一篇可复现的端到端教程。
@@ -110,3 +111,11 @@ token 豁免项待实测数字复核。
 1. **金任务先行**:每个 Phase 的验收任务在开发前定义,不为凑功能延后验收;
 2. **范围铁律**:PRD 非目标清单(§1.3)膨胀 = 项目失败的第一原因;
 3. **UIA 黑洞预算**:按"写 1 行调 3 行"留时间([05 §5](05-implementation-estimate.md)),进度落后先砍命令面广度,不砍可靠性特性(fallback/verify/evidence)。
+
+
+### 显示层紧凑版补充（2026-09-27）
+
+已实现：信号条拆分、终态失联修正、持续心跳、组合输入影响、动作预告/取消、
+点击波纹/UIA 边界反馈、截图排除。详见 [18](18-display-layer-implementation.md)。
+此前 0.2.0 剩余列表中的信号条拆分与失联修正由本项完成；任务级计划/暂停恢复、
+完整详情面板和 WebView2 仍为后期候选。
