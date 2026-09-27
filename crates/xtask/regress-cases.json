@@ -49,19 +49,19 @@
   },
   {
     "id": "edge-deep-tree",
-    "script": "fixtures/edge-deep-tree.sh",
+    "script": "fixtures/edge-deep-tree.ps1",
     "suite": "system",
-    "state": "blocked",
-    "input": "none",
-    "reason": "Pending window identity and retained evidence migration"
+    "state": "ready",
+    "input": "uia",
+    "reason": "Isolated profile and local page; live acceptance and owned-tab cleanup passed (docs/24)"
   },
   {
     "id": "edge-content-view",
-    "script": "fixtures/edge-content-view.sh",
+    "script": "fixtures/edge-content-view.ps1",
     "suite": "system",
-    "state": "blocked",
-    "input": "none",
-    "reason": "Pending window identity and deterministic loading assertion"
+    "state": "ready",
+    "input": "uia",
+    "reason": "Isolated profile and local page; live acceptance and owned-tab cleanup passed (docs/24)"
   },
   {
     "id": "coord-click",
@@ -78,5 +78,45 @@
     "state": "manual",
     "input": "keyboard",
     "reason": "Requires a real account and dynamic content; not a system fixture"
+  },
+  {
+    "id": "chrome-content-view",
+    "script": "scenarios/chrome-content-view.ps1",
+    "suite": "scenario",
+    "state": "ready",
+    "input": "uia",
+    "reason": "Installed Chrome; isolated private profile and local page (not a CI dependency)"
+  },
+  {
+    "id": "observe-cloudmusic",
+    "script": "scenarios/app-observe.ps1",
+    "suite": "scenario",
+    "state": "manual",
+    "input": "none",
+    "reason": "Local app observation; invoke with -App cloudmusic -Program installed-executable; see docs/24"
+  },
+  {
+    "id": "observe-zotero",
+    "script": "scenarios/app-observe.ps1",
+    "suite": "scenario",
+    "state": "manual",
+    "input": "none",
+    "reason": "Local app observation; invoke with -App zotero -Program installed-executable; see docs/24"
+  },
+  {
+    "id": "observe-meeting",
+    "script": "scenarios/app-observe.ps1",
+    "suite": "scenario",
+    "state": "manual",
+    "input": "none",
+    "reason": "Local app observation; invoke with -App meeting -Program installed-executable; see docs/24"
+  },
+  {
+    "id": "observe-vscode",
+    "script": "scenarios/app-observe.ps1",
+    "suite": "scenario",
+    "state": "manual",
+    "input": "none",
+    "reason": "Local app observation; invoke with -App vscode -Program installed-executable; see docs/24"
   }
 ]

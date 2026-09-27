@@ -1,0 +1,24 @@
+# 来源: docs/24-application-adaptation-round1.md；真实窗口只读验证。
+pack_format: 1
+name: cloudmusic
+display: 网易云音乐
+launch: cloudmusic
+window: "hwnd:{hwnd}"
+app_version: "3.1.41.205529"
+verified_date: 2026-09-27
+verified_env: Windows 10.0.26200.0 zh-cn
+quirks:
+  - id: sparse_tree_rich_text
+    note: 实测快照只有 6 个节点，但唯一 Document 的 TextPattern 能读到推荐、歌单和歌曲信息。文本出现“播放”不代表有可调用的播放按钮；搜索和播放操作尚未验证。
+routes:
+  - id: observe
+    description: 根据 list-windows 确认目标 HWND 后读取控件树
+    status: verified
+    steps:
+      - ["snapshot", "--app", "{window}"]
+  - id: read_content
+    description: 读取当前页面内容；先确认窗口内只有一个 Document
+    status: verified
+    verify: 文本非空，并与截图可见栏目对应；不把歌曲列表当作播放状态
+    steps:
+      - ["get", "role:Document", "--property", "text", "--app", "{window}"]

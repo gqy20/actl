@@ -4,6 +4,12 @@ $golden = Get-Content "$root/fixtures/golden-task-2.sh" -Raw
 if ($golden -match 'ACTL=\./target/debug') { throw 'golden-task-2 ignores the selected validation binary' }
 if ($golden -match 'close_all_by_title') { throw 'golden-task-2 closes windows it does not own' }
 Write-Output 'Fixture entry contract passed'
+foreach ($name in @('edge-deep-tree','edge-content-view')) {
+    $entry = Get-Content "$root/fixtures/$name.sh" -Raw
+    if ($entry -match 'close-window "\$WIN"|rm -f|ACTL:-target/release') {
+        throw "$name still uses title cleanup, deletes evidence or bypasses validation binary"
+    }
+}
 foreach ($name in @('golden-task-1','win32-table-extract','virtualized-list')) {
     $entry = Get-Content "$root/fixtures/$name.sh" -Raw
     if ($entry -match 'close_all_by_title|rm -rf') { throw "$name still uses broad cleanup" }
@@ -58,3 +64,4 @@ try {
 Write-Output 'Regression selection, stream capture, exit classification and existing-session protection passed'
 & "$PSScriptRoot/system-fixture.Tests.ps1"
 & "$PSScriptRoot/fixture-stream.Tests.ps1"
+& "$PSScriptRoot/browser-probe.Tests.ps1"

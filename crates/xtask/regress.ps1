@@ -33,6 +33,7 @@ foreach ($item in $cases) {
     $prefix = Join-Path $caseDir 'fixture'
     $record.stdout = "$prefix.stdout.log"
     $record.stderr = "$prefix.stderr.log"
+    $record.capture = "$prefix.capture.json"
     Save-Report
     Write-Host "Running $($item.id) (input: $($item.input))"
     $timer = [Diagnostics.Stopwatch]::StartNew()

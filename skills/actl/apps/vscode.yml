@@ -1,0 +1,29 @@
+# 来源: docs/24-application-adaptation-round1.md；独立 profile 和临时文本文件。
+pack_format: 1
+name: vscode
+display: Visual Studio Code
+launch: "{installed_executable}"
+window: "hwnd:{hwnd}"
+app_version: "1.139.0"
+verified_date: 2026-09-27
+verified_env: Windows 10.0.26200.0 zh-cn; independent user-data-dir; extensions disabled; force-renderer-accessibility
+quirks:
+  - id: multiple_edit_surfaces
+    note: 文件编辑器与 Chat Input 都是 Edit。必须按文件名加角色定位，再取唯一 ref，不能对裸 role:Edit 输入。
+  - id: insertion_not_replacement
+    note: type --paste 在当前选区或光标位置插入，不能假设覆盖全文。本轮在新打开临时文件的开头插入后保存，磁盘全文核验通过；会使用剪贴板。
+routes:
+  - id: observe
+    description: 读取独立测试窗口的控件结构
+    status: verified
+    steps:
+      - ["snapshot", "--app", "{window}"]
+  - id: edit_owned_file
+    description: 仅用于已确认归属的临时文本文件；将 find 的唯一 ref 填入 editor_ref，并确认插入位置
+    status: verified
+    verify: Ctrl+S 后从磁盘读取临时文件，与预期全文精确比较（仅规范化换行）；失败保留证据
+    steps:
+      - ["find", "--name", "{file_name}", "--role", "Edit", "--app", "{window}"]
+      - ["get", "{editor_ref}", "--property", "text", "--app", "{window}"]
+      - ["type", "{editor_ref}", "{text}", "--paste", "--app", "{window}"]
+      - ["press", "ctrl+s", "--app", "{window}"]

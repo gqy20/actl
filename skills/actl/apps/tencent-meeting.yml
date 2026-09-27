@@ -1,0 +1,18 @@
+# 来源: docs/24-application-adaptation-round1.md；首页观察，未加入会议。
+pack_format: 1
+name: tencent_meeting
+display: 腾讯会议
+launch: "{installed_executable}"
+window: "hwnd:{hwnd}"
+app_version: "3.46.1.409"
+verified_date: 2026-09-27
+verified_env: Windows 10.0.26200.0 zh-cn
+quirks:
+  - id: homepage_controls_missing
+    note: 首页快照 91 个节点，只有系统窗口按钮提供可交互 ref。加入、快速会议、预定、共享入口视觉可见但未暴露为可用 UIA Button。NXQt 自动化 ID 含地址，不可跨会话硬编码。
+routes:
+  - id: observe
+    description: 已解析安装路径与 HWND 后观察首页结构；会议操作尚未验证
+    status: verified
+    steps:
+      - ["snapshot", "--app", "{window}"]

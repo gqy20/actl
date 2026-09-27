@@ -38,15 +38,23 @@ function Invoke-RegressionProcess([string]$Program, [string[]]$Arguments, [strin
     $stdout = [IO.File]::Create("$LogPrefix.stdout.log")
     $stderr = [IO.File]::Create("$LogPrefix.stderr.log")
     $process = $null
+    $capture = [Threading.CancellationTokenSource]::new()
     try {
         $process = [Diagnostics.Process]::Start($info)
-        $outTask = $process.StandardOutput.BaseStream.CopyToAsync($stdout)
-        $errTask = $process.StandardError.BaseStream.CopyToAsync($stderr)
+        $outTask = $process.StandardOutput.BaseStream.CopyToAsync($stdout,$capture.Token)
+        $errTask = $process.StandardError.BaseStream.CopyToAsync($stderr,$capture.Token)
         $process.WaitForExit()
-        $null = $outTask.GetAwaiter().GetResult()
-        $null = $errTask.GetAwaiter().GetResult()
+        $capture.CancelAfter(1000)
+        foreach ($task in @($outTask,$errTask)) {
+            try { $null = $task.GetAwaiter().GetResult() } catch {
+                if (-not $task.IsCanceled) { throw }
+            }
+        }
+        @{streams_drained=(-not ($outTask.IsCanceled -or $errTask.IsCanceled));exit_code=$process.ExitCode} |
+            ConvertTo-Json | Set-Content "$LogPrefix.capture.json" -Encoding utf8
         return $process.ExitCode
     } finally {
+        $capture.Dispose()
         if ($process) { $process.Dispose() }
         $stdout.Dispose()
         $stderr.Dispose()

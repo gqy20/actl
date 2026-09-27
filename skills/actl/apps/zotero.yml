@@ -1,0 +1,26 @@
+# 来源: docs/24-application-adaptation-round1.md；未修改用户文献库。
+pack_format: 1
+name: zotero
+display: Zotero
+launch: zotero
+window: "hwnd:{hwnd}"
+app_version: "10.0.3"
+verified_date: 2026-09-27
+verified_env: Windows 10.0.26200.0 zh-cn
+quirks:
+  - id: search_value_unavailable
+    note: 快速搜索 Edit 可定位，但 get value 返回空 properties，不能据此认为搜索词为空。本轮没有写搜索词，搜索及恢复流程待验证。
+  - id: reader_text_scope
+    note: Zotero Reader 的 text 实测为阅读器工具栏和页码信息，不能当作 PDF 正文提取能力。
+routes:
+  - id: observe
+    description: 确认 HWND 后读取文献库及阅读器界面结构
+    status: verified
+    steps:
+      - ["snapshot", "--app", "{window}"]
+  - id: locate_search
+    description: 定位中文界面的快速搜索框，仅查找
+    status: verified
+    verify: elements 唯一且角色为 Edit；不代表 ValuePattern 可用
+    steps:
+      - ["find", "--name", "快速搜索", "--role", "Edit", "--app", "{window}"]

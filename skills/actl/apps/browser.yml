@@ -12,6 +12,10 @@ app_version: "Edge 1xx / Chrome 1xx(Chromium 系)"
 verified_date: 2026-09-27
 verified_env: Win11 zh-cn(Edge + Chrome 双实证,docs/16)
 quirks:
+  - id: isolated_probe_documents
+    note: docs/24 实测 Edge 154.0.4258.37、Chrome 153.0.8010.53。独立 profile 也可能出现同步提示 Document；本地测试页按唯一标题加 Document 角色查找，再使用返回的 ref，不硬编码 RootWebArea 或序号。
+  - id: tab_strip_ownership
+    note: 关闭测试窗口前只计算测试标签所在 Tab 容器的直接 TabItem 子节点。Chrome 翻译弹层也有语言 TabItem，不应计入网页标签；真实额外网页标签仍拒绝清理。
   - id: content_view_projection
     note: 树形观察一律 snapshot --view content --skeleton——Document(网页正文)子树
           保留、工具栏 chrome 整枝丢弃;纯 --skeleton 对浏览器只削 ~36%(工具栏按钮
