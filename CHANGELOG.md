@@ -10,6 +10,13 @@
 ## [Unreleased]
 
 ### Added
+- **截图→视觉工作流端到端实证 + pack 路线**:Notepad 实测 `screenshot --element
+  role:Document` → PNG(24KB/2280×1180)→ 视觉模型**逐字读回**中英文混合内容
+  ("actl + vision = the screenshot loop works. 敏捷的棕色狐狸。")——UIA 失明
+  场景的完整读取链路打通。wechat pack 增 read_image_message(图片消息:定位
+  bubble → screenshot --element → 上层多模态)和 capture_context_menu(右键
+  point + screenshot --rect);SKILL.md 增视觉兜底协议节(三域用法 + 三典型
+  场景 + "显式请求的兜底,默认路径永远是 UIA"定位);lint 76 步全绿。
 - **PointerSpec 模型化 + 输入面三缺口收口(spec)**:① pointer.rs 的扁平
   PointerAction 枚举重构为 **PointerSpec**(button×clicks×modifiers 参数化,
   键盘侧 KeySpec 的镜像)——新增操作 = 新数据而非新分支;② **middle-click**

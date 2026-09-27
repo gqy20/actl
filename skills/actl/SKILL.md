@@ -81,6 +81,20 @@ steps、quirks 与解法、验证方法)。要点速记:
   先 `click name:启用编辑`。
 - **启动**:Office/商店应用裸名即可(`launch WINWORD`,App Paths 注册表解析)。
 
+## 视觉兜底协议(UIA 失明时)
+
+当 UIA 树不暴露内容(图片消息、自绘菜单、Canvas 画布)时,截图是最后的兜底通道:
+
+```
+actl screenshot --element <ref> --app <win>     # 元素级裁剪(经定位链)
+actl screenshot --app <win>                     # 整窗(抗遮挡)
+actl screenshot --rect <x,y,w,h>               # 区域(配合 right-click 返回的 point)
+```
+
+输出为 PNG 文件路径(envelope data.path),把该文件交给多模态模型即可读图。
+截图是**显式请求的兜底**——默认路径永远是 UIA(确定性和 token 效率优先)。
+Canvas 类(mspaint)、自绘菜单(微信右键)、图片消息(微信气泡)是三个典型场景。
+
 ## 工具分工:actl × wechat-ui-collector
 
 同机互补,按任务选工具:

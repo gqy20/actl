@@ -139,3 +139,15 @@ verify: 输入框 value 读回比对(draft_message 最后一步);发送后新气
       - ["click", "@{info_ref}", "--app", "{window}", "--physical"]
       - ["snapshot", "--app", "{window}"]
       - ["press", "escape", "--app", "{window}"]
+  - id: read_image_message
+    description: 图片消息内容读取(UIA 失明兜底:截图+视觉模型;须先打开含图会话)
+    steps:
+      - ["snapshot", "--app", "{window}", "--skeleton"]
+      - ["screenshot", "--element", "{bubble_ref}", "--sapp", "{window}"]
+      # 之后的视觉模型调用由上层 agent 完成(把 PNG 路径喂给多模态)
+  - id: capture_context_menu
+    description: 右键菜单捕获(菜单是 mmui overlay,UIA 不可见;截 point 右下区域给视觉)
+    steps:
+      - ["right-click", "{target}", "--app", "{window}", "--physical"]
+      - ["screenshot", "--rect", "{menu_x},{menu_y},{menu_w},{menu_h}"]
+      - ["press", "escape", "--app", "{window}"]
