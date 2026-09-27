@@ -3,7 +3,9 @@
 本项目的全部显著变更记录于此。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0),
 版本语义遵循 SemVer;0.x 期间破坏性变更在条目中以 **[BC]** 标注。
 条目只记"变了什么与为什么";过程细节、实测战况与归因在 git 提交信息与 docs/(场景实测
-记录、timing 报告)里,不在此重复。
+记录、timing 报告)里,不在此重复。release notes 由本文件生成:正文中的
+`` 等 ref 语法必须置于反引号内——裸 `@` 会被 GitHub 解析为用户提及
+(v0.1.3 曾因此把无关账号 en 列进 Contributors)。
 
 ## [Unreleased]
 
