@@ -34,6 +34,18 @@ try {
     $file=Get-ChildItem $env:ACTL_TEST_DIR -Recurse -Filter result.json|Select-Object -First 1
     $report=Get-Content $file.FullName -Raw|ConvertFrom-Json
     if($report.calls.Count -ne 0 -or $report.passed){throw 'Zotero search launched despite stop'}
+    foreach($scenario in @('cloudmusic-playback','tencent-meeting-draft')){
+        $env:ACTL_TEST_DIR=Join-Path $testRoot $scenario
+        $parameters=@{Actl=(Get-Process -Id $PID).Path}
+        if($scenario -eq 'cloudmusic-playback'){$parameters.Hwnd=1}
+        else{$parameters.ScheduleHwnd=1;$parameters.Topic='stop-test';$parameters.ExpectedDate='2026/9/28'}
+        & "$root/scenarios/$scenario.ps1" @parameters
+        if($LASTEXITCODE -ne 77){throw "$scenario ignored stop"}
+        $file=Get-ChildItem $env:ACTL_TEST_DIR -Recurse -Filter result.json|Select-Object -First 1
+        $report=Get-Content $file.FullName -Raw|ConvertFrom-Json
+        if($report.calls.Count -ne 0 -or $report.passed){throw "$scenario operated despite stop"}
+    }
+    if(-not (Test-Path "$testRoot/actl/stop-requested")){throw 'Scenario cleared stop'}
 }finally{$env:LOCALAPPDATA=$oldLocal;$env:ACTL_TEST_DIR=$oldDir}
 Write-Output 'Browser stop guard passed'
 . "$root/fixtures/system-fixture.ps1"

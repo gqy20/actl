@@ -10,6 +10,22 @@ $c=@{root=$root;binary=(Resolve-Path $Actl).Path;calls=[Collections.Generic.List
 $report=@{passed=$false;reason='';checks=[Collections.Generic.List[object]]::new();cleanup='';application=$null}
 $code=1
 function Read-Normalized([string]$Path){[IO.File]::ReadAllText($Path).Replace("`r`n","`n")}
+function Type-Input([string]$Name,[string]$Text){
+ $deadline=[DateTime]::UtcNow.AddSeconds(5)
+ do{
+  $f=Invoke-FixtureCli $c @('find','--name',$Name,'--role','Edit','--app',$c.app)
+  if(@($f.elements).Count -eq 1){break}
+ }while([DateTime]::UtcNow -lt $deadline)
+ Assert-Fixture (@($f.elements).Count -eq 1) "Input not unique: $Name"
+ $null=Invoke-FixtureCli $c @('type',$f.elements[0].ref,$Text,'--paste','--app',$c.app)
+}
+function Editor-Command([string]$Query,[string]$Prefix){
+ $null=Invoke-FixtureCli $c @('press','f1','--app',$c.app)
+ Type-Input '键入要运行的命令的名称。' $Query
+ $f=Invoke-FixtureCli $c @('find','--name',$Prefix,'--role','ListItem','--app',$c.app)
+ Assert-Fixture (@($f.elements).Count -eq 1) "Command not unique: $Prefix"
+ $null=Invoke-FixtureCli $c @('click',$f.elements[0].ref,'--app',$c.app)
+}
 function Assert-Saved([string]$Label,[string]$Expected){
  $null=Invoke-FixtureCli $c @('press','ctrl+s','--app',$c.app)
  $deadline=[DateTime]::UtcNow.AddSeconds(5)
@@ -62,6 +78,45 @@ try {
  $read=Invoke-FixtureCli $c @('get',$editor,'--property','text','--app',$c.app)
  Assert-Fixture ($read.properties.text.Replace("`r`n","`n") -eq $replacement) 'Reopened editor text differs from saved file'
  $report.checks.Add(@{name='reopen_text';passed=$true})
+ # Go-to-line and find must return focus to the editor, not the Chat Input.
+ Editor-Command '转到行' '转到行/列...,'
+ Type-Input '转到行。' '2'
+ $null=Invoke-FixtureCli $c @('press','enter','--app',$c.app)
+ $null=Invoke-FixtureCli $c @('press','home','--app',$c.app)
+ $null=Invoke-FixtureCli $c @('set-clipboard','GOTO-')
+ $null=Invoke-FixtureCli $c @('paste','--app',$c.app)
+ $replacement=$replacement.Replace('Number','GOTO-Number')
+ Assert-Saved 'goto_line_insert' $replacement
+ $null=Invoke-FixtureCli $c @('press','ctrl+h','--app',$c.app)
+ foreach($fieldValue in @(@('查找','123456789'),@('替换','987654321'))){
+  $field=Invoke-FixtureCli $c @('find','--name',$fieldValue[0],'--role','Edit','--app',$c.app)
+  Assert-Fixture (@($field.elements).Count -eq 1) 'Find/replace input not unique'
+  $null=Invoke-FixtureCli $c @('set-value',$field.elements[0].ref,$fieldValue[1],'--app',$c.app)
+ }
+ $null=Invoke-FixtureCli $c @('click','name:全部替换 (Ctrl+Alt+Enter)','--app',$c.app)
+ $null=Invoke-FixtureCli $c @('click','name:关闭 (Escape)','--app',$c.app)
+ $replacement=$replacement.Replace('123456789','987654321')
+ Assert-Saved 'find_replace_all' $replacement
+ $second=Join-Path $root 'second-owned.txt'
+ [IO.File]::WriteAllText($second,"Second owned file`n")
+ Editor-Command '转到文件' '转到文件...,'
+ Type-Input '按名称搜索文件' $second
+ $null=Invoke-FixtureCli $c @('press','enter','--app',$c.app)
+ $null=Invoke-FixtureCli $c @('wait','--window','second-owned.txt','--timeout','10000')
+ $secondEditor=Invoke-FixtureCli $c @('find','--name','second-owned.txt','--role','Edit','--app',$c.app)
+ Assert-Fixture (@($secondEditor.elements).Count -eq 1) 'Second editor is ambiguous'
+ $read=Invoke-FixtureCli $c @('get',$secondEditor.elements[0].ref,'--property','text','--app',$c.app)
+ Assert-Fixture ($read.properties.text.Replace("`r`n","`n") -eq "Second owned file`n") 'Quick-open selected wrong content'
+ $report.checks.Add(@{name='quick_open_second_file';passed=$true})
+ Editor-Command '转到文件' '转到文件...,'
+ Type-Input '按名称搜索文件' $file
+ $null=Invoke-FixtureCli $c @('press','enter','--app',$c.app)
+ $null=Invoke-FixtureCli $c @('wait','--window',$marker,'--timeout','10000')
+ $firstEditor=Invoke-FixtureCli $c @('find','--name',"$marker.txt",'--role','Edit','--app',$c.app)
+ Assert-Fixture (@($firstEditor.elements).Count -eq 1) 'First editor is ambiguous'
+ $read=Invoke-FixtureCli $c @('get',$firstEditor.elements[0].ref,'--property','text','--app',$c.app)
+ Assert-Fixture ($read.properties.text.Replace("`r`n","`n") -eq $replacement) 'Returning to first file lost content'
+ $report.checks.Add(@{name='quick_open_return';passed=$true})
  $code=0
 }catch{$report.reason=$_.Exception.Message}
 finally {

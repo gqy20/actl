@@ -48,7 +48,7 @@ user_pref("extensions.zotero.firstRunGuidance", false);
  Assert-Fixture (Test-Path "$data/zotero.sqlite") 'Isolated database not created'
  $ris="TY  - JOUR`r`nTI  - ACTL Alpha 中文测试`r`nAU  - Test, Alice`r`nPY  - 2026`r`nER  - `r`n`r`nTY  - JOUR`r`nTI  - ACTL Beta unrelated`r`nAU  - Test, Bob`r`nPY  - 2025`r`nER  - `r`n"
  $ris|Set-Content "$root/seed.ris" -Encoding utf8
- $null=Invoke-FixtureCli $c @('click','name:文件','--app',$c.app)
+ $null=Invoke-FixtureCli $c @('click','id:fileMenu','--app',$c.app)
  $null=Invoke-FixtureCli $c @('set-clipboard',$ris)
  $null=Invoke-FixtureCli $c @('click','name:从剪贴板导入','--app',$c.app)
  $both=@('ACTL Alpha 中文测试. 期刊文章. Test','ACTL Beta unrelated. 期刊文章. Test')
@@ -75,6 +75,44 @@ user_pref("extensions.zotero.firstRunGuidance", false);
   $null=Invoke-FixtureCli $c @('press','backspace','--app',$c.app)
   Check-Rows 'restored_two_records' $both
  }
+ # Edit an owned synthetic item's publication, then verify the persisted export.
+ $null=Invoke-FixtureCli $c @('click','id:item-tree-main-default-row-0','--app',$c.app)
+ $fields=Invoke-FixtureCli $c @('find','--name','出版物','--role','Edit','--app',$c.app)
+ $publication=@($fields.elements|Where-Object name -EQ '出版物')
+ Assert-Fixture ($publication.Count -eq 1) 'Publication field is ambiguous'
+ $null=Invoke-FixtureCli $c @('type',$publication[0].ref,'ACTL Journal 2026','--paste','--app',$c.app)
+ $null=Invoke-FixtureCli $c @('press','tab','--app',$c.app)
+ $null=Invoke-FixtureCli $c @('right-click','id:item-tree-main-default-row-0','--app',$c.app)
+ $null=Invoke-FixtureCli $c @('click','name:导出条目','--app',$c.app)
+ $null=Invoke-FixtureCli $c @('wait','--window','导出…','--timeout','10000')
+ $dialogs=@((Invoke-FixtureCli $c @('list-windows')).windows|Where-Object {$_.pid -eq $c.owned.pid -and $_.class -eq 'MozillaDialogClass' -and $_.title -eq '导出…'})
+ Assert-Fixture ($dialogs.Count -eq 1) 'Export format dialog not unique'
+ $formatApp="hwnd:$($dialogs[0].hwnd)"
+ $null=Invoke-FixtureCli $c @('click','id:format-menu','--app',$formatApp)
+ $null=Invoke-FixtureCli $c @('click','name:CSL JSON','--app',$formatApp)
+ $beforeSave=@((Invoke-FixtureCli $c @('list-windows')).windows|ForEach-Object hwnd)
+ $null=Invoke-FixtureCli $c @('click','name:OK','--app',$formatApp)
+ $deadline=[DateTime]::UtcNow.AddSeconds(15)
+ do{
+  $save=@((Invoke-FixtureCli $c @('list-windows')).windows|Where-Object {$_.hwnd -notin $beforeSave -and $_.class -eq '#32770' -and $_.title -eq '导出' -and $_.PSObject.Properties['owner_title'] -and $_.owner_title.Contains('Zotero')})
+ }while($save.Count -eq 0 -and [DateTime]::UtcNow -lt $deadline)
+ Assert-Fixture ($save.Count -eq 1) 'Export save dialog not unique'
+ $saveApp="hwnd:$($save[0].hwnd)"
+ # Common dialogs reuse numeric IDs for file rows and the toolbar; filter by role.
+ $field=Invoke-FixtureCli $c @('find','--name','文件名:','--role','Edit','--app',$saveApp)
+ Assert-Fixture (@($field.elements).Count -eq 1) 'Filename field not unique'
+ $export=Join-Path $root 'export.json'
+ $null=Invoke-FixtureCli $c @('set-value',$field.elements[0].ref,$export,'--app',$saveApp)
+ $null=Invoke-FixtureCli $c @('click','name:保存(S)','--app',$saveApp)
+ $deadline=[DateTime]::UtcNow.AddSeconds(10)
+ do{
+  $items=@()
+  if(Test-Path -LiteralPath $export){try{$items=@(Get-Content -LiteralPath $export -Raw|ConvertFrom-Json)}catch{}}
+  if($items.Count -eq 1){break}
+  Start-Sleep -Milliseconds 100
+ }while([DateTime]::UtcNow -lt $deadline)
+ Assert-Fixture ($items.Count -eq 1 -and $items[0].title -eq 'ACTL Alpha 中文测试' -and $items[0].'container-title' -eq 'ACTL Journal 2026' -and $items[0].author[0].family -eq 'Test') 'Exported metadata differs from owned record'
+ $report.checks.Add(@{name='publication_edit_export';passed=$true;file=$export;sha256=(Get-FileHash $export).Hash})
  $code=0
 }catch{$report.reason=$_.Exception.Message}
 finally{
