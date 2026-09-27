@@ -1,8 +1,9 @@
 # Read-only workflow evaluation. Isolated records; no injected input or user stop-flag changes.
-param([string]$Actl = "$PSScriptRoot/../target/release/actl.exe")
+param([string]$Actl = $(if ($env:ACTL) { $env:ACTL } else { "$PSScriptRoot/../target/validation/release/actl.exe" }))
 $ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
 $Actl = (Resolve-Path -LiteralPath $Actl).Path
-$evalRoot = Join-Path $PSScriptRoot "../target/flow-evaluation-$([guid]::NewGuid().ToString('N'))"
+$evalRoot = if ($env:ACTL_TEST_DIR) { Join-Path $env:ACTL_TEST_DIR 'flow-evaluation' } else { Join-Path $PSScriptRoot "../target/flow-evaluation-$([guid]::NewGuid().ToString('N'))" }
 New-Item -ItemType Directory -Path $evalRoot -Force | Out-Null
 $evalRoot = (Resolve-Path -LiteralPath $evalRoot).Path
 $previousLocal = $env:LOCALAPPDATA

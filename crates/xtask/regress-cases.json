@@ -1,0 +1,82 @@
+[
+  {
+    "id": "flow-evaluation",
+    "script": "fixtures/flow-evaluation.ps1",
+    "suite": "flow",
+    "state": "ready",
+    "input": "none",
+    "reason": "Isolated read-only workflow recovery evaluation"
+  },
+  {
+    "id": "golden-task-2",
+    "script": "fixtures/golden-task-2.ps1",
+    "suite": "system",
+    "state": "ready",
+    "input": "keyboard",
+    "reason": "Owned test document: edit, save and disk verification"
+  },
+  {
+    "id": "golden-task-1",
+    "script": "fixtures/golden-task-1.ps1",
+    "suite": "system",
+    "state": "ready",
+    "input": "uia",
+    "reason": "Owned window, structured assertions and retained per-call evidence; live acceptance pending"
+  },
+  {
+    "id": "us1-cross-app",
+    "script": "fixtures/us1-cross-app.sh",
+    "suite": "system",
+    "state": "blocked",
+    "input": "keyboard",
+    "reason": "Pending owned windows and portable document paths"
+  },
+  {
+    "id": "virtualized-list",
+    "script": "fixtures/virtualized-list.ps1",
+    "suite": "system",
+    "state": "ready",
+    "input": "none",
+    "reason": "Owned window, structured assertions and retained per-call evidence; live acceptance pending"
+  },
+  {
+    "id": "win32-table-extract",
+    "script": "fixtures/win32-table-extract.ps1",
+    "suite": "system",
+    "state": "ready",
+    "input": "none",
+    "reason": "Owned window, structured assertions and retained per-call evidence; live acceptance pending"
+  },
+  {
+    "id": "edge-deep-tree",
+    "script": "fixtures/edge-deep-tree.sh",
+    "suite": "system",
+    "state": "blocked",
+    "input": "none",
+    "reason": "Pending window identity and retained evidence migration"
+  },
+  {
+    "id": "edge-content-view",
+    "script": "fixtures/edge-content-view.sh",
+    "suite": "system",
+    "state": "blocked",
+    "input": "none",
+    "reason": "Pending window identity and deterministic loading assertion"
+  },
+  {
+    "id": "coord-click",
+    "script": "fixtures/coord-click.sh",
+    "suite": "system",
+    "state": "blocked",
+    "input": "physical",
+    "reason": "Pending owned document; currently targets existing Notepad"
+  },
+  {
+    "id": "xhs-deep2",
+    "script": "fixtures/xhs-deep2.sh",
+    "suite": "scenario",
+    "state": "manual",
+    "input": "keyboard",
+    "reason": "Requires a real account and dynamic content; not a system fixture"
+  }
+]

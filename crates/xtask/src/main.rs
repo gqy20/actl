@@ -28,7 +28,7 @@ fn main() -> ExitCode {
                  cargo xtask setup   install git hooks + activate pinned toolchain (run once after clone)\n  \
                  cargo xtask gate    quality gate: file-lines + fmt --check + clippy -D warnings + tests (= pre-push = CI)\n  \
                  cargo xtask fmt     format all code
-                 cargo xtask regress run all live fixtures sequentially (needs an interactive desktop)
+                 cargo xtask regress [--list | --suite flow|system|scenario | --case ID] (PowerShell 7)
   \n                 cargo xtask lint-packs [dir] validate app packs against the CLI schema\n                 \
                  (default skills/actl/apps; pass a dir to lint out-of-repo private packs)"
             );
@@ -76,7 +76,11 @@ fn gate() -> ExitCode {
     if lint_packs(None) != ExitCode::SUCCESS {
         return ExitCode::FAILURE;
     }
-    eprintln!("✓ gate passed (file-lines + fmt + clippy + test + lint-packs)");
+    let tests = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/regress.Tests.ps1");
+    if !step("pwsh", &["-NoProfile", "-File", &tests.to_string_lossy()]) {
+        return ExitCode::FAILURE;
+    }
+    eprintln!("✓ gate passed (file-lines + fmt + clippy + test + lint-packs + regression harness)");
     ExitCode::SUCCESS
 }
 
@@ -175,53 +179,29 @@ fn build_pair() -> bool {
 }
 
 fn regress() -> ExitCode {
-    if !build_pair() {
+    let args: Vec<String> = std::env::args().skip(2).collect();
+    if !args.iter().any(|arg| arg == "--list") && !build_pair() {
         return ExitCode::FAILURE;
     }
-    let ws_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let fixtures = [
-        "golden-task-1.sh",       // 计算器(3 轮;正式验收 ACTL_RUNS? RUNS=10)
-        "golden-task-2.sh",       // 记事本全链(注入,需桌面空闲)
-        "us1-cross-app.sh",       // 跨 3 应用数据搬运
-        "virtualized-list.sh",    // Explorer 条目级(L4)
-        "win32-table-extract.sh", // msinfo32 报表提取
-        "edge-deep-tree.sh",      // Chromium 深树 + 正文 + skeleton
-    ];
-    // Windows 上裸 "bash" 可能解析到 System32 的 WSL bash(fixture 用 git-bash 语义,
-    // 脚本会全线失败)——显式探测 Git Bash;ACTL_BASH 可覆盖。
-    let bash = std::env::var("ACTL_BASH").unwrap_or_else(|_| {
-        for p in [
-            r"C:\Program Files\Git\bin\bash.exe",
-            r"C:\Program Files (x86)\Git\bin\bash.exe",
-        ] {
-            if Path::new(p).exists() {
-                return p.to_string();
-            }
-        }
-        "bash".into()
-    });
-    let mut failed = Vec::new();
-    for f in fixtures {
-        let path = ws_root.join("fixtures").join(f);
-        eprintln!("▶ {f}");
-        let ok = Command::new(&bash)
-            .arg(&path)
-            .env("ACTL", ws_root.join("target/validation/release/actl.exe"))
-            .status()
-            .is_ok_and(|s| s.success());
-        if !ok {
-            failed.push(f);
-        }
+    let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("regress.ps1");
+    let mut command = Command::new("pwsh");
+    command.args(["-NoProfile", "-File"]).arg(script);
+    for arg in args {
+        command.arg(match arg.as_str() {
+            "--list" => "-List".to_string(),
+            "--suite" => "-Suite".to_string(),
+            "--case" => "-Case".to_string(),
+            _ => arg,
+        });
     }
-    if failed.is_empty() {
-        eprintln!("✓ regress: all fixtures green");
-        ExitCode::SUCCESS
-    } else {
-        eprintln!("✗ regress failed: {}", failed.join(", "));
-        ExitCode::FAILURE
+    match command.status() {
+        Ok(status) => code(status.success()),
+        Err(error) => {
+            eprintln!("regress requires PowerShell 7 (pwsh): {error}");
+            ExitCode::FAILURE
+        }
     }
 }
-
 /// 路线收束校验:status 必填且取值合法(id 唯一性在收集时已查)。返回问题数。
 fn check_route(rel: &str, id: &str, status: Option<&str>) -> usize {
     match status {
