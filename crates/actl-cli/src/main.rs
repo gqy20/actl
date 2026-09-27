@@ -117,7 +117,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             near.as_deref(),
             snapshot.as_deref(),
             *physical,
-            &with,
+            with.as_slice(),
             expect.as_deref(),
             *timeout,
         ),

@@ -8,6 +8,7 @@ use serde_json::json;
 
 use crate::CommandOutput;
 
+#[allow(clippy::too_many_arguments)] // 参数面与 clap 命令定义一一对应
 pub(crate) fn click(
     target_raw: &str,
     app: Option<&str>,

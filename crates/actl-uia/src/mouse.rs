@@ -141,26 +141,6 @@ pub fn wheel_at(x: i32, y: i32, notches: i32) -> Result<(), CtlError> {
     ])
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn normalize_maps_primary_origin_to_zero() {
-        unsafe {
-            let vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
-            let vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
-            let (nx, ny) = normalize(vx, vy);
-            assert_eq!((nx, ny), (0, 0));
-            let (fx, fy) = normalize(
-                vx + GetSystemMetrics(SM_CXVIRTUALSCREEN),
-                vy + GetSystemMetrics(SM_CYVIRTUALSCREEN),
-            );
-            assert!((fx - 65535).abs() <= 1 && (fy - 65535).abs() <= 1);
-        }
-    }
-}
-
 /// 物理中键点击(浏览器:链接新标签;任务栏:新实例)。
 pub fn middle_click_at(x: i32, y: i32) -> Result<(), CtlError> {
     let (nx, ny) = normalize(x, y);
@@ -187,8 +167,6 @@ pub fn triple_click_at(x: i32, y: i32) -> Result<(), CtlError> {
     ])
 }
 
-/// 按钮点击事件片段(不含移动;PointerSpec::Click 组合用)。
-
 /// 修饰键+点击的混合事件批(PointerSpec::Click 的执行体)。
 pub(crate) fn send_mixed(inputs: Vec<INPUT>) -> Result<(), CtlError> {
     send_all(&inputs)
@@ -207,4 +185,24 @@ pub(crate) fn click_events_for(button: &crate::pointer::MouseButton, x: i32, y: 
         mouse_event(abs(down), nx, ny, 0),
         mouse_event(up, nx, ny, 0),
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_maps_primary_origin_to_zero() {
+        unsafe {
+            let vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
+            let vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
+            let (nx, ny) = normalize(vx, vy);
+            assert_eq!((nx, ny), (0, 0));
+            let (fx, fy) = normalize(
+                vx + GetSystemMetrics(SM_CXVIRTUALSCREEN),
+                vy + GetSystemMetrics(SM_CYVIRTUALSCREEN),
+            );
+            assert!((fx - 65535).abs() <= 1 && (fy - 65535).abs() <= 1);
+        }
+    }
 }
