@@ -23,11 +23,54 @@ pub(crate) enum ViewMode {
 }
 
 #[derive(Subcommand)]
+pub(crate) enum DesktopCommand {
+    /// Inspect the companion lease without starting or changing it
+    DisplayStatus,
+    /// Start the matching companion if missing and wait for its visible rendered frame
+    DisplayStart,
+    /// Minimize one ordinary application window
+    MinimizeWindow {
+        #[arg(conflicts_with_all = ["pid", "hwnd"])]
+        pattern: Option<String>,
+        #[arg(long, conflicts_with_all = ["pattern", "hwnd"])]
+        pid: Option<u32>,
+        #[arg(long, conflicts_with_all = ["pattern", "pid"])]
+        hwnd: Option<String>,
+    },
+    /// Restore one window from minimized state
+    RestoreWindow {
+        #[arg(conflicts_with_all = ["pid", "hwnd"])]
+        pattern: Option<String>,
+        #[arg(long, conflicts_with_all = ["pattern", "hwnd"])]
+        pid: Option<u32>,
+        #[arg(long, conflicts_with_all = ["pattern", "pid"])]
+        hwnd: Option<String>,
+    },
+    /// Minimize ordinary application windows, recording a restorable desktop session
+    DesktopPrepare {
+        /// Explicitly request desktop-wide preparation; excludes tool/topmost/owned windows
+        #[arg(long, conflicts_with = "hwnd")]
+        all: bool,
+        /// Prepare only these native handles (repeat --hwnd); mutually exclusive with --all
+        #[arg(long)]
+        hwnd: Vec<String>,
+    },
+    /// Restore unchanged windows from a desktop preparation session
+    DesktopRestore {
+        /// Session id returned by desktop-prepare, including partial-failure evidence
+        #[arg(long)]
+        session: String,
+    },
+}
+
+#[derive(Subcommand)]
 pub(crate) enum Command {
     /// List every command with its argument schema (machine-readable self-description)
     Commands,
     /// Report version, protocol version and platform info
     Status,
+    #[command(flatten)]
+    Desktop(DesktopCommand),
     /// Capture the interactive element tree of a window as refs (@e1..)
     Snapshot {
         /// Target window by title substring or hwnd:<n> (@eN refs require it; otherwise focused window)
@@ -469,6 +512,12 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
     match cmd {
         Command::Commands => "commands",
         Command::Status => "status",
+        Command::Desktop(DesktopCommand::DisplayStatus) => "display-status",
+        Command::Desktop(DesktopCommand::DisplayStart) => "display-start",
+        Command::Desktop(DesktopCommand::MinimizeWindow { .. }) => "minimize-window",
+        Command::Desktop(DesktopCommand::RestoreWindow { .. }) => "restore-window",
+        Command::Desktop(DesktopCommand::DesktopPrepare { .. }) => "desktop-prepare",
+        Command::Desktop(DesktopCommand::DesktopRestore { .. }) => "desktop-restore",
         Command::Snapshot { .. } => "snapshot",
         Command::Click { .. } => "click",
         Command::Get { .. } => "get",
@@ -508,6 +557,24 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
 /// 与 doc comment 同为 help 单一事实来源的一部分(改这里 = 改 -h)。
 fn after_help_for(name: &str) -> Option<&'static str> {
     Some(match name {
+        "display-status" => {
+            "Example:\n  actl display-status\nReports readiness, lease, and sticky stop state; never starts the companion.\nErrors: INTERNAL unavailable state storage"
+        }
+        "display-start" => {
+            "Example:\n  actl display-start\nStarts sibling actl-signal.exe only if missing; waits up to 4s for a matching visible frame. Does not clear stop.\nErrors: NOT_ACTIONABLE missing/hidden/incompatible display | INTERNAL launch failure"
+        }
+        "minimize-window" => {
+            "Example:\n  actl minimize-window --hwnd 12345\nExactly one title, --pid or --hwnd. Only ordinary unowned windows.\nErrors: PROTOCOL missing selector | NOT_FOUND | AMBIGUOUS | NOT_ACTIONABLE | ABORTED"
+        }
+        "restore-window" => {
+            "Example:\n  actl restore-window --hwnd 12345\nExactly one title, --pid or --hwnd. Restores the selected window.\nErrors: PROTOCOL missing selector | NOT_FOUND | AMBIGUOUS | NOT_ACTIONABLE | ABORTED"
+        }
+        "desktop-prepare" => {
+            "Example:\n  actl desktop-prepare --all\nExplicit opt-in. Returns session id for restoration. Failures retain partial evidence and session.\nErrors: PROTOCOL missing --all | NOT_ACTIONABLE | ABORTED | INTERNAL journal failure"
+        }
+        "desktop-restore" => {
+            "Example:\n  actl desktop-restore --session <session-id>\nRestores unchanged minimized window instances; reports skips. Never clears stop.\nErrors: PROTOCOL invalid record/id | NOT_FOUND session | NOT_ACTIONABLE | ABORTED"
+        }
         "commands" => {
             "Example:\n  actl commands\nOutput: envelope with every command + arg schema (machine self-description)"
         }

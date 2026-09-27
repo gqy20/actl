@@ -13,7 +13,26 @@ actl 通过系统无障碍树(UIA)精确定位控件,像 Playwright 操作 DOM �
 **感知(snapshot/find)→ 决策 → 执行(click/type/press)→ 确认(verify/--expect)**。
 禁止跳过确认:ok:true 只代表命令完成,不代表任务达成。
 
-## 核心循环
+## 任务启动与桌面整理
+
+开始桌面任务可先调用 `actl display-start`：启动同目录的 actl-signal 并等待可见画面。
+`display-status` 只查询。观察类命令可独立运行；改变应用/输入/剪贴板的动作由程序检查显示就绪、
+确认本次动作预告后执行，skill 不需要轮询进程。`NOT_ACTIONABLE` 且说明显示不可用时，
+检查配套版本与状态条是否被隐藏；不要绕过检查。启动显示端不清除停止标志，`ABORTED` 时等待用户恢复。
+
+整理桌面是可选步骤，仅在任务需要或用户要求时使用：
+
+- 单个窗口：`minimize-window --hwnd <句柄>` / `restore-window --hwnd <句柄>`。
+- 指定窗口并记录恢复信息：`desktop-prepare --hwnd <句柄>`（可重复 `--hwnd`）。
+- 用户明确要求整理整个桌面：`desktop-prepare --all`。系统/工具/置顶/owned 窗口及显示端被排除。
+- 保存返回的 `session`（失败时检查 `error.evidence.session`），结束后运行
+  `desktop-restore --session <session>`，逐项检查 restored/skipped。只恢复实例、位置与最小化状态仍匹配的窗口。
+
+不要用 `Win+D` 切换代替恢复记录；不要为清理桌面关闭用户窗口。任务新建窗口仍按下文规则优雅关闭。
+进程中断时恢复记录保留；未确认完成的最小化记录会跳过，需重新观察。当前记录不能追踪用户先恢复再最小化回
+完全相同状态的历史，也不承诺恢复精确 Z 序或用户原先焦点。
+
+## 执行循环
 
 ```bash
 actl snapshot --app <窗口标题子串> --skeleton   # 感知:拿 @eN 引用(省 token 用 --skeleton)
@@ -41,6 +60,7 @@ actl verify --value <target> "<期望>" --app <app> # 确认:立即断言
 执行:click(--physical/--expect/--near) right-click double-click hover drag scroll type(--paste)
      press(--expect) key-down key-up set-value
 窗口:launch focus-window close-window resize-window wait(--element/--window/--gone/--stable) batch
+桌面:minimize-window restore-window desktop-prepare desktop-restore display-start display-status
 验证:verify(--exists/--value/--contains/--checked) extract(--table)
 系统:get-clipboard set-clipboard
 

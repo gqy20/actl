@@ -100,3 +100,23 @@ CI(GitHub Actions,`windows-latest`):`cargo xtask gate`(file-lines 单文件行�
 - 选型**论证**(语言对比、冷启动数据、为什么不是 C#):[04-tech-decision.md](04-tech-decision.md)
 - 命令面与协议**内容**: [06-design-blueprint.md](06-design-blueprint.md)
 - 工期与行数:[05-implementation-estimate.md](05-implementation-estimate.md)
+
+
+## 显示层 v2 实现登记（2026-09-27）
+
+零新增直接依赖。`actl-core::{activity,signal_session,state}` 保持纯 Rust，心跳使用
+标准线程与 channel，不引入 async/tokio。`actl-signal` 拆为 model/paint/overlay/shell。
+unsafe 仍仅在 actl-uia：新增 display_support 用于互斥锁探测、截图隐藏确认和窗口排除；
+feedback 的物理焦点读取及原生显示模块的 GDI/消息泵/透明窗口操作沿用该 crate 豁免。
+所有 GDI 对象归还后释放，标记窗口销毁时停止定时器；无全局输入 hook。
+
+状态条精细绘制复用 windows crate 的 Direct2D / DirectWrite / Dxgi Common feature，
+不新增直接依赖。WIC 软件渲染输出预乘 BGRA，UpdateLayeredWindow 提交逐像素透明度；
+COM 与 DIB/DC 生命周期仅位于 actl-uia 的 paint 模块，原生调用需要该 crate 的 unsafe 豁免。
+
+显示就绪协议 v3 仍使用文件租约与 std 轮询，不新增依赖。desktop 模块使用 UIA 身份和 Win32
+窗口状态 API 保存/恢复布局；signal/icon 生成各原生尺寸的预乘 BGRA 图标，不引入外部资源代码。
+CLI 增加命令后，clap 调试构建超过 MSVC 默认 1 MiB 栈保留；build.rs 为 actl 预留 4 MiB，
+页面按需提交。已有 CLI 启动/契约测试覆盖此前栈溢出复现。
+显示端为 Windows GUI 子系统；自动启动使用 CreateProcessW 禁止句柄继承，避免常驻子进程持有
+调用者管道而令 PowerShell 等待。该原生启动只位于 actl-uia/display_gate，按既有 unsafe 豁免执行。

@@ -15,7 +15,7 @@ use actl_core::{CtlError, Envelope, ErrorEnvelope};
 use clap::FromArgMatches;
 use serde_json::Value;
 
-use crate::cli::{Cli, Command, app_of, command_name};
+use crate::cli::{Cli, Command, DesktopCommand, app_of, command_name};
 use crate::{interact::*, query::*};
 
 /// 命令执行产物:data 进 envelope,`snapshot_id` 存在时附加到顶层(06 §4)。
@@ -39,21 +39,11 @@ fn main() {
     let cli = Cli::from_arg_matches(&matches).expect("clap-validated matches");
     let command_name = command_name(&cli.command);
     let started = Instant::now();
-    let signals = actl_core::state::SignalPaths::default();
-
-    // 显示信号协议:命令开始即落状态(消费端 actl-signal 轮询渲染)。
-    // P50 优化(读类命令跳过 begin 态):瞬时观察命令的 begin 写对信号条无意义
-    // (250ms 轮询几乎必然错过)却占冷启动路径;动作/等待类命令保持双写。
-    // 终态写所有命令都保留(消费端靠它回到空闲/失败展示)。
-    if !is_instant_read(command_name) {
-        signals.write_state(&actl_core::state::SessionState::now(
-            std::process::id(),
-            command_name,
-            app_of(&cli.command).as_deref(),
-            None,
-            actl_core::state::Phase::Running,
-        ));
-    }
+    let mut signal = actl_core::signal_session::SignalSession::start(
+        actl_core::state::SignalPaths::default(),
+        command_name,
+        app_of(&cli.command).as_deref(),
+    );
 
     let result = dispatch(&cli.command);
 
@@ -64,13 +54,12 @@ fn main() {
         Err(e) if e.code == actl_core::ErrorCode::Aborted => actl_core::state::Phase::Stopped,
         Err(_) => actl_core::state::Phase::Error,
     };
-    signals.write_state(&actl_core::state::SessionState::now(
-        std::process::id(),
-        command_name,
-        app_of(&cli.command).as_deref(),
-        None,
-        phase,
-    ));
+    let error = result.as_ref().err().and_then(|e| {
+        serde_json::to_value(e.code)
+            .ok()
+            .and_then(|v| v.as_str().map(str::to_owned))
+    });
+    signal.finish(phase, error.as_deref());
     finish(command_name, result, duration_ms);
 }
 
@@ -79,6 +68,41 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
     match command {
         Command::Commands => commands().map(Into::into),
         Command::Status => status().map(Into::into),
+        Command::Desktop(DesktopCommand::DisplayStatus) => {
+            let paths = actl_core::state::SignalPaths::default();
+            let lease = paths.display_lease();
+            Ok(serde_json::json!({"ready":lease.as_ref().is_some_and(|l| l.ready(actl_core::state::unix_ms())),"lease":lease,"stop_requested":paths.stop_requested()}).into())
+        }
+        Command::Desktop(DesktopCommand::DisplayStart) => {
+            let lease = actl_uia::display_gate::ensure()?;
+            Ok(serde_json::json!({"ready":true,"lease":lease,"stop_requested":actl_core::state::SignalPaths::default().stop_requested()}).into())
+        }
+        Command::Desktop(DesktopCommand::MinimizeWindow { pattern, pid, hwnd })
+        | Command::Desktop(DesktopCommand::RestoreWindow { pattern, pid, hwnd }) => {
+            actl_uia::desktop::set_minimized(
+                window_ref_of(pattern.as_deref(), *pid, hwnd.as_deref())?,
+                matches!(
+                    command,
+                    Command::Desktop(DesktopCommand::MinimizeWindow { .. })
+                ),
+            )
+            .map(Into::into)
+        }
+        Command::Desktop(DesktopCommand::DesktopPrepare { all, hwnd }) => {
+            if !all && hwnd.is_empty() {
+                return Err(CtlError::protocol(
+                    "desktop-prepare requires --all or one or more --hwnd selectors",
+                ));
+            }
+            let handles = hwnd
+                .iter()
+                .map(|s| actl_uia::parse_hwnd(s))
+                .collect::<Result<Vec<_>, _>>()?;
+            actl_uia::desktop::prepare(&handles).map(Into::into)
+        }
+        Command::Desktop(DesktopCommand::DesktopRestore { session }) => {
+            actl_uia::desktop::restore(session).map(Into::into)
+        }
         Command::Screenshot {
             app,
             hwnd,
@@ -331,14 +355,4 @@ fn finish(command_name: &'static str, result: Result<CommandOutput, CtlError>, d
             std::process::exit(code);
         }
     }
-}
-
-/// 瞬时读类命令:begin 态跳过(P50 优化)。判定按命令名,集合只收"亚百毫秒
-/// 级、无副作用"的观察命令;snapshot/find/extract 等慢读保持双写(信号条
-/// 有展示价值)。
-fn is_instant_read(cmd: &str) -> bool {
-    matches!(
-        cmd,
-        "status" | "commands" | "list-windows" | "get-clipboard"
-    )
 }

@@ -1,0 +1,25 @@
+{
+  "version": 2,
+  "call_id": "call-42",
+  "seq": 3,
+  "started_ms": 1,
+  "finished_ms": null,
+  "action": {
+    "id": 1,
+    "seq": 2,
+    "kind": "paste",
+    "phase": "delivered",
+    "effects": { "keyboard": true, "pointer": false, "clipboard": "read", "focus": true },
+    "target": { "window": "Notepad", "point": null, "bounds": null, "destination": null },
+    "ts_ms": 2,
+    "expires_ms": 2002
+  },
+  "recent_actions": [],
+  "error_code": null,
+  "pid": 42,
+  "command": "paste",
+  "app": "Notepad",
+  "step": null,
+  "phase": "done",
+  "ts_ms": 1
+}

@@ -283,6 +283,7 @@ pub fn send_key_spec(spec: &KeySpec) -> Result<(), CtlError> {
     // (mods DOWN → keys → mods UP,同批原子);③部分发送失败如实报错。
     wait_modifiers_clear()?;
     let inputs = compile_key_spec(spec)?;
+    crate::feedback::check_keyboard_anchor()?;
     let sent = unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) };
     if sent == inputs.len() as u32 {
         Ok(())
@@ -331,16 +332,8 @@ pub fn send_key_partial(spec: &KeySpec, down: bool) -> Result<(), CtlError> {
     if down {
         wait_modifiers_clear()?;
     }
-    let inputs: Vec<INPUT> = compile_key_spec(spec)?
-        .into_iter()
-        .filter(|i| {
-            let ki = unsafe { i.Anonymous.ki };
-            ki.dwFlags.contains(KEYEVENTF_KEYUP) != down
-        })
-        .collect();
-    if inputs.is_empty() {
-        return Err(CtlError::protocol("nothing to send for this half"));
-    }
+    let inputs = compile_key_partial(spec, down)?;
+    crate::feedback::check_keyboard_anchor()?;
     let sent = unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) };
     if sent == inputs.len() as u32 {
         Ok(())
@@ -351,12 +344,36 @@ pub fn send_key_partial(spec: &KeySpec, down: bool) -> Result<(), CtlError> {
         )))
     }
 }
+fn compile_key_partial(spec: &KeySpec, down: bool) -> Result<Vec<INPUT>, CtlError> {
+    let inputs: Vec<INPUT> = compile_key_spec(spec)?
+        .into_iter()
+        .filter(|i| {
+            let ki = unsafe { i.Anonymous.ki };
+            ki.dwFlags.contains(KEYEVENTF_KEYUP) != down
+        })
+        .collect();
+    if inputs.is_empty() {
+        return Err(CtlError::protocol("nothing to send for this half"));
+    }
+    Ok(inputs)
+}
 #[cfg(test)]
 mod tests {
     //! 编译层回归(doc 09 §8 第一批):只断言事件序列,不注入。
     //! 布局依赖说明:字母的 VkKeyScanW 映射在 en-US / zh-CN 等标准布局下一致。
     use super::*;
     use actl_core::keys::parse_key_expr;
+
+    #[test]
+    fn key_up_compiles_only_release_events() {
+        let spec = parse_key_expr("ctrl").unwrap();
+        let down = compile_key_partial(&spec, true).unwrap();
+        let up = compile_key_partial(&spec, false).unwrap();
+        assert_eq!(down.len(), 1);
+        assert_eq!(up.len(), 1);
+        assert_eq!(vk_seq(&down), vec![(VK_CONTROL.0, false)]);
+        assert_eq!(vk_seq(&up), vec![(VK_CONTROL.0, true)]);
+    }
 
     fn compile(expr: &str) -> Vec<INPUT> {
         let spec = parse_key_expr(expr).unwrap();

@@ -109,6 +109,7 @@ unsafe fn blt_region(x: i32, y: i32, w: i32, h: i32) -> Result<(Vec<u8>, i32, i3
             format!("region {w}x{h} invalid or over the {MAX_PIXELS}-pixel guard"),
         ));
     }
+    let _display = crate::display_support::CaptureGuard::enter()?;
     let screen = GetDC(None);
     let mem = CreateCompatibleDC(Some(screen));
     let mut bmi = BITMAPINFO {

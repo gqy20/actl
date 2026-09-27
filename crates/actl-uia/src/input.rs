@@ -43,13 +43,20 @@ impl InputLock {
         unsafe {
             // CreateMutexExW(flags=0) 等价 CreateMutexW;access=SYNCHRONIZE(0x0010_0000)
             // (裸值:免为单常量引入 Storage::FileSystem feature)
-            let handle = CreateMutexExW(None, w!("actl-input-lock"), 0, 0x0010_0000)
+            let handle = CreateMutexExW(None, w!("actl-input-lock"), 0, 0x0010_0001)
                 .map_err(|e| CtlError::internal(format!("CreateMutexExW(actl-input-lock): {e}")))?;
             let waited = WaitForSingleObject(handle, timeout_ms);
             if waited == WAIT_OBJECT_0 || waited == WAIT_ABANDONED {
                 // ABANDONED:上一持有者异常退出,OS 已把所有权交给我们——
                 // 正确姿势是接管并继续(残留修饰键清场由 kbd 层负责)
-                Ok(Self(handle))
+                let lock = Self(handle);
+                if paths.stop_requested() {
+                    return Err(CtlError::new(
+                        ErrorCode::Aborted,
+                        "stop requested while waiting for input lock",
+                    ));
+                }
+                Ok(lock)
             } else if waited == WAIT_TIMEOUT {
                 let _ = CloseHandle(handle);
                 Err(CtlError::new(
@@ -117,7 +124,8 @@ mod tests {
         let a = InputLock::acquire_at(&paths, 0).expect("first acquire");
         // 互斥体所有权在线程:同线程重入会成功,必须跨线程验证互斥;
         // 锁本身留在原线程,跨线程只把错误码传回来
-        let other = std::thread::spawn(|| match InputLock::acquire(0) {
+        let isolated_paths = paths.clone();
+        let other = std::thread::spawn(move || match InputLock::acquire_at(&isolated_paths, 0) {
             Err(e) => Some(e.code),
             Ok(_) => None,
         });
@@ -127,7 +135,7 @@ mod tests {
         }
         drop(a);
         // 释放后可再取
-        assert!(InputLock::acquire(0).is_ok());
+        assert!(InputLock::acquire_at(&paths, 0).is_ok());
     }
 
     #[test]

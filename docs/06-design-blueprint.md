@@ -252,21 +252,44 @@ L2  actl commands     机器 schema:全命令+参数的 JSON(agent 自发现入�
 - 管理员窗口/跨完整性级别受 UIPI 限制时返回 `PERM_DENIED` 而非静默失败;
 - 敏感命令白名单(clipboard-set 到密码框等场景)留给上层 agent 策略,CLI 不做内容审查,但 `--dry-run` 全局可用。
 
-## 7.5 显示信号协议(v0.1.1;docs/11 显示层 / docs/13 拉取哲学的落地)
+## 7.5 显示信号协议 v2（独立于 stdout envelope v1）
 
-stdout envelope 保持纯净(不塞进度文本);状态走旁路四原语,消费端全拉取、零订阅:
+stdout 保持原有单个 JSON envelope。显示通道是旁路、拉取式；协议 golden 见
+`crates/actl-core/tests/golden/signal_v2.json`，实现说明见 [18](18-display-layer-implementation.md)。
 
-1. **状态快照** `%LOCALAPPDATA%ctl\state.json`:命令开始/结束/batch 步间写入
-   `{pid, command, app, step, phase(running|done|error|stopped), ts_ms}`;
-2. **停止标志** `stop-requested`(粘性,存在即停止):输入锁获取点与 batch 步间
-   检查 → `ABORTED`;只有显式动作清除(actl-signal 点击);
-3. **输入占用锁** `actl-input-lock`(命名互斥体):"正在操控物理输入"的权威信号,
-   外部程序可 OpenMutex+Wait(0) 观测;
-4. **失联判定**:状态心跳 >10s → 消费端如实显示"失联",不显示成功。
+1. **调用快照**：`%LOCALAPPDATA%/actl/calls/<call_id>.json`，单调用独占文件，
+   原子替换；同时更新兼容入口 `state.json`。字段为
+   `{version:2, call_id, pid, seq, command, app, step, phase, started_ms, finished_ms,
+   ts_ms, action, recent_actions, error_code}`。
+   `phase` 仍为 `running|done|error|stopped`；旧快照缺少新字段时按默认值读取。
+2. **持续存活**：命令运行期间标准线程每秒更新 `ts_ms`，不重置 `started_ms`。
+   仅运行态超过 10 秒未更新显示“状态未知”；终态不会因静默变成失联。
+   `finished_ms` 固定终态耗时；状态通道不推测上层 agent 的思考或整个任务完成。
+3. **动作事实**：`action` 为
+   `{id,seq,kind,phase,effects,target,ts_ms,expires_ms}`；动作阶段为
+   `preparing|executing|delivered|failed|cancelled|partial`。
+   `effects={keyboard:bool,pointer:bool,clipboard:untouched|read|write,focus:bool}`，
+   表示该动作的输入影响，阶段决定这是预期影响、正在执行还是已发生；不含内容。
+   `target={window,point:[x,y]?,bounds:[l,t,r,b]?,destination:[x,y]?}` 使用虚拟桌面物理像素。
+   `delivered` 不等于业务结果已经验证。
+4. **短动作保留**：每调用 `recent_actions` 保留最近 32 个终结动作；消费者按
+   `(call_id,seq)` 去重，2 秒过期，不补播显示进程启动前的动作。只对 delivered
+   的空间动作绘制送达反馈。调用文件清理保留 60 秒内最多 128 个终态，运行态由心跳续期。
+5. **停止**：`stop-requested` 为粘性标志。输入锁等待后、动作准备间隔及执行前
+   检查；取消返回 `ABORTED`。UIA 修改和剪贴板写入也在调用前检查。停止请求与
+   本次调用确认停止分别呈现，不能承诺撤销已提交的 COM/输入。右侧按钮只请求停止；
+   右键“清除停止标志”才允许后续调用。保留 Ctrl+Alt+F12，热键冲突时按钮仍有效。
+6. **预告**：显示条可见时通过 `display-live` 时间戳声明在线，执行端对已解析动作
+   提供约 300ms 可取消准备期，结束后重新校验目标或物理焦点。显示端不存在时不增加
+   该等待。预告不构成授权、确认或跨调用任务计划；物理输入授权语义不变。
+7. **显示**：`actl-signal` 为 280×34 DIP 单行原生条；统一线性图标，组合显示设备
+   影响；详情按需打开。独立非激活穿透窗口负责准备圈、点击波纹和控件边界高亮。
+   状态条不做持续动画；减少动态效果时空间反馈为短暂静态标记。
+8. **自排除**：显示窗口不进入一般目标枚举，显式 HWND 自动化也拒绝。屏幕截图通过
+   同步隐藏确认和 DWM flush 排除本工具显示；不能确认时拒绝捕获，不静默污染截图。
 
-伴随程序 `actl-signal`(actl-uia 第二 bin,纯 Win32 零新依赖):置顶状态条
-(`WS_EX_NOACTIVATE` 不抢焦点)+ 托盘 + **Ctrl+Alt+F12 紧急停止**(被占时降级为
-点击停止);状态灯取市场通行色:绿=执行中 · 琥珀=注入 · 红=停止 · 灰=空闲 · 暗=失联。
+附带修正：`key-up` 将 release 方向传递到输入执行体；带修饰键的物理 click 在
+stdout `input_effects.keyboard` 如实返回 `injected`（原先错误地返回 `none`）。
 
 ## 8. 里程碑
 
@@ -275,3 +298,37 @@ stdout envelope 保持纯净(不塞进度文本);状态走旁路四原语,消费
 ## 9. 明确不做
 
 非目标清单**唯一来源**:[PRD §1.3](PRD.md);背景论证见 [02 §4](02-gap-analysis.md)。
+## 显示就绪与桌面整理增补（2026-09-27）
+
+stdout envelope 继续为 v1，调用记录继续为 v2；显示租约使用独立 protocol=3。
+`display.json` 字段：protocol、build（包版本）、pid、epoch（启动实例）、state、ts_ms。
+state 为 ready/hidden/capture/closed；仅版本一致、心跳不超过 1500ms、对应显示窗口存活且中心点未被遮挡的 ready 租约
+允许开始副作用动作。CLI 从自身目录启动 actl-signal.exe，最长等待 4s；隐藏、缺失或不兼容返回 NOT_ACTIONABLE。
+并发启动由会话内单实例互斥体合并。不会清除停止标志，不提供静默绕过。
+Windows 锁屏可能保留可见窗口属性，因此另用屏幕命中检查拒绝被锁屏覆盖的状态条；这不证明整条无遮挡或人已阅读。
+
+准备阶段记录存活 6s。显示端优先展示最早等待的 preparing 动作，Direct2D 画面提交及 DWM flush 成功后，
+写入 `ack-<call_id>.json`：epoch、call_id、action_id、ts_ms。执行端最长等 3s，身份与时间匹配后再保留约 300ms
+可取消预告，然后重验目标并执行。用户悬停不会覆盖待执行的预告文案。确认表示程序提交了画面，不代表人已阅读。
+输入分段边界检查停止及显示存活；短暂 capture 隐藏不误判失联，新动作仍等待重新可见。
+观察命令（snapshot/find/get/status/list-windows/screenshot 等）不强制启动显示端。
+
+新增命令：
+
+| 命令 | 参数 | data |
+|---|---|---|
+| display-status | 无 | ready, lease（可空）, stop_requested |
+| display-start | 无 | ready, lease, stop_requested |
+| minimize-window / restore-window | 标题、--pid、--hwnd 三选一 | hwnd, window, minimized, input_effects |
+| desktop-prepare | --all 或重复 --hwnd | session, results[] |
+| desktop-restore | --session ID | session, results[] |
+
+桌面准备只最小化普通可见、非置顶、非工具、无 owner、有最小化能力的窗口；排除系统桌面与显示端。
+更改前在 `%LOCALAPPDATA%/actl/desktop/<session>.json` 持久化身份（hwnd/pid/UIA RuntimeId/class）与
+WINDOWPLACEMENT，操作后保存确认状态。失败 evidence 带 session 和已完成结果；恢复只处理仍处于
+记录状态的同一实例，改变/关闭/未确认的窗口报告 skipped，恢复成功记录不会重复执行。
+恢复窗口状态和位置，不承诺精确 Z 序或前台焦点，也不推断中间发生但最终回到同一状态的用户操作。
+最小化并非关闭或保存文档。停止标志仍阻止桌面整理及恢复，用户需显式恢复后再调用。
+
+新命令错误：PROTOCOL 参数或记录不合法；NOT_FOUND 窗口/会话不存在；AMBIGUOUS 目标不唯一；
+NOT_ACTIONABLE 显示或窗口未就绪；ABORTED 用户停止；INTERNAL 持久化或原生调用错误。

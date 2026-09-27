@@ -45,21 +45,29 @@ pub fn click(
     let loc = locate(app, target, near)?;
     let _t = actl_core::trace::scope("click.pattern");
     if let Ok(invoke) = loc.element.get_pattern::<UIInvokePattern>() {
-        invoke.invoke().map_err(internal)?;
+        crate::feedback::semantic("click", &loc.element, &loc.window_title, || {
+            invoke.invoke().map_err(internal)
+        })?;
         return Ok((loc, "invoke"));
     }
     if let Ok(sel) = loc.element.get_pattern::<UISelectionItemPattern>() {
-        sel.select().map_err(internal)?;
+        crate::feedback::semantic("select", &loc.element, &loc.window_title, || {
+            sel.select().map_err(internal)
+        })?;
         return Ok((loc, "selection-item"));
     }
     // 复选框/开关:点击语义 = Toggle(状态翻转)
     if let Ok(toggle) = loc.element.get_pattern::<UITogglePattern>() {
-        toggle.toggle().map_err(internal)?;
+        crate::feedback::semantic("toggle", &loc.element, &loc.window_title, || {
+            toggle.toggle().map_err(internal)
+        })?;
         return Ok((loc, "toggle"));
     }
     // 折叠面板/树节点:点击语义 = ExpandCollapse
     if let Ok(exp) = loc.element.get_pattern::<UIExpandCollapsePattern>() {
-        exp.expand().map_err(internal)?;
+        crate::feedback::semantic("expand", &loc.element, &loc.window_title, || {
+            exp.expand().map_err(internal)
+        })?;
         return Ok((loc, "expand-collapse"));
     }
     Err(CtlError::new(
@@ -85,6 +93,13 @@ pub fn type_text(
     near: Option<&str>,
 ) -> Result<TypeOutcome, CtlError> {
     let loc = locate(app, target, near)?;
+    let _lock = input::InputLock::acquire(timing().lock_wait_ms)?;
+    let mut action = crate::feedback::prepare(
+        "type",
+        crate::feedback::keyboard(paste, paste),
+        crate::feedback::target(&loc.element, &loc.window_title),
+    )?;
+    action.executing();
     loc.element.set_focus().map_err(|_| {
         CtlError::new(
             ErrorCode::NotActionable,
@@ -99,7 +114,7 @@ pub fn type_text(
     if let Some(pattern) = app {
         std::thread::sleep(std::time::Duration::from_millis(timing().type_focus_ms));
         let fg = kbd::foreground_title().unwrap_or_default();
-        if !fg.contains(pattern) {
+        if fg != loc.window_title {
             return Err(CtlError::new(
                 ErrorCode::PermDenied,
                 format!(
@@ -111,7 +126,10 @@ pub fn type_text(
         }
     }
     // 输入占用锁(doc 09 §6.2):多 actl 实例互斥;持锁覆盖整个注入动作段
-    let _lock = input::InputLock::acquire(timing().lock_wait_ms)?;
+    let _anchor = crate::feedback::KeyboardAnchor::capture()?;
+    crate::feedback::check_foreground(&loc.window_title)?;
+    crate::feedback::check_keyboard_anchor()?;
+    action.executing();
     let total = text.chars().count();
     let outcome = |delivered: usize, stopped_early: bool| TypeOutcome {
         located: (&loc).into(),
@@ -126,13 +144,14 @@ pub fn type_text(
             modifiers: vec!["ctrl".into()],
             keys: vec![actl_core::keys::Key::Char('v')],
         })?;
+        action.delivered();
         Ok(outcome(total, false))
     } else {
         // 键盘逐字通道:分批注入,批间复核物理前台——焦点被抢(真人点走/弹窗
         // 夺焦)即停在批边界并如实上报已送达量(并发输入损坏注入的四次活体
         // 实证结论,docs/spike-findings)
         let chars: Vec<char> = text.chars().collect();
-        let pattern = app.map(str::to_string);
+        let pattern = Some(loc.window_title.clone());
         let delivered = input::send_in_segments(
             &chars,
             timing().segment_chars,
@@ -153,6 +172,11 @@ pub fn type_text(
                     .unwrap_or(false)
             },
         )?;
+        if delivered < total {
+            action.partial();
+        } else {
+            action.delivered();
+        }
         Ok(outcome(delivered, delivered < total))
     }
 }
@@ -174,19 +198,57 @@ pub struct TypeOutcome {
 /// 物理前台(GetForegroundWindow)验证前台确为目标窗口——UIA 焦点视图可能与物理前台
 /// 不一致,"看起来聚焦了"不等于键会进目标。不匹配则拒绝注入,宁可失败不可错发。
 pub fn press_keys(spec: &KeySpec, app: Option<&str>) -> Result<Option<String>, CtlError> {
+    let _lock = input::InputLock::acquire(timing().lock_wait_ms)?;
     let focused = prepare_keyboard(app)?;
     // 输入占用锁(doc 09 §6.2):护栏之后、注入之前取得,覆盖整个按键序列
-    let _lock = input::InputLock::acquire(timing().lock_wait_ms)?;
+    let _anchor = crate::feedback::KeyboardAnchor::capture()?;
+    let mut action = crate::feedback::prepare(
+        "press",
+        crate::feedback::keyboard(false, false),
+        actl_core::activity::ActionTarget {
+            window: focused.clone(),
+            ..Default::default()
+        },
+    )?;
+    if let Some(title) = &focused {
+        crate::feedback::check_foreground(title)?;
+    }
+    crate::feedback::check_keyboard_anchor()?;
+    action.executing();
     kbd::send_key_spec(spec)?;
+    action.delivered();
     Ok(focused)
 }
 
 /// key-down/key-up:与 press 相同的护栏链,但只发半边事件(见 kbd::send_key_partial)。
 pub fn press_half(spec: &KeySpec, app: Option<&str>) -> Result<Option<String>, CtlError> {
-    let focused = prepare_keyboard(app)?;
+    press_half_with_direction(spec, app, true)
+}
+
+pub fn press_half_with_direction(
+    spec: &KeySpec,
+    app: Option<&str>,
+    down: bool,
+) -> Result<Option<String>, CtlError> {
     let _lock = input::InputLock::acquire(timing().lock_wait_ms)?;
+    let focused = prepare_keyboard(app)?;
+    let _anchor = crate::feedback::KeyboardAnchor::capture()?;
     // 半事件方向由调用方决定;此函数不持锁跨进程(key-up 是另一进程,锁不横跨)
-    kbd::send_key_partial(spec, true)?;
+    let mut action = crate::feedback::prepare(
+        if down { "key-down" } else { "key-up" },
+        crate::feedback::keyboard(false, false),
+        actl_core::activity::ActionTarget {
+            window: focused.clone(),
+            ..Default::default()
+        },
+    )?;
+    if let Some(title) = &focused {
+        crate::feedback::check_foreground(title)?;
+    }
+    crate::feedback::check_keyboard_anchor()?;
+    action.executing();
+    kbd::send_key_partial(spec, down)?;
+    action.delivered();
     Ok(focused)
 }
 
@@ -201,7 +263,7 @@ fn prepare_keyboard(app: Option<&str>) -> Result<Option<String>, CtlError> {
             ensure_element_focus(pattern)?;
             // 护栏:物理前台必须是目标窗口,否则注入会打进别处(已发生过真实事故)
             let fg = kbd::foreground_title().unwrap_or_default();
-            if !fg.contains(pattern) {
+            if fg != title {
                 return Err(CtlError::new(
                     ErrorCode::PermDenied,
                     format!(
@@ -290,7 +352,9 @@ pub fn set_value(
             ),
         )
     })?;
-    pattern.set_value(value).map_err(internal)?;
+    crate::feedback::semantic("set-value", &loc.element, &loc.window_title, || {
+        pattern.set_value(value).map_err(internal)
+    })?;
     Ok((&loc).into())
 }
 
@@ -336,15 +400,17 @@ pub fn select_option(
     }
     let item = &items[0];
     let name = item.get_name().unwrap_or_default();
-    item.get_pattern::<UISelectionItemPattern>()
-        .map_err(|_| {
-            CtlError::new(
-                ErrorCode::NotActionable,
-                format!("{name:?} exposes no SelectionItem pattern"),
-            )
-        })?
-        .select()
-        .map_err(internal)?;
+    crate::feedback::semantic("select", item, &loc.window_title, || {
+        item.get_pattern::<UISelectionItemPattern>()
+            .map_err(|_| {
+                CtlError::new(
+                    ErrorCode::NotActionable,
+                    format!("{name:?} exposes no SelectionItem pattern"),
+                )
+            })?
+            .select()
+            .map_err(internal)
+    })?;
     Ok((loc, name, level))
 }
 
@@ -408,7 +474,9 @@ pub fn toggle_element(
             ),
         )
     })?;
-    pattern.toggle().map_err(internal)?;
+    crate::feedback::semantic("toggle", &loc.element, &loc.window_title, || {
+        pattern.toggle().map_err(internal)
+    })?;
     let state = pattern
         .get_toggle_state()
         .map(|s| format!("{s:?}"))
@@ -422,10 +490,11 @@ pub fn toggle_element(
 /// 只做窗口前置 + 物理前台护栏 + 输入锁。剪贴板内容只读不写(消费方)。
 pub fn paste(app: &str) -> Result<String, CtlError> {
     use actl_core::keys::Key;
+    let _lock = input::InputLock::acquire(timing().lock_wait_ms)?;
     let title = focus_window(app)?;
     std::thread::sleep(std::time::Duration::from_millis(timing().press_focus_ms));
     let fg = kbd::foreground_title().unwrap_or_default();
-    if !fg.contains(app) {
+    if fg != title {
         return Err(CtlError::new(
             ErrorCode::PermDenied,
             format!(
@@ -435,10 +504,22 @@ pub fn paste(app: &str) -> Result<String, CtlError> {
             ),
         ));
     }
-    let _lock = input::InputLock::acquire(timing().lock_wait_ms)?;
+    let _anchor = crate::feedback::KeyboardAnchor::capture()?;
+    let mut action = crate::feedback::prepare(
+        "paste",
+        crate::feedback::keyboard(true, false),
+        actl_core::activity::ActionTarget {
+            window: Some(title.clone()),
+            ..Default::default()
+        },
+    )?;
+    crate::feedback::check_foreground(&title)?;
+    crate::feedback::check_keyboard_anchor()?;
+    action.executing();
     kbd::send_key_spec(&KeySpec {
         modifiers: vec!["ctrl".into()],
         keys: vec![Key::Char('v')],
     })?;
+    action.delivered();
     Ok(title)
 }

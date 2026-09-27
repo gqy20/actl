@@ -235,7 +235,9 @@ fn root_children(auto: &UIAutomation, walker: &UITreeWalker) -> Vec<UIElement> {
     };
     let mut child = walker.get_first_child(&root).ok();
     while let Some(w) = child {
-        out.push(w.clone());
+        if !native_hwnd(&w).is_some_and(crate::display_support::is_display_window) {
+            out.push(w.clone());
+        }
         child = walker.get_next_sibling(&w).ok();
     }
     out
@@ -291,6 +293,7 @@ pub(crate) fn find_window(
     // 导航会改标题(标题不是窗口身份),HWND 是;所有 --app 消费方自动生效
     if let Some(raw) = pattern.strip_prefix("hwnd:") {
         let hwnd = parse_hwnd(raw)?;
+        crate::display_support::reject_display(hwnd)?;
         return auto
             .element_from_handle(uiautomation::types::Handle::from(hwnd))
             .map_err(|_| {
@@ -479,12 +482,14 @@ pub fn focus_window(pattern: &str) -> Result<String, CtlError> {
     let auto = UIAutomation::new().map_err(internal)?;
     let walker = auto.create_tree_walker().map_err(internal)?;
     let win = find_window(&auto, &walker, pattern)?;
+    let mut action = crate::feedback::window_action("focus-window", &win, true)?;
     win.set_focus().map_err(|e| {
         CtlError::new(
             ErrorCode::NotActionable,
             format!("cannot focus window {pattern:?}: {e:?}"),
         )
     })?;
+    action.delivered();
     Ok(win.get_name().unwrap_or_default())
 }
 
@@ -619,6 +624,7 @@ pub fn close_window(pattern: &str) -> Result<String, CtlError> {
     let auto = UIAutomation::new().map_err(internal)?;
     let walker = auto.create_tree_walker().map_err(internal)?;
     let win = find_window(&auto, &walker, pattern)?;
+    let mut action = crate::feedback::window_action("close-window", &win, false)?;
     let title = win.get_name().unwrap_or_default();
     let Some(hwnd) = native_hwnd(&win) else {
         return Err(CtlError::new(
@@ -635,6 +641,7 @@ pub fn close_window(pattern: &str) -> Result<String, CtlError> {
         )
     }
     .map_err(|e| CtlError::internal(format!("PostMessageW(WM_CLOSE) failed for {title:?}: {e}")))?;
+    action.delivered();
     Ok(title)
 }
 
@@ -648,6 +655,7 @@ pub fn resize_window(pattern: &str, width: i32, height: i32) -> Result<String, C
     let auto = UIAutomation::new().map_err(internal)?;
     let walker = auto.create_tree_walker().map_err(internal)?;
     let win = find_window(&auto, &walker, pattern)?;
+    let mut action = crate::feedback::window_action("resize-window", &win, false)?;
     let title = win.get_name().unwrap_or_default();
     let Some(hwnd) = native_hwnd(&win) else {
         return Err(CtlError::new(
@@ -673,6 +681,7 @@ pub fn resize_window(pattern: &str, width: i32, height: i32) -> Result<String, C
         )
     }
     .map_err(|e| CtlError::internal(format!("SetWindowPos: {e}")))?;
+    action.delivered();
     Ok(title)
 }
 
@@ -731,6 +740,7 @@ pub fn resolve_window(r: WindowRef<'_>) -> Result<UIElement, CtlError> {
             }
         }
         WindowRef::Hwnd(raw) => {
+            crate::display_support::reject_display(raw)?;
             // 特殊窗(任务栏 XAML 岛/TrayNotifyWnd 等)不在 UIA root 枚举里,
             // 也不必非有标题——ElementFromHandle 直取(From<isize> 现成转换)
             auto.element_from_handle(uiautomation::types::Handle::from(raw))
@@ -759,6 +769,7 @@ pub fn parse_hwnd(raw: &str) -> Result<isize, CtlError> {
 /// close-window 的按引用入口(FR3)。
 pub fn close_window_by(r: WindowRef<'_>) -> Result<String, CtlError> {
     let win = resolve_window(r)?;
+    let mut action = crate::feedback::window_action("close-window", &win, false)?;
     let title = win.get_name().unwrap_or_default();
     let Some(hwnd) = native_hwnd(&win) else {
         return Err(CtlError::new(
@@ -775,18 +786,21 @@ pub fn close_window_by(r: WindowRef<'_>) -> Result<String, CtlError> {
         )
     }
     .map_err(|e| CtlError::internal(format!("PostMessageW(WM_CLOSE) failed for {title:?}: {e}")))?;
+    action.delivered();
     Ok(title)
 }
 
 /// focus-window 的按引用入口(FR3)。
 pub fn focus_window_by(r: WindowRef<'_>) -> Result<String, CtlError> {
     let win = resolve_window(r)?;
+    let mut action = crate::feedback::window_action("focus-window", &win, true)?;
     win.set_focus().map_err(|e| {
         CtlError::new(
             ErrorCode::NotActionable,
             format!("cannot focus window: {e:?}"),
         )
     })?;
+    action.delivered();
     Ok(win.get_name().unwrap_or_default())
 }
 

@@ -1,10 +1,11 @@
 //! bin 集成测试:对真实 `actl` 二进制断言 envelope 契约(06 §4)与退出码。
 //! 这是命令输出形状的 golden 起点;协议变更(spec 提交)时同步更新断言。
 
-use std::process::Command;
+mod support;
 
 fn actl(args: &[&str]) -> (i32, String, String) {
-    let out = Command::new(env!("CARGO_BIN_EXE_actl"))
+    let out = support::IsolatedCommand::new()
+        .command
         .args(args)
         .output()
         .expect("spawn actl binary");

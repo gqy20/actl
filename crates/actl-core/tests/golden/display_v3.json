@@ -1,0 +1,8 @@
+{
+  "protocol": 3,
+  "build": "0.1.5",
+  "pid": 42,
+  "epoch": "display-42",
+  "state": "ready",
+  "ts_ms": 100
+}

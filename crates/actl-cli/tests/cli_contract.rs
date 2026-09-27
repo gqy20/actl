@@ -1,10 +1,43 @@
 //! envelope 契约测试(06 §4):成功/失败形态与退出码三态。
 //! 只测无需桌面交互的确定性路径(CI 安全)。
 
-use std::process::Command;
+mod support;
+
+#[test]
+fn display_and_desktop_commands_contract() {
+    let (code, text) = actl(&["display-status"]);
+    let mut result: serde_json::Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(code, 0);
+    result.as_object_mut().unwrap().remove("duration_ms");
+    let golden: serde_json::Value =
+        serde_json::from_str(include_str!("golden/display_status.json")).unwrap();
+    assert_eq!(result, golden);
+    assert_eq!(
+        result["data"],
+        serde_json::json!({"ready":false,"lease":null,"stop_requested":false})
+    );
+    for args in [
+        vec!["minimize-window"],
+        vec!["restore-window"],
+        vec!["desktop-prepare"],
+        vec!["desktop-restore", "--session", "../bad"],
+    ] {
+        let (code, text) = actl(&args);
+        assert_eq!(code, 2, "{text}");
+        let result: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(result["error"]["code"], "PROTOCOL");
+    }
+    let (code, text) = actl(&["desktop-restore", "--session", "missing"]);
+    assert_eq!(code, 1);
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&text).unwrap()["error"]["code"],
+        "NOT_FOUND"
+    );
+}
 
 fn actl(args: &[&str]) -> (i32, String) {
-    let out = Command::new(env!("CARGO_BIN_EXE_actl"))
+    let out = support::IsolatedCommand::new()
+        .command
         .args(args)
         .output()
         .expect("spawn actl");
@@ -149,7 +182,8 @@ fn batch_failure_carries_partial_steps_in_evidence() {
 #[test]
 fn actl_trace_goes_to_stderr_and_stdout_stays_pure() {
     // ACTL_TRACE=1:诊断进 stderr;stdout 仍是一个合法 envelope(ADR-002 不变量)
-    let out = Command::new(env!("CARGO_BIN_EXE_actl"))
+    let out = support::IsolatedCommand::new()
+        .command
         .args(["status"])
         .env("ACTL_TRACE", "1")
         .output()

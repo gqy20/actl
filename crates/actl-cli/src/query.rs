@@ -372,13 +372,6 @@ pub(crate) fn batch_cmd(json_str: &str) -> Result<CommandOutput, CtlError> {
         };
         // 步前采样一次(launch 后自启窗未成形的竞态由失败时刻补采样兜住)
         let mut blocked_by = fg_blocked();
-        signals.write_state(&actl_core::state::SessionState::now(
-            std::process::id(),
-            "batch",
-            None,
-            Some(format!("{}/{}", i + 1, cmds.len())),
-            actl_core::state::Phase::Running,
-        ));
         let tokens: Vec<&str> = line.split_whitespace().collect();
         if tokens.is_empty() {
             return Err(CtlError::protocol(format!("batch[{i}] is empty")));
@@ -388,6 +381,12 @@ pub(crate) fn batch_cmd(json_str: &str) -> Result<CommandOutput, CtlError> {
         if let Command::Batch { .. } = sub.command {
             return Err(CtlError::protocol("batch cannot nest batch"));
         }
+        actl_core::signal_session::step(
+            crate::cli::command_name(&sub.command),
+            crate::cli::app_of(&sub.command).as_deref(),
+            i + 1,
+            cmds.len(),
+        );
         let step_started = Instant::now();
         match dispatch(&sub.command) {
             Ok(_) => {

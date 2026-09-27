@@ -327,6 +327,20 @@ fn open_clipboard() -> Result<ClipGuard, CtlError> {
 
 /// get-clipboard:读文本(None = 无文本格式/空)。非文本格式(图片等)返回 None。
 pub fn get_clipboard_text() -> Result<Option<String>, CtlError> {
+    let mut action = actl_core::signal_session::ActionGuard::begin(
+        "get-clipboard",
+        actl_core::activity::InputEffects {
+            clipboard: actl_core::activity::ClipboardEffect::Read,
+            ..Default::default()
+        },
+        Default::default(),
+    );
+    action.executing();
+    let result = get_clipboard_text_inner()?;
+    action.delivered();
+    Ok(result)
+}
+fn get_clipboard_text_inner() -> Result<Option<String>, CtlError> {
     unsafe {
         let _guard = open_clipboard()?;
         if !windows::Win32::System::DataExchange::IsClipboardFormatAvailable(CF_UNICODETEXT).is_ok()
@@ -356,6 +370,16 @@ pub fn get_clipboard_text() -> Result<Option<String>, CtlError> {
 pub fn set_clipboard_text(text: &str) -> Result<(), CtlError> {
     use windows::Win32::Foundation::{GlobalFree, HANDLE};
 
+    let mut action = crate::feedback::prepare(
+        "set-clipboard",
+        actl_core::activity::InputEffects {
+            clipboard: actl_core::activity::ClipboardEffect::Write,
+            ..Default::default()
+        },
+        Default::default(),
+    )?;
+    crate::feedback::check_stop()?;
+    action.executing();
     let mut wide: Vec<u16> = text.encode_utf16().collect();
     wide.push(0);
     unsafe {
@@ -375,6 +399,7 @@ pub fn set_clipboard_text(text: &str) -> Result<(), CtlError> {
             let _ = GlobalFree(Some(h));
             return Err(CtlError::internal("SetClipboardData failed"));
         }
+        action.delivered();
         Ok(())
     }
 }

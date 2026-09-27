@@ -97,6 +97,8 @@ pub fn pointer_physical(
     use windows::Win32::Foundation::POINT;
     use windows::Win32::UI::WindowsAndMessaging::{GA_ROOT, GetAncestor, WindowFromPoint};
 
+    crate::feedback::check_stop()?;
+    let _dpi = crate::capture::Pmv2Guard::enter();
     let loc = locate(app, target, near)?;
     let scrolled = ensure_visible(&loc.element);
     // clickable point 缺失时的受控退化:BoundingRectangle 中心 + 命中检查把关
@@ -172,17 +174,60 @@ pub fn pointer_physical(
         ));
     }
 
-    inject_pointer_at(px, py, action.to_spec())?;
+    let bounds = crate::feedback::target(&loc.element, &loc.window_title).bounds;
+    inject_pointer_at(px, py, action.to_spec(), &loc.window_title, || {
+        crate::feedback::check_stop()?;
+        let hit = unsafe { WindowFromPoint(POINT { x: px, y: py }) };
+        if root_of(hit).and_then(window_title_of).as_deref() != Some(target_title.as_str())
+            || crate::feedback::target(&loc.element, &loc.window_title).bounds != bounds
+        {
+            return Err(CtlError::new(
+                ErrorCode::NotActionable,
+                "pointer target changed during preparation",
+            ));
+        }
+        Ok(())
+    })?;
     Ok((loc, (px, py), scrolled))
 }
 
 /// 物理注入公共尾段:输入占用锁 → 修饰键空置检查 → 一批 SendInput。
 /// 元素路径(pointer_physical)与坐标路径(pointer_at_physical)共用,
 /// 锁与护栏语义不分叉。
-fn inject_pointer_at(px: i32, py: i32, spec: PointerSpec) -> Result<(), CtlError> {
+fn inject_pointer_at(
+    px: i32,
+    py: i32,
+    spec: PointerSpec,
+    window: &str,
+    validate: impl Fn() -> Result<(), CtlError>,
+) -> Result<(), CtlError> {
     let _lock = input::InputLock::acquire(timing().lock_wait_ms)?;
     // 修饰键空置检查:ctrl 按住时的物理点击 = ctrl+click(语义劫持)
     kbd::wait_modifiers_clear()?;
+    let (kind, keyboard, destination) = match &spec {
+        PointerSpec::Click { modifiers, .. } => ("click", !modifiers.is_empty(), None),
+        PointerSpec::Hover => ("hover", false, None),
+        PointerSpec::Drag { to } => ("drag", false, Some([to.0, to.1])),
+        PointerSpec::Wheel { .. } => ("scroll", false, None),
+    };
+    let mut action = crate::feedback::prepare(
+        kind,
+        actl_core::activity::InputEffects {
+            pointer: true,
+            keyboard,
+            ..Default::default()
+        },
+        actl_core::activity::ActionTarget {
+            window: Some(window.into()),
+            point: Some([px, py]),
+            destination,
+            ..Default::default()
+        },
+    )?;
+    validate()?;
+    kbd::wait_modifiers_clear()?;
+    validate()?;
+    action.executing();
     match spec {
         PointerSpec::Click {
             button,
@@ -201,6 +246,7 @@ fn inject_pointer_at(px: i32, py: i32, spec: PointerSpec) -> Result<(), CtlError
         PointerSpec::Drag { to: (tx, ty) } => mouse::drag_to(px, py, tx, ty)?,
         PointerSpec::Wheel { notches } => mouse::wheel_at(px, py, notches)?,
     }
+    action.delivered();
     Ok(())
 }
 
@@ -231,6 +277,7 @@ pub fn pointer_at_physical(
         GA_ROOT, GetAncestor, GetWindowRect, IsIconic, WindowFromPoint,
     };
 
+    crate::feedback::check_stop()?;
     let _dpi = crate::capture::Pmv2Guard::enter();
     let auto = UIAutomation::new().map_err(internal)?;
     let walker = auto.create_tree_walker().map_err(internal)?;
@@ -290,7 +337,29 @@ pub fn pointer_at_physical(
             ),
         ));
     }
-    inject_pointer_at(x, y, action.to_spec())?;
+    let mut before = RECT::default();
+    unsafe { GetWindowRect(hwnd, &mut before) }.map_err(internal)?;
+    inject_pointer_at(x, y, action.to_spec(), &title, || {
+        crate::feedback::check_stop()?;
+        let mut current = RECT::default();
+        unsafe { GetWindowRect(hwnd, &mut current) }.map_err(internal)?;
+        let hit = unsafe { WindowFromPoint(POINT { x, y }) };
+        let hit_title = window_title_of(unsafe { GetAncestor(hit, GA_ROOT) });
+        if unsafe { IsIconic(hwnd) }.as_bool()
+            || current != before
+            || x < current.left
+            || x >= current.right
+            || y < current.top
+            || y >= current.bottom
+            || hit_title.as_deref() != Some(title.as_str())
+        {
+            return Err(CtlError::new(
+                ErrorCode::NotActionable,
+                "coordinate target changed during preparation",
+            ));
+        }
+        Ok(())
+    })?;
     Ok(CoordOutcome {
         window_title: title,
         point: (x, y),
@@ -347,8 +416,40 @@ pub fn drag_physical(
         ));
     };
     let point = (dest.get_x(), dest.get_y());
-    let _lock = input::InputLock::acquire(timing().lock_wait_ms)?;
-    mouse::drag_to(fx, fy, point.0, point.1)?;
+    let source = locate(app, from, from_near)?;
+    let before = crate::feedback::target(&source.element, &source.window_title).bounds;
+    let dest_before = crate::feedback::target(&to_loc.element, &to_loc.window_title).bounds;
+    inject_pointer_at(
+        fx,
+        fy,
+        PointerSpec::Drag { to: point },
+        &source.window_title,
+        || {
+            use windows::Win32::Foundation::POINT;
+            use windows::Win32::UI::WindowsAndMessaging::{GA_ROOT, GetAncestor, WindowFromPoint};
+            let hit = unsafe { WindowFromPoint(POINT { x: fx, y: fy }) };
+            let end = unsafe {
+                WindowFromPoint(POINT {
+                    x: point.0,
+                    y: point.1,
+                })
+            };
+            if window_title_of(unsafe { GetAncestor(hit, GA_ROOT) }).as_deref()
+                != Some(source.window_title.as_str())
+                || window_title_of(unsafe { GetAncestor(end, GA_ROOT) }).as_deref()
+                    != Some(to_loc.window_title.as_str())
+                || crate::feedback::target(&source.element, &source.window_title).bounds != before
+                || crate::feedback::target(&to_loc.element, &to_loc.window_title).bounds
+                    != dest_before
+            {
+                return Err(CtlError::new(
+                    ErrorCode::NotActionable,
+                    "drag target changed during preparation",
+                ));
+            }
+            crate::feedback::check_stop()
+        },
+    )?;
     Ok((
         locate(app, from, from_near)?,
         (fx, fy),
@@ -375,6 +476,13 @@ pub fn scroll_element(
             ScrollAmount::SmallDecrement
         };
         // pattern 宣称支持但调用失败(实测记事本 Document)→ 物理滚轮兜底
+        let mut feedback = actl_core::signal_session::ActionGuard::begin(
+            "scroll",
+            Default::default(),
+            crate::feedback::target(&loc.element, &loc.window_title),
+        );
+        crate::feedback::check_stop()?;
+        feedback.executing();
         let mut ok = true;
         for _ in 0..notches.abs() {
             if scroll
@@ -386,6 +494,7 @@ pub fn scroll_element(
             }
         }
         if ok {
+            feedback.delivered();
             return Ok((loc, "uia-scroll"));
         }
     }

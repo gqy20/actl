@@ -62,7 +62,7 @@ pub(crate) fn click(
             "modifiers": with,
             "point": [x, y],
             "guard": "window-bounds",
-            "input_effects": { "keyboard": "none", "clipboard": "untouched", "pointer": "move_and_click" },
+            "input_effects": { "keyboard": if with.is_empty() { "none" } else { "injected" }, "clipboard": "untouched", "pointer": "move_and_click" },
             "window": out.window_title,
         })
     } else if physical {
@@ -82,7 +82,7 @@ pub(crate) fn click(
             "modifiers": with,
             "point": [px, py],
             "scrolled_into_view": scrolled,
-            "input_effects": { "keyboard": "none", "clipboard": "untouched", "pointer": "move_and_click" },
+            "input_effects": { "keyboard": if with.is_empty() { "none" } else { "injected" }, "clipboard": "untouched", "pointer": "move_and_click" },
             "resolved": { "role": loc.role, "name": loc.name, "automation_id": loc.automation_id },
             "window": loc.window_title,
         })
@@ -243,6 +243,28 @@ pub(crate) fn launch(args: &[String]) -> Result<CommandOutput, CtlError> {
     let Some(program) = args.first() else {
         return Err(CtlError::protocol("launch requires a program name"));
     };
+    let candidate = actl_uia::resolve_app_path(program).unwrap_or_else(|| program.clone());
+    let direct = std::path::PathBuf::from(&candidate);
+    let resolved_path = if direct.is_file() {
+        Some(direct)
+    } else {
+        std::env::var_os("PATH").and_then(|p| {
+            std::env::split_paths(&p)
+                .flat_map(|dir| [dir.join(&candidate), dir.join(format!("{candidate}.exe"))])
+                .find(|p| p.is_file())
+        })
+    };
+    let program = resolved_path
+        .ok_or_else(|| {
+            CtlError::new(
+                ErrorCode::NotFound,
+                format!("cannot find launch executable {program:?}"),
+            )
+        })?
+        .to_string_lossy()
+        .into_owned();
+    let mut action = actl_uia::display_gate::prepare_action("launch", &program)?;
+    action.executing();
     // App Paths 解析:裸程序名(Office/商店别名)不在 PATH 时查注册表取完整路径
     // (通用增强,docs/14 实测痛点:launch WINWORD 曾 NotFound)
     // GUI 程序不得继承控制台句柄:Word 等会攥住 stdout 写端,调用方的
@@ -252,14 +274,14 @@ pub(crate) fn launch(args: &[String]) -> Result<CommandOutput, CtlError> {
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null());
     };
-    let mut first = std::process::Command::new(program);
+    let mut first = std::process::Command::new(&program);
     detached(&mut first);
     let resolved = first
         .args(&args[1..])
         .spawn()
         .map(|child| (child, program.clone()))
-        .or_else(|first_err| match actl_uia::resolve_app_path(program) {
-            Some(full) if full != *program => {
+        .or_else(|first_err| match actl_uia::resolve_app_path(&program) {
+            Some(full) if full != program => {
                 let full2 = full.clone();
                 let mut second = std::process::Command::new(&full);
                 detached(&mut second);
@@ -280,6 +302,7 @@ pub(crate) fn launch(args: &[String]) -> Result<CommandOutput, CtlError> {
             )),
         })?;
     let (child, program) = resolved;
+    action.delivered();
     Ok(json!({ "pid": child.id(), "program": program }).into())
 }
 
@@ -410,7 +433,7 @@ pub(crate) fn key_half_cmd(
     let app = require_app(app, name)?;
     let spec = actl_core::parse_key_expr(keys)?;
     // 与 press 相同的护栏链:置焦 + 物理前台核对
-    actl_uia::press_half(&spec, Some(app))?;
+    actl_uia::press_half_with_direction(&spec, Some(app), down)?;
     Ok(json!({
         "action": name,
         "keys": keys,

@@ -28,6 +28,22 @@ pub enum Phase {
 /// 一次命令执行的状态快照(单写者:当前 actl 进程;多读者)。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionState {
+    #[serde(default)]
+    pub version: u32,
+    #[serde(default)]
+    pub call_id: String,
+    #[serde(default)]
+    pub seq: u64,
+    #[serde(default)]
+    pub started_ms: u64,
+    #[serde(default)]
+    pub finished_ms: Option<u64>,
+    #[serde(default)]
+    pub action: Option<crate::activity::ActionState>,
+    #[serde(default)]
+    pub recent_actions: Vec<crate::activity::ActionState>,
+    #[serde(default)]
+    pub error_code: Option<String>,
     pub pid: u32,
     pub command: String,
     /// 目标窗口摘要(--app 原样;无则 None)
@@ -48,6 +64,14 @@ impl SessionState {
         phase: Phase,
     ) -> Self {
         Self {
+            version: 1,
+            call_id: String::new(),
+            seq: 0,
+            started_ms: unix_ms(),
+            finished_ms: None,
+            action: None,
+            recent_actions: Vec::new(),
+            error_code: None,
             pid,
             command: command.to_string(),
             app: app.map(str::to_string),
@@ -97,13 +121,75 @@ impl SignalPaths {
     /// 状态快照落盘(单文件原子替换;失败静默——状态通道绝不能影响命令本身)。
     pub fn write_state(&self, st: &SessionState) {
         let _ = std::fs::create_dir_all(&self.dir);
-        let tmp = self.dir.join("state.json.tmp");
-        if serde_json::to_string(st)
-            .map(|s| std::fs::write(&tmp, s))
-            .is_ok()
-        {
-            let _ = std::fs::rename(&tmp, self.state_file());
+        if st.version >= 2 && !st.call_id.is_empty() {
+            let dir = self.dir.join("calls");
+            let _ = std::fs::create_dir_all(&dir);
+            // Each invocation owns its file: concurrent commands cannot overwrite it.
+            let file = dir.join(format!("{}.json", st.call_id));
+            Self::atomic_write(&file, st);
         }
+        Self::atomic_write(&self.state_file(), st);
+    }
+
+    fn atomic_write(file: &std::path::Path, st: &SessionState) {
+        let tmp = file.with_extension(format!("{}.{}.tmp", st.pid, st.call_id));
+        if let Ok(text) = serde_json::to_vec(st) {
+            if std::fs::write(&tmp, text).is_ok() {
+                let _ = std::fs::rename(&tmp, file);
+            }
+            let _ = std::fs::remove_file(tmp);
+        }
+    }
+
+    /// Recent call snapshots, bounded retention; active calls are never evicted.
+    pub fn read_calls(&self) -> Vec<SessionState> {
+        let now = unix_ms();
+        let mut states = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(self.dir.join("calls")) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().is_none_or(|e| e != "json") {
+                    continue;
+                }
+                let Some(st) = std::fs::read(&path)
+                    .ok()
+                    .and_then(|b| serde_json::from_slice::<SessionState>(&b).ok())
+                else {
+                    continue;
+                };
+                if now.saturating_sub(st.ts_ms) > 60_000 {
+                    let _ = std::fs::remove_file(path);
+                } else {
+                    states.push(st);
+                }
+            }
+        }
+        if states.is_empty() {
+            if let Some(st) = self.read_state() {
+                states.push(st);
+            }
+        }
+        states.sort_by_key(|s| s.ts_ms);
+        let terminal_count = states.iter().filter(|s| s.phase != Phase::Running).count();
+        let mut excess = terminal_count.saturating_sub(128);
+        states.retain(|s| {
+            if excess > 0 && s.phase != Phase::Running && !s.call_id.is_empty() {
+                // File names are enumerated/generated locally; never trust a serialized path.
+                if s.call_id
+                    .bytes()
+                    .all(|c| c.is_ascii_alphanumeric() || c == b'-')
+                {
+                    let _ = std::fs::remove_file(
+                        self.dir.join("calls").join(format!("{}.json", s.call_id)),
+                    );
+                }
+                excess -= 1;
+                false
+            } else {
+                true
+            }
+        });
+        states
     }
 
     pub fn read_state(&self) -> Option<SessionState> {

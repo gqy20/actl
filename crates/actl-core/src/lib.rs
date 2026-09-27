@@ -5,7 +5,10 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod activity;
+pub mod display;
 pub mod keys;
+pub mod signal_session;
 pub mod snapshot;
 pub mod state;
 pub mod target;
