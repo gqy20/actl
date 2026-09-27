@@ -6,6 +6,15 @@
 ## [Unreleased]
 
 ### Added
+- **微信 pack 真机修正(打开/点击/输入实测,未发送)**:① 会话条目 UIA Invoke
+  返回 ok 但**不触发导航**(mmui/Qt 特性)——切换会话必须 `--physical`(实测
+  物理点击后消息区即时物化);② 消息气泡是 Custom role,extract 不命中——读消息
+  走快照 name 解析(气泡 name=正文全文,虚拟化仅含可见段);③ 输入闭环全通:
+  set-clipboard → click 输入框 → paste → `get --property value` **读回逐字**
+  (输入框暴露 ValuePattern);④ 清草稿 = ctrl+a + delete(回车即发送,严禁);
+  会话条目 name 为"名称\n置顶\n预览\n时间"复合文本。pack 路线重写为
+  session_scan/open(physical)/read(snapshot)/draft(读回)/clear_draft/send(高危,
+  仅核对后,未真机验证)。
 - **微信 pack(skills/actl/apps/wechat.yml)**:知识来源 = 同作者的 wechat-ui-collector
   项目(weixin-4x profile:mmui:: 选择器体系)+ 本机只读真机验证(session_list 可达、
   session_item_<名称> 富 id 定位会话、消息区随打开物化)。路线:会话概览/打开会话/
