@@ -8,6 +8,8 @@ app_version: "11.2607.0.0"
 verified_date: 2026-09-27
 verified_env: Windows 10.0.26200.0 zh-cn
 quirks:
+  - id: packaged_activation
+    note: 直接执行包内 CalculatorApp.exe 可返回 PID 但不出现窗口；fixture 使用 AppsFolder 激活。list-windows 会同时列出宿主、标题栏和应用窗口，按包内程序路径、新 HWND 和进程启动时间确认测试实例。
   - id: result_name_channel
     note: CalculatorResults 的结果在 Name 通道，实测 verify --value 返回 actual=null。使用 verify --property name、get --property name 或 wait 的 name 谓词；中文界面的值为“显示为 5”等。
   - id: nested_output_not_resolved

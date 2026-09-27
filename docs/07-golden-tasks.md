@@ -5,6 +5,12 @@
 
 ## 金任务 1 · 计算器(M1 主验收,10/10)
 
+2026-09-27 迁移为 PowerShell：激活商店包中的计算器，以新 HWND、程序路径和启动时间确认归属，
+每轮 snapshot 后依次用 ref 点击，并用 verify 检查结果名称。默认 3 轮；正式 10 轮验收设置
+`$env:RUNS='10'` 后运行 `cargo xtask regress --case golden-task-1`。历史 10/10 不代表新脚本
+通过；授权解除停止后已完成 10/10 轮计算断言，清理误判已修正并单独验证。
+最终脚本的整轮重跑仍待完成，具体证据和边界见 [测试基建](22-adaptation-test-infrastructure.md)。
+
 ```
 1. actl launch calc
 2. actl snapshot --app "计算器"
@@ -16,6 +22,11 @@
 覆盖能力:launch / snapshot(ref 编号) / click(UIA Invoke) / get / 中文控件名。
 
 ## 金任务 2 · 记事本写入保存(M1 主验收,10/10)
+
+2026-09-27 测试入口迁移：历史 10/10 记录不代表新脚本验收。当前用例打开本轮独立空文件，
+写入中英文后以 Ctrl+Shift+S 另存到绝对路径，核对完整磁盘内容。已有记事本会话或紧急停止时
+返回 blocked；只关闭本轮已保存的测试标签。运行 `cargo xtask regress --case golden-task-2`，
+详细边界及迁移状态见 [测试基建](22-adaptation-test-infrastructure.md)。
 
 ```
 1. actl launch notepad
