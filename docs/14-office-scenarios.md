@@ -45,13 +45,24 @@ actl press ctrl+c --app Excel
 actl get-clipboard        # → "hello actl 123"(实测逐字命中)
 ```
 
-### 保存链 ⏸(待解锁桌面续测)
+### 保存链 ✅(原地保存正链打通;场景框架修正)
 
-ctrl+s / F12 的行为在锁屏发生前未能归因完成(键被锁屏层吞没,见 §4)。
-桌面解锁后待测项:新工作簿首存走 Backstage 视图还是另存为对话框
-(Backcase 不产生新顶层窗口,`--expect window:` 断言不适用,需
-`wait --element` Backstage 按钮形态);另存为对话框本身为 IFileSaveDialog,
-actl 已有深度支持(金任务 2)。
+真实场景 = **打开已有文件 → 修改 → ctrl+s 原地保存**——原地保存不弹任何窗口,
+断言走磁盘终验而非 `--expect window:`(实测纠正:对未落盘的草稿 Book1 等
+"另存为弹窗"是错误的场景构造)。实测全链:
+
+```
+actl type id:1001 "E1" --app <xlsx标题> && actl press enter --app <xlsx标题>
+actl press ctrl+v --app <xlsx标题>          # 剪贴板直灌(§1 路线)
+actl press enter --app <xlsx标题>
+actl press ctrl+s --app <xlsx标题>          # 原地保存,无弹窗
+# 终验:COM GetActiveObject 读运行实例 E1="saved by actl",文件 mtime 更新(实测双中)
+```
+
+**受保护视图(重要发现)**:TEMP 等不可信位置的文件,Excel/Word 以受保护视图
+打开——UIA 读写正常,但**编辑被静默拒绝**(ctrl+v ok 却不落格、保存命令沉默)。
+这是安全特性正确工作,actl 不绕过;正解 = `click name:启用编辑` 解除后正常操作。
+F12/ctrl+s 在草稿 Book1 上沉默的另一半即此族现象(策略层禁用,非注入失败)。
 
 ## 2. Word
 
@@ -66,9 +77,18 @@ actl get "role:Document" --app "<文档标题>" --property text
 Word 是 TextPattern 正文通道的第二个实证应用**。快照 14.7KB
 (skeleton 仅削 8%——文档视图交互元素本就少,Ribbon 按钮是内容主体)。
 
-### 字段填写 / 保存链 ⏸(待解锁续测)
+### 字段填写 ✅ + 保存链 ✅(全链闭环,2026-09-27 解锁后实测)
 
-type --paste 通道预期可用(记事本同款),保存链同 Excel(§1)待解锁验证。
+```
+actl type "role:Document" "actl 在此处追加了一行。" --app <文档标题> --paste
+actl press ctrl+s --app <文档标题>
+actl get "role:Document" --app <文档标题> --property text   # TextPattern 读回
+```
+
+实测:delivered:14 → ctrl+s 原地保存 → TextPattern 读回含追加内容且原文完整;
+COM GetActiveObject 磁盘终验 contains=True + mtime 更新(双中)。**Word 三闭环
+全通(读/写/保存)**,Excel 同(§1 写读 + 保存链)。注意追加落在焦点处
+(文档头),定位插入点需先 click 目标位置或用名称框类导航。
 
 ## 3. 产品修复(实测直接产出)
 
@@ -100,8 +120,10 @@ type --paste 通道预期可用(记事本同款),保存链同 Excel(§1)待解�
 
 ## 6. 结论
 
-Office(Excel/Word)的**读取侧全通**(TextPattern 正文/GridPattern 表格/
-ctrl+c 单元格),**写入侧 Excel 闭环**(剪贴板直灌 + 名称框导航);
-保存链与 Word 写入待桌面解锁续测(预计同金任务 2 的既有能力)。
+Office(Excel/Word)**三个闭环全部打通**:读取(TextPattern 正文/GridPattern 表格/
+ctrl+c 单元格)、写入(Excel 剪贴板直灌+名称框导航;Word type --paste)、保存
+(原地 ctrls + 磁盘终验,双应用实测)。两个环境发现入档:受保护视图(不可信
+位置文件的编辑静默拒绝,解法 click 启用编辑)、锁屏分层(UIA 后台可用/注入
+等待解锁)。
 Quicker 需求 Top 分类(资源管理器 ✓ / Excel 读写 ✓ / Word 读取 ✓)的
 解析空白就此填补大半。

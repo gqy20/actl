@@ -6,6 +6,15 @@
 ## [Unreleased]
 
 ### Added
+- **Office 保存链 + Word 写入闭环(解锁后续测,docs/14 收口)**:真实场景 =
+  打开已有文件 → 修改 → ctrl+s **原地保存**(不弹窗——断言走磁盘终验而非
+  --expect window,此前对草稿 Book1 等弹窗是场景构造错误,已纠正)。Excel:
+  剪贴板直灌 E1 → ctrl+s → COM GetActiveObject 终验 E1="saved by actl" + mtime
+  更新;Word:type --paste 追加(delivered:14)→ ctrl+s → TextPattern 读回原文
+  完整 + COM 磁盘终验双中。**受保护视图发现**:TEMP 等不可信位置文件,
+  Excel/Word 静默拒绝编辑(ctrl+v ok 不落格、保存命令沉默)——安全特性正确
+  工作,actl 不绕过,正解 `click name:启用编辑`;草稿 Book1 上 F12/ctrl+s
+  沉默的同族归因。三个闭环(读/写/保存)双应用全通。
 - **Office 场景实测(docs/14,真实需求最大空白填补)**:Excel——有数据的网格物化为
   DataItem(1246)+DataGrid,**`extract --table` 的 grid-pattern 直读首次真实触发**
   (43×28 全网格,行列标齐全、数据逐格正确);字段填写闭环 = set-clipboard →
