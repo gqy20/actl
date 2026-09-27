@@ -348,7 +348,13 @@ verified 是提交者声明；报告内容由提交者简化，不自动脱敏�
 独立流程层复用原子命令，run/resume 按运行 ID 关联操作历史。
 写操作要求后置 verify，自动重试仅限只读；暂停在命令边界确认，紧急停止保持粘性。
 未确认动作恢复时先验证，不能直接重放；显式 --retry-step 才允许重复写入。
-显示信号可选 workflow 字段为 `{run_id,title,status}`，缺失时保持旧调用级显示。
+显示信号可选 workflow 字段为 `{run_id,title,status,reason?,step_id?,error_code?,actions?}`，
+新增字段均可缺省，旧信号继续可读。actions 是状态建议，不是授权：pause/stop/resume/recheck/
+allow_then_resume；执行时仍重新检查停止标志、运行锁及步骤状态。
+流程中的 wait 在每次轮询前检查暂停和停止，当前 COM 调用返回前不能强行中断。
+因暂停中断的只读等待保留 pending，不标成超时；已写入后等待验证的步骤仍需恢复前核对。
+`actl-signal --controls` 打开可聚焦的原生控制窗口，提供标准按钮及键盘导航；关闭窗口不停止流程。
+该窗口不提供输入动作显示租约，也不解除原有显示就绪约束；停止标志只能通过明确操作解除。
 JSON envelope 版本保持 1；CLI 使用结构化错误与 evidence 返回运行状态。
 
 ## 8. 里程碑

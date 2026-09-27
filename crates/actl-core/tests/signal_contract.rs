@@ -3,6 +3,18 @@ use actl_core::signal_session::{ActionGuard, SignalSession};
 use actl_core::state::*;
 
 #[test]
+fn workflow_progress_preserves_reason_and_reads_legacy() {
+    let expected: serde_json::Value =
+        serde_json::from_str(include_str!("golden/workflow_progress.json")).unwrap();
+    let progress: WorkflowProgress = serde_json::from_value(expected.clone()).unwrap();
+    assert_eq!(serde_json::to_value(progress).unwrap(), expected);
+    let old: WorkflowProgress =
+        serde_json::from_str(r#"{"run_id":"old","title":"Wait","status":"paused"}"#).unwrap();
+    assert!(old.reason.is_none());
+    assert!(old.actions.is_empty());
+}
+
+#[test]
 fn display_v3_contract_and_action_ack_identity() {
     use actl_core::display::*;
     let l = DisplayLease {

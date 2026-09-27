@@ -103,7 +103,7 @@ pub(crate) enum FlowCommand {
         #[arg(long)]
         id: String,
     },
-    /// Request a pause at the next command boundary; does not interrupt in-flight input
+    /// Request a pause at the next command boundary or workflow wait poll
     #[command(name = "flow-pause")]
     Pause {
         #[arg(long)]
@@ -633,7 +633,7 @@ fn after_help_for(name: &str) -> Option<&'static str> {
             "Example:\n  actl flow-status --id report-01\nReports run state, pause request and runner_active. An inactive running record is interrupted.\nErrors: PROTOCOL invalid ID/state | INTERNAL storage"
         }
         "flow-pause" => {
-            "Example:\n  actl flow-pause --id report-01\nRequests a boundary pause; only status=paused confirms it. Does not stop other CLI calls.\nErrors: PROTOCOL invalid ID/state | INTERNAL storage"
+            "Example:\n  actl flow-pause --id report-01\nRequests a boundary pause; workflow waits also check each poll. Only status=paused confirms it. In-flight COM calls and other CLI calls are not interrupted.\nErrors: PROTOCOL invalid ID/state | INTERNAL storage"
         }
         "flow-resume" => {
             "Example:\n  actl flow-resume --id report-01\nUses the saved plan; never clears emergency stop. --retry-step explicitly permits repeating an uncertain action after verification fails.\nErrors: PROTOCOL invalid state/step | NOT_ACTIONABLE executor busy | ABORTED stop | INTERNAL storage"

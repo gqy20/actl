@@ -407,6 +407,7 @@ pub fn wait_window(substr: &str, timeout_ms: u64) -> Result<String, CtlError> {
     let walker = auto.create_tree_walker().map_err(internal)?;
     let deadline = std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
     loop {
+        actl_core::wait_control::check()?;
         if let Some(title) = scan_top_windows(&auto, &walker, substr) {
             return Ok(title);
         }

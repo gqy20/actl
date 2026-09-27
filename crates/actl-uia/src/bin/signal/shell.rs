@@ -40,7 +40,7 @@ fn publish_lease(paths: &SignalPaths, state: &str) {
     let _ = paths.write_display("display.json", &lease);
 }
 
-fn stop_timestamp(paths: &SignalPaths) -> Option<u64> {
+pub(super) fn stop_timestamp(paths: &SignalPaths) -> Option<u64> {
     paths.stop_requested().then(|| {
         std::fs::read_to_string(paths.stop_file())
             .ok()
@@ -276,6 +276,7 @@ unsafe fn menu(hwnd: HWND) {
             "显示".into()
         },
         "停止并退出".into(),
+        "流程控制".into(),
     ];
     let paths = SignalPaths::default();
     let states = paths.read_calls();
@@ -328,6 +329,15 @@ unsafe fn menu_action(hwnd: HWND, cmd: usize) {
             let _ = DestroyWindow(hwnd);
         }
         6 => {
+            use std::os::windows::process::CommandExt;
+            if let Ok(exe) = std::env::current_exe() {
+                let _ = std::process::Command::new(exe)
+                    .arg("--controls")
+                    .creation_flags(0x08000000)
+                    .spawn();
+            }
+        }
+        7 => {
             let action = MENU_FLOW.lock().ok().and_then(|a| a.clone());
             if let Some((id, resume)) = action {
                 let result = flow_action(&id, resume);
@@ -341,7 +351,7 @@ unsafe fn menu_action(hwnd: HWND, cmd: usize) {
     tick(hwnd);
 }
 
-fn flow_action(id: &str, resume: bool) -> Result<(), String> {
+pub(super) fn flow_action(id: &str, resume: bool) -> Result<(), String> {
     let paths = SignalPaths::default();
     if !actl_core::history::valid_id(id) {
         return Err("无效的流程标识".into());

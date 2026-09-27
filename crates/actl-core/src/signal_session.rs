@@ -148,19 +148,16 @@ pub fn step(command: &str, app: Option<&str>, index: usize, total: usize) {
     }
 }
 
-pub fn workflow(run_id: &str, title: &str, status: &str) {
+pub fn workflow(progress: crate::state::WorkflowProgress) {
     if let Some(shared) = CURRENT.with(|c| c.borrow().upgrade())
         && let Ok(mut p) = shared.lock()
     {
-        p.state.workflow = Some(crate::state::WorkflowProgress {
-            run_id: run_id.into(),
-            title: title.into(),
-            status: status.into(),
-        });
         p.event(
             "workflow",
-            serde_json::json!({"run_id":run_id,"status":status}),
+            serde_json::json!({"run_id":progress.run_id,"status":progress.status,
+                "step_id":progress.step_id,"reason":progress.reason,"error_code":progress.error_code}),
         );
+        p.state.workflow = Some(progress);
         p.publish();
     }
 }

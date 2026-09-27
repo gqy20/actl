@@ -19,10 +19,17 @@ struct Fake {
     pause: Option<Store>,
     failures: u32,
     stop_on_check: bool,
+    interrupt_check: Option<Store>,
 }
 impl Host for Fake {
     fn execute(&mut self, call: &Invocation) -> Result<(), CtlError> {
         self.calls.push(call.command.clone());
+        if call.command == "check"
+            && let Some(store) = self.interrupt_check.take()
+        {
+            store.pause().unwrap();
+            return Err(CtlError::new(ErrorCode::Aborted, "pause wait"));
+        }
         if call.command == "check" && self.stop_on_check {
             self.stop = true;
             return Err(CtlError::new(
@@ -60,6 +67,40 @@ fn fake() -> Fake {
         pause: None,
         failures: 0,
         stop_on_check: false,
+        interrupt_check: None,
+    }
+}
+
+#[test]
+fn pause_in_checks_preserves_stage_without_false_assertion_failure() {
+    for before in [true, false] {
+        let mut p = plan();
+        if before {
+            p.steps[0].before = Some(Invocation {
+                command: "check".into(),
+                args: vec![],
+            });
+        }
+        let (root, store, mut run) = setup(&p);
+        let mut host = fake();
+        host.interrupt_check = Some(store.clone());
+        execute(&p, &mut run, &store, &mut host, None).unwrap();
+        assert_eq!(run.status, Status::Paused);
+        assert_eq!(run.reason.as_deref(), Some("pause_requested"));
+        assert_eq!(
+            run.steps[0].status,
+            if before {
+                StepStatus::Pending
+            } else {
+                StepStatus::Verifying
+            }
+        );
+        assert!(run.steps[0].error_code.is_none());
+        store.clear_pause().unwrap();
+        execute(&p, &mut run, &store, &mut host, None).unwrap();
+        assert_eq!(run.status, Status::Completed);
+        assert_eq!(host.calls.iter().filter(|c| *c == "write").count(), 1);
+        std::fs::remove_dir_all(root).unwrap();
     }
 }
 

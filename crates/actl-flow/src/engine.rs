@@ -172,6 +172,13 @@ pub fn execute(
         if let Some(before) = &step.before
             && let Err(error) = host.execute(before)
         {
+            if error.code == ErrorCode::Aborted
+                && !host.stopped()
+                && store.pause_requested()
+                && boundary(run, store, host)?
+            {
+                return Ok(());
+            }
             run.steps[i].error_code = Some(error.code);
             if boundary(run, store, host)? {
                 return Ok(());
@@ -196,6 +203,16 @@ pub fn execute(
             run.save(store, host)?;
             let result = host.execute(&step.run);
             if let Err(error) = result {
+                if error.code == ErrorCode::Aborted
+                    && host.read_only(&step.run)
+                    && (store.pause_requested() || host.stopped())
+                {
+                    run.steps[i].status = StepStatus::Pending;
+                    run.steps[i].error_code = None;
+                    if boundary(run, store, host)? {
+                        return Ok(());
+                    }
+                }
                 run.steps[i].error_code = Some(error.code);
                 run.steps[i].status = if host.read_only(&step.run) {
                     StepStatus::Failed
@@ -240,6 +257,13 @@ pub fn execute(
                         run.steps[i].verified = true;
                     }
                     Err(error) => {
+                        if error.code == ErrorCode::Aborted
+                            && !host.stopped()
+                            && store.pause_requested()
+                            && boundary(run, store, host)?
+                        {
+                            return Ok(());
+                        }
                         run.steps[i].error_code = Some(error.code);
                         run.steps[i].status = StepStatus::Uncertain;
                         if boundary(run, store, host)? {

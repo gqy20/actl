@@ -161,8 +161,21 @@ fn step(program: &str, args: &[&str]) -> bool {
 /// 与 gate 的分工:gate = 离线质量门禁(CI 安全);regress = 真机行为回归
 /// (需要交互桌面;金任务含键盘注入,桌面需空闲——并发打字会如实报 FAIL,
 /// 这是护栏在工作,不是误报)。fixture 各自负责应用的启停与清理。
+fn build_pair() -> bool {
+    run(&[
+        "build",
+        "--release",
+        "--bin",
+        "actl",
+        "--bin",
+        "actl-signal",
+        "--target-dir",
+        "target/validation",
+    ])
+}
+
 fn regress() -> ExitCode {
-    if !run(&["build", "--release", "-p", "actl-cli", "--bins"]) {
+    if !build_pair() {
         return ExitCode::FAILURE;
     }
     let ws_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -191,7 +204,11 @@ fn regress() -> ExitCode {
     for f in fixtures {
         let path = ws_root.join("fixtures").join(f);
         eprintln!("▶ {f}");
-        let ok = step(&bash, &[path.to_string_lossy().as_ref()]);
+        let ok = Command::new(&bash)
+            .arg(&path)
+            .env("ACTL", ws_root.join("target/validation/release/actl.exe"))
+            .status()
+            .is_ok_and(|s| s.success());
         if !ok {
             failed.push(f);
         }
@@ -240,10 +257,10 @@ fn lint_packs(dir_arg: Option<&str>) -> ExitCode {
         eprintln!("✗ lint-packs: {} not found", packs_dir.display());
         return ExitCode::FAILURE;
     };
-    if !run(&["build", "--release", "-p", "actl-cli", "--bins"]) {
+    if !build_pair() {
         return ExitCode::FAILURE;
     }
-    let actl = ws_root.join("target/release/actl.exe");
+    let actl = ws_root.join("target/validation/release/actl.exe");
     // 命令全集(单一事实来源)
     let known: Vec<String> = match std::process::Command::new(&actl).arg("commands").output() {
         Ok(o) if o.status.success() => {

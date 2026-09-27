@@ -73,11 +73,11 @@ steps:
 '@)
     $process = Start-Flow @('flow-run','--file',$waitFile,'--id','pause')
     Wait-Running 'pause'
+    $busy = Invoke-Flow @('flow-resume','--id','pause')
+    Check ($busy.error.code -eq 'NOT_ACTIONABLE') 'Second executor was not rejected.'
     $watch.Restart()
     $requested = Invoke-Flow @('flow-pause','--id','pause')
     $requestMs = $watch.ElapsedMilliseconds
-    $busy = Invoke-Flow @('flow-resume','--id','pause')
-    Check ($busy.error.code -eq 'NOT_ACTIONABLE') 'Second executor was not rejected.'
     $paused = Finish-Flow $process
     Check ($paused.data.run.status -eq 'paused') 'Pause not acknowledged.'
     Check ($paused.data.run.steps[1].attempts -eq 0) 'Next step ran after pause.'

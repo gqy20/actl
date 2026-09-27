@@ -132,10 +132,13 @@ pub fn validate(plan: &Plan) -> Result<(), CtlError> {
 }
 struct Adapter<'a> {
     plan: &'a Plan,
+    store: &'a Store,
 }
 impl Host for Adapter<'_> {
     fn execute(&mut self, call: &Invocation) -> Result<(), CtlError> {
         let command = parse(call)?;
+        let _scope = matches!(command, Command::Wait { .. })
+            .then(|| actl_core::wait_control::Scope::enter(self.store.dir.join("pause-requested")));
         crate::dispatch(&command).map(|_| ())
     }
     fn read_only(&self, call: &Invocation) -> bool {
@@ -165,7 +168,22 @@ impl Host for Adapter<'_> {
             Status::Completed => "completed",
             Status::Failed => "failed",
         };
-        actl_core::signal_session::workflow(&run.id, &self.plan.steps[current].title, status);
+        let actions = match run.status {
+            Status::Running => vec!["pause", "stop"],
+            Status::Paused | Status::Ready | Status::Failed => vec!["resume"],
+            Status::NeedsReview => vec!["recheck"],
+            Status::Stopped => vec!["allow_then_resume"],
+            Status::Completed => vec![],
+        };
+        actl_core::signal_session::workflow(actl_core::state::WorkflowProgress {
+            run_id: run.id.clone(),
+            title: self.plan.steps[current].title.clone(),
+            status: status.into(),
+            reason: run.reason.clone(),
+            step_id: Some(run.steps[current].id.clone()),
+            error_code: run.steps[current].error_code,
+            actions: actions.into_iter().map(str::to_owned).collect(),
+        });
     }
 }
 fn state(store: &Store) -> Result<Value, CtlError> {
@@ -197,7 +215,10 @@ pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
             let _global = store.lock(true)?;
             let mut run = store.create(&plan, id)?;
             let active = store.lock(false)?;
-            let mut host = Adapter { plan: &plan };
+            let mut host = Adapter {
+                plan: &plan,
+                store: &store,
+            };
             if *paused {
                 run.status = Status::Paused;
                 run.reason = Some("start_paused".into());
@@ -230,7 +251,10 @@ pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
                 &plan,
                 &mut run,
                 &store,
-                &mut Adapter { plan: &plan },
+                &mut Adapter {
+                    plan: &plan,
+                    store: &store,
+                },
                 retry_step.as_deref(),
             )?;
             drop(active);

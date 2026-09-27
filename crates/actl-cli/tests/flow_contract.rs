@@ -122,7 +122,7 @@ fn stop_is_sticky_and_pause_is_a_boundary_request() {
 #[test]
 fn live_pause_and_process_death_are_distinguished() {
     let s = Sandbox::new();
-    let file=s.file("version: 1\nname: Wait\nsteps:\n - id: wait\n   title: Wait\n   run: {command: wait, args: [--window, ACTL-NONEXISTENT-FLOW-947312, --timeout, '2500']}\n - id: next\n   title: Next\n   run: {command: status}\n");
+    let file=s.file("version: 1\nname: Wait\nsteps:\n - id: wait\n   title: Wait\n   run: {command: wait, args: [--window, ACTL-NONEXISTENT-FLOW-947312, --timeout, '60000']}\n - id: next\n   title: Next\n   run: {command: status}\n");
     let mut child = s
         .command()
         .args(["flow-run", "--file", &file, "--id", "live"])
@@ -150,10 +150,22 @@ fn live_pause_and_process_death_are_distinguished() {
     }
     let (_, status) = s.invoke(&["flow-pause", "--id", "live"]);
     assert_eq!(status["data"]["pause_requested"], true);
+    let requested = std::time::Instant::now();
+    while child.try_wait().unwrap().is_none() {
+        if requested.elapsed().as_secs() >= 5 {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("60-second wait did not cooperate with pause within 5 seconds");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
     let out = child.wait_with_output().unwrap();
     let result: Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(result["data"]["run"]["status"], "paused");
     assert_eq!(result["data"]["run"]["steps"][1]["attempts"], 0);
+    assert_eq!(result["data"]["run"]["reason"], "pause_requested");
+    assert_eq!(result["data"]["run"]["steps"][0]["status"], "pending");
+    assert!(result["data"]["run"]["steps"][0]["error_code"].is_null());
     // Simulate a write-ahead record left by a dead process; status must report interruption.
     let mut stored: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
     stored["status"] = json!("running");

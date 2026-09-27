@@ -187,7 +187,13 @@ pub fn view(states: &[SessionState], now: u64, stop_ms: Option<u64>, busy: Optio
         match flow.status.as_str() {
             "paused" => {
                 mode = Mode::Idle;
-                text = "流程已暂停".into();
+                text = match flow.reason.as_deref() {
+                    Some("checkpoint" | "start_paused") => "等待继续",
+                    Some("precondition_failed") => "条件未满足",
+                    Some("action_failed") => "操作未完成",
+                    _ => "流程已暂停",
+                }
+                .into();
             }
             "needs_review" => {
                 mode = Mode::Partial;
@@ -256,8 +262,29 @@ pub fn view(states: &[SessionState], now: u64, stop_ms: Option<u64>, busy: Optio
     }
     if let Some(flow) = &s.workflow {
         details.push(flow.title.clone());
-        if flow.status == "paused" {
-            details.push("恢复前将重新检查目标".into());
+        if let Some(reason) = flow.reason.as_deref() {
+            details.push(
+                match reason {
+                    "checkpoint" => "已到检查点，确认后继续",
+                    "start_paused" => "尚未开始，确认后继续",
+                    "pause_requested" => "已暂停，继续时重新检查",
+                    "precondition_failed" => "检查目标是否已就绪",
+                    "action_failed" => "检查操作结果后继续",
+                    "verification_failed" => "先核对结果，继续仅重新检查",
+                    "stop_requested" => "允许后续操作后再继续",
+                    _ => "核对结果后再决定是否重试",
+                }
+                .into(),
+            );
+        }
+        if let Some(error) = flow.error_code {
+            details.push(format!(
+                "步骤错误：{}",
+                serde_json::to_value(error)
+                    .ok()
+                    .and_then(|v| v.as_str().map(str::to_owned))
+                    .unwrap_or_default()
+            ));
         }
     }
     if live > 1 {
@@ -299,6 +326,22 @@ pub fn view(states: &[SessionState], now: u64, stop_ms: Option<u64>, busy: Optio
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn workflow_pause_reason_and_step_error_remain_visible() {
+        let mut state = SessionState::now(1, "wait", None, None, Phase::Done);
+        state.workflow = Some(serde_json::from_value(serde_json::json!({
+            "run_id":"test", "title":"Check result", "status":"paused",
+            "reason":"action_failed", "step_id":"check", "error_code":"TIMEOUT", "actions":["resume"]
+        })).unwrap());
+        let shown = view(&[state.clone()], state.ts_ms, None, Some(false));
+        assert!(shown.label.contains("操作未完成"));
+        assert!(shown.details.contains("检查操作结果"));
+        assert!(shown.details.contains("TIMEOUT"));
+        assert_eq!(
+            view(&[state.clone()], state.ts_ms, Some(0), Some(false)).mode,
+            Mode::StopRequested
+        );
+    }
     #[test]
     fn failure_details_offer_a_next_step_without_claiming_a_specific_cause() {
         let mut s = SessionState::now(1, "click", None, None, Phase::Error);

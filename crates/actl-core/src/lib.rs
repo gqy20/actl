@@ -15,6 +15,7 @@ pub mod state;
 pub mod target;
 pub mod timing;
 pub mod trace;
+pub mod wait_control;
 
 pub use keys::{Key, KeySpec, parse_key_expr};
 pub use snapshot::{

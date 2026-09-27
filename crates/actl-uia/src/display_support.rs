@@ -75,7 +75,10 @@ pub fn is_display_window(hwnd: HWND) -> bool {
     let mut name = [0u16; 128];
     let len = unsafe { GetClassNameW(hwnd, &mut name) };
     let class = String::from_utf16_lossy(&name[..len.max(0) as usize]);
-    if matches!(class.as_str(), "actl_signal_window" | "actl_signal_marker") {
+    if matches!(
+        class.as_str(),
+        "actl_signal_window" | "actl_signal_marker" | "actl_signal_controls"
+    ) {
         return true;
     }
     // User-opened detail dialogs share the display process and must not become targets.

@@ -537,6 +537,7 @@ fn collect_containers(
 /// 已随错误携带,无需等满超时;2026-09-27 抖音多文档页实测:samples 冻结
 /// 在 1 的误导性 TIMEOUT 根因)。
 fn poll(app: Option<&str>, target: &Target) -> Result<Option<Located>, CtlError> {
+    actl_core::wait_control::check()?;
     match locate(app, target, None) {
         Ok(loc) => Ok(Some(loc)),
         Err(e) if e.code == ErrorCode::Ambiguous => Err(e),
