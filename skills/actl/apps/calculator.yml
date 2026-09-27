@@ -1,4 +1,4 @@
-# 来源：docs/21-workflow-evaluation.md，Computer Use 实际点击与 CLI 只读断言联合验证。
+# 来源：docs/21-workflow-evaluation.md；docs/22-adaptation-test-infrastructure.md 输入方式对照。
 pack_format: 1
 name: calculator
 display: Windows 计算器
@@ -15,6 +15,14 @@ quirks:
   - id: nested_output_not_resolved
     note: 本次快照包含 NormalOutput，但 get/wait 的语义定位返回 NOT_FOUND。优先使用 CalculatorResults，不把快照出现等同于选择器可定位。
 routes:
+  - id: keyboard_arithmetic_example
+    description: 在中文标准模式下整段输入已验证算式，输入前清空当前计算
+    status: verified
+    verify: 同环境 3/3 次得到显示为 56,877；键盘 type 输入中位 913 ms。需使用独立测试实例或获准清空的计算器；其他算式及输入法状态需另验。
+    steps:
+      - ["click", "id:clearButton", "--app", "{window}"]
+      - ["type", "id:num1Button", "123*456+789=", "--app", "{window}"]
+      - ["verify", "--value", "id:CalculatorResults", "显示为 56,877", "--property", "name", "--app", "{window}"]
   - id: read_result
     description: 读取标准计算器的当前显示结果
     status: verified
