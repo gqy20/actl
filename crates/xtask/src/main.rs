@@ -1,7 +1,7 @@
 //! xtask —— 仓库任务入口:`cargo xtask setup|gate|fmt`
 //!
 //! 存在的意义:新 clone 者唯一前置依赖 = git + rustup(全平台一致,无需 make/python)。
-//! `gate` 是质量门禁的**唯一实现**(file-lines + fmt-check + clippy + test),
+//! `gate` 是质量门禁的**唯一实现**(file-lines + fmt-check + clippy + test + lint-packs),
 //! pre-push hook 与 CI 都调用它,门禁定义从此单点维护(AGENTS.md 工作流)。
 
 use std::path::{Path, PathBuf};
@@ -21,7 +21,7 @@ fn main() -> ExitCode {
         Some("gate") => gate(),
         Some("fmt") => code(run(&["fmt", "--all"])),
         Some("regress") => regress(),
-        Some("lint-packs") => lint_packs(),
+        Some("lint-packs") => lint_packs(std::env::args().nth(2).as_deref()),
         Some(_) | None => {
             eprintln!(
                 "tasks:\n  \
@@ -29,7 +29,8 @@ fn main() -> ExitCode {
                  cargo xtask gate    quality gate: file-lines + fmt --check + clippy -D warnings + tests (= pre-push = CI)\n  \
                  cargo xtask fmt     format all code
                  cargo xtask regress run all live fixtures sequentially (needs an interactive desktop)
-  \n                 cargo xtask lint-packs validate skills/actl/apps/*.yml steps against the CLI schema"
+  \n                 cargo xtask lint-packs [dir] validate app packs against the CLI schema\n                 \
+                 (default skills/actl/apps; pass a dir to lint out-of-repo private packs)"
             );
             ExitCode::FAILURE
         }
@@ -57,7 +58,8 @@ fn setup() -> ExitCode {
     }
 }
 
-/// 质量门禁(唯一定义点):顺序执行,首个失败即停。行数检查在最前(纯本地、最快失败)。
+/// 质量门禁(唯一定义点):顺序执行,首个失败即停。行数检查在最前(纯本地、最快失败);
+/// pack 校验在最后(需先构建 release actl,失败成本最高故放末位)。
 fn gate() -> ExitCode {
     if !file_lines_gate() {
         return ExitCode::FAILURE;
@@ -71,7 +73,10 @@ fn gate() -> ExitCode {
             return ExitCode::FAILURE;
         }
     }
-    eprintln!("✓ gate passed (file-lines + fmt + clippy + test)");
+    if lint_packs(None) != ExitCode::SUCCESS {
+        return ExitCode::FAILURE;
+    }
+    eprintln!("✓ gate passed (file-lines + fmt + clippy + test + lint-packs)");
     ExitCode::SUCCESS
 }
 
@@ -200,13 +205,37 @@ fn regress() -> ExitCode {
     }
 }
 
-/// 应用档案 pack 校验(零依赖,不引 YAML 解析器——xtask 须离线可跑):
-/// ① 结构:每 pack 必含 name/launch/window/routes 四键;
-/// ② 语义:steps/unblock 数组的首 token(变量 {x} 先替换哑值)必须是真实
+/// 路线收束校验:status 必填且取值合法(id 唯一性在收集时已查)。返回问题数。
+fn check_route(rel: &str, id: &str, status: Option<&str>) -> usize {
+    match status {
+        Some("verified" | "manual" | "unverified") => 0,
+        Some(other) => {
+            eprintln!(
+                "✗ {rel}: route {id:?} invalid status {other:?} (verified|manual|unverified)"
+            );
+            1
+        }
+        None => {
+            eprintln!("✗ {rel}: route {id:?} missing `status:`");
+            1
+        }
+    }
+}
+
+/// 应用档案 pack 校验(零依赖,不引 YAML 解析器——xtask 须离线可跑)。
+/// 契约的单一事实来源是 skills/actl/PACKS.md(pack_format: 1):
+/// ① 结构:必含 name/launch/window/app_version/verified_date/routes,pack_format=1;
+/// ② 标识:quirks 与 routes 的 id 共用命名空间,全文件唯一;
+/// ③ 信任:每条 route 必带 status ∈ {verified, manual, unverified};
+/// ④ 语义:steps/unblock 数组的首 token(变量 {x} 先替换哑值)必须是真实
 ///    actl 命令——命令全集取自 `actl commands`(单一事实来源,防漂移)。
-fn lint_packs() -> ExitCode {
+/// 目录参数指向仓库外时校验私有/企业 pack;默认 skills/actl/apps。
+fn lint_packs(dir_arg: Option<&str>) -> ExitCode {
     let ws_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let packs_dir = ws_root.join("skills").join("actl").join("apps");
+    let packs_dir = match dir_arg {
+        Some(d) => PathBuf::from(d),
+        None => ws_root.join("skills").join("actl").join("apps"),
+    };
     let Ok(entries) = std::fs::read_dir(&packs_dir) else {
         eprintln!("✗ lint-packs: {} not found", packs_dir.display());
         return ExitCode::FAILURE;
@@ -244,14 +273,81 @@ fn lint_packs() -> ExitCode {
             .to_string_lossy()
             .into_owned();
         let text = std::fs::read_to_string(&path).unwrap_or_default();
-        // ① 结构
-        for key in ["name:", "launch:", "window:", "routes:"] {
-            if !text.contains(key) {
+        // ① 结构:顶层必填键(注释行不算)
+        for key in [
+            "name:",
+            "launch:",
+            "window:",
+            "app_version:",
+            "verified_date:",
+            "routes:",
+        ] {
+            let hit = text
+                .lines()
+                .any(|l| !l.trim_start().starts_with('#') && l.trim_start().starts_with(key));
+            if !hit {
                 eprintln!("✗ {rel}: missing `{key}`");
                 bad += 1;
             }
         }
-        // ② 步骤首 token(取每行中第一个 [" 之后的首个引号串)
+        let mut has_format = false;
+        for l in text.lines() {
+            let t = l.trim_start();
+            if t.starts_with('#') {
+                continue;
+            }
+            if let Some(v) = t.strip_prefix("pack_format:") {
+                has_format = true;
+                if v.trim() != "1" {
+                    eprintln!("✗ {rel}: pack_format must be 1, got {:?}", v.trim());
+                    bad += 1;
+                }
+            }
+        }
+        if !has_format {
+            eprintln!("✗ {rel}: missing `pack_format:`");
+            bad += 1;
+        }
+        // ②③ id 唯一性 + 路线 status(顶层 quirks:/routes: 分节的简单状态机)
+        let mut ids: Vec<String> = Vec::new();
+        let mut in_routes = false;
+        let mut route: Option<(String, Option<String>)> = None;
+        for l in text.lines() {
+            let t = l.trim_start();
+            if t.is_empty() || t.starts_with('#') {
+                continue;
+            }
+            if !l.starts_with(' ') {
+                // 顶层键:收束上一条 route;只有 routes: 节内的条目要求 status
+                if let Some((id, status)) = route.take() {
+                    bad += check_route(&rel, &id, status.as_deref());
+                }
+                in_routes = t.starts_with("routes:");
+                continue;
+            }
+            if let Some(v) = t.strip_prefix("- id:") {
+                let id = v.split('#').next().unwrap_or(v).trim().to_string();
+                if ids.contains(&id) {
+                    eprintln!("✗ {rel}: duplicate id {id:?}");
+                    bad += 1;
+                }
+                ids.push(id.clone());
+                if in_routes {
+                    if let Some((prev_id, prev_status)) = route.take() {
+                        bad += check_route(&rel, &prev_id, prev_status.as_deref());
+                    }
+                    route = Some((id, None));
+                }
+            } else if let Some(v) = t.strip_prefix("status:") {
+                if let Some(r) = route.as_mut() {
+                    r.1 = Some(v.split('#').next().unwrap_or(v).trim().to_string());
+                }
+            }
+        }
+        if let Some((id, status)) = route.take() {
+            bad += check_route(&rel, &id, status.as_deref());
+        }
+        // ④ 步骤首 token(取每行中第一个 [" 之后的首个引号串)
         for line in text.lines() {
             let Some(start) = line.find("[\"") else {
                 continue;

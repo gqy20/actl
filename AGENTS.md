@@ -31,7 +31,7 @@
 
 ## 仓库地图(分层细节见 docs/TECH_STACK.md §2)
 
-`crates/actl-core`=协议(纯逻辑) · `crates/actl-uia`=UIA/COM(唯一 unsafe 豁免) · `crates/actl-physical`=物理兜底 · `crates/actl-cli`=入口 · `fixtures/`=集成测试 · `hooks/`=git hooks · `docs/`=全部决策文档 · `skills/actl`=agent skill 与应用档案 pack(`apps/*.yml`,应用知识不进核心,改后跑 `cargo xtask lint-packs`)
+`crates/actl-core`=协议(纯逻辑) · `crates/actl-uia`=UIA/COM(唯一 unsafe 豁免) · `crates/actl-physical`=物理兜底 · `crates/actl-cli`=入口 · `fixtures/`=集成测试 · `hooks/`=git hooks · `docs/`=全部决策文档 · `skills/actl`=agent skill 与应用档案 pack(`apps/*.yml`,契约见 skills/actl/PACKS.md,应用知识不进核心;lint-packs 已入 gate)
 
 ## 测试
 
