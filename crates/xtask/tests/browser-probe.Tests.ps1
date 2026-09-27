@@ -22,6 +22,18 @@ try {
         $report=Get-Content "$testRoot/observe/$app/report.json" -Raw | ConvertFrom-Json
         if($report.calls.Count -ne 0 -or -not $report.failure){throw 'App observation launched despite stop'}
     }
+    $env:ACTL_TEST_DIR=Join-Path $testRoot 'vscode-edit'
+    & "$root/scenarios/vscode-edit.ps1" -Actl (Get-Process -Id $PID).Path
+    if($LASTEXITCODE -ne 77){throw 'VS Code edit ignored stop'}
+    $file=Get-ChildItem $env:ACTL_TEST_DIR -Recurse -Filter result.json|Select-Object -First 1
+    $report=Get-Content $file.FullName -Raw|ConvertFrom-Json
+    if($report.calls.Count -ne 0 -or $report.passed){throw 'VS Code edit launched despite stop'}
+    $env:ACTL_TEST_DIR=Join-Path $testRoot 'zotero-search'
+    & "$root/scenarios/zotero-search.ps1" -Actl (Get-Process -Id $PID).Path
+    if($LASTEXITCODE -ne 77){throw 'Zotero search ignored stop'}
+    $file=Get-ChildItem $env:ACTL_TEST_DIR -Recurse -Filter result.json|Select-Object -First 1
+    $report=Get-Content $file.FullName -Raw|ConvertFrom-Json
+    if($report.calls.Count -ne 0 -or $report.passed){throw 'Zotero search launched despite stop'}
 }finally{$env:LOCALAPPDATA=$oldLocal;$env:ACTL_TEST_DIR=$oldDir}
 Write-Output 'Browser stop guard passed'
 . "$root/fixtures/system-fixture.ps1"

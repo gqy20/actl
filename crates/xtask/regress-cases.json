@@ -118,5 +118,21 @@
     "state": "manual",
     "input": "none",
     "reason": "Local app observation; invoke with -App vscode -Program installed-executable; see docs/24"
+  },
+  {
+    "id": "vscode-edit",
+    "script": "scenarios/vscode-edit.ps1",
+    "suite": "scenario",
+    "state": "ready",
+    "input": "keyboard",
+    "reason": "Isolated profile and file; insert, undo, redo, replace, save and reopen verification"
+  },
+  {
+    "id": "zotero-search",
+    "script": "scenarios/zotero-search.ps1",
+    "suite": "scenario",
+    "state": "ready",
+    "input": "keyboard",
+    "reason": "Isolated profile and data; synthetic RIS import, search, text readback and result restoration"
   }
 ]

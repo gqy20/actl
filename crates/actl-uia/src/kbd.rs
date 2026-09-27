@@ -37,10 +37,10 @@ pub fn foreground_title() -> Option<String> {
     }
 }
 
-/// 物理键盘焦点所在控件,上溯到根窗口后的标题(None = 取不到)。
+/// 物理键盘焦点所在控件,上溯到根窗口后的 HWND 和标题(None = 取不到)。
 /// 焦点归属的**物理**判据:UIA focused element 视图在 WinUI 上实测会谎报
 /// (物理层 RichEditD2DPT 已聚焦时仍报别窗口编辑框,金任务 2 误拒绝实证)。
-pub fn focused_root_title() -> Option<String> {
+pub fn focused_root_window() -> Option<(isize, String)> {
     use windows::Win32::UI::WindowsAndMessaging::{
         GA_ROOT, GUITHREADINFO, GetAncestor, GetGUIThreadInfo,
     };
@@ -61,7 +61,10 @@ pub fn focused_root_title() -> Option<String> {
         if len <= 0 {
             return None;
         }
-        Some(String::from_utf16_lossy(&buf[..len as usize]))
+        Some((
+            root.0 as isize,
+            String::from_utf16_lossy(&buf[..len as usize]),
+        ))
     }
 }
 

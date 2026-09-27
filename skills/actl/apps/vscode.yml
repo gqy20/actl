@@ -1,17 +1,19 @@
-# 来源: docs/24-application-adaptation-round1.md；独立 profile 和临时文本文件。
+# 来源: docs/24-application-adaptation-round1.md；docs/25-deep-edit-search-tests.md。
 pack_format: 1
 name: vscode
 display: Visual Studio Code
 launch: "{installed_executable}"
 window: "hwnd:{hwnd}"
 app_version: "1.139.0"
-verified_date: 2026-09-27
+verified_date: 2026-09-28
 verified_env: Windows 10.0.26200.0 zh-cn; independent user-data-dir; extensions disabled; force-renderer-accessibility
 quirks:
   - id: multiple_edit_surfaces
     note: 文件编辑器与 Chat Input 都是 Edit。必须按文件名加角色定位，再取唯一 ref，不能对裸 role:Edit 输入。
   - id: insertion_not_replacement
     note: type --paste 在当前选区或光标位置插入，不能假设覆盖全文。本轮在新打开临时文件的开头插入后保存，磁盘全文核验通过；会使用剪贴板。
+  - id: edit_regression
+    note: scenarios/vscode-edit.ps1 使用独立 profile 和临时文件，覆盖三轮中英文/符号输入、Ctrl+Z 撤销、Ctrl+Y 重做、Ctrl+A 全文替换和关闭重开。每次保存均核验磁盘全文，重开另验编辑器 TextPattern；不能用文件标题作为保存证据。
 routes:
   - id: observe
     description: 读取独立测试窗口的控件结构

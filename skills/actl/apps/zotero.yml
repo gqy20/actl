@@ -1,15 +1,19 @@
-# 来源: docs/24-application-adaptation-round1.md；未修改用户文献库。
+# 来源: docs/24-application-adaptation-round1.md；docs/25-deep-edit-search-tests.md；独立测试库。
 pack_format: 1
 name: zotero
 display: Zotero
 launch: zotero
 window: "hwnd:{hwnd}"
 app_version: "10.0.3"
-verified_date: 2026-09-27
+verified_date: 2026-09-28
 verified_env: Windows 10.0.26200.0 zh-cn
 quirks:
   - id: search_value_unavailable
-    note: 快速搜索 Edit 可定位，但 get value 返回空 properties，不能据此认为搜索词为空。本轮没有写搜索词，搜索及恢复流程待验证。
+    note: 初轮空搜索框 get value 返回空 properties。深测确认非空搜索词可从 ValuePattern 和 TextPattern 读回；空 properties 不足以证明搜索恢复，应核验实际条目行。
+  - id: dynamic_refs
+    note: 通知栏会插入 Edit，连 find 与 get 之间 ref 都可能漂移。读回须核对 name=快速搜索、role=Edit 和文本，必要时重新 find。写入前尽量使用稳定语义定位，不能把旧 ref 当作持久 ID；本 pack 的写入仅在独立测试库验证。
+  - id: hwnd_keyboard_focus
+    note: 需包含 docs/25 焦点修复的 actl 版本；旧版 press --app hwnd 会误触发首个 Edit 聚焦，Ctrl+A/Backspace 不能可靠清空搜索。新版三组查询均恢复两条测试记录。
   - id: reader_text_scope
     note: Zotero Reader 的 text 实测为阅读器工具栏和页码信息，不能当作 PDF 正文提取能力。
 routes:
@@ -24,3 +28,16 @@ routes:
     verify: elements 唯一且角色为 Edit；不代表 ValuePattern 可用
     steps:
       - ["find", "--name", "快速搜索", "--role", "Edit", "--app", "{window}"]
+  - id: search_test_library
+    description: 独立测试库中搜索；从刚执行的 find 取唯一 search_ref，初始搜索须为空
+    status: verified
+    verify: 搜索后核对条目 TreeItem 集合，再重新 find 并核对搜索框名称、角色与 text；清空后原始条目集合必须恢复。完整脚本 scenarios/zotero-search.ps1
+    steps:
+      - ["find", "--name", "快速搜索", "--role", "Edit", "--app", "{window}"]
+      - ["type", "{search_ref}", "{query}", "--paste", "--app", "{window}"]
+      - ["snapshot", "--app", "{window}"]
+      - ["find", "--name", "快速搜索", "--role", "Edit", "--app", "{window}"]
+      - ["get", "{search_ref}", "--app", "{window}"]
+      - ["press", "ctrl+a", "--app", "{window}"]
+      - ["press", "backspace", "--app", "{window}"]
+      - ["snapshot", "--app", "{window}"]

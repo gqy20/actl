@@ -49,8 +49,9 @@ actl verify --value <target> "<期望>" --app <app> # 确认:立即断言
    `verify --value` 读 UIA 值,或磁盘终验。
 4. **AMBIGUOUS 不是失败**:错误里 `evidence.candidates` 带可重放 ref,直接选一个
    `click @eN --app X` 重试,不必重新 snapshot。
-5. **ref 跨步骤会漂移**:同窗口内 @eN 稳定;窗口重开/切换后 ref 失效 → STALE_REF → 重拍快照。
-   长流程建议 `--snapshot <id>` 校验窗口实例。
+5. **ref 是树遍历序号，动态界面会漂移**:即使同窗口，通知/弹层/列表变化也可能让 @eN 指向另一控件，
+   不保证报 STALE_REF。变化后重新定位并核对名称、角色和内容；写操作优先稳定语义选择器。
+   `--snapshot <id>` 校验窗口实例，不能替代控件身份核验。Zotero 实证见 docs/25。
 6. **人在用电脑时**:注入会被焦点护栏拒绝(PERM_DENIED/部分送达 stopped_early)——
    这是保护,不是 bug;等空闲再试。紧急情况人按 Ctrl+Alt+F12(actl-signal),你的注入会收到 ABORTED。
 
