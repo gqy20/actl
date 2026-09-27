@@ -10,6 +10,26 @@
 ## [Unreleased]
 
 ### Added
+- **登录态深度闭环(docs/16 §5)**:用户 Chrome 完成两家登录后补测——① xhs
+  "点开具体笔记 → 读正文+评论 → esc 返回"**全链成功**(ref 精点 @e164 →
+  弹层 → 文本 4451→8170B,评论区"回复"×85);关键发现:**text 通道读整个
+  文档范围而非视口**——评论区未滚到也能读,零滚动成本。诊断方法沉淀:
+  UIA 文本与截图矛盾时以截图仲裁(未登录误判由此推翻——卡片标题在树里,
+  是 find 默认视图没暴露全)。② bilibili 整页跳转形态:点击/新标题锚全通,
+  评论读取未完成(卡点全在选卡/锚点层:整页跳转标题变锚失效、卡片标题
+  AMBIGUOUS、活动卡两连踩、共享桌面锚漂移——五怪癖全部入 pack)。
+  browser.yml:+5 quirks(modal_vs_page/card_name_ambiguous/
+  text_reads_beyond_viewport/promo_card_trap/shared_desktop_drift),
+  open_item 翻 verified,新增 read_note_comments(verified);fixtures:
+  xhs-deep2/xhs-login-check/bili-deep5 定稿。
+- **抖音深度实测(docs/16 §5.4):"读屏标签"开关发现 + 坐标缺口登记**:
+  ① 抖音默认 a11y 半盲(文案/作者/推荐视觉可见不在树)——**钥匙是
+  Button "开启读屏标签"**(抖音检测 UIA 客户端后暴露的开关,点开后内容层
+  全进树,+294 行);② 互动层(卡片链接/评论图标)无 name 无 ref——评论栏
+  展开需要坐标点击,**登记 M3 候选 `click --at x,y --physical`**(视觉
+  兜底闭环的"手",与微信自绘右键菜单同源缺口);③ /explore 已 404,
+  登录态首页为单视频沉浸流。三家横向 a11y 友好度:xhs > bilibili >
+  douyin,pack 按站分级(2 quirks 入档)。
 - **浏览器场景实测(docs/16)+ browser pack 翻档**:fixture 轨 8/8(四档投影:
   full 19764B → skeleton 43% → content 58% → **content+skeleton 80%**,超 PRD 70%
   线;settle 活体证据:10s 追加窗内阻塞 8410ms、观测 5 次变化);小红书真机

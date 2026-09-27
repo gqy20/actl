@@ -52,6 +52,38 @@ quirks:
           (locate 失败被当作未解析,samples 冻结会超时)。Chrome 同构实证
           (2026-09-27:同样 2×RootWebArea、feed 同为 #2、组合投影 72% 与
           Edge 71% 对齐)——Chromium 系一致性,同源套用成立
+  - id: modal_vs_page
+    note: 两种详情形态决定锚点策略:xhs 笔记是弹层(窗口标题不变,--app 全程
+          稳,esc 返回);bilibili 视频是整页跳转/同窗新标签(标题随页面变,
+          点击后 --app 即失效)——跳转后重读 list-windows 换新标题锚,或预记
+          hwnd 供 snapshot/close-window 用;换锚 grep 要排除"点击前的旧标题",
+          不能排除站点名(B 站视频标题就含"哔哩哔哩")
+  - id: card_name_ambiguous
+    note: feed 卡片标题被多元素共享(Image alt + Hyperlink 同名)——裸
+          click name:<标题> 会 AMBIGUOUS(实测 4 命中);先 find --name 拿
+          Hyperlink 的 @eN 再 ref 精点(evidence.candidates 可直接挑)
+  - id: text_reads_beyond_viewport
+    note: text 通道(TextPattern)读的是整个文档范围而非视口——评论区
+          未滚到也能读到(xhs 实测:视觉上评论在折叠线下,文本里已有 85 个
+          "回复")。滚动后文本不变 ≠ 没内容,可能本来就读全了
+  - id: promo_card_trap
+    note: 推荐流混活动入口卡(bilibili 的 VCT 电竞/AI 萌宠企划,实测两连踩,
+          落地页无评论区无视频)——确定性选卡走搜索结果页(结果卡即真内容;
+          keyword 用 ASCII,bash 内联中文会 GBK 污染)
+  - id: shared_desktop_drift
+    note: 用户在场/自动连播都会改窗口标题(实测:复验尾段窗口被用户接管,
+          标题三变)——锚点漂移先查 list-windows 实况,勿盲重试
+  - id: douyin_screen_reader_toggle
+    note: 抖音默认 a11y 半盲(视频文案/作者/推荐列表视觉可见但不在树里,
+          text 通道只有导航+页脚)——钥匙是 Button "开启读屏标签"(抖音检测
+          UIA 客户端后暴露,默认关;find --name 读屏 拿 ref 点开)。开启后
+          内容层全进树(实测 +294 行:标题/作者@/时长/播放量/推荐列表)
+  - id: douyin_interaction_blind
+    note: 抖音互动层(推荐卡片链接/评论图标/点赞按钮)在树里无 name、
+          不可交互(有 name 的 Text/Image 不分配 ref)——评论栏展开需要
+          坐标点击,当前无此原语(M3 候选 click --at x,y --physical;
+          视觉兜底 screenshot+VLM 已能给坐标,缺"点"的手)。
+          /explore 已 404;首页是单视频沉浸流,评论栏默认收起
   - id: risk_control_pacing
     note: 平台风控是现实——注入虽是人类级信号(SendInput/剪贴板,无 CDP 指纹),
           但机器速率的连续"滚动-读取"循环可能触发行为检测;采集类任务控制
@@ -90,11 +122,22 @@ routes:
       - ["wait", "--element", "role:Document#2", "--stable", "--app", "{window}", "--timeout", "8000"]
       - ["get", "role:Document#2", "--property", "text", "--app", "{window}"]
   - id: open_item
-    description: 点开链接/卡片(标题子串变量 {text};SPA 多为原地展开,esc 返回)
-    status: unverified
+    description: 点开卡片/链接(标题子串变量 {text};先 find 拿 Hyperlink 的 ref
+      再精点防 AMBIGUOUS;xhs 实测:弹层打开 esc 返回,B 站整页跳转换新锚)
+    status: verified
     steps:
+      - ["find", "--name", "{text}", "--app", "{window}"]
       - ["click", "name:{text}", "--app", "{window}"]
       - ["wait", "--element", "role:Document#2", "--stable", "--app", "{window}", "--timeout", "8000"]
+  - id: read_note_comments
+    description: 点开笔记后读评论(text 通道直达,无需滚到评论区;xhs 实测
+      标题/正文/评论一次读全)
+    status: verified
+    steps:
+      - ["find", "--name", "{text}", "--app", "{window}"]
+      - ["get", "role:Document#2", "--property", "text", "--app", "{window}"]
+      - ["press", "esc", "--app", "{window}"]
+      - ["wait", "--element", "role:Document#2", "--stable", "--app", "{window}"]
   - id: site_search
     description: 站内搜索框输入(关键词变量 {query};搜索框定位形态各站不一)
     status: unverified
