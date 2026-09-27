@@ -129,3 +129,7 @@ CLI 增加命令后，clap 调试构建超过 MSVC 默认 1 MiB 栈保留；buil
 操作历史与任务报告使用 actl-core 的 std 文件 IO + 已有 serde_json，零新依赖、零 unsafe。
 每调用独立 JSONL，避免跨进程共享追加流；写入处清理，不增加后台服务。
 存储失败用 stderr 诊断；显式归档命令返回统一错误 envelope。保留与容量边界见 docs/06 §7.6。
+
+本轮显示补充仍复用现有 Win32 依赖：popup 的 SetWindowSubclass 保留静态文本原生可访问角色，
+仅跳过重复绘制；controls 的字体随 DPI 更新并在销毁时释放。shell --replace 使用进程同步句柄、
+WM_CLOSE 和有界等待完成正常替换；句柄在成功/失败路径均释放。以上 unsafe 仅位于 actl-uia。

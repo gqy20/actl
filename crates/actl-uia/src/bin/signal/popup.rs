@@ -6,7 +6,11 @@ use windows::{
         Foundation::*,
         Graphics::Gdi::*,
         System::LibraryLoader::GetModuleHandleW,
-        UI::{HiDpi::*, WindowsAndMessaging::*},
+        UI::{
+            HiDpi::*,
+            Shell::{DefSubclassProc, SetWindowSubclass},
+            WindowsAndMessaging::*,
+        },
     },
     core::w,
 };
@@ -60,15 +64,19 @@ pub unsafe fn show(owner: HWND, lines: Vec<String>, menu: bool) {
         (info.rcWork.bottom - height).max(info.rcWork.top),
     );
     let Ok(hwnd) = CreateWindowExW(
-        WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED,
+        WS_EX_TOPMOST | WS_EX_APPWINDOW | WS_EX_CONTROLPARENT | WS_EX_LAYERED,
         class,
-        w!("actl · 详情"),
+        if menu {
+            w!("actl · 菜单")
+        } else {
+            w!("actl · 详情")
+        },
         WS_POPUP,
         x,
         y,
         width,
         height,
-        Some(owner),
+        None,
         None,
         Some(instance.into()),
         None,
@@ -85,10 +93,64 @@ pub unsafe fn show(owner: HWND, lines: Vec<String>, menu: bool) {
         });
     }
     if let Some(p) = POPUP.lock().ok().and_then(|p| p.clone()) {
+        // Standard owner-drawn buttons supply native accessible names, roles and Invoke.
+        // The existing layered raster remains the single visual surface.
+        for (i, text) in p.lines.iter().enumerate() {
+            let label = paint::wide(text);
+            let child = CreateWindowExW(
+                WS_EX_TRANSPARENT,
+                if menu { w!("BUTTON") } else { w!("STATIC") },
+                windows::core::PCWSTR(label.as_ptr()),
+                WS_CHILD
+                    | WS_VISIBLE
+                    | if menu {
+                        WS_TABSTOP | WINDOW_STYLE(BS_OWNERDRAW as u32 | BS_NOTIFY as u32)
+                    } else {
+                        WINDOW_STYLE(0) // Native Text role, rather than owner-drawn Image.
+                    },
+                paint::pixels(8, dx),
+                paint::pixels(8 + i as i32 * 28, dx),
+                width - paint::pixels(16, dx),
+                paint::pixels(28, dx),
+                Some(hwnd),
+                Some(HMENU((100 + i) as *mut _)),
+                Some(instance.into()),
+                None,
+            );
+            if !menu && let Ok(child) = child {
+                let _ = SetWindowSubclass(child, Some(text_proc), 1, 0);
+            }
+        }
         paint::draw_popup(hwnd, &p.lines, p.menu, p.selected);
     }
     let _ = ShowWindow(hwnd, SW_SHOW);
     let _ = SetForegroundWindow(hwnd);
+    if menu && let Ok(button) = GetDlgItem(Some(hwnd), 100) {
+        let _ = windows::Win32::UI::Input::KeyboardAndMouse::SetFocus(Some(button));
+    }
+}
+// Keep native static-control accessibility while the parent supplies the raster.
+unsafe extern "system" fn text_proc(
+    hwnd: HWND,
+    msg: u32,
+    wp: WPARAM,
+    lp: LPARAM,
+    _: usize,
+    _: usize,
+) -> LRESULT {
+    if msg == WM_PAINT {
+        let _ = ValidateRect(Some(hwnd), None);
+        LRESULT(0)
+    } else {
+        DefSubclassProc(hwnd, msg, wp, lp)
+    }
+}
+pub unsafe fn dialog_message(message: &MSG) -> bool {
+    let hwnd = POPUP
+        .lock()
+        .ok()
+        .and_then(|p| p.as_ref().map(|p| HWND(p.hwnd as *mut _)));
+    hwnd.is_some_and(|h| IsDialogMessageW(h, message).as_bool())
 }
 unsafe fn choose(p: &Popup) {
     if p.menu
@@ -106,6 +168,60 @@ unsafe fn choose(p: &Popup) {
 unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
     let state = POPUP.lock().ok().and_then(|p| p.clone());
     match msg {
+        WM_DPICHANGED => {
+            if let Some(p) = state {
+                let dpi = wp.0 as u32 & 0xffff;
+                let rect = &*(lp.0 as *const RECT);
+                let width = paint::pixels(if p.menu { 136 } else { 280 }, dpi);
+                let height = paint::pixels(16 + p.lines.len() as i32 * 28, dpi);
+                let _ = SetWindowPos(
+                    hwnd,
+                    None,
+                    rect.left,
+                    rect.top,
+                    width,
+                    height,
+                    SWP_NOZORDER | SWP_NOACTIVATE,
+                );
+                for i in 0..p.lines.len() {
+                    if let Ok(child) = GetDlgItem(Some(hwnd), 100 + i as i32) {
+                        let _ = SetWindowPos(
+                            child,
+                            None,
+                            paint::pixels(8, dpi),
+                            paint::pixels(8 + i as i32 * 28, dpi),
+                            width - paint::pixels(16, dpi),
+                            paint::pixels(28, dpi),
+                            SWP_NOZORDER | SWP_NOACTIVATE,
+                        );
+                    }
+                }
+                paint::draw_popup(hwnd, &p.lines, p.menu, p.selected);
+            }
+            LRESULT(0)
+        }
+        WM_DRAWITEM => LRESULT(1),
+        WM_COMMAND => {
+            let id = wp.0 & 0xffff;
+            if id == 2 {
+                hide();
+            } else if let Some(mut p) = state
+                && p.menu
+                && id >= 100
+                && id - 100 < p.lines.len()
+            {
+                p.selected = Some(id - 100);
+                if wp.0 >> 16 == BN_CLICKED as usize {
+                    choose(&p);
+                } else if wp.0 >> 16 == BN_SETFOCUS as usize {
+                    if let Ok(mut s) = POPUP.lock() {
+                        *s = Some(p);
+                    }
+                    let _ = InvalidateRect(Some(hwnd), None, false);
+                }
+            }
+            LRESULT(0)
+        }
         WM_PAINT => {
             if let Some(p) = state {
                 paint::draw_popup(hwnd, &p.lines, p.menu, p.selected);

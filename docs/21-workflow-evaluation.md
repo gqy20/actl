@@ -137,3 +137,30 @@ gate/regress 构建同目录配套二进制到 target/validation/release，运�
 配套发布版跨进程评估五组通过；2026-09-27 21:30 +08:00，本次请求返回 71ms、暂停确认 2397ms。
 该数字仍含窗口枚举与 COM 调用耗时，不能承诺瞬时暂停，也不与此前不同负载的结果作性能比较。
 原始报告：`target/flow-evaluation-89b7bdf478cc4bef81f079cbccfe6062/report.json`。
+
+## 2026-09-27 补充验收：断言、归档与显示
+
+环境：Windows 10.0.26200.0，中文计算器 11.2607.0.0；本次数字仅用于当前环境观测。
+
+- Computer Use 打开新版托盘菜单，识别 6 个有名称的原生 Button；点击“详情”后识别 Text 行。
+  早期实测详情被识别为 Image，已改为原生 Static 文本角色并复测通过。Esc 正常关闭。
+- Computer Use 启动测试计算器，截图确认初值 0，点击数字 2，截图确认结果 2；
+  CLI `verify --value id:CalculatorResults "显示为 2" --property name --app 计算器` 成功，channel=name。
+  显式 value/text 均 ASSERTION_FAILED，actual=null，分别标 value-pattern/text-pattern；
+  expected/target/property/comparison 保留。通过窗口关闭按钮退出测试计算器。
+  本轮 Computer Use 的计算器 UIA tree 返回 null，因此点击采用新截图坐标；CLI 语义定位与 Name 读取成功。
+- 回归复现并修复空闲停止详情误称“等待当前操作结束”；现为“后续操作已阻止”。
+- 原生隐藏控件测试发送 DPI 变化，核对 96/120/144/192/96 下按钮尺寸与 16 DIP 字体高度。
+  菜单行命中已有同倍率测试。此项不等于实体多显示器迁移验收。
+- 最新完整门禁覆盖字段错误 envelope golden、脱敏证据 golden、关联动作 golden、
+  报告证据 available→missing、推测禁止 verified=true，以及恢复核验失败更新错误。
+
+发布版 `fixtures/flow-evaluation.ps1` 首轮在等待暂停确认时超过脚本的 10 秒限制，
+状态仍为 running，未收到调用结束事件。该结果与阻塞调用一致，但未取得 COM 栈，不能断言根因。
+第二轮 5 项通过：检查点/计划隔离、暂停/互斥、实际 CLI 退出恢复、停止粘性、语义预检。
+请求返回 57ms，确认 2064ms；不是跨环境性能承诺。
+本地证据：target/flow-evaluation-267503980a264d2f9266fde5be6ced2f（失败状态），
+target/flow-evaluation-135dfe6cf0a94ad6990f4159561d025c/report.json（复测）。
+
+仍需区分：轮询可协作暂停，已进入 COM 的调用仍须返回；写操作不强杀、不承诺撤销。
+实际 Narrator 朗读与实体跨屏迁移尚未验收，原生可访问树和合成 DPI 检查不能替代这两项。

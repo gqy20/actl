@@ -412,6 +412,10 @@ unsafe fn place(hwnd: HWND) {
 
 unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
     match msg {
+        msg if msg == WM_APP + 44 => {
+            menu(hwnd);
+            LRESULT(0)
+        }
         WM_TIMER => {
             tick(hwnd);
             LRESULT(0)
@@ -549,6 +553,43 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
 }
 
 pub unsafe fn run() -> windows::core::Result<()> {
+    if std::env::args().any(|a| a == "--menu")
+        && !std::env::args().any(|a| a == "--replace")
+        && let Ok(existing) = FindWindowW(w!("actl_signal_window"), None)
+    {
+        PostMessageW(Some(existing), WM_APP + 44, WPARAM(0), LPARAM(0))?;
+        return Ok(());
+    }
+    if std::env::args().any(|a| a == "--replace") {
+        if actl_uia::display_support::input_busy() != Some(false) {
+            return Err(windows::core::Error::new(
+                windows::core::HRESULT(0x80004005u32 as i32),
+                "input busy; replacement refused",
+            ));
+        }
+        if let Ok(old) = FindWindowW(w!("actl_signal_window"), None) {
+            let mut pid = 0;
+            GetWindowThreadProcessId(old, Some(&mut pid));
+            let process = windows::Win32::System::Threading::OpenProcess(
+                windows::Win32::System::Threading::PROCESS_SYNCHRONIZE,
+                false,
+                pid,
+            )?;
+            let posted = PostMessageW(Some(old), WM_CLOSE, WPARAM(0), LPARAM(0));
+            let waited = if posted.is_ok() {
+                windows::Win32::System::Threading::WaitForSingleObject(process, 4000)
+            } else {
+                WAIT_FAILED
+            };
+            let _ = CloseHandle(process);
+            if waited != WAIT_OBJECT_0 {
+                return Err(windows::core::Error::new(
+                    windows::core::HRESULT(0x80004005u32 as i32),
+                    "old display did not exit; replacement refused",
+                ));
+            }
+        }
+    }
     struct Instance(HANDLE);
     impl Drop for Instance {
         fn drop(&mut self) {
@@ -628,7 +669,11 @@ pub unsafe fn run() -> windows::core::Result<()> {
     );
     let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
     tick(hwnd);
+    let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
     SetTimer(Some(hwnd), 1, 100, None);
+    if std::env::args().any(|a| a == "--menu") {
+        menu(hwnd);
+    }
     let mut msg = MSG::default();
     loop {
         let result = GetMessageW(&mut msg, None, 0, 0).0;
@@ -638,8 +683,10 @@ pub unsafe fn run() -> windows::core::Result<()> {
         if result == 0 {
             break;
         }
-        let _ = TranslateMessage(&msg);
-        DispatchMessageW(&msg);
+        if !super::popup::dialog_message(&msg) {
+            let _ = TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
     }
     Ok(())
 }

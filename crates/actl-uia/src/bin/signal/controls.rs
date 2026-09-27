@@ -11,6 +11,59 @@ use windows::{
     core::{PCWSTR, w},
 };
 
+const CONTROLS: &[(i32, &str, i32, i32, i32, i32)] = &[
+    (100, "正在读取流程状态", 16, 16, 388, 220),
+    (101, "", 16, 240, 388, 24),
+    (10, "暂停流程", 16, 272, 120, 32),
+    (11, "继续流程", 148, 272, 120, 32),
+    (12, "停止操作", 280, 272, 120, 32),
+    (13, "允许后续操作", 16, 312, 180, 32),
+    (14, "关闭", 280, 312, 120, 32),
+];
+
+unsafe fn layout(hwnd: HWND, dpi: u32) {
+    let px = |n| paint::pixels(n, dpi);
+    let font = CreateFontW(
+        -px(16),
+        0,
+        0,
+        0,
+        400,
+        0,
+        0,
+        0,
+        DEFAULT_CHARSET,
+        OUT_DEFAULT_PRECIS,
+        CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY,
+        0,
+        w!("Segoe UI"),
+    );
+    let old = SetWindowLongPtrW(hwnd, GWLP_USERDATA, font.0 as isize);
+    for &(id, _, x, y, width, height) in CONTROLS {
+        if let Ok(child) = GetDlgItem(Some(hwnd), id) {
+            let _ = SetWindowPos(
+                child,
+                None,
+                px(x),
+                px(y),
+                px(width),
+                px(height),
+                SWP_NOZORDER | SWP_NOACTIVATE,
+            );
+            SendMessageW(
+                child,
+                WM_SETFONT,
+                Some(WPARAM(font.0 as usize)),
+                Some(LPARAM(1)),
+            );
+        }
+    }
+    if old != 0 {
+        let _ = DeleteObject(HGDIOBJ(old as *mut _));
+    }
+}
+
 fn current() -> Option<(String, String)> {
     let paths = SignalPaths::default();
     let states = paths.read_calls();
@@ -73,6 +126,20 @@ unsafe fn refresh(hwnd: HWND) {
 }
 unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
     match msg {
+        WM_DPICHANGED => {
+            let rect = &*(lp.0 as *const RECT);
+            let _ = SetWindowPos(
+                hwnd,
+                None,
+                rect.left,
+                rect.top,
+                rect.right - rect.left,
+                rect.bottom - rect.top,
+                SWP_NOZORDER | SWP_NOACTIVATE,
+            );
+            layout(hwnd, wp.0 as u32 & 0xffff);
+            LRESULT(0)
+        }
         WM_TIMER => {
             refresh(hwnd);
             LRESULT(0)
@@ -111,6 +178,10 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
             LRESULT(0)
         }
         WM_DESTROY => {
+            let font = SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
+            if font != 0 {
+                let _ = DeleteObject(HGDIOBJ(font as *mut _));
+            }
             PostQuitMessage(0);
             LRESULT(0)
         }
@@ -149,28 +220,11 @@ pub unsafe fn run() -> windows::core::Result<()> {
         None,
     )?;
     let dpi = GetDpiForWindow(hwnd);
-    let px = |n| paint::pixels(n, dpi);
-    let font = CreateFontW(
-        -px(16),
-        0,
-        0,
-        0,
-        400,
-        0,
-        0,
-        0,
-        DEFAULT_CHARSET,
-        OUT_DEFAULT_PRECIS,
-        CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY,
-        0,
-        w!("Segoe UI"),
-    );
     let mut bounds = RECT {
         left: 0,
         top: 0,
-        right: px(420),
-        bottom: px(360),
+        right: paint::pixels(420, dpi),
+        bottom: paint::pixels(360, dpi),
     };
     let _ = AdjustWindowRectExForDpi(
         &mut bounds,
@@ -188,38 +242,25 @@ pub unsafe fn run() -> windows::core::Result<()> {
         bounds.bottom - bounds.top,
         SWP_NOMOVE | SWP_NOZORDER,
     );
-    for (id, label, x, y, width, height) in [
-        (100, "正在读取流程状态", 16, 16, 388, 220),
-        (101, "", 16, 240, 388, 24),
-        (10, "暂停流程", 16, 272, 120, 32),
-        (11, "继续流程", 148, 272, 120, 32),
-        (12, "停止操作", 280, 272, 120, 32),
-        (13, "允许后续操作", 16, 312, 180, 32),
-        (14, "关闭", 280, 312, 120, 32),
-    ] {
+    for &(id, label, _, _, _, _) in CONTROLS {
         let button = id < 100;
         let text = paint::wide(label);
-        let child = CreateWindowExW(
+        CreateWindowExW(
             WINDOW_EX_STYLE(0),
             if button { w!("BUTTON") } else { w!("STATIC") },
             PCWSTR(text.as_ptr()),
             WS_CHILD | WS_VISIBLE | if button { WS_TABSTOP } else { WINDOW_STYLE(0) },
-            px(x),
-            px(y),
-            px(width),
-            px(height),
+            0,
+            0,
+            0,
+            0,
             Some(hwnd),
             Some(HMENU(id as *mut _)),
             Some(instance.into()),
             None,
         )?;
-        SendMessageW(
-            child,
-            WM_SETFONT,
-            Some(WPARAM(font.0 as usize)),
-            Some(LPARAM(1)),
-        );
     }
+    layout(hwnd, dpi);
     refresh(hwnd);
     let _ = ShowWindow(hwnd, SW_SHOW);
     // StartupInfo may request a hidden helper; this explicit user window must be visible.
@@ -237,7 +278,6 @@ pub unsafe fn run() -> windows::core::Result<()> {
     loop {
         let result = GetMessageW(&mut msg, None, 0, 0).0;
         if result == -1 {
-            let _ = DeleteObject(font.into());
             return Err(windows::core::Error::from_thread());
         }
         if result == 0 {
@@ -248,13 +288,82 @@ pub unsafe fn run() -> windows::core::Result<()> {
             DispatchMessageW(&msg);
         }
     }
-    let _ = DeleteObject(font.into());
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn dpi_change_updates_native_control_bounds_and_font() {
+        unsafe {
+            let previous = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+            let instance = GetModuleHandleW(None).unwrap();
+            let parent = CreateWindowExW(
+                WINDOW_EX_STYLE(0),
+                w!("STATIC"),
+                w!("dpi-test"),
+                WS_POPUP,
+                0,
+                0,
+                420,
+                360,
+                None,
+                None,
+                Some(instance.into()),
+                None,
+            )
+            .unwrap();
+            let child = CreateWindowExW(
+                WINDOW_EX_STYLE(0),
+                w!("BUTTON"),
+                w!("pause"),
+                WS_CHILD,
+                0,
+                0,
+                0,
+                0,
+                Some(parent),
+                Some(HMENU(10usize as *mut _)),
+                Some(instance.into()),
+                None,
+            )
+            .unwrap();
+            for dpi in [96, 120, 144, 192, 96] {
+                let bounds = RECT {
+                    left: 0,
+                    top: 0,
+                    right: paint::pixels(420, dpi),
+                    bottom: paint::pixels(360, dpi),
+                };
+                proc(
+                    parent,
+                    WM_DPICHANGED,
+                    WPARAM(dpi as usize),
+                    LPARAM((&bounds as *const RECT) as isize),
+                );
+                let mut rect = RECT::default();
+                GetWindowRect(child, &mut rect).unwrap();
+                assert_eq!(rect.right - rect.left, paint::pixels(120, dpi));
+                assert_eq!(rect.bottom - rect.top, paint::pixels(32, dpi));
+                let font = SendMessageW(child, WM_GETFONT, None, None);
+                let mut info = LOGFONTW::default();
+                assert_ne!(
+                    GetObjectW(
+                        HGDIOBJ(font.0 as *mut _),
+                        std::mem::size_of::<LOGFONTW>() as i32,
+                        Some((&mut info as *mut LOGFONTW).cast())
+                    ),
+                    0
+                );
+                assert_eq!(info.lfHeight, -paint::pixels(16, dpi));
+            }
+            let font = SetWindowLongPtrW(parent, GWLP_USERDATA, 0);
+            DestroyWindow(parent).unwrap();
+            let _ = DeleteObject(HGDIOBJ(font as *mut _));
+            let _ = SetThreadDpiAwarenessContext(previous);
+        }
+    }
     #[test]
     fn acknowledged_stop_is_not_still_pending() {
         use actl_core::state::{Phase, SessionState};

@@ -107,7 +107,11 @@ pub fn view(states: &[SessionState], now: u64, stop_ms: Option<u64>, busy: Optio
             .into(),
             effects: Default::default(),
             details: if stop_ms.is_some() {
-                "已请求停止\n等待当前操作结束"
+                if busy == Some(false) {
+                    "已请求停止\n后续操作已阻止"
+                } else {
+                    "已请求停止\n等待当前操作结束"
+                }
             } else {
                 "空闲\n暂无操作"
             }
@@ -306,7 +310,16 @@ pub fn view(states: &[SessionState], now: u64, stop_ms: Option<u64>, busy: Optio
         details.push(format!("错误：{error}"));
     }
     if mode == Mode::StopRequested {
-        details.push("等待当前操作结束".into());
+        details.push(
+            if live > 0 || busy != Some(false) {
+                "等待当前操作结束"
+            } else if states.iter().any(|s| s.phase == Phase::Running) {
+                "操作状态未知，后续操作已阻止"
+            } else {
+                "后续操作已阻止"
+            }
+            .into(),
+        );
     }
     View {
         mode,
@@ -326,6 +339,16 @@ pub fn view(states: &[SessionState], now: u64, stop_ms: Option<u64>, busy: Optio
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn idle_stop_does_not_claim_an_operation_is_still_running() {
+        let mut state = SessionState::now(1, "commands", None, None, Phase::Done);
+        state.ts_ms = 100;
+        for states in [vec![], vec![state]] {
+            let v = view(&states, 500, Some(200), Some(false));
+            assert!(!v.details.contains("等待当前操作结束"));
+            assert!(v.details.contains("后续操作已阻止"));
+        }
+    }
     #[test]
     fn workflow_pause_reason_and_step_error_remain_visible() {
         let mut state = SessionState::now(1, "wait", None, None, Phase::Done);

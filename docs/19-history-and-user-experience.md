@@ -110,3 +110,11 @@ feedback 可显式指定 kind 和 evidence_ids：
 未完成 flows 与 desktop 恢复记录不参与上述清理。历史事件新增 run_id/step_id，
 完整关系为 run_id → step_id → call_id → action_id，同一次调用可包含多个步骤。
 
+## 7. 显示与可访问性补充
+
+自绘托盘菜单保留紧凑圆角表面，附原生 Button 的名称、焦点和调用能力；详情附原生 Text 控件。
+`actl-signal --menu` 打开菜单；`--controls` 打开标准流程控制窗口。
+菜单、详情和控制窗口响应 DPI 变化；控制窗口同步更新布局和 16 DIP 字体。
+`actl-signal --replace` 在确认输入未占用后请求旧显示端正常退出，最多等待 4 秒，不强杀进程；
+旧端退出沿用停止保护，不清除停止标志。部署时将配套 actl.exe/actl-signal.exe 放在同一目录。
+Computer Use 可访问树验收与实际屏幕阅读器朗读验收是两项检查；后者和多显示器迁移需分别实测。
