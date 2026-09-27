@@ -38,15 +38,26 @@ pub fn pointer_physical(
 
     let loc = locate(app, target, near)?;
     let scrolled = ensure_visible(&loc.element);
-    let Some(point) = loc.element.get_clickable_point().ok().flatten() else {
-        return Err(CtlError::new(
-            ErrorCode::NotActionable,
-            format!(
-                "{} ({}) exposes no clickable point; refusing to guess a center point",
-                target.describe(),
-                loc.role
-            ),
-        ));
+    // clickable point 缺失时的受控退化:BoundingRectangle 中心 + 命中检查把关
+    // (mmui/Qt 导航图标等不暴露 clickable point;命中检查不过仍拒,fail-closed 保留)
+    let point = match loc.element.get_clickable_point().ok().flatten() {
+        Some(p) => p,
+        None => {
+            let r = loc.element.get_bounding_rectangle().map_err(|_| {
+                CtlError::new(
+                    ErrorCode::NotActionable,
+                    format!(
+                        "{} ({}) exposes neither clickable point nor bounding rectangle",
+                        target.describe(),
+                        loc.role
+                    ),
+                )
+            })?;
+            uiautomation::types::Point::new(
+                (r.get_left() + r.get_right()) / 2,
+                (r.get_top() + r.get_bottom()) / 2,
+            )
+        }
     };
     let (px, py) = (point.get_x(), point.get_y());
 

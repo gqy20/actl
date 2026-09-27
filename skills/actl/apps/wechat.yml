@@ -18,6 +18,10 @@ quirks:
     note: 消息列表 mmui::RecyclerListView 虚拟化,4.1.x 无 Scroll pattern——滚动用物理滚轮兜底
   - id: input_value_readback
     note: 输入框(id:chat_input_field)暴露 ValuePattern——paste 后 get --property value 读回逐字可用(实测);清草稿 = press ctrl+a + press delete(切勿回车,回车即发送)
+  - id: moments_quirks
+    note: 朋友圈入口在发现页(快照后按 ref 精点,如 @e16);帖子 name=「作者 来源 正文 时间 类型·来源」复合文本;
+         滚动须 ≥15 档滚轮(虚拟化懒加载阈值,5 档无效果);回聊天页用 --near name:通讯录 锚点消歧(微信 与窗口同名);
+         导航图标无 clickable point——click --physical 已有 rect-center 兜底+命中检查
   - id: safety_no_blind_send
     note: 真实聊天应用——发送前必须读回输入框 value 并核对会话标题;严禁盲发
   - id: background_ops
@@ -53,3 +57,18 @@ routes:
     steps:
       - ["click", "name:发送", "--app", "{window}", "--physical"]
 verify: 输入框 value 读回比对(draft_message 最后一步);发送后新气泡出现在下一次快照
+  - id: moments
+    description: 刷朋友圈(发现页中转;读取=快照 name 解析;滚动=物理滚轮,虚拟化懒加载需大步长)
+    steps:
+      - ["click", "name:发现", "--app", "{window}", "--physical"]
+      - ["snapshot", "--app", "{window}"]
+      - ["click", "", "--app", "{window}", "--physical"]  # 快照后取发现页首项(朋友圈)的 ref
+      - ["wait", "--element", "id:sns_list", "--app", "{window}", "--timeout", "3000"]
+      - ["snapshot", "--app", "{window}"]
+      - ["scroll", "id:sns_list", "--down", "15", "--app", "{window}"]
+      - ["snapshot", "--app", "{window}"]
+  - id: moments_back
+    description: 朋友圈回聊天页(name:微信 与窗口同名,--near 通讯录 锚点消歧)
+    steps:
+      - ["click", "name:微信", "--app", "{window}", "--near", "name:通讯录", "--physical"]
+      - ["find", "--id", "session_list", "--app", "{window}"]

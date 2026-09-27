@@ -6,6 +6,15 @@
 ## [Unreleased]
 
 ### Added
+- **朋友圈实测全流程(用户授权) + `click --physical` rect-center 兜底(产品改进)**:
+  ① mmui 导航图标不暴露 clickable point,旧实现直接拒——现受控退化为
+  **BoundingRectangle 中心 + 命中检查把关**(命中检查不过仍拒,fail-closed 保留;
+  实战首例:ZCode 遮挡时正确拒绝误点);② 朋友圈闭环:发现(物理点击)→ 快照取
+  发现页首项 ref 精点 → wait id:sns_list 物化 → 快照 name 解析帖子(作者+来源+
+  正文+时间复合文本,实测两条逐字)→ scroll id:sns_list 物理滚轮(**≥15 档**,
+  虚拟化懒加载阈值,5 档无效果)→ 新帖出现;③ 恢复:click name:微信
+  **--near name:通讯录** 锚点消歧(与窗口同名冲突的实战解法)。pack 增
+  moments/moments_back 路线 + quirks;lint 37 步全绿。
 - **微信 pack 真机修正(打开/点击/输入实测,未发送)**:① 会话条目 UIA Invoke
   返回 ok 但**不触发导航**(mmui/Qt 特性)——切换会话必须 `--physical`(实测
   物理点击后消息区即时物化);② 消息气泡是 Custom role,extract 不命中——读消息
