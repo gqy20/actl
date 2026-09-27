@@ -6,6 +6,15 @@
 ## [Unreleased]
 
 ### Added
+- **Office 场景实测(docs/14,真实需求最大空白填补)**:Excel——有数据的网格物化为
+  DataItem(1246)+DataGrid,**`extract --table` 的 grid-pattern 直读首次真实触发**
+  (43×28 全网格,行列标齐全、数据逐格正确);字段填写闭环 = set-clipboard →
+  名称框(id:1001)跳转 → ctrl+v 直灌 → ctrl+c + get-clipboard 读回(实测逐字)。
+  Word——`get --property text`(TextPattern)中英文正文逐字命中(Chromium 之外
+  第二个实证应用)。保存链/Word 写入因实测中桌面锁屏待续测(护栏正确拒绝锁屏注入,
+  UIA 后台调用不受影响——重要特性发现)。产品修复:ensure_element_focus 前置免扰
+  (焦点已在目标窗口时不再强行 SetFocus 首个 Edit;Excel 多 Edit 场景旧启发式会
+  把正确焦点搅到搜索框,后续按键全被吞)。
 - **batch 步间弹窗闸门(blocked_by,warning 不阻断)**:每步前采样前台窗口,若它既不在
   批前基线、也不匹配本批任何 --app 目标 → 该步 steps 条目附 `blocked_by:{title,hwnd}`;
   失败时刻补采样一次(launch 竞态/慢弹窗在步执行中才成形)。语义 = **前台劫持检测**

@@ -227,8 +227,14 @@ fn batch_steps_have_no_blocked_by_when_foreground_is_baseline() {
     let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
     let step = &v["data"]["steps"][0];
     assert_eq!(step["ok"], true);
-    assert!(
-        step.get("blocked_by").is_none(),
-        "no spurious popup warning"
-    );
+    // 锁屏会话下前台=锁屏界面(非基线非 --app),blocked_by 如实上报是正确行为;
+    // 仅当告警指向普通窗口时才视为虚假告警
+    match step.get("blocked_by") {
+        None => {}
+        Some(b) => assert!(
+            b["title"].as_str().unwrap_or_default().contains("锁屏"),
+            "no spurious popup warning (got {:?})",
+            b["title"]
+        ),
+    }
 }

@@ -57,7 +57,7 @@ Agent Skill ✓ · crates.io 已发布且 tag 自动同步(三 crate;cargo insta
 时序评估闭环(Timing 旋钮 + 画像/扫描 fixtures + 三默认值维持,docs/timing-2026-09.md)✓ ·
 外部机器复现 US3 待非开发机验证。
 
-**收官批进展(2026-09-27,v0.1.3 已发)**:命令面 26/31(wait 属性谓词/select/toggle ✓;
+**收官批进展(2026-09-27,v0.1.3 已发;Office 场景见 docs/14)**:Office 实测(Excel 表格 GridPattern 直读+剪贴板直灌读写闭环、Word TextPattern 正文)✓ · 窗口治理(batch windows_created+blocked_by 弹窗闸门+fixtures trap 清理)✓ · 原有项:命令面:命令面 26/31(wait 属性谓词/select/toggle ✓;
 list-notifications 搁置 M3,list-surfaces 待裁定)· 虚拟化容器定位 L4 + Explorer 条目级
 收口 ✓ · 全命令 help 四要素 ✓ · batch 步级可观测 + ACTL_TRACE ✓ · skeleton 单链折叠
 (NFR 修订为分形态:深单链 ≥70%,浏览器/小窗口实测受限)· P50 结构优化落地(绝对值

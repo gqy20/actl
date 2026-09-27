@@ -223,6 +223,15 @@ fn prepare_keyboard(app: Option<&str>) -> Result<Option<String>, CtlError> {
 /// ——战记"信源必须用可靠层"的又一次实例)。重试耗尽未就绪 → 放行,由
 /// verify-then-inject 物理前台护栏做最终裁决(它才是注入前的权威闸门)。
 fn ensure_element_focus(pattern: &str) -> Result<(), CtlError> {
+    // 前置免扰:物理键盘焦点已落在目标窗口时直接放行——多 Edit 应用
+    // (Excel:首页搜索框/名称框/编辑栏)里"找首个 Edit 强行 SetFocus"会把
+    // 已正确的焦点搅到搜索框,后续按键全被吞(Office 实测:ctrl+s/f12 失效)
+    if kbd::focused_root_title()
+        .map(|t| t.contains(pattern))
+        .unwrap_or(false)
+    {
+        return Ok(());
+    }
     for _ in 0..timing().focus_retries {
         if let Some(edit) = find_editable_element(pattern) {
             let _ = edit.set_focus();
