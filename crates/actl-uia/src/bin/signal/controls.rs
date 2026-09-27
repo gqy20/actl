@@ -1,12 +1,19 @@
 //! Explicit, focusable control window using standard Windows accessible controls.
-use super::{model, paint};
+use super::{flow_ui, model, paint};
+use std::sync::OnceLock;
+static BOUND_FLOW: OnceLock<Option<String>> = OnceLock::new();
 use actl_core::state::{SignalPaths, unix_ms};
 use windows::{
     Win32::{
         Foundation::*,
         Graphics::Gdi::*,
         System::LibraryLoader::GetModuleHandleW,
-        UI::{HiDpi::*, Input::KeyboardAndMouse::*, WindowsAndMessaging::*},
+        UI::{
+            Controls::{EM_GETFIRSTVISIBLELINE, EM_GETSEL, EM_LINESCROLL, EM_SETSEL},
+            HiDpi::*,
+            Input::KeyboardAndMouse::*,
+            WindowsAndMessaging::*,
+        },
     },
     core::{PCWSTR, w},
 };
@@ -66,21 +73,57 @@ unsafe fn layout(hwnd: HWND, dpi: u32) {
 
 fn current() -> Option<(String, String)> {
     let paths = SignalPaths::default();
-    let states = paths.read_calls();
-    let flow = model::selected(&states, unix_ms())?.workflow.as_ref()?;
-    if !actl_core::history::valid_id(&flow.run_id) {
-        return None;
+    let id = BOUND_FLOW
+        .get_or_init(|| {
+            let args: Vec<_> = std::env::args().collect();
+            args.windows(2)
+                .find(|a| a[0] == "--flow")
+                .map(|a| a[1].clone())
+                .filter(|id| actl_core::history::valid_id(id))
+                .or_else(|| flow_ui::discover(&paths))
+        })
+        .as_ref()?;
+    let state = flow_ui::read(&paths, id)?;
+    Some((id.clone(), state["status"].as_str()?.into()))
+}
+unsafe fn set_text(hwnd: HWND, id: i32, text: &str) {
+    let Ok(child) = GetDlgItem(Some(hwnd), id) else {
+        return;
+    };
+    let mut old = vec![0u16; GetWindowTextLengthW(child).max(0) as usize + 1];
+    let len = GetWindowTextW(child, &mut old).max(0) as usize;
+    if String::from_utf16_lossy(&old[..len]) != text {
+        let (mut start, mut end) = (0u32, 0u32);
+        let first = SendMessageW(child, EM_GETFIRSTVISIBLELINE, None, None);
+        SendMessageW(
+            child,
+            EM_GETSEL,
+            Some(WPARAM((&mut start as *mut u32) as usize)),
+            Some(LPARAM((&mut end as *mut u32) as isize)),
+        );
+        if id == 100 {
+            SendMessageW(child, WM_SETREDRAW, Some(WPARAM(0)), None);
+        }
+        let text = paint::wide(text);
+        let _ = SetWindowTextW(child, PCWSTR(text.as_ptr()));
+        if id == 100 {
+            SendMessageW(
+                child,
+                EM_SETSEL,
+                Some(WPARAM(start as usize)),
+                Some(LPARAM(end as isize)),
+            );
+            let current = SendMessageW(child, EM_GETFIRSTVISIBLELINE, None, None);
+            SendMessageW(
+                child,
+                EM_LINESCROLL,
+                Some(WPARAM(0)),
+                Some(LPARAM(first.0 - current.0)),
+            );
+            SendMessageW(child, WM_SETREDRAW, Some(WPARAM(1)), None);
+            let _ = InvalidateRect(Some(child), None, true);
+        }
     }
-    let bytes = std::fs::read(
-        paths
-            .dir
-            .join("flows")
-            .join(&flow.run_id)
-            .join("state.json"),
-    )
-    .ok()?;
-    let state: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
-    Some((flow.run_id.clone(), state["status"].as_str()?.into()))
 }
 fn control_view(paths: &SignalPaths) -> model::View {
     model::view(
@@ -93,17 +136,60 @@ fn control_view(paths: &SignalPaths) -> model::View {
 unsafe fn refresh(hwnd: HWND) {
     let paths = SignalPaths::default();
     let stopped = paths.stop_requested();
-    let view = control_view(&paths);
-    let text = paint::wide(&view.details);
-    let _ = SetWindowTextW(
-        GetDlgItem(Some(hwnd), 100).unwrap_or_default(),
-        PCWSTR(text.as_ptr()),
-    );
     let flow = current();
+    let mut text = if let Some(id) = BOUND_FLOW.get().and_then(|id| id.as_deref()) {
+        flow_ui::details(&paths, id)
+    } else {
+        control_view(&paths).details
+    };
+    if let Some(id) = BOUND_FLOW.get().and_then(|id| id.as_deref()) {
+        let states: Vec<_> = paths
+            .read_calls()
+            .into_iter()
+            .filter(|s| s.workflow.as_ref().is_some_and(|f| f.run_id == id))
+            .collect();
+        if !states.is_empty() {
+            text.push_str(&format!(
+                "\n\n{}",
+                model::view(
+                    &states,
+                    unix_ms(),
+                    super::shell::stop_timestamp(&paths),
+                    actl_uia::display_support::input_busy()
+                )
+                .details
+            ));
+        }
+    }
+    set_text(hwnd, 100, &text.replace('\n', "\r\n"));
+    let message = flow_ui::message();
+    if !message.is_empty() {
+        set_text(
+            hwnd,
+            101,
+            if flow.as_ref().is_some_and(|(_, status)| status == "paused")
+                && message == "已请求暂停，等待当前操作结束"
+            {
+                "已暂停"
+            } else {
+                &message
+            },
+        );
+    }
     let status = flow.as_ref().map(|(_, s)| s.as_str());
     let _ = EnableWindow(
         GetDlgItem(Some(hwnd), 10).unwrap_or_default(),
-        status == Some("running") && !stopped,
+        status == Some("running")
+            && !stopped
+            && flow.as_ref().is_none_or(|(id, _)| {
+                !flow_ui::pending(id, false)
+                    && !paths
+                        .dir
+                        .join("flows")
+                        .join(id)
+                        .join("pause-requested")
+                        .exists()
+            }),
     );
     let resume = matches!(
         status,
@@ -111,16 +197,43 @@ unsafe fn refresh(hwnd: HWND) {
     );
     let _ = EnableWindow(
         GetDlgItem(Some(hwnd), 11).unwrap_or_default(),
-        resume && !stopped,
+        resume
+            && !stopped
+            && flow
+                .as_ref()
+                .is_none_or(|(id, _)| !flow_ui::pending(id, true)),
     );
-    let label = paint::wide(if status == Some("needs_review") {
-        "重新核对"
-    } else {
-        "继续流程"
-    });
-    let _ = SetWindowTextW(
-        GetDlgItem(Some(hwnd), 11).unwrap_or_default(),
-        PCWSTR(label.as_ptr()),
+    set_text(
+        hwnd,
+        11,
+        if flow
+            .as_ref()
+            .is_some_and(|(id, _)| flow_ui::pending(id, true))
+        {
+            "继续中…"
+        } else if status == Some("needs_review") {
+            "重新核对"
+        } else {
+            "继续流程"
+        },
+    );
+    set_text(
+        hwnd,
+        10,
+        if flow.as_ref().is_some_and(|(id, _)| {
+            flow_ui::pending(id, false)
+                || (status == Some("running")
+                    && paths
+                        .dir
+                        .join("flows")
+                        .join(id)
+                        .join("pause-requested")
+                        .exists())
+        }) {
+            "暂停中…"
+        } else {
+            "暂停流程"
+        },
     );
     let _ = EnableWindow(GetDlgItem(Some(hwnd), 13).unwrap_or_default(), stopped);
 }
@@ -145,6 +258,11 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
             LRESULT(0)
         }
         WM_COMMAND => {
+            if wp.0 >> 16 != BN_CLICKED as usize {
+                return LRESULT(0);
+            }
+            flow_ui::clear_message();
+            set_text(hwnd, 101, "");
             let result = match wp.0 & 0xffff {
                 10 | 11 => current()
                     .ok_or_else(|| "没有可操作的流程".into())
@@ -247,9 +365,27 @@ pub unsafe fn run() -> windows::core::Result<()> {
         let text = paint::wide(label);
         CreateWindowExW(
             WINDOW_EX_STYLE(0),
-            if button { w!("BUTTON") } else { w!("STATIC") },
+            if button {
+                w!("BUTTON")
+            } else if id == 100 {
+                w!("EDIT")
+            } else {
+                w!("STATIC")
+            },
             PCWSTR(text.as_ptr()),
-            WS_CHILD | WS_VISIBLE | if button { WS_TABSTOP } else { WINDOW_STYLE(0) },
+            WS_CHILD
+                | WS_VISIBLE
+                | if button {
+                    WS_TABSTOP
+                } else if id == 100 {
+                    WS_TABSTOP
+                        | WS_VSCROLL
+                        | WINDOW_STYLE(
+                            ES_MULTILINE as u32 | ES_READONLY as u32 | ES_AUTOVSCROLL as u32,
+                        )
+                } else {
+                    WINDOW_STYLE(0)
+                },
             0,
             0,
             0,
@@ -273,7 +409,7 @@ pub unsafe fn run() -> windows::core::Result<()> {
         GetDlgItem(Some(hwnd), 14)?
     };
     let _ = SetFocus(Some(focus));
-    SetTimer(Some(hwnd), 1, 250, None);
+    SetTimer(Some(hwnd), 1, 500, None);
     let mut msg = MSG::default();
     loop {
         let result = GetMessageW(&mut msg, None, 0, 0).0;
@@ -362,6 +498,50 @@ mod tests {
             DestroyWindow(parent).unwrap();
             let _ = DeleteObject(HGDIOBJ(font as *mut _));
             let _ = SetThreadDpiAwarenessContext(previous);
+        }
+    }
+    #[test]
+    fn live_details_preserve_selection_and_unchanged_text() {
+        unsafe {
+            let instance = GetModuleHandleW(None).unwrap();
+            let parent = CreateWindowExW(
+                WINDOW_EX_STYLE(0),
+                w!("STATIC"),
+                w!("details-test"),
+                WS_POPUP,
+                0,
+                0,
+                420,
+                360,
+                None,
+                None,
+                Some(instance.into()),
+                None,
+            )
+            .unwrap();
+            let child = CreateWindowExW(
+                WINDOW_EX_STYLE(0),
+                w!("EDIT"),
+                w!(""),
+                WS_CHILD | WINDOW_STYLE(ES_MULTILINE as u32 | ES_READONLY as u32),
+                0,
+                0,
+                388,
+                220,
+                Some(parent),
+                Some(HMENU(100usize as *mut _)),
+                Some(instance.into()),
+                None,
+            )
+            .unwrap();
+            set_text(parent, 100, "first details");
+            SendMessageW(child, EM_SETSEL, Some(WPARAM(1)), Some(LPARAM(4)));
+            set_text(parent, 100, "first details");
+            set_text(parent, 100, "newer details");
+            let selected = SendMessageW(child, EM_GETSEL, None, None).0 as u32;
+            DestroyWindow(parent).unwrap();
+            assert_eq!(selected & 0xffff, 1);
+            assert_eq!(selected >> 16, 4);
         }
     }
     #[test]

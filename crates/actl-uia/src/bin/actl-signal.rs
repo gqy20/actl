@@ -3,6 +3,8 @@
 #![windows_subsystem = "windows"]
 #[path = "signal/controls.rs"]
 mod controls;
+#[path = "signal/flow_ui.rs"]
+mod flow_ui;
 #[path = "signal/icon.rs"]
 mod icon;
 #[path = "signal/model.rs"]

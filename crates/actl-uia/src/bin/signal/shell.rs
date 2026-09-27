@@ -15,6 +15,7 @@ use windows::Win32::UI::WindowsAndMessaging::*;
 use windows::core::{PCWSTR, w};
 
 static VIEW: Mutex<Option<model::View>> = Mutex::new(None);
+static REQUEST_MESSAGE: Mutex<String> = Mutex::new(String::new());
 static MENU_FLOW: Mutex<Option<(String, bool)>> = Mutex::new(None);
 static CURSOR: Mutex<Option<ActionCursor>> = Mutex::new(None);
 static PREPARING: Mutex<String> = Mutex::new(String::new());
@@ -22,6 +23,7 @@ static CAPTURES: Mutex<Vec<u32>> = Mutex::new(Vec::new());
 static WAS_VISIBLE: AtomicBool = AtomicBool::new(false);
 static HOTKEY: AtomicBool = AtomicBool::new(false);
 static STOP_HOVERED: AtomicBool = AtomicBool::new(false);
+static DRAG_STOP: AtomicBool = AtomicBool::new(false);
 static FRAME_READY: AtomicBool = AtomicBool::new(false);
 static TRAY_ICON: Mutex<Option<(usize, i32, u32)>> = Mutex::new(None);
 static EPOCH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
@@ -49,6 +51,35 @@ pub(super) fn stop_timestamp(paths: &SignalPaths) -> Option<u64> {
     })
 }
 
+// Filesystem snapshots arrive on a worker; the window thread only takes the latest value.
+fn call_snapshot() -> Vec<actl_core::state::SessionState> {
+    type States = Vec<actl_core::state::SessionState>;
+    static CACHE: std::sync::OnceLock<std::sync::Arc<Mutex<States>>> = std::sync::OnceLock::new();
+    let cache = CACHE.get_or_init(|| {
+        let cache = std::sync::Arc::new(Mutex::new(vec![]));
+        let output = cache.clone();
+        if std::thread::Builder::new()
+            .name("signal-state-reader".into())
+            .spawn(move || {
+                loop {
+                    let states = SignalPaths::default().read_calls();
+                    if let Ok(mut latest) = output.lock() {
+                        *latest = states;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                }
+            })
+            .is_err()
+        {
+            eprintln!("INTERNAL: cannot start display state reader");
+        }
+        cache
+    });
+    cache
+        .lock()
+        .map(|states| states.clone())
+        .unwrap_or_default()
+}
 unsafe fn tick(hwnd: HWND) {
     let mut pointer = POINT::default();
     let mut bounds = RECT::default();
@@ -64,7 +95,7 @@ unsafe fn tick(hwnd: HWND) {
     }
     let paths = SignalPaths::default();
     let now = unix_ms();
-    let states = paths.read_calls();
+    let states = call_snapshot();
     let stop = stop_timestamp(&paths);
     let mut v = model::view(&states, now, stop, actl_uia::display_support::input_busy());
     if v.mode == model::Mode::Running
@@ -80,8 +111,37 @@ unsafe fn tick(hwnd: HWND) {
         v.label = "正在暂停流程".into();
         v.details.push_str("\n等待当前操作结束");
     }
+    if stop.is_none() {
+        DRAG_STOP.store(false, Ordering::Relaxed);
+    }
+    if DRAG_STOP.load(Ordering::Relaxed) {
+        v.label = "移动状态条 · 已请求停止".into();
+        v.details
+            .push_str("\n移动状态条会请求停止；可在菜单允许后续操作");
+    }
+    let request_message = super::flow_ui::message();
+    if !request_message.is_empty() {
+        v.details.push_str(&format!("\n{request_message}"));
+        let is_new = REQUEST_MESSAGE
+            .lock()
+            .map(|mut old| {
+                let changed = *old != request_message;
+                *old = request_message.clone();
+                changed
+            })
+            .unwrap_or(false);
+        if is_new && request_message.contains('：') {
+            super::popup::show(
+                hwnd,
+                vec!["流程操作未完成".into(), request_message.clone()],
+                false,
+            );
+        }
+    }
     let changed = if let Ok(mut old) = VIEW.lock() {
-        let changed = old.as_ref().is_none_or(|o| o != &v);
+        let changed = old
+            .as_ref()
+            .is_none_or(|o| o.mode != v.mode || o.label != v.label || o.effects != v.effects);
         *old = Some(v.clone());
         changed
     } else {
@@ -258,13 +318,18 @@ unsafe fn update_icon(hwnd: HWND, mode: model::Mode) -> HICON {
     icon
 }
 
-unsafe fn details(hwnd: HWND) {
-    let text = VIEW
-        .lock()
-        .ok()
-        .and_then(|v| v.as_ref().map(|v| v.details.clone()))
-        .unwrap_or_default();
-    super::popup::show(hwnd, text.lines().map(str::to_owned).collect(), false);
+unsafe fn details(_hwnd: HWND) {
+    use std::os::windows::process::CommandExt;
+    if let Ok(exe) = std::env::current_exe() {
+        let mut command = std::process::Command::new(exe);
+        command.arg("--controls").creation_flags(0x08000000);
+        if let Some(id) = super::flow_ui::discover(&SignalPaths::default()) {
+            command.args(["--flow", &id]);
+        }
+        if command.spawn().is_err() {
+            super::popup::show(_hwnd, vec!["INTERNAL：无法打开详情".into()], false);
+        }
+    }
 }
 
 unsafe fn menu(hwnd: HWND) {
@@ -281,20 +346,14 @@ unsafe fn menu(hwnd: HWND) {
         "流程控制".into(),
     ];
     let paths = SignalPaths::default();
-    let states = paths.read_calls();
-    let flow = model::selected(&states, unix_ms()).and_then(|s| s.workflow.as_ref());
-    let action = flow
-        .filter(|f| actl_core::history::valid_id(&f.run_id))
-        .and_then(|f| {
-            let bytes =
-                std::fs::read(paths.dir.join("flows").join(&f.run_id).join("state.json")).ok()?;
-            let state: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
-            match state["status"].as_str()? {
-                "running" => Some((f.run_id.clone(), false)),
-                "paused" | "needs_review" | "stopped" | "failed" => Some((f.run_id.clone(), true)),
-                _ => None,
-            }
-        });
+    let action = super::flow_ui::discover(&paths).and_then(|id| {
+        let state = super::flow_ui::read(&paths, &id)?;
+        match state["status"].as_str()? {
+            "running" => Some((id, false)),
+            "paused" | "needs_review" | "stopped" | "failed" => Some((id, true)),
+            _ => None,
+        }
+    });
     if let Some((_, resume)) = &action {
         lines.push(
             if *resume {
@@ -330,15 +389,7 @@ unsafe fn menu_action(hwnd: HWND, cmd: usize) {
             SignalPaths::default().request_stop();
             let _ = DestroyWindow(hwnd);
         }
-        6 => {
-            use std::os::windows::process::CommandExt;
-            if let Ok(exe) = std::env::current_exe() {
-                let _ = std::process::Command::new(exe)
-                    .arg("--controls")
-                    .creation_flags(0x08000000)
-                    .spawn();
-            }
-        }
+        6 => details(hwnd),
         7 => {
             let action = MENU_FLOW.lock().ok().and_then(|a| a.clone());
             if let Some((id, resume)) = action {
@@ -354,35 +405,7 @@ unsafe fn menu_action(hwnd: HWND, cmd: usize) {
 }
 
 pub(super) fn flow_action(id: &str, resume: bool) -> Result<(), String> {
-    let paths = SignalPaths::default();
-    if !actl_core::history::valid_id(id) {
-        return Err("无效的流程标识".into());
-    }
-    if !resume {
-        use std::io::Write;
-        let file = paths.dir.join("flows").join(id).join("pause-requested");
-        let mut out = std::fs::File::create(file).map_err(|_| "无法保存暂停请求".to_string())?;
-        out.write_all(b"pause")
-            .and_then(|_| out.sync_all())
-            .map_err(|_| "无法保存暂停请求".to_string())?;
-        return Ok(());
-    }
-    if paths.stop_requested() {
-        return Err("请先允许后续操作".into());
-    }
-    let exe = std::env::current_exe()
-        .map_err(|_| "无法定位程序".to_string())?
-        .with_file_name("actl.exe");
-    use std::os::windows::process::CommandExt;
-    std::process::Command::new(exe)
-        .args(["flow-resume", "--id", id])
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .creation_flags(0x08000000)
-        .spawn()
-        .map_err(|_| "无法启动流程执行器".to_string())?;
-    Ok(())
+    super::flow_ui::request(id, resume)
 }
 
 unsafe fn place(hwnd: HWND) {
@@ -452,6 +475,7 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
             )
         }
         WM_ENTERSIZEMOVE => {
+            DRAG_STOP.store(true, Ordering::Relaxed);
             SignalPaths::default().request_stop();
             overlay::hide();
             super::perimeter::hide();

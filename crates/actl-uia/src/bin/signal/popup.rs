@@ -117,8 +117,8 @@ pub unsafe fn show(owner: HWND, lines: Vec<String>, menu: bool) {
                 Some(instance.into()),
                 None,
             );
-            if !menu && let Ok(child) = child {
-                let _ = SetWindowSubclass(child, Some(text_proc), 1, 0);
+            if let Ok(child) = child {
+                let _ = SetWindowSubclass(child, Some(text_proc), 1, usize::from(menu));
             }
         }
         paint::draw_popup(hwnd, &p.lines, p.menu, p.selected);
@@ -136,9 +136,23 @@ unsafe extern "system" fn text_proc(
     wp: WPARAM,
     lp: LPARAM,
     _: usize,
-    _: usize,
+    menu: usize,
 ) -> LRESULT {
-    if msg == WM_PAINT {
+    if menu != 0 && msg == WM_MOUSEMOVE {
+        let parent = POPUP.lock().ok().and_then(|mut p| {
+            let p = p.as_mut()?;
+            let next = GetDlgCtrlID(hwnd).saturating_sub(100) as usize;
+            if p.selected == Some(next) {
+                return None;
+            }
+            p.selected = Some(next);
+            Some(HWND(p.hwnd as *mut _))
+        });
+        if let Some(parent) = parent {
+            let _ = InvalidateRect(Some(parent), None, false);
+        }
+    }
+    if menu == 0 && msg == WM_PAINT {
         let _ = ValidateRect(Some(hwnd), None);
         LRESULT(0)
     } else {
@@ -265,6 +279,9 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
                         None => 0,
                     };
                     p.selected = Some(i);
+                    if let Ok(button) = GetDlgItem(Some(hwnd), 100 + i as i32) {
+                        let _ = windows::Win32::UI::Input::KeyboardAndMouse::SetFocus(Some(button));
+                    }
                     if let Ok(mut s) = POPUP.lock() {
                         *s = Some(p);
                     }
@@ -303,6 +320,37 @@ fn row_at(lp: LPARAM, dpi: u32, count: usize) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    #[ignore = "interactive desktop popup regression"]
+    fn child_hover_updates_parent_selection() {
+        unsafe {
+            show(HWND::default(), vec!["first".into(), "second".into()], true);
+            let hwnd = POPUP.lock().unwrap().as_ref().unwrap().hwnd;
+            let first = GetDlgItem(Some(HWND(hwnd as *mut _)), 100).unwrap();
+            dialog_message(&MSG {
+                hwnd: first,
+                message: WM_KEYDOWN,
+                wParam: WPARAM(40),
+                ..Default::default()
+            });
+            let first_down = POPUP.lock().unwrap().as_ref().unwrap().selected;
+            let child = GetDlgItem(Some(HWND(hwnd as *mut _)), 101).unwrap();
+            SendMessageW(child, WM_MOUSEMOVE, Some(WPARAM(0)), Some(LPARAM(0)));
+            let selected = POPUP.lock().unwrap().as_ref().unwrap().selected;
+            let _ = windows::Win32::UI::Input::KeyboardAndMouse::SetFocus(Some(child));
+            dialog_message(&MSG {
+                hwnd: child,
+                message: WM_KEYDOWN,
+                wParam: WPARAM(40),
+                ..Default::default()
+            });
+            let keyboard = POPUP.lock().unwrap().as_ref().unwrap().selected;
+            hide();
+            assert_eq!(selected, Some(1));
+            assert_eq!(keyboard, Some(0));
+            assert_eq!(first_down, Some(1));
+        }
+    }
     #[test]
     fn menu_click_maps_to_visible_row_at_scaled_dpi() {
         for dpi in [96, 120, 144, 192] {
