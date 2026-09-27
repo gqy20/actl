@@ -185,6 +185,21 @@ fn wait_property_predicate_validated_at_protocol_level() {
 }
 
 #[test]
+fn id_ordinal_and_hwnd_anchor_validated_at_protocol_level() {
+    // id:#N 与 role:#N 同纪律(#0/非数字 → PROTOCOL);hwnd: 锚的非法句柄同拒
+    let (code, _) = actl(&["get", "id:Foo#0", "--property", "name"]);
+    assert_eq!(code, 2);
+    let (code, _) = actl(&["get", "id:Foo#x", "--property", "name"]);
+    assert_eq!(code, 2);
+    let (code, _) = actl(&["snapshot", "--app", "hwnd:bogus"]);
+    assert_eq!(code, 2, "malformed hwnd anchor is PROTOCOL");
+    let (code, stdout) = actl(&["snapshot", "--app", "hwnd:9999999"]);
+    assert_eq!(code, 1, "well-formed but absent hwnd is NOT_FOUND");
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
+    assert_eq!(v["error"]["code"], "NOT_FOUND");
+}
+
+#[test]
 fn coordinate_targets_gated_at_protocol_level() {
     // xy: 是物理专用寻址(spec):无 --physical / 无 --app / 非法形态 / 元素类
     // 命令误用 —— 全部 PROTOCOL exit 2(离线可测,不触桌面)

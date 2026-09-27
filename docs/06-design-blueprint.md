@@ -26,7 +26,7 @@
 
 - **扁平动词式**:不嵌套分组(对比 `actl interact click`),动词即语义——省 token、零结构记忆负担;分组只用于 help 分段标题。
 - **一个命令 = 一个认知动作**:命令语义对齐 agent 循环的四步心智模型——**感知**(`snapshot`/`find`)→ 决策(LLM)→ **执行**(`click`/`type`)→ **确认**(`--expect`/`verify`)。禁止复合语义命令(如 click-and-type):失败无法归因,中间决策被吞掉。
-- **命名四规则**:① `动词` 或 `动词-宾语`,小写连字符;② 读操作前缀固定:`get-*` / `find` / `list-*` / `inspect` / `extract`;③ 位置参数只放目标(@ref / 语义选择器 / `xy:x,y` 坐标——坐标为物理专用寻址,见 §7),其余全 flag,谓词统一 `--expect`/`--predicate`、超时统一 `--timeout`;④ 全局 flag 极小:`--dry-run` `--timeout` `--verbose` + 体积控制(`--skeleton` `--max-depth`)。
+- **命名四规则**:① `动词` 或 `动词-宾语`,小写连字符;② 读操作前缀固定:`get-*` / `find` / `list-*` / `inspect` / `extract`;③ 位置参数只放目标(@ref / 语义选择器 / `xy:x,y` 坐标——坐标为物理专用寻址,见 §7),其余全 flag;`--app` 窗口锚定接受标题子串或 `hwnd:<n>`(2026-09-27:SPA 整页跳转改标题,HWND 是窗口身份),谓词统一 `--expect`/`--predicate`、超时统一 `--timeout`;④ 全局 flag 极小:`--dry-run` `--timeout` `--verbose` + 体积控制(`--skeleton` `--max-depth`)。
 - **自发现**:`actl commands` 输出全部命令 + 参数 schema 的 JSON(等价于 MCP `tools/list` 的 CLI 形态);人类 help 文本与机器 schema 同源生成,不漂移。agent 冷启动一条命令拿全能力清单,不依赖读文档。
 - **可理解性验收标准**:任一命令的 help + envelope,不看文档即可推断四件事——输入什么 / 副作用是什么 / 返回什么 / 失败码指示的下一步动作。
 
@@ -221,8 +221,15 @@ L2  actl commands     机器 schema:全命令+参数的 JSON(agent 自发现入�
      进 L4 的值必须是完整名称(如完整文件名);命中元素不在快照树内,无 `@eN` ref,
      重放走同一 name/id 查询;`Role`/`@eN` 不参与(无属性查询语义);
 3. 回退结果写入返回(`resolved_by` 字段,全集:`primary` | `fuzzy-name` | `role-ordinal` |
-   `anchor` | `ref-replay` | `item-container`),全部失效才报 `STALE_REF`(@eN)/`NOT_FOUND`(语义选择器);
-4. 重定位在同 snapshot_id 内自动进行(agent 无感),跨 snapshot 必须重取——契约简单严格,优于模糊缓存。
+   `id-ordinal` | `anchor` | `ref-replay` | `item-container`),全部失效才报
+   `STALE_REF`(@eN)/`NOT_FOUND`(语义选择器);
+   `id:<Id>#N`(2026-09-27)与 role 序数同机制——多文档页(iframe/扩展弹层)
+   同名 AutomationId 的确定性寻址,不走 provider 快路径(序数需计数);
+4. 重定位在同 snapshot_id 内自动进行(agent 无感),跨 snapshot 必须重取——契约简单严格,优于模糊缓存;
+   **已知 hazard(2026-09-27 登记)**:ref 校验的是窗口实例(RuntimeId)而非树内容,
+   弹层/模态开合会插入/移除子树——若插入点在 DFS 序上先于既有内容,后续 `@eN`
+   整体平移而校验照样通过(静默错位)。纪律:**覆盖层开/关后先重拍快照再用 ref**;
+   树前缀比对(根治)留待完整会话设计与 §5 既有登记合并。
 
 ## 6. token 控制
 

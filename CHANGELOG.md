@@ -10,6 +10,20 @@
 ## [Unreleased]
 
 ### Added
+- **寻址层打磨批(2026-09-27,docs/16 §5.7)**:① **wait 族 AMBIGUOUS 快速
+  失败**(fix):轮询把确定性多命中当"未解析"吞掉,产生 samples 冻结的误导性
+  TIMEOUT(抖音多文档页实测根因)——现 NOT_FOUND 继续等、AMBIGUOUS 立即失败
+  (候选 evidence 随错带出);fixture 断言 1.3s 快败 vs 5s 超时。②
+  **`id:<Id>#N` 序数寻址**(spec,加法):与 role 序数同机制,多文档页
+  (iframe/扩展弹层)同名 AutomationId 的确定性寻址,不走 provider 快路径;
+  `resolved_by` 新值 `id-ordinal`。③ **`--app hwnd:<n>` 窗口锚**(spec,
+  加法):SPA 整页跳转改标题(bilibili 三次踩)的根治——HWND 是窗口身份,
+  所有 --app 消费方(find_window 单点)自动生效。④ **#3 猜想证伪入档**:
+  非交互元素的物理点击机制存在(bounds-center 不查交互性),但 Chromium
+  不为无语义文本暴露 a11y 元素(bare span find 恒空)——该路径仅当应用
+  显式给 name 时可用,无名元素仍归 xy: 视觉兜底。⑤ ref 漂移 hazard 登记
+  docs/06 §5(弹层开合平移 @eN;纪律:覆盖层开关后重拍快照);xy 点击
+  标准闭环纪律(hover 预探→截图核对→click→verify)入 SKILL。
 - **`xy:x,y` 坐标寻址(spec,视觉兜底闭环的"手")**:click 家族(click/
   right-click/double-click/middle-click/triple-click)与 hover 接受屏幕坐标
   目标——`click xy:1420,856 --app 抖音 --physical`。无元素可校验的物理专用

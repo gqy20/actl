@@ -287,6 +287,19 @@ pub(crate) fn find_window(
     walker: &UITreeWalker,
     pattern: &str,
 ) -> Result<UIElement, CtlError> {
+    // `hwnd:<n>`(十进制/0x 十六进制):按原生句柄锚定窗口——SPA 整页跳转/
+    // 导航会改标题(标题不是窗口身份),HWND 是;所有 --app 消费方自动生效
+    if let Some(raw) = pattern.strip_prefix("hwnd:") {
+        let hwnd = parse_hwnd(raw)?;
+        return auto
+            .element_from_handle(uiautomation::types::Handle::from(hwnd))
+            .map_err(|_| {
+                CtlError::new(
+                    ErrorCode::NotFound,
+                    format!("no window at hwnd {hwnd:#x} (--app anchor)"),
+                )
+            });
+    }
     let mut matches: Vec<UIElement> = root_children(auto, walker)
         .into_iter()
         .filter(|w| name_matches(w, pattern))

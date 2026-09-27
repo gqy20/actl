@@ -174,6 +174,15 @@ Chrome 登录态实测(三轮,迭代脚本不入库):
 记事本 CI 轨 fixture(coord-click.sh)5/5:rect 中心点坐标点击 → 输入落焦
 → 文本 verify;窗外坐标 NOT_ACTIONABLE 拒绝。
 
+### 5.7 寻址层打磨(2026-09-27 第五批)
+
+分析轮列出的六项打磨落地情况:① wait 族 AMBIGUOUS 快速失败(fix,
+fixture 1.3s vs 5s);② `id:#N` 序数;③ `--app hwnd:<n>` 锚;④ 非交互
+元素物理点击**证伪**(机制在,但 Chromium 不暴露无语义文本——bare span
+find 恒空,抖音卡片依赖读屏标签给的 name 才可能走此路,无名元素归 xy:);
+⑤ ref 弹层漂移 hazard 登记;⑥ xy 闭环纪律入 SKILL。未动:settle 噪声
+鲁棒、AMBIGUOUS 候选带文档上下文(登记 M3 候选)。
+
 ## 6. 三个实测发现(沉淀为 pack quirks)
 
 1. **多文档页 AMBIGUOUS**:xiaohongshu.com 有 **2 个 `RootWebArea`**(主文档

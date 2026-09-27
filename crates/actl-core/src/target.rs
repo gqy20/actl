@@ -20,6 +20,10 @@ pub enum Target {
     Role(String),
     /// ControlType + 1 起序数(`role:Button#2` = 第 2 个 Button;fallback 链 L3)
     RoleAt(String, u32),
+    /// AutomationId + 1 起序数(`id:RootWebArea#2` = 第 2 个同名 id)——多文档
+    /// 页的确定性寻址(iframe/扩展弹层会让同一 AutomationId 出现多次;
+    /// 2026-09-27 三连踩后补,与 RoleAt 同机制)
+    IdAt(String, u32),
     /// 屏幕物理坐标(`xy:1420,856`;负值合法——多显示器左侧屏)。
     /// 视觉兜底的"手":坐标来自调用方(screenshot+VLM/人),不经元素定位;
     /// 强制 --app + --physical(窗口边界守卫,06 §7)
@@ -35,6 +39,7 @@ impl Target {
             Target::Id(s) => format!("id:{s}"),
             Target::Role(s) => format!("role:{s}"),
             Target::RoleAt(s, n) => format!("role:{s}#{n}"),
+            Target::IdAt(s, n) => format!("id:{s}#{n}"),
             Target::Coord(x, y) => format!("xy:{x},{y}"),
         }
     }
@@ -70,14 +75,18 @@ pub fn parse_target(raw: &str) -> Result<Target, CtlError> {
             if rest.is_empty() {
                 return Err(bad(raw));
             }
-            // role:Type#N → 序数形式(fallback 链 L3;#0 非法)
-            if prefix == "role:" {
-                if let Some((role, idx)) = rest.rsplit_once('#') {
+            // <Type|Id>#N → 序数形式(fallback 链 L3;#0 非法)
+            if prefix == "role:" || prefix == "id:" {
+                if let Some((key, idx)) = rest.rsplit_once('#') {
                     let n: u32 = idx.parse().map_err(|_| bad(raw))?;
-                    if !role.is_empty() && n >= 1 {
-                        return Ok(Target::RoleAt(role.to_string(), n));
+                    if key.is_empty() || n < 1 {
+                        return Err(bad(raw));
                     }
-                    return Err(bad(raw));
+                    return Ok(if prefix == "role:" {
+                        Target::RoleAt(key.to_string(), n)
+                    } else {
+                        Target::IdAt(key.to_string(), n)
+                    });
                 }
             }
             return Ok(build(rest.to_string()));
@@ -131,6 +140,10 @@ mod tests {
             Target::RoleAt("Button".into(), 2)
         );
         assert_eq!(
+            parse_target("id:RootWebArea#2").unwrap(),
+            Target::IdAt("RootWebArea".into(), 2)
+        );
+        assert_eq!(
             parse_target("xy:1420,856").unwrap(),
             Target::Coord(1420, 856)
         );
@@ -151,8 +164,17 @@ mod tests {
     }
 
     #[test]
-    fn role_ordinal_edges() {
-        for bad in ["role:Button#0", "role:#2", "role:Button#", "role:Button#x"] {
+    fn ordinal_edges() {
+        for bad in [
+            "role:Button#0",
+            "role:#2",
+            "role:Button#",
+            "role:Button#x",
+            "id:Foo#0",
+            "id:#2",
+            "id:Foo#",
+            "id:Foo#x",
+        ] {
             assert!(parse_target(bad).is_err(), "{bad:?} should be rejected");
         }
     }

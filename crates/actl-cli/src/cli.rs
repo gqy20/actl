@@ -30,7 +30,7 @@ pub(crate) enum Command {
     Status,
     /// Capture the interactive element tree of a window as refs (@e1..)
     Snapshot {
-        /// Target window by title substring (@eN refs require it; otherwise focused window)
+        /// Target window by title substring or hwnd:<n> (@eN refs require it; otherwise focused window)
         #[arg(long, conflicts_with = "snap_hwnd")]
         app: Option<String>,
         /// Target window by native handle (decimal or 0x-hex; untitled special windows
@@ -50,7 +50,7 @@ pub(crate) enum Command {
     Click {
         /// Target: @eN (needs --app) | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | xy:<x>,<y> (physical-only; needs --app)
         target: String,
-        /// Target window by title substring (@eN refs require it; otherwise focused window)
+        /// Target window by title substring or hwnd:<n> (@eN refs require it; otherwise focused window)
         #[arg(long)]
         app: Option<String>,
         /// Disambiguate multi-matches by picking the one nearest to this anchor element's name
@@ -80,7 +80,7 @@ pub(crate) enum Command {
         /// Property: name | role | automation_id | offscreen | value | text (default: all)
         #[arg(long)]
         property: Option<String>,
-        /// Target window by title substring (@eN refs require it; otherwise focused window)
+        /// Target window by title substring or hwnd:<n> (@eN refs require it; otherwise focused window)
         #[arg(long)]
         app: Option<String>,
         /// Disambiguate multi-matches by picking the one nearest to this anchor element's name
@@ -142,7 +142,7 @@ pub(crate) enum Command {
     },
     /// Paste (ctrl+v) into the current focus/selection of the target window
     Paste {
-        /// Target window by title substring (required: injection is fail-closed)
+        /// Target window by title substring or hwnd:<n> (required: injection is fail-closed)
         #[arg(long)]
         app: String,
     },
@@ -168,7 +168,7 @@ pub(crate) enum Command {
         target: String,
         /// Value to set
         value: String,
-        /// Target window by title substring (@eN refs require it; otherwise focused window)
+        /// Target window by title substring or hwnd:<n> (@eN refs require it; otherwise focused window)
         #[arg(long)]
         app: Option<String>,
         /// Disambiguate multi-matches by picking the one nearest to this anchor element's name
@@ -182,7 +182,7 @@ pub(crate) enum Command {
     RightClick {
         /// Target: @eN | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N
         target: String,
-        /// Target window by title substring
+        /// Target window by title substring, or hwnd:<n> (0x ok; survives SPA title changes)
         #[arg(long)]
         app: Option<String>,
         /// Disambiguate multi-matches by picking the one nearest to this anchor
@@ -193,7 +193,7 @@ pub(crate) enum Command {
     DoubleClick {
         /// Target: @eN | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N
         target: String,
-        /// Target window by title substring
+        /// Target window by title substring, or hwnd:<n> (0x ok; survives SPA title changes)
         #[arg(long)]
         app: Option<String>,
         /// Disambiguate multi-matches by picking the one nearest to this anchor
@@ -204,7 +204,7 @@ pub(crate) enum Command {
     MiddleClick {
         /// Target: @eN | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N
         target: String,
-        /// Target window by title substring
+        /// Target window by title substring, or hwnd:<n> (0x ok; survives SPA title changes)
         #[arg(long)]
         app: Option<String>,
         /// Disambiguate multi-matches by picking the one nearest to this anchor
@@ -215,7 +215,7 @@ pub(crate) enum Command {
     TripleClick {
         /// Target: @eN | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N
         target: String,
-        /// Target window by title substring
+        /// Target window by title substring, or hwnd:<n> (0x ok; survives SPA title changes)
         #[arg(long)]
         app: Option<String>,
         /// Disambiguate multi-matches by picking the one nearest to this anchor
@@ -226,7 +226,7 @@ pub(crate) enum Command {
     Hover {
         /// Target: @eN | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N
         target: String,
-        /// Target window by title substring
+        /// Target window by title substring, or hwnd:<n> (0x ok; survives SPA title changes)
         #[arg(long)]
         app: Option<String>,
         /// Disambiguate multi-matches by picking the one nearest to this anchor
@@ -239,7 +239,7 @@ pub(crate) enum Command {
         target: String,
         /// Drag destination target
         to: String,
-        /// Target window by title substring
+        /// Target window by title substring, or hwnd:<n> (0x ok; survives SPA title changes)
         #[arg(long)]
         app: Option<String>,
         /// Anchor disambiguation for the source
@@ -259,7 +259,7 @@ pub(crate) enum Command {
         /// Scroll up N notches
         #[arg(long)]
         up: Option<u32>,
-        /// Target window by title substring
+        /// Target window by title substring, or hwnd:<n> (0x ok; survives SPA title changes)
         #[arg(long)]
         app: Option<String>,
         /// Disambiguate multi-matches by picking the one nearest to this anchor
@@ -270,7 +270,7 @@ pub(crate) enum Command {
     KeyDown {
         /// Key expression (single key or combo, e.g. shift, ctrl+a)
         keys: String,
-        /// Target window by title substring (required: injection is fail-closed)
+        /// Target window by title substring or hwnd:<n> (required: injection is fail-closed)
         #[arg(long)]
         app: Option<String>,
     },
@@ -278,7 +278,7 @@ pub(crate) enum Command {
     KeyUp {
         /// Key expression (same as the paired key-down)
         keys: String,
-        /// Target window by title substring (required: injection is fail-closed)
+        /// Target window by title substring or hwnd:<n> (required: injection is fail-closed)
         #[arg(long)]
         app: Option<String>,
     },
@@ -309,7 +309,7 @@ pub(crate) enum Command {
         /// Assert a toggle is On
         #[arg(long)]
         checked: Option<String>,
-        /// Target window by title substring
+        /// Target window by title substring, or hwnd:<n> (0x ok; survives SPA title changes)
         #[arg(long)]
         app: Option<String>,
         /// Disambiguate multi-matches by picking the one nearest to this anchor
@@ -320,7 +320,7 @@ pub(crate) enum Command {
     Extract {
         /// Container target (role:Table / DataGrid / list that owns rows)
         target: String,
-        /// Target window by title substring
+        /// Target window by title substring, or hwnd:<n> (0x ok; survives SPA title changes)
         #[arg(long)]
         app: Option<String>,
     },
@@ -363,7 +363,7 @@ pub(crate) enum Command {
         /// Match AutomationId exactly
         #[arg(long)]
         id: Option<String>,
-        /// Target window by title substring (default: focused window)
+        /// Target window by title substring or hwnd:<n> (default: focused window)
         #[arg(long)]
         app: Option<String>,
         /// Max matches to report (default 20)
@@ -383,7 +383,7 @@ pub(crate) enum Command {
         target: String,
         /// Option name to select (exact first, substring fallback)
         name: String,
-        /// Target window by title substring
+        /// Target window by title substring, or hwnd:<n> (0x ok; survives SPA title changes)
         #[arg(long)]
         app: Option<String>,
         /// Disambiguate multi-matches by picking the one nearest to this anchor
@@ -394,7 +394,7 @@ pub(crate) enum Command {
     Toggle {
         /// Target: @eN | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N
         target: String,
-        /// Target window by title substring
+        /// Target window by title substring, or hwnd:<n> (0x ok; survives SPA title changes)
         #[arg(long)]
         app: Option<String>,
         /// Disambiguate multi-matches by picking the one nearest to this anchor
@@ -424,7 +424,7 @@ pub(crate) enum Command {
         /// Substring semantics for the value/name predicate (exact by default)
         #[arg(long, requires = "property")]
         contains: bool,
-        /// Target window by title substring (for --element)
+        /// Target window by title substring or hwnd:<n> (for --element)
         #[arg(long)]
         app: Option<String>,
         /// Timeout in milliseconds (default 5000)
