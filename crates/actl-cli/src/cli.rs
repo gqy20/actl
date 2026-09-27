@@ -24,8 +24,12 @@ pub(crate) enum Command {
     /// Capture the interactive element tree of a window as refs (@e1..)
     Snapshot {
         /// Target window by title substring (@eN refs require it; otherwise focused window)
-        #[arg(long)]
+        #[arg(long, conflicts_with = "snap_hwnd")]
         app: Option<String>,
+        /// Target window by native handle (decimal or 0x-hex; untitled special windows
+        /// like the Win11 taskbar XAML island are only reachable this way)
+        #[arg(long, id = "snap_hwnd", value_name = "HWND")]
+        hwnd: Option<String>,
         /// Keep only interactive elements and their ancestor chain (token saver)
         #[arg(long)]
         skeleton: bool,

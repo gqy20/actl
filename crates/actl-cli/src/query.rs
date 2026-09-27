@@ -48,8 +48,15 @@ pub(crate) fn status() -> Result<Value, CtlError> {
     }))
 }
 
-pub(crate) fn snapshot(app: Option<&str>, skeleton: bool) -> Result<CommandOutput, CtlError> {
-    let cap = actl_uia::capture(app)?;
+pub(crate) fn snapshot_cmd(
+    app: Option<&str>,
+    hwnd: Option<&str>,
+    skeleton: bool,
+) -> Result<CommandOutput, CtlError> {
+    let cap = match (app, hwnd) {
+        (_, Some(h)) => actl_uia::capture_hwnd(actl_uia::parse_hwnd(h)?)?,
+        (a, None) => actl_uia::capture(a)?,
+    };
     let mut builder = SnapshotBuilder::new(actl_uia::MAX_ELEMENTS + 1);
     for node in cap.nodes {
         if !builder.push(node) {

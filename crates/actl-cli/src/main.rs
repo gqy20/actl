@@ -97,7 +97,11 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             out.as_deref(),
         ),
         Command::Paste { app } => paste_cmd(app),
-        Command::Snapshot { app, skeleton } => snapshot(app.as_deref(), *skeleton),
+        Command::Snapshot {
+            app,
+            hwnd,
+            skeleton,
+        } => snapshot_cmd(app.as_deref(), hwnd.as_deref(), *skeleton),
         Command::Click {
             target,
             app,

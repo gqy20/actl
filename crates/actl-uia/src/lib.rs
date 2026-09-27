@@ -40,9 +40,10 @@ pub use read::{
 };
 pub use window::{
     CaptureResult, MAX_DEPTH, MAX_ELEMENTS, WindowEntry, WindowInfo, WindowRef, capture,
-    check_snapshot_freshness, check_snapshot_freshness_by_pattern, close_window, close_window_by,
-    focus_window, focus_window_by, foreground_window, list_windows, parse_hwnd, persist_snapshot,
-    resize_window, resolve_app_path, wait_new_window, wait_window, window_identities,
+    capture_hwnd, check_snapshot_freshness, check_snapshot_freshness_by_pattern, close_window,
+    close_window_by, focus_window, focus_window_by, foreground_window, list_windows, parse_hwnd,
+    persist_snapshot, resize_window, resolve_app_path, wait_new_window, wait_window,
+    window_identities,
 };
 
 use actl_core::{CtlError, ErrorCode};

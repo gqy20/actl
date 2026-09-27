@@ -10,6 +10,15 @@
 ## [Unreleased]
 
 ### Added
+- **`snapshot --hwnd`(spec,加法)+ 特殊窗可达性修复**:Win11 任务栏 XAML 岛/
+  TrayNotifyWnd 等无标题特殊窗此前双遮蔽(list-windows 滤空标题 + UIA root 枚举
+  不含)。修复:`resolve_window` 的 Hwnd 分支改走 **ElementFromHandle 直取**
+  (不再依赖 root 枚举),snapshot 增 `--hwnd`;实测 TrayNotifyWnd/XAML 岛可
+  快照。**托盘交互现状结论(Win11 24H2+)**:任务栏 UIA 全面退化——根级仅
+  Shell_TrayWnd、深扫 3 个空 Pane、XAML 岛树空,.NET 对照一致;托盘图标
+  **UIA 路线不可行**,可行路线 = screenshot --rect 托盘区 + 视觉定位 + 坐标点击
+  原语(待立项)或 Shell API 枚举(collector 式,非 UIA);溢出窗
+  (TopLevelWindowForOverflowXamlIsland)待展开后复测。登记 M3 候选。
 - **`screenshot` 命令(spec,新原语)**:像素捕获兜底通道——**显式请求**(与 --physical
   同级授权语义;默认观察仍是 UIA,定位哲学不变)。四域:`--app`/`--hwnd`(PrintWindow
   本体渲染,抗遮挡;bindings 缺失故手写 extern 声明)、`--rect`(BitBlt+CAPTUREBLT,

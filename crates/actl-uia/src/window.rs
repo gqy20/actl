@@ -713,12 +713,14 @@ pub fn resolve_window(r: WindowRef<'_>) -> Result<UIElement, CtlError> {
                 }
             }
         }
-        WindowRef::Hwnd(raw) => top_windows(&auto, &walker)
-            .into_iter()
-            .find(|w| native_hwnd(w).map(|h| h.0 as isize == raw).unwrap_or(false))
-            .ok_or_else(|| {
-                CtlError::new(ErrorCode::NotFound, format!("no window at hwnd {raw:#x}"))
-            }),
+        WindowRef::Hwnd(raw) => {
+            // 特殊窗(任务栏 XAML 岛/TrayNotifyWnd 等)不在 UIA root 枚举里,
+            // 也不必非有标题——ElementFromHandle 直取(From<isize> 现成转换)
+            auto.element_from_handle(uiautomation::types::Handle::from(raw))
+                .map_err(|_| {
+                    CtlError::new(ErrorCode::NotFound, format!("no window at hwnd {raw:#x}"))
+                })
+        }
     }
 }
 
@@ -839,4 +841,32 @@ pub fn resolve_app_path(program: &str) -> Option<String> {
 /// 元素的原生 HWND 公开入口(capture 窗口域用)
 pub fn hwnd_of(elem: &UIElement) -> Option<windows::Win32::Foundation::HWND> {
     native_hwnd(elem)
+}
+
+/// capture 的按句柄入口(特殊窗可见性:Win11 任务栏 XAML 岛/溢出托盘等
+/// 无标题窗口被 list-windows 的空标题过滤遮蔽,snapshot --hwnd 直指)。
+pub fn capture_hwnd(hwnd_raw: isize) -> Result<CaptureResult, CtlError> {
+    let auto = UIAutomation::new().map_err(internal)?;
+    let walker = auto.create_tree_walker().map_err(internal)?;
+    let target = resolve_window(WindowRef::Hwnd(hwnd_raw))?;
+    let window = WindowInfo {
+        title: target.get_name().unwrap_or_default(),
+        class: target.get_classname().unwrap_or_default(),
+        pid: target.get_process_id().unwrap_or_default(),
+    };
+    let wake_ms = ensure_window_responsive(&target);
+    let window_runtime_id = target.get_runtime_id().unwrap_or_default();
+    let mut nodes = Vec::new();
+    {
+        let _t = actl_core::trace::scope("capture.walk");
+        walk(&walker, &target, 0, None, &mut nodes);
+    }
+    let truncated = nodes.len() >= MAX_ELEMENTS;
+    Ok(CaptureResult {
+        window,
+        window_runtime_id,
+        nodes,
+        truncated,
+        wake_ms,
+    })
 }
