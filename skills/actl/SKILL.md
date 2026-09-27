@@ -37,10 +37,10 @@ actl verify --value <target> "<期望>" --app <app> # 确认:立即断言
 
 ## 命令速查
 
-感知:snapshot(--skeleton) find(--name/--role/--id/--near) get list-windows status commands
+感知:snapshot(--skeleton/--view content) find(--name/--role/--id/--near) get list-windows status commands
 执行:click(--physical/--expect/--near) right-click double-click hover drag scroll type(--paste)
      press(--expect) key-down key-up set-value
-窗口:launch focus-window close-window resize-window wait(--element/--window/--gone) batch
+窗口:launch focus-window close-window resize-window wait(--element/--window/--gone/--stable) batch
 验证:verify(--exists/--value/--contains/--checked) extract(--table)
 系统:get-clipboard set-clipboard
 
@@ -69,6 +69,7 @@ actl verify --value <target> "<期望>" --app <app> # 确认:立即断言
 
 操作 Excel/Word/微信前先读对应档案:`apps/excel.yml`、`apps/word.yml`、`apps/wechat.yml`(含路线
 steps、quirks 与解法、验证方法;路线的 `status` 是信任分级,`unverified` 不得直接执行)。
+浏览器(Edge/Chrome,知识外溢到 WebView2/Electron 系)读 `apps/browser.yml`。
 为其他应用写档案:格式契约、模板与贡献红线见 [PACKS.md](PACKS.md)。要点速记:
 
 - **Excel 单元格**:名称框 `id:1001` 导航 + 剪贴板直灌(`set-clipboard` →
@@ -95,6 +96,26 @@ actl screenshot --rect <x,y,w,h>               # 区域(配合 right-click 返�
 输出为 PNG 文件路径(envelope data.path),把该文件交给多模态模型即可读图。
 截图是**显式请求的兜底**——默认路径永远是 UIA(确定性和 token 效率优先)。
 Canvas 类(mspaint)、自绘菜单(微信右键)、图片消息(微信气泡)是三个典型场景。
+
+## 工具分工:actl × playwright(浏览器场景路由)
+
+浏览器任务先路由,再动手:
+
+- **全新上下文的 web 任务**(抓取、批量表单、headless、测试):用 playwright/
+  browser-use 类工具——CDP 通道,DOM 级选择器,那是它们的主场。
+- **actl 的浏览器领地**:**用户真实登录态的会话**(企业 SSO 门户、已登录的
+  网页应用——Chrome 136 起默认 profile 禁 CDP,Playwright 接管不了,UIA 是唯一
+  非视觉通道)+ **浏览器内外联动**(下载→文件对话框→桌面应用、地址栏/标签/
+  扩展弹窗等 chrome 层操作)。
+
+浏览器内操作要点(详见 `apps/browser.yml`):树形观察用
+`snapshot --view content --skeleton`(chrome 整枝丢弃);读正文用
+`get role:Document --property text`(Document 的 Value 是 URL);滚动/导航后用
+`wait --element role:Document --stable` 判定加载完成(不要 sleep);地址栏输入
+走 `press ctrl+l` → `set-clipboard` + `paste`。
+
+规则:**两工具可组合**——playwright 做研究/采集,actl 把结果"落地"到用户真实
+会话或桌面应用(与下方 collector 分工同构)。
 
 ## 工具分工:actl × wechat-ui-collector
 

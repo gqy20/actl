@@ -1,0 +1,103 @@
+# actl 应用档案 pack(pack_format: 1)—— 浏览器(Chromium 系,以 Edge 为准)
+# 知识来源:docs/16-browser-scenarios.md(真机实测)+ edge-deep-tree fixture
+# (2026-09-26/27)+ docs/06 §6 token 投影实测。Chrome 同源可直接套用
+# (window 换 "Chrome");Firefox UIA 暴露较弱,未验证。
+pack_format: 1
+name: browser
+display: 浏览器(Edge/Chrome)
+launch: msedge           # App Paths 注册表解析;Chrome 用 chrome
+window: "Edge"           # 标题子串(页面标题 - Microsoft Edge);Chrome 换 "Chrome"
+app_version: "Edge 1xx(Chromium 系)"
+verified_date: 2026-09-27
+verified_env: Win11 zh-cn
+quirks:
+  - id: content_view_projection
+    note: 树形观察一律 snapshot --view content --skeleton——Document(网页正文)子树
+          保留、工具栏 chrome 整枝丢弃;纯 --skeleton 对浏览器只削 ~36%(工具栏按钮
+          是交互主体),--view content 是主削减通道。读正文更省的通道是
+          get role:Document --property text(线性文本,无 chrome 噪声)
+  - id: document_value_is_url
+    note: Chromium Document 的 Value=URL(会掩盖正文)——正文只能走
+          get --property text(TextPattern 专用通道);URL 读回用地址栏 Edit 的 value
+  - id: settle_stable
+    note: 滚动/导航后的加载判定用 wait --element role:Document --stable
+          (样本连续两次不变即就绪);不要 sleep 固定时长
+  - id: keyboard_scroll
+    note: 页面滚动优先键盘:press pgdn/space/end(需先确保焦点在页面——导航后默认
+          即是);UIA Scroll pattern 命中与否视页面容器实现,不命中走键盘
+  - id: address_bar_navigation
+    note: 导航 = press ctrl+l(聚焦地址栏并全选)→ set-clipboard + paste(粘贴到当前
+          选中,不经元素定位——页面含输入框时 role:Edit 会 AMBIGUOUS;中文 IME 下
+          剪贴板也是唯一可靠文本通道)→ press enter → wait --stable
+  - id: on_demand_a11y
+    note: Chromium a11y 树按需构建——首次 snapshot 可能只含部分内容或偏慢,
+          重拍一次即完整;冷启动后第一拍不要急着下"内容为空"的结论
+  - id: lazy_virtualized
+    note: 无限滚动 feed 的 DOM 会回收(旧内容卸载、新内容滚动驱动物化)——
+          累积采集须 agent 侧去重(按标题/链接),单次快照只见当前视口段
+  - id: tabs
+    note: 标签操作走键盘:ctrl+t 新标签 / ctrl+w 关标签 / ctrl+tab 切换;
+          标签条在 UIA 树可见(TabItem),切标签后须重拍快照(ref 已漂移)
+  - id: real_session_lane
+    note: 工具分工铁律——全新上下文的 web 任务(抓取/批量表单/headless)让给
+          playwright/browser-use;actl 的领地是"用户真实登录态的浏览器会话"
+          (Chrome 136 起默认 profile 禁 CDP,Playwright 接管不了,UIA 是唯一
+          非视觉通道)与浏览器内外联动(下载→文件对话框→桌面应用)
+  - id: risk_control_pacing
+    note: 平台风控是现实——注入虽是人类级信号(SendInput/剪贴板,无 CDP 指纹),
+          但机器速率的连续"滚动-读取"循环可能触发行为检测;采集类任务控制
+          节奏,重要账号操作前确认
+routes:
+  # status 注:本批机制(view content/--stable)落地后先行写入,真机实测
+  #(docs/16)通过后翻 verified——未翻档前 agent 只读不执行。
+  - id: read_page
+    description: 读当前页(正文走 text 通道;树形操作走内容域投影)
+    status: unverified
+    steps:
+      - ["get", "role:Document", "--property", "text", "--app", "{window}"]
+  - id: read_page_tree
+    description: 树形观察当前页(chrome 整枝丢弃,点链接/找控件用)
+    status: unverified
+    steps:
+      - ["snapshot", "--app", "{window}", "--view", "content", "--skeleton"]
+  - id: navigate
+    description: 地址栏导航(URL 变量 {url};IME 安全 + settle 判定)
+    status: unverified
+    steps:
+      - ["press", "ctrl+l", "--app", "{window}"]
+      - ["set-clipboard", "{url}"]
+      - ["paste", "--app", "{window}"]
+      - ["press", "enter", "--app", "{window}"]
+      - ["wait", "--element", "role:Document", "--stable", "--app", "{window}"]
+  - id: scroll_more
+    description: 下滚一屏并等加载完成(无限滚动采集的循环原语)
+    status: unverified
+    steps:
+      - ["press", "pgdn", "--app", "{window}"]
+      - ["wait", "--element", "role:Document", "--stable", "--app", "{window}", "--timeout", "8000"]
+      - ["get", "role:Document", "--property", "text", "--app", "{window}"]
+  - id: open_item
+    description: 点开链接/卡片(标题子串变量 {text};SPA 多为原地展开,esc 返回)
+    status: unverified
+    steps:
+      - ["click", "name:{text}", "--app", "{window}"]
+      - ["wait", "--element", "role:Document", "--stable", "--app", "{window}", "--timeout", "8000"]
+  - id: site_search
+    description: 站内搜索框输入(关键词变量 {query};搜索框定位形态各站不一)
+    status: unverified
+    steps:
+      - ["find", "--role", "search", "--app", "{window}"]
+      - ["click", "role:search", "--app", "{window}"]
+      - ["set-clipboard", "{query}"]
+      - ["paste", "--app", "{window}"]
+      - ["press", "enter", "--app", "{window}"]
+      - ["wait", "--element", "role:Document", "--stable", "--app", "{window}"]
+  - id: new_tab_and_go
+    description: 新标签页打开 URL(不扰动现有标签)
+    status: unverified
+    steps:
+      - ["press", "ctrl+t", "--app", "{window}"]
+      - ["set-clipboard", "{url}"]
+      - ["paste", "--app", "{window}"]
+      - ["press", "enter", "--app", "{window}"]
+      - ["wait", "--element", "role:Document", "--stable", "--app", "{window}"]
