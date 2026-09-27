@@ -77,8 +77,10 @@ pub fn parse_key_expr(expr: &str) -> Result<KeySpec, CtlError> {
         }
         return Err(bad(expr)); // 未知命名键
     }
-    if keys.is_empty() {
-        return Err(bad(expr)); // 纯修饰键不是可按键
+    // 裸修饰键(win/shift)= 按下并释放该键本身:Win 弹开始菜单/呼出隐藏任务栏的
+    // 入口(用户实测工作流);key-down shift 先例同语义。修饰键本身即按键。
+    if keys.is_empty() && mods.is_empty() {
+        return Err(bad(expr));
     }
     // 归一修饰键顺序
     let modifiers = MODIFIERS
@@ -142,9 +144,7 @@ mod tests {
     #[test]
     fn rejects_garbage() {
         // 注:"f" 是合法单字符(Char('f')),"f01" 归一为 f1,均不该在此列
-        for bad in [
-            "", "ctrl", "foo+bar", "ctrl+", "+a", "notakey", "f0", "f13", "f99",
-        ] {
+        for bad in ["", "foo+bar", "ctrl+", "+a", "notakey", "f0", "f13", "f99"] {
             assert_eq!(
                 parse_key_expr(bad).unwrap_err().code,
                 ErrorCode::Protocol,
@@ -163,5 +163,20 @@ mod tests {
             assert_eq!(spec.keys, vec![Key::Named(name.into())], "{name}");
             assert!(spec.modifiers.is_empty());
         }
+    }
+}
+
+#[cfg(test)]
+mod bare_modifier_tests {
+    use super::*;
+
+    #[test]
+    fn bare_modifier_is_a_keyable_press() {
+        // press win = 弹开始菜单(呼出自动隐藏任务栏的工作流);key-down shift 同语义
+        let spec = parse_key_expr("win").unwrap();
+        assert_eq!(spec.modifiers, vec!["win"]);
+        assert!(spec.keys.is_empty());
+        assert!(parse_key_expr("shift").is_ok());
+        assert!(parse_key_expr("").is_err());
     }
 }

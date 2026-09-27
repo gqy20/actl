@@ -9,7 +9,7 @@ shell 级注入的如实语义)。
 | **快速设置**(Win+A) | ✅ 全可达 | ControlCenterRegion → RootGridView;WLAN/蓝牙/勿扰/媒体控件等按钮**实名可点** |
 | **通知中心**(Win+N) | ✅ 全可达 | 通知列表/请勿打扰/全部清除/通知来源(含"来自 ZCode 的通知")实名 |
 | **桌面图标** | ✅ 全可达 | Program Manager → ListItem(回收站/study/…) |
-| 开始菜单 | ⏸ 待复测 | 单键 win 未出差集窗(宿主复用或未弹出) |
+| **开始菜单**(单键 win) | ✅ 全可达 | 窗口预创建(title"开始"/CoreWindow),差集法曾误判;搜索框 Edit+AppsList+钉住应用实名(Word/Edge…) |
 | 任务栏/托盘 | ❌ UIA 退化 | 前轮终审(全树 3 空 Pane;路线=截图+坐标点击/Shell API,M3) |
 
 ## 更正入档

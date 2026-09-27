@@ -10,6 +10,14 @@
 ## [Unreleased]
 
 ### Added
+- **裸修饰键 + 开始菜单可达(用户场景闭环)**:① `press win`/`press shift` 等
+  裸修饰键此前被解析层拒("纯修饰键不是可按键")——放宽为修饰键本身即按键
+  (与 key-down shift 同语义;单测+垃圾用例同步);② **开始菜单全可达**(更正
+  普查的"待复测":窗口预创建故差集法失明;实测 snapshot --app 开始 = 搜索框
+  Edit + AppsList + 钉住应用实名 Word/Edge/任务计划程序等);③ 用户工作流闭环:
+  **自动隐藏任务栏 + Win 呼出**——`press win --app <前台>` 弹开始菜单并同时
+  呼出任务栏,之后 `snapshot --app 开始` 全交互,esc 即收;系统 shell 交互面
+  就此齐了(flyout/开始/桌面可达,仅任务栏按钮层退化)。
 - **系统 UI 区域普查(docs/15)**:快速设置(Win+A)**全可达**(ControlCenterRegion,
   WLAN/蓝牙/勿扰按钮实名可点)、通知中心(Win+N)**全可达**(通知列表/请勿打扰/
   全部清除实名)、桌面图标全可达(ListItem)——系统控制原语路线(勿扰开关/WiFi
