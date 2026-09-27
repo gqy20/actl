@@ -113,7 +113,7 @@ unsafe fn raster(view: &View, hovered: bool, dpi: u32) -> Result<Vec<u8>> {
         _ => 0xB4BAC0,
     };
     brush.SetColor(&color(status_color));
-    target.FillRoundedRectangle(&rounded(13., 14., 6., 6., 3.), &brush);
+    target.FillRoundedRectangle(&rounded(10., 11., 12., 12., 6.), &brush);
     let pending = matches!(view.mode, Mode::StopRequested | Mode::Stopped);
     let label = if hovered && view.mode != Mode::Preparing {
         match view.mode {
@@ -253,7 +253,52 @@ pub unsafe fn draw(hwnd: HWND, view: &View, stop_hovered: bool) -> bool {
     result.is_ok()
 }
 
+#[derive(PartialEq)]
+struct PopupKey {
+    lines: Vec<String>,
+    menu: bool,
+    selected: Option<usize>,
+    dpi: u32,
+}
+thread_local! { static POPUP_CACHE: std::cell::RefCell<std::collections::VecDeque<(PopupKey, Vec<u8>)>> = const { std::cell::RefCell::new(std::collections::VecDeque::new()) }; }
 unsafe fn raster_popup(
+    lines: &[String],
+    menu: bool,
+    selected: Option<usize>,
+    dpi: u32,
+) -> Result<Vec<u8>> {
+    let key = PopupKey {
+        lines: lines.to_vec(),
+        menu,
+        selected,
+        dpi,
+    };
+    if let Some(data) = POPUP_CACHE.with(|cache| {
+        cache
+            .borrow()
+            .iter()
+            .find(|(k, _)| *k == key)
+            .map(|(_, data)| data.clone())
+    }) {
+        return Ok(data);
+    }
+    let data = render_popup(lines, menu, selected, dpi)?;
+    POPUP_CACHE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        // Bound memory as well as entries across DPI and changing text.
+        while !cache.is_empty()
+            && (cache.len() >= 12
+                || cache.iter().map(|(_, d)| d.len()).sum::<usize>() + data.len() > 8 * 1024 * 1024)
+        {
+            cache.pop_front();
+        }
+        if data.len() <= 8 * 1024 * 1024 {
+            cache.push_back((key, data.clone()));
+        }
+    });
+    Ok(data)
+}
+unsafe fn render_popup(
     lines: &[String],
     menu: bool,
     selected: Option<usize>,

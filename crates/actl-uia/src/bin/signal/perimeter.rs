@@ -64,6 +64,8 @@ struct Strip {
     width: i32,
     height: i32,
     pixels: Vec<u8>,
+    phase: Vec<u8>,
+    wave_pixels: Vec<u8>,
 }
 struct Frame {
     screens: Vec<Screen>,
@@ -71,7 +73,9 @@ struct Frame {
     strips: Vec<Strip>,
     fading: Option<(u64, u8)>,
     alpha: u8,
+    wave_frame: Option<u64>,
 }
+static TARGETS: Mutex<Option<(String, Vec<[i32; 4]>)>> = Mutex::new(None);
 static FRAME: Mutex<Option<Frame>> = Mutex::new(None);
 
 fn intersects(a: [i32; 4], b: [i32; 4]) -> bool {
@@ -115,6 +119,15 @@ unsafe fn screens(owner: HWND, states: &[SessionState], now: u64) -> Vec<Screen>
             }
         }
     }
+    let identity = super::model::selected(states, now).map(|s| {
+        s.workflow
+            .as_ref()
+            .map(|f| format!("flow:{}", f.run_id))
+            .unwrap_or_else(|| format!("call:{}", s.call_id))
+    });
+    if let Ok(mut remembered) = TARGETS.lock() {
+        targets = remember_targets(&mut remembered, identity, targets);
+    }
     // No target geometry (read-only waits / checkpoints): use the status bar's monitor.
     if targets.is_empty() {
         let mut r = RECT::default();
@@ -122,8 +135,35 @@ unsafe fn screens(owner: HWND, states: &[SessionState], now: u64) -> Vec<Screen>
             targets.push([r.left, r.top, r.right, r.bottom]);
         }
     }
+    if !all
+        .iter()
+        .any(|s| targets.iter().any(|t| intersects(s.bounds, *t)))
+    {
+        let mut r = RECT::default();
+        if GetWindowRect(owner, &mut r).is_ok() {
+            targets = vec![[r.left, r.top, r.right, r.bottom]];
+        }
+    }
     all.retain(|s| targets.iter().any(|t| intersects(s.bounds, *t)));
     all
+}
+fn remember_targets(
+    memory: &mut Option<(String, Vec<[i32; 4]>)>,
+    identity: Option<String>,
+    targets: Vec<[i32; 4]>,
+) -> Vec<[i32; 4]> {
+    let Some(id) = identity else {
+        *memory = None;
+        return targets;
+    };
+    if targets.is_empty()
+        && let Some((previous, targets)) = memory.as_ref()
+        && *previous == id
+    {
+        return targets.clone();
+    }
+    *memory = Some((id, targets.clone()));
+    targets
 }
 fn strips(width: i32, height: i32, band: i32) -> [[i32; 4]; 4] {
     [
@@ -147,10 +187,10 @@ fn raster(width: i32, height: i32, part: [i32; 4], dpi: u32, tone: Tone) -> Vec<
         for x in 0..part[2] {
             let px = (part[0] + x) as f32 + 0.5;
             let py = (part[1] + y) as f32 + 0.5;
-            let qx = (px - width as f32 / 2.).abs() - (width as f32 / 2. - radius - 1.);
-            let qy = (py - height as f32 / 2.).abs() - (height as f32 / 2. - radius - 1.);
+            let qx = (px - width as f32 / 2.).abs() - (width as f32 / 2. - radius - 4. * scale);
+            let qy = (py - height as f32 / 2.).abs() - (height as f32 / 2. - radius - 4. * scale);
             let distance = qx.max(0.).hypot(qy.max(0.)) + qx.max(qy).min(0.) - radius;
-            let line = (1. - distance.abs() / (1.25 * scale)).clamp(0., 1.);
+            let line = (1. - distance.abs() / (5. * scale)).clamp(0., 1.);
             let glow = if tone == Tone::Paused || distance > 0. {
                 0.
             } else {
@@ -198,6 +238,7 @@ unsafe fn create(screens: Vec<Screen>, tone: Tone) -> windows::core::Result<Fram
         strips: vec![],
         fading: None,
         alpha: 0,
+        wave_frame: None,
     };
     let result = (|| -> windows::core::Result<()> {
         for screen in &frame.screens {
@@ -227,11 +268,24 @@ unsafe fn create(screens: Vec<Screen>, tone: Tone) -> windows::core::Result<Fram
                     None,
                 )?;
                 let _ = SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE);
+                let pixels = raster(width, height, part, screen.dpi, tone);
+                let phase = if tone == Tone::Running {
+                    wave_phase(width, height, part)
+                } else {
+                    vec![]
+                };
+                let wave_pixels = if tone == Tone::Running {
+                    pixels.clone()
+                } else {
+                    vec![]
+                };
                 frame.strips.push(Strip {
                     hwnd: hwnd.0 as usize,
                     width: part[2],
                     height: part[3],
-                    pixels: raster(width, height, part, screen.dpi, tone),
+                    pixels,
+                    phase,
+                    wave_pixels,
                 });
             }
         }
@@ -242,6 +296,39 @@ unsafe fn create(screens: Vec<Screen>, tone: Tone) -> windows::core::Result<Fram
         return Err(error);
     }
     Ok(frame)
+}
+// Cache spatial phases once. Animation uses a 256-entry table, no per-frame
+// trigonometry per pixel, geometry rebuild, allocation, or additional windows.
+fn wave_phase(width: i32, height: i32, part: [i32; 4]) -> Vec<u8> {
+    (0..part[3])
+        .flat_map(|y| {
+            (0..part[2]).map(move |x| {
+                let nx = ((part[0] + x) as f32 + 0.5) / width as f32 * 2. - 1.;
+                let ny = ((part[1] + y) as f32 + 0.5) / height as f32 * 2. - 1.;
+                ((ny.atan2(nx) / std::f32::consts::TAU + 0.5) * 256.) as u8
+            })
+        })
+        .collect()
+}
+fn wave_table(frame: u64) -> [u8; 256] {
+    let time = (frame % 60) as f32 / 60.;
+    std::array::from_fn(|i| {
+        ((0.85 + 0.15 * ((i as f32 / 256. - time) * std::f32::consts::TAU).cos()) * 255.) as u8
+    })
+}
+fn apply_wave(base: &[u8], phase: &[u8], output: &mut [u8], table: &[u8; 256]) {
+    for ((source, target), phase) in base
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(output.as_chunks_mut::<4>().0.iter_mut())
+        .zip(phase)
+    {
+        let gain = u16::from(table[usize::from(*phase)]);
+        for (src, dst) in source.iter().zip(target) {
+            *dst = (u16::from(*src) * gain / 255) as u8;
+        }
+    }
 }
 fn opacity(tone: Tone, now: u64, fade: Option<(u64, u8)>, reduced: bool) -> u8 {
     if let Some((start, initial)) = fade {
@@ -307,21 +394,76 @@ pub unsafe fn update(owner: HWND, view: &View, states: &[SessionState], now: u64
         }
         return;
     }
-    if alpha != frame.alpha {
-        for strip in &frame.strips {
+    let wave_frame = (frame.tone == Tone::Running && animation.as_bool()).then(|| {
+        if frame.fading.is_some() {
+            frame.wave_frame.unwrap_or(now / 100)
+        } else {
+            now / 100
+        }
+    });
+    if alpha != frame.alpha || wave_frame != frame.wave_frame {
+        let table = wave_frame
+            .filter(|_| wave_frame != frame.wave_frame)
+            .map(wave_table);
+        for strip in &mut frame.strips {
+            if let Some(table) = &table {
+                apply_wave(&strip.pixels, &strip.phase, &mut strip.wave_pixels, table);
+            }
+            let pixels = if wave_frame.is_some() {
+                &strip.wave_pixels
+            } else {
+                &strip.pixels
+            };
             let hwnd = HWND(strip.hwnd as *mut _);
-            if paint::present_alpha(hwnd, &strip.pixels, 96, strip.width, strip.height, alpha)
-                .is_ok()
-            {
+            if paint::present_alpha(hwnd, pixels, 96, strip.width, strip.height, alpha).is_ok() {
                 let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
             }
         }
         frame.alpha = alpha;
+        frame.wave_frame = wave_frame;
     }
 }
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn wave_moves_periodically_and_preserves_premultiplied_pixels() {
+        let a = wave_table(0);
+        let b = wave_table(15);
+        assert_ne!(a, b);
+        assert_eq!(a, wave_table(60));
+        assert!(a.iter().all(|v| *v >= 178));
+        let base = raster(1920, 1080, [0, 0, 1920, 32], 96, Tone::Running);
+        let phase = wave_phase(1920, 1080, [0, 0, 1920, 32]);
+        let mut output = vec![0; base.len()];
+        apply_wave(&base, &phase, &mut output, &a);
+        assert_ne!(base, output);
+        assert!(
+            output
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .all(|p| p[0] <= p[3] && p[1] <= p[3] && p[2] <= p[3])
+        );
+        // Adjacent bands meet without a brightness seam at their shared corner.
+        let top = wave_phase(1920, 1080, [0, 31, 32, 1]);
+        let side = wave_phase(1920, 1080, [0, 32, 32, 1]);
+        assert!(top.iter().zip(&side).all(|(a, b)| a.abs_diff(*b) <= 1));
+    }
+    #[test]
+    fn paused_run_keeps_target_but_new_run_does_not() {
+        let target = vec![[1920, 0, 3840, 1080]];
+        let mut memory = None;
+        assert_eq!(
+            remember_targets(&mut memory, Some("flow:a".into()), target.clone()),
+            target
+        );
+        assert_eq!(
+            remember_targets(&mut memory, Some("flow:a".into()), vec![]),
+            target
+        );
+        assert!(remember_targets(&mut memory, Some("flow:b".into()), vec![]).is_empty());
+    }
     #[test]
     fn workflow_states_choose_distinct_static_tones() {
         let mut state = SessionState::now(1, "flow-run", None, None, Phase::Done);
@@ -401,7 +543,7 @@ mod tests {
                 .all(|p| p[0] <= p[3] && p[1] <= p[3] && p[2] <= p[3])
         );
         assert!(data[(31 * 1920 + 960) * 4 + 3] < 3);
-        assert!(data[(1920 + 960) * 4 + 3] > 100);
+        assert!(data[(4 * 1920 + 960) * 4 + 3] > 100);
     }
     #[test]
     fn motion_and_completion() {
