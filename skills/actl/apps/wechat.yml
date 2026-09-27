@@ -22,6 +22,12 @@ quirks:
     note: 朋友圈入口在发现页(快照后按 ref 精点,如 @e16);帖子 name=「作者 来源 正文 时间 类型·来源」复合文本;
          滚动须 ≥15 档滚轮(虚拟化懒加载阈值,5 档无效果);回聊天页用 --near name:通讯录 锚点消歧(微信 与窗口同名);
          导航图标无 clickable point——click --physical 已有 rect-center 兜底+命中检查
+  - id: file_dialog_quirks
+    note: 微信"选择文件"是自绘 #32770:真"打开"按钮是 SplitButton(无 ref,点击 DropDown 箭头
+         和回车都无效)——正解 alt+o 助记键;文件名框 = ComboBox(id:1148)的子 Edit;
+         发送按钮与 发送表情/收藏/文件 同名前缀,find 后按 ref 精点;文件气泡 name 形态与
+         文本不同(时间戳邻近,靠会话预览[文件]+时间戳双证);联系人详情页会令 通讯录 锚点
+         重名,回聊天页换 name:发现 锚点
   - id: safety_no_blind_send
     note: 真实聊天应用——发送前必须读回输入框 value 并核对会话标题;严禁盲发
   - id: background_ops
@@ -72,3 +78,40 @@ verify: 输入框 value 读回比对(draft_message 最后一步);发送后新气
     steps:
       - ["click", "name:微信", "--app", "{window}", "--near", "name:通讯录", "--physical"]
       - ["find", "--id", "session_list", "--app", "{window}"]
+  - id: send_verified
+    description: 发送(真机实证:读回核对 → ref 精点发送按钮 → 三重验证)
+    steps:
+      - ["set-clipboard", "{text}"]
+      - ["click", "id:chat_input_field", "--app", "{window}"]
+      - ["paste", "--app", "{window}"]
+      - ["get", "id:chat_input_field", "--app", "{window}", "--property", "value"]
+      - ["find", "--name", "发送", "--app", "{window}"]
+      - ["click", "@{send_ref}", "--app", "{window}", "--physical"]
+      - ["get", "id:chat_input_field", "--app", "{window}", "--property", "value"]
+  - id: search_conversation
+    description: 会话搜索(搜索框 Edit 聚焦后 paste;esc 退出)
+    steps:
+      - ["find", "--name", "搜索", "--role", "Edit", "--app", "{window}"]
+      - ["click", "@{search_ref}", "--app", "{window}"]
+      - ["paste", "--app", "{window}"]
+      - ["snapshot", "--app", "{window}"]
+      - ["press", "escape", "--app", "{window}"]
+  - id: send_file
+    description: 发送文件(选择文件对话框:文件名 ComboBox 子 Edit paste 全路径 → Alt+O 确认)
+    steps:
+      - ["find", "--name", "发送文件", "--app", "{window}"]
+      - ["click", "@{sendfile_ref}", "--app", "{window}", "--physical"]
+      - ["wait", "--window", "选择文件", "--timeout", "4000"]
+      - ["find", "--role", "ComboBox", "--app", "选择文件"]
+      - ["click", "@{filename_edit_ref}", "--app", "选择文件"]
+      - ["paste", "--app", "选择文件"]
+      - ["press", "alt+o", "--app", "选择文件"]
+  - id: contacts_browse
+    description: 通讯录(导航 → 列表+分组统计 → 点联系人读详情 → esc + 发现锚点回聊天)
+    steps:
+      - ["click", "name:通讯录", "--app", "{window}", "--physical"]
+      - ["snapshot", "--app", "{window}"]
+      - ["click", "name:{contact}", "--app", "{window}", "--physical"]
+      - ["snapshot", "--app", "{window}"]
+      - ["press", "escape", "--app", "{window}"]
+      - ["click", "name:微信", "--app", "{window}", "--near", "name:发现", "--physical"]
