@@ -48,7 +48,7 @@ pub(crate) enum Command {
     },
     /// Click an element (UIA Invoke by default; --physical for a real mouse click)
     Click {
-        /// Target: @eN (needs --app) | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N
+        /// Target: @eN (needs --app) | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | xy:<x>,<y> (physical-only; needs --app)
         target: String,
         /// Target window by title substring (@eN refs require it; otherwise focused window)
         #[arg(long)]
@@ -75,7 +75,7 @@ pub(crate) enum Command {
     },
     /// Read properties of an element
     Get {
-        /// Target: @eN (needs --app) | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N
+        /// Target: @eN (needs --app) | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | xy:<x>,<y> (physical-only; needs --app)
         target: String,
         /// Property: name | role | automation_id | offscreen | value | text (default: all)
         #[arg(long)]
@@ -164,7 +164,7 @@ pub(crate) enum Command {
     },
     /// Set an element's value directly via UIA Value pattern (no keyboard)
     SetValue {
-        /// Target: @eN (needs --app) | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N
+        /// Target: @eN (needs --app) | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | xy:<x>,<y> (physical-only; needs --app)
         target: String,
         /// Value to set
         value: String,
@@ -516,7 +516,7 @@ fn after_help_for(name: &str) -> Option<&'static str> {
             "Example:\n  actl snapshot --app Notepad --skeleton\n  actl snapshot --app Edge --view content --skeleton\n--skeleton keeps interactive elements + collapsed ancestors (token saver).\n--view content keeps only Document (web/document body) subtrees, drops app chrome;\ncombines with --skeleton (folding inside the document) — the browser/editor token saver.\nErrors: NOT_FOUND no window matches --app, or no Document region for --view content"
         }
         "click" => {
-            "Example:\n  actl click @e3 --app Notepad --snapshot s1a2b\n  actl click name:item --app Explorer --physical --with ctrl\n(multi-select)\nErrors: NOT_FOUND no match | AMBIGUOUS multi-match (candidates returned) | STALE_REF stale @eN (re-snapshot) | NOT_ACTIONABLE no pattern | PERM_DENIED foreground guard (--physical)"
+            "Example:\n  actl click @e3 --app Notepad --snapshot s1a2b\n  actl click name:item --app Explorer --physical --with ctrl\n(multi-select)\nErrors: NOT_FOUND no match | AMBIGUOUS multi-match (candidates returned) | STALE_REF stale @eN (re-snapshot) | NOT_ACTIONABLE no pattern, occluded, or xy: point outside window bounds | PERM_DENIED foreground guard (--physical) | PROTOCOL xy: without --physical/--app"
         }
         "get" => {
             "Example:\n  actl get name:状态 --app 设置 --property value\nProperties: name role automation_id offscreen value text (text = TextPattern body; Chromium Document value is the URL).\nErrors: PROTOCOL unknown property | NOT_FOUND no match | AMBIGUOUS multi-match"

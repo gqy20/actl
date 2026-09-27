@@ -26,7 +26,7 @@
 
 - **扁平动词式**:不嵌套分组(对比 `actl interact click`),动词即语义——省 token、零结构记忆负担;分组只用于 help 分段标题。
 - **一个命令 = 一个认知动作**:命令语义对齐 agent 循环的四步心智模型——**感知**(`snapshot`/`find`)→ 决策(LLM)→ **执行**(`click`/`type`)→ **确认**(`--expect`/`verify`)。禁止复合语义命令(如 click-and-type):失败无法归因,中间决策被吞掉。
-- **命名四规则**:① `动词` 或 `动词-宾语`,小写连字符;② 读操作前缀固定:`get-*` / `find` / `list-*` / `inspect` / `extract`;③ 位置参数只放目标(@ref 或选择器),其余全 flag,谓词统一 `--expect`/`--predicate`、超时统一 `--timeout`;④ 全局 flag 极小:`--dry-run` `--timeout` `--verbose` + 体积控制(`--skeleton` `--max-depth`)。
+- **命名四规则**:① `动词` 或 `动词-宾语`,小写连字符;② 读操作前缀固定:`get-*` / `find` / `list-*` / `inspect` / `extract`;③ 位置参数只放目标(@ref / 语义选择器 / `xy:x,y` 坐标——坐标为物理专用寻址,见 §7),其余全 flag,谓词统一 `--expect`/`--predicate`、超时统一 `--timeout`;④ 全局 flag 极小:`--dry-run` `--timeout` `--verbose` + 体积控制(`--skeleton` `--max-depth`)。
 - **自发现**:`actl commands` 输出全部命令 + 参数 schema 的 JSON(等价于 MCP `tools/list` 的 CLI 形态);人类 help 文本与机器 schema 同源生成,不漂移。agent 冷启动一条命令拿全能力清单,不依赖读文档。
 - **可理解性验收标准**:任一命令的 help + envelope,不看文档即可推断四件事——输入什么 / 副作用是什么 / 返回什么 / 失败码指示的下一步动作。
 
@@ -73,6 +73,7 @@ get @e3 [--property p] [--raw]      # 读元素属性;--raw 全量含 pattern �
 list-windows / list-surfaces        # 窗口/虚拟桌面枚举(list-surfaces 未实现)
                                      # list-windows 附物理层叠放事实:foreground / topmost /
                                      # minimized / visible / z_order(0=最顶) / rect / owner_title
+                                     # (rect 为物理像素,PMv2 口径——与 screenshot/xy: 同坐标系)
 extract @ref [--table]              # 结构化提取(表格→JSON 数组),@ref 指定容器
                                      # GridPattern 直读优先(source:"grid-pattern",带 row/col
                                      # 语义),树扁平化兜底(source:"tree-flatten");来源随结果上报
@@ -81,6 +82,7 @@ extract @ref [--table]              # 结构化提取(表格→JSON 数组),@ref
 #### 交互(interact)
 ```
 click @e3 [--expect P]     right-click / double-click
+click xy:1420,856 --app X --physical   # 坐标寻址(视觉兜底的手;§7 守卫)
 type @e5 "text"            set-value @e5 "v"    # UIA Value pattern 优先
 press ctrl+s               key-down shift / key-up shift  # 状态保持键必须成对
 paste --app Excel                                 # ctrl+v 到当前选中(无元素落点;pack 路线原语)
@@ -234,6 +236,12 @@ L2  actl commands     机器 schema:全命令+参数的 JSON(agent 自发现入�
 ## 7. 安全边界
 
 - 物理指针注入(真实移动/点击鼠标)必须显式 `--physical`,默认仅 UIA 后台调用;键盘注入的授权是强制 `--app` + 护栏 + 输入占用锁(见 §2 规则 2);
+- **坐标寻址(`xy:x,y`)的守卫(2026-09-27,spec,视觉兜底闭环的"手")**:无元素
+  可校验的物理专用通道——①强制 `--app` + 显式 `--physical`;②**窗口边界守卫**:
+  注入瞬间坐标必须落在 `--app` 窗口当前 bounds 内(PMv2 物理像素,与 screenshot
+  同坐标系),窗口移动/最小化即拒(防"截图后窗口漂移点进窗外");③复用遮挡
+  检查(WindowFromPoint 命中窗口须属目标)。坐标来源是调用方(screenshot+VLM/人),
+  core 不做视觉(PRD §1.3 非目标不破);click 家族 + hover 适用,drag 暂不含;
 - 管理员窗口/跨完整性级别受 UIPI 限制时返回 `PERM_DENIED` 而非静默失败;
 - 敏感命令白名单(clipboard-set 到密码框等场景)留给上层 agent 策略,CLI 不做内容审查,但 `--dry-run` 全局可用。
 

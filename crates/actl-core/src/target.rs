@@ -1,7 +1,9 @@
-//! 命令目标(@eN ref / 语义选择器)的解析,纯逻辑。
+//! 命令目标(@eN ref / 语义选择器 / 坐标)的解析,纯逻辑。
 //!
-//! 06 §3.1 规则③:位置参数只放目标。合法形式四种:
-//! `@eN`(snapshot 重放序号)/ `name:子串` / `id:AutomationId 精确` / `role:Type 精确`。
+//! 06 §3.1 规则③:位置参数只放目标。合法形式:
+//! `@eN`(snapshot 重放序号)/ `name:子串` / `id:AutomationId 精确` /
+//! `role:Type 精确` / `xy:x,y`(屏幕坐标,视觉兜底专用——无元素可校验,
+//! 强制 `--app` 窗口边界守卫 + 显式 `--physical`,见 06 §7)。
 //! ref 的漂移风险与 fallback 定位链的根治关系见 06 §5、spike-findings。
 
 use crate::CtlError;
@@ -18,6 +20,10 @@ pub enum Target {
     Role(String),
     /// ControlType + 1 起序数(`role:Button#2` = 第 2 个 Button;fallback 链 L3)
     RoleAt(String, u32),
+    /// 屏幕物理坐标(`xy:1420,856`;负值合法——多显示器左侧屏)。
+    /// 视觉兜底的"手":坐标来自调用方(screenshot+VLM/人),不经元素定位;
+    /// 强制 --app + --physical(窗口边界守卫,06 §7)
+    Coord(i32, i32),
 }
 
 impl Target {
@@ -29,6 +35,7 @@ impl Target {
             Target::Id(s) => format!("id:{s}"),
             Target::Role(s) => format!("role:{s}"),
             Target::RoleAt(s, n) => format!("role:{s}#{n}"),
+            Target::Coord(x, y) => format!("xy:{x},{y}"),
         }
     }
 }
@@ -41,6 +48,15 @@ pub fn parse_target(raw: &str) -> Result<Target, CtlError> {
             return Err(bad(raw)); // ref 从 @e1 起
         }
         return Ok(Target::Ref(n));
+    }
+    // xy:x,y(物理屏幕坐标;负 x 合法——虚拟桌面左侧屏)
+    if let Some(rest) = raw.strip_prefix("xy:") {
+        if let Some((xs, ys)) = rest.split_once(',') {
+            if let (Ok(x), Ok(y)) = (xs.trim().parse::<i32>(), ys.trim().parse::<i32>()) {
+                return Ok(Target::Coord(x, y));
+            }
+        }
+        return Err(bad(raw));
     }
     for (prefix, build) in [
         (
@@ -72,7 +88,7 @@ pub fn parse_target(raw: &str) -> Result<Target, CtlError> {
 
 fn bad(raw: &str) -> CtlError {
     CtlError::protocol(format!(
-        "invalid target {raw:?}: expected @eN, name:<substr>, id:<AutomationId> or role:<Type>"
+        "invalid target {raw:?}: expected @eN, name:<substr>, id:<AutomationId>, role:<Type> or xy:<x>,<y>"
     ))
 }
 
@@ -96,7 +112,7 @@ mod tests {
     use crate::ErrorCode;
 
     #[test]
-    fn parses_all_four_forms() {
+    fn parses_all_forms() {
         assert_eq!(parse_target("@e3").unwrap(), Target::Ref(3));
         assert_eq!(
             parse_target("name:确定").unwrap(),
@@ -114,6 +130,24 @@ mod tests {
             parse_target("role:Button#2").unwrap(),
             Target::RoleAt("Button".into(), 2)
         );
+        assert_eq!(
+            parse_target("xy:1420,856").unwrap(),
+            Target::Coord(1420, 856)
+        );
+        // 负坐标合法(虚拟桌面左侧屏)
+        assert_eq!(
+            parse_target("xy:-100,200").unwrap(),
+            Target::Coord(-100, 200)
+        );
+        assert_eq!(parse_target("xy:0,0").unwrap(), Target::Coord(0, 0));
+    }
+
+    #[test]
+    fn coord_edges_rejected() {
+        for bad in ["xy:100", "xy:100,", "xy:,200", "xy:a,b", "xy:", "xy:1,2,3"] {
+            let err = parse_target(bad).unwrap_err();
+            assert_eq!(err.code, ErrorCode::Protocol, "{bad:?} should be rejected");
+        }
     }
 
     #[test]

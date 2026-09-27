@@ -34,7 +34,10 @@ pub use locate::{
     Located, StableOutcome, WaitPredicate, WaitProp, locate, wait_element, wait_gone,
     wait_property, wait_stable,
 };
-pub use pointer::{PointerAction, click_physical, drag_physical, pointer_physical, scroll_element};
+pub use pointer::{
+    CoordOutcome, PointerAction, click_physical, drag_physical, pointer_at_physical,
+    pointer_physical, scroll_element,
+};
 pub use read::{
     PROPS, PropertyInfo, VerifyKind, VerifyOutcome, extract_table, get_clipboard_text,
     read_property, set_clipboard_text, verify,

@@ -172,10 +172,18 @@ pub fn pointer_physical(
         ));
     }
 
+    inject_pointer_at(px, py, action.to_spec())?;
+    Ok((loc, (px, py), scrolled))
+}
+
+/// 物理注入公共尾段:输入占用锁 → 修饰键空置检查 → 一批 SendInput。
+/// 元素路径(pointer_physical)与坐标路径(pointer_at_physical)共用,
+/// 锁与护栏语义不分叉。
+fn inject_pointer_at(px: i32, py: i32, spec: PointerSpec) -> Result<(), CtlError> {
     let _lock = input::InputLock::acquire(timing().lock_wait_ms)?;
     // 修饰键空置检查:ctrl 按住时的物理点击 = ctrl+click(语义劫持)
     kbd::wait_modifiers_clear()?;
-    match action.to_spec() {
+    match spec {
         PointerSpec::Click {
             button,
             clicks,
@@ -193,7 +201,100 @@ pub fn pointer_physical(
         PointerSpec::Drag { to: (tx, ty) } => mouse::drag_to(px, py, tx, ty)?,
         PointerSpec::Wheel { notches } => mouse::wheel_at(px, py, notches)?,
     }
-    Ok((loc, (px, py), scrolled))
+    Ok(())
+}
+
+/// 坐标点击(xy: 目标)的结果上报。
+pub struct CoordOutcome {
+    pub window_title: String,
+    pub point: (i32, i32),
+}
+
+/// 坐标物理动作(xy: 目标,视觉兜底的"手"):无元素定位,窗口边界守卫 +
+/// 命中检查后注入。坐标来自调用方(screenshot+VLM/人),core 不做视觉。
+///
+/// 守卫(比元素路径多一重边界检查——无语义目标可校验时的防漂移手段):
+/// ① 全程 PMv2 线程上下文(与 screenshot 同坐标系,坐标即截图物理像素);
+/// ② 坐标必须落在 --app 窗口**当前** bounds 内(DWM 可见边界优先)——
+///    窗口移动/最小化即拒,不点窗外的东西;
+/// ③ WindowFromPoint 命中窗口须属于目标(遮挡检查,与元素路径同款)。
+pub fn pointer_at_physical(
+    app: &str,
+    x: i32,
+    y: i32,
+    action: PointerAction,
+) -> Result<CoordOutcome, CtlError> {
+    use windows::Win32::Foundation::POINT;
+    use windows::Win32::Foundation::RECT;
+    use windows::Win32::Graphics::Dwm::DWMWA_EXTENDED_FRAME_BOUNDS;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GA_ROOT, GetAncestor, GetWindowRect, IsIconic, WindowFromPoint,
+    };
+
+    let _dpi = crate::capture::Pmv2Guard::enter();
+    let auto = UIAutomation::new().map_err(internal)?;
+    let walker = auto.create_tree_walker().map_err(internal)?;
+    let win = find_window(&auto, &walker, app)?;
+    let title = win.get_name().unwrap_or_default();
+    let hwnd = native_hwnd(&win).ok_or_else(|| {
+        CtlError::new(
+            ErrorCode::NotActionable,
+            "target window has no native handle for the coordinate guard",
+        )
+    })?;
+    if unsafe { IsIconic(hwnd) }.as_bool() {
+        return Err(CtlError::new(
+            ErrorCode::NotActionable,
+            "target window is minimized - restore it before coordinate clicks",
+        ));
+    }
+    // bounds:DWM 可见边界优先(最大化窗口的 GetWindowRect 含屏外阴影),
+    // 与 screenshot --app 的裁剪口径一致
+    let mut r = RECT::default();
+    let dwm_ok = unsafe {
+        windows::Win32::Graphics::Dwm::DwmGetWindowAttribute(
+            hwnd,
+            DWMWA_EXTENDED_FRAME_BOUNDS,
+            &mut r as *mut RECT as *mut _,
+            std::mem::size_of::<RECT>() as u32,
+        )
+    }
+    .is_ok()
+        && r.right > r.left;
+    if !dwm_ok {
+        unsafe { GetWindowRect(hwnd, &mut r) }
+            .map_err(|e| CtlError::internal(format!("GetWindowRect: {e}")))?;
+    }
+    if x < r.left || x >= r.right || y < r.top || y >= r.bottom {
+        return Err(CtlError::new(
+            ErrorCode::NotActionable,
+            format!(
+                "point ({x},{y}) lies outside target window bounds [{},{}) x [{},{}) - the window may have moved; re-screenshot and recompute the coordinate",
+                r.left, r.right, r.top, r.bottom
+            ),
+        ));
+    }
+    // 命中检查:坐标处最顶层窗口的根标题 == 目标窗口标题(遮挡拒绝)
+    let hit = unsafe { WindowFromPoint(POINT { x, y }) };
+    let hit_title = (!hit.0.is_null()).then_some(hit).and_then(|h| {
+        let root = unsafe { GetAncestor(h, GA_ROOT) };
+        (!root.0.is_null())
+            .then_some(root)
+            .and_then(window_title_of)
+    });
+    if hit_title.as_deref() != Some(title.as_str()) {
+        return Err(CtlError::new(
+            ErrorCode::NotActionable,
+            format!(
+                "point ({x},{y}) is occupied by another window (occluded); refusing                  physical pointer action",
+            ),
+        ));
+    }
+    inject_pointer_at(x, y, action.to_spec())?;
+    Ok(CoordOutcome {
+        window_title: title,
+        point: (x, y),
+    })
 }
 
 /// offscreen 元素尝试 ScrollItemPattern::ScrollIntoView(P1,虚拟化定位配套)。

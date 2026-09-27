@@ -10,6 +10,25 @@
 ## [Unreleased]
 
 ### Added
+- **`xy:x,y` 坐标寻址(spec,视觉兜底闭环的"手")**:click 家族(click/
+  right-click/double-click/middle-click/triple-click)与 hover 接受屏幕坐标
+  目标——`click xy:1420,856 --app 抖音 --physical`。无元素可校验的物理专用
+  通道,守卫三重:①强制 `--app` + 显式 `--physical`(元素类命令对 xy 统一
+  PROTOCOL 拒绝);②**窗口边界守卫**:注入瞬间坐标须落在 --app 窗口当前
+  bounds 内(PMv2 物理像素,与 screenshot 同坐标系;DWM 可见边界口径)——
+  窗口移动/最小化即拒,防"截图后窗口漂移点进窗外";③复用遮挡检查
+  (WindowFromPoint 命中须属目标)。坐标来源是调用方(screenshot+VLM/人),
+  core 不做视觉(PRD §1.3 非目标不破)。至此视觉兜底协议闭环:screenshot
+  (眼)+ VLM(脑,调用方)+ click xy(手)。解锁四类 UIA 失明场景:抖音
+  互动层、微信自绘右键菜单、chrome://extensions 的 WebUI 开关、通用
+  Canvas。契约 +1 golden(协议门六态);wechat/browser pack quirks 的
+  "M3 候选"注记全部翻为已落地路线。
+- **[BC] list-windows 的 rect 统一物理像素**(随 xy: 同批 spec):此前
+  GetWindowRect 在非 PMv2 线程读出**逻辑坐标**,与 screenshot/xy: 的物理
+  像素跨缩放混层——抖音实测踩坑(200% 缩放副屏,逻辑 rect 当物理基准换算
+  差点错点,窗口边界守卫拦下后定位根因)。现于 PMv2 上下文枚举,rect 与
+  截图/坐标寻址同坐标系,视觉兜底换算("窗口左上角 + PNG 坐标")不再需要
+  缩放修正。依赖旧逻辑 rect 的消费方需按 DPI 换算迁移。
 - **登录态深度闭环(docs/16 §5)**:用户 Chrome 完成两家登录后补测——① xhs
   "点开具体笔记 → 读正文+评论 → esc 返回"**全链成功**(ref 精点 @e164 →
   弹层 → 文本 4451→8170B,评论区"回复"×85);关键发现:**text 通道读整个

@@ -185,6 +185,36 @@ fn wait_property_predicate_validated_at_protocol_level() {
 }
 
 #[test]
+fn coordinate_targets_gated_at_protocol_level() {
+    // xy: 是物理专用寻址(spec):无 --physical / 无 --app / 非法形态 / 元素类
+    // 命令误用 —— 全部 PROTOCOL exit 2(离线可测,不触桌面)
+    let (code, stdout) = actl(&["click", "xy:100,200"]);
+    assert_eq!(code, 2, "xy without --physical is PROTOCOL");
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
+    assert_eq!(v["error"]["code"], "PROTOCOL");
+    let (code, _) = actl(&["click", "xy:100,200", "--physical"]);
+    assert_eq!(
+        code, 2,
+        "xy without --app is PROTOCOL (bounds-guard anchor)"
+    );
+    for bad in ["xy:100", "xy:a,b", "xy:1,2,3"] {
+        let (code, _) = actl(&["click", bad, "--app", "x", "--physical"]);
+        assert_eq!(code, 2, "malformed {bad}");
+    }
+    // 元素类命令对坐标目标统一拒绝(get 走 locate 的 fail-closed)
+    let (code, stdout) = actl(&["get", "xy:100,200"]);
+    assert_eq!(code, 2);
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
+    assert_eq!(v["error"]["code"], "PROTOCOL");
+    // right-click 家族:命名即物理授权,只查 --app 门
+    let (code, _) = actl(&["right-click", "xy:1,2"]);
+    assert_eq!(code, 2);
+    // 负坐标合法(多显示器左侧屏):卡在 --app 门而非解析
+    let (code, _) = actl(&["click", "xy:-100,200", "--physical"]);
+    assert_eq!(code, 2);
+}
+
+#[test]
 fn snapshot_view_values_and_stable_flag_validated_at_protocol_level() {
     // --view 值域(content):未知值 clap 层 exit 2(spec:投影值域扩展走 spec)
     let (code, _) = actl(&["snapshot", "--view", "bogus", "--app", "x"]);

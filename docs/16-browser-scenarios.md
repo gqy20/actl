@@ -156,6 +156,24 @@ Chrome 登录态实测(三轮,迭代脚本不入库):
 **跨语言读取**(沉浸式翻译:触发翻译→text 通道读译文)可编排。Cookie-Editor
 类凭据操作按安全边界跳过(白名单归上层 agent 策略)。
 
+### 5.6 视觉兜底闭环端到端(2026-09-27 第四批,xy: 落地日)
+
+`fixtures/douyin-vision-loop.sh` + VLM(本会话):抖音评论图标是坐标寻址的
+第一个真实客户——
+
+1. screenshot(3072×1920 物理像素)→ VLM 读出评论图标 PNG 坐标 (2568,983);
+2. 首次换算用了 list-windows 的 rect 作窗口原点 → **窗口边界守卫拒绝**
+   (坐标落在窗外)——守卫的活体证明:错误消息直接指引"re-screenshot";
+3. 根因:list-windows rect 是**逻辑坐标**(非 PMv2 线程读取),200% 缩放副屏
+   上与物理差一倍——**坐标系统一修复随同批落地**(rect 现 PMv2 物理口径);
+4. 修正换算(物理窗口原点 + PNG 1:1)→ `click xy:6408,983 --app 抖音
+   --physical` → **resolved_by:"coord"** → 评论区展开(截图仲裁:约 8-10 条
+   可见,"全部评论"标签在场;"发送"按钮进树,评论文本仍不进——抖音评论区
+   的文本层视觉兜底是终点,结论与 §5.4 一致)。
+
+记事本 CI 轨 fixture(coord-click.sh)5/5:rect 中心点坐标点击 → 输入落焦
+→ 文本 verify;窗外坐标 NOT_ACTIONABLE 拒绝。
+
 ## 6. 三个实测发现(沉淀为 pack quirks)
 
 1. **多文档页 AMBIGUOUS**:xiaohongshu.com 有 **2 个 `RootWebArea`**(主文档

@@ -32,8 +32,10 @@ quirks:
          文本不同(时间戳邻近,靠会话预览[文件]+时间戳双证);联系人详情页会令 通讯录 锚点
          重名,回聊天页换 name:发现 锚点
   - id: context_menu_invisible
-    note: 右键菜单是 mmui 自绘,UIA 树不可见(find MenuItem 空)——菜单操作需键盘导航或截图+坐标
-         (M3 候选);自己消息的菜单无"引用"项(复制/转发/收藏/提醒/删除)
+    note: 右键菜单是 mmui 自绘,UIA 树不可见(find MenuItem 空)——菜单操作走视觉兜底:
+         right-click 后 screenshot --app → 多模态读菜单项坐标 → click xy:<x>,<y>
+         --app 微信 --physical(窗口边界守卫;2026-09-27 坐标寻址已落地);
+         自己消息的菜单无"引用"项(复制/转发/收藏/提醒/删除)
   - id: mention_object
     note: @人引用以 U+FFFC 内嵌对象插入,输入框 Value 读回显示为对象符非纯文本——
          含 @ 的草稿读回核对只对文本部分有效

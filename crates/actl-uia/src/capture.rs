@@ -71,11 +71,12 @@ fn retain_shots(dir: &std::path::Path) {
     }
 }
 
-/// 线程级 PMv2 上下文(spike 实证:此上下文内 UIA/Win32 坐标同为物理像素)
-struct Pmv2Guard(windows::Win32::UI::HiDpi::DPI_AWARENESS_CONTEXT);
+/// 线程级 PMv2 上下文(spike 实证:此上下文内 UIA/Win32 坐标同为物理像素)。
+/// pub(crate):坐标点击(pointer_at_physical)复用——截图与坐标守卫同坐标系。
+pub(crate) struct Pmv2Guard(windows::Win32::UI::HiDpi::DPI_AWARENESS_CONTEXT);
 
 impl Pmv2Guard {
-    fn enter() -> Self {
+    pub(crate) fn enter() -> Self {
         use windows::Win32::UI::HiDpi::{
             DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetThreadDpiAwarenessContext,
         };

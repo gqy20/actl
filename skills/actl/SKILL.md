@@ -45,7 +45,8 @@ actl verify --value <target> "<期望>" --app <app> # 确认:立即断言
 系统:get-clipboard set-clipboard
 
 目标语法:`@eN`(重放,须 --app)· `name:<子串>` · `id:<AutomationId>` · `role:<Type>` ·
-`role:<Type>#<序数>`;多候选消歧:`--near <锚点>`。
+`role:<Type>#<序数>` · `xy:<x>,<y>`(坐标,须 --app + --physical,窗口边界守卫);
+多候选消歧:`--near <锚点>`。
 
 ## 弹窗处理协议
 
@@ -93,9 +94,12 @@ actl screenshot --app <win>                     # 整窗(抗遮挡)
 actl screenshot --rect <x,y,w,h>               # 区域(配合 right-click 返回的 point)
 ```
 
-输出为 PNG 文件路径(envelope data.path),把该文件交给多模态模型即可读图。
+输出为 PNG 文件路径(envelope data.path),把该文件交给多模态模型即可读图;
+模型给出坐标后用 `click xy:<x>,<y> --app <win> --physical` 落点(窗口边界守卫:
+坐标必须在目标窗口当前 bounds 内,窗口移动即拒——重新截图再算)。
 截图是**显式请求的兜底**——默认路径永远是 UIA(确定性和 token 效率优先)。
-Canvas 类(mspaint)、自绘菜单(微信右键)、图片消息(微信气泡)是三个典型场景。
+Canvas 类(mspaint)、自绘菜单(微信右键)、图片消息(微信气泡)、UIA 无名按钮
+(抖音互动栏)是四个典型场景。
 
 ## 工具分工:actl × playwright(浏览器场景路由)
 

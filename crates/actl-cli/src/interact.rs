@@ -32,7 +32,40 @@ pub(crate) fn click(
         Vec::new()
     };
 
-    let data = if physical {
+    let data = if let actl_core::target::Target::Coord(x, y) = target {
+        // xy: 坐标目标:无元素可校验 → ①物理授权必须显式 --physical;
+        // ②强制 --app(窗口边界守卫的锚,防窗口漂移后点进窗外)
+        if !physical {
+            return Err(CtlError::protocol(
+                "xy: targets are physical-only (no UIA element to verify); add --physical",
+            ));
+        }
+        let app = app.ok_or_else(|| {
+            CtlError::protocol(format!(
+                "{} requires --app <title-substr>: the coordinate bounds guard needs a window anchor (fail-closed)",
+                target.describe()
+            ))
+        })?;
+        let action = if with.is_empty() {
+            actl_uia::PointerAction::LeftClick
+        } else {
+            actl_uia::PointerAction::ClickWith {
+                modifiers: with.to_vec(),
+            }
+        };
+        let out = actl_uia::pointer_at_physical(app, x, y, action)?;
+        json!({
+            "action": "click",
+            "target": target.describe(),
+            "resolved_by": "coord",
+            "pattern": if with.is_empty() { "physical-left" } else { "physical-modified" },
+            "modifiers": with,
+            "point": [x, y],
+            "guard": "window-bounds",
+            "input_effects": { "keyboard": "none", "clipboard": "untouched", "pointer": "move_and_click" },
+            "window": out.window_title,
+        })
+    } else if physical {
         let action = if with.is_empty() {
             actl_uia::PointerAction::LeftClick
         } else {
@@ -279,6 +312,26 @@ pub(crate) fn pointer_cmd(
         PointerKind::Hover => "move",
         _ => "move_and_click",
     };
+    if let actl_core::target::Target::Coord(x, y) = target {
+        // xy: 坐标目标:本族命名即物理授权,但 --app 必须显式(边界守卫的锚)
+        let app = app.ok_or_else(|| {
+            CtlError::protocol(format!(
+                "{name} {} requires --app <title-substr>: the coordinate bounds guard needs a window anchor (fail-closed)",
+                target.describe()
+            ))
+        })?;
+        let out = actl_uia::pointer_at_physical(app, x, y, action)?;
+        return Ok(json!({
+            "action": name,
+            "target": target.describe(),
+            "resolved_by": "coord",
+            "point": [x, y],
+            "guard": "window-bounds",
+            "input_effects": { "keyboard": "none", "clipboard": "untouched", "pointer": effects },
+            "window": out.window_title,
+        })
+        .into());
+    }
     let (loc, (px, py), scrolled) = actl_uia::pointer_physical(app, &target, near, action)?;
     Ok(json!({
         "action": name,

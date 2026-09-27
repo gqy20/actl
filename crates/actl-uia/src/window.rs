@@ -514,6 +514,10 @@ pub fn list_windows() -> Result<Vec<WindowEntry>, CtlError> {
 
     let auto = UIAutomation::new().map_err(internal)?;
     let walker = auto.create_tree_walker().map_err(internal)?;
+    // rect 统一物理像素(PMv2 线程上下文):与 screenshot / xy: 坐标寻址同
+    // 坐标系——视觉兜底换算("窗口左上角 + PNG 坐标")不再跨缩放混层
+    // (2026-09-27 实测踩坑:逻辑 rect × 200% 缩放屏差点点错,守卫拦下)
+    let _dpi = crate::capture::Pmv2Guard::enter();
 
     // Z 链一次取全:HWND → 位次(0 = 最顶)
     let mut z_rank: HashMap<usize, u32> = HashMap::new();
