@@ -28,6 +28,19 @@ static FRAME_READY: AtomicBool = AtomicBool::new(false);
 static TRAY_ICON: Mutex<Option<(usize, i32, u32)>> = Mutex::new(None);
 static EPOCH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
+// Normal replacement is distinct from user close. Older displays do not acknowledge
+// this message; never fall back to WM_CLOSE or clear a pre-existing stop request.
+const REPLACE_CLOSE: u32 = WM_APP + 45;
+
+fn allow_close(paths: &SignalPaths, message: u32, input_busy: Option<bool>) -> bool {
+    if message == WM_CLOSE {
+        paths.request_stop();
+        true
+    } else {
+        message == REPLACE_CLOSE && input_busy == Some(false)
+    }
+}
+
 fn publish_lease(paths: &SignalPaths, state: &str) {
     let lease = actl_core::display::DisplayLease {
         protocol: actl_core::display::DISPLAY_PROTOCOL,
@@ -555,10 +568,17 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
             place(hwnd);
             LRESULT(0)
         }
-        WM_CLOSE => {
-            SignalPaths::default().request_stop();
-            let _ = DestroyWindow(hwnd);
-            LRESULT(0)
+        WM_CLOSE | REPLACE_CLOSE => {
+            if allow_close(
+                &SignalPaths::default(),
+                msg,
+                actl_uia::display_support::input_busy(),
+            ) {
+                let _ = DestroyWindow(hwnd);
+                LRESULT(1)
+            } else {
+                LRESULT(0)
+            }
         }
         WM_DESTROY => {
             super::popup::hide();
@@ -604,8 +624,17 @@ pub unsafe fn run() -> windows::core::Result<()> {
                 false,
                 pid,
             )?;
-            let posted = PostMessageW(Some(old), WM_CLOSE, WPARAM(0), LPARAM(0));
-            let waited = if posted.is_ok() {
+            let mut acknowledged = 0;
+            let sent = SendMessageTimeoutW(
+                old,
+                REPLACE_CLOSE,
+                WPARAM(0),
+                LPARAM(0),
+                SMTO_ABORTIFHUNG | SMTO_BLOCK,
+                2000,
+                Some(&mut acknowledged),
+            );
+            let waited = if sent.0 != 0 && acknowledged == 1 {
                 windows::Win32::System::Threading::WaitForSingleObject(process, 4000)
             } else {
                 WAIT_FAILED
@@ -614,7 +643,7 @@ pub unsafe fn run() -> windows::core::Result<()> {
             if waited != WAIT_OBJECT_0 {
                 return Err(windows::core::Error::new(
                     windows::core::HRESULT(0x80004005u32 as i32),
-                    "old display did not exit; replacement refused",
+                    "display replacement not acknowledged or exit timed out; old builds require explicit user close (stop state preserved)",
                 ));
             }
         }
@@ -723,6 +752,31 @@ pub unsafe fn run() -> windows::core::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn replacement_must_not_send_user_close() {
+        let source = include_str!("shell.rs");
+        let replacement = source.split("pub unsafe fn run()").nth(1).unwrap();
+        let replacement = replacement.split("struct Instance").next().unwrap();
+        assert!(
+            !replacement.contains("PostMessageW(Some(old), WM_CLOSE"),
+            "replacement must not take the user-close path that sets emergency stop"
+        );
+    }
+    #[test]
+    fn replacement_preserves_stop_and_user_close_requests_stop() {
+        let dir = std::env::temp_dir().join(actl_core::snapshot::new_snapshot_id());
+        let paths = SignalPaths::at(dir.clone());
+        assert!(allow_close(&paths, REPLACE_CLOSE, Some(false)));
+        assert!(!paths.stop_requested());
+        assert!(!allow_close(&paths, REPLACE_CLOSE, Some(true)));
+        assert!(!allow_close(&paths, REPLACE_CLOSE, None));
+        assert!(!paths.stop_requested());
+        assert!(allow_close(&paths, WM_CLOSE, Some(true)));
+        let original = std::fs::read(paths.stop_file()).unwrap();
+        assert!(allow_close(&paths, REPLACE_CLOSE, Some(false)));
+        assert_eq!(std::fs::read(paths.stop_file()).unwrap(), original);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
     #[test]
     fn empty_stop_file_still_means_stop_requested() {
         let dir = std::env::temp_dir().join(format!(
