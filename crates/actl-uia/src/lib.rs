@@ -14,6 +14,8 @@
 #![allow(unsafe_code)] // 豁免点(AGENTS.md §5.5):COM/SendInput/Win32 直调集中于本 crate
 
 mod action;
+#[allow(unsafe_op_in_unsafe_fn)] // GDI/WIC 直调集中在该模块
+mod capture;
 mod locate;
 mod pointer;
 mod read;
@@ -22,6 +24,7 @@ mod window;
 pub mod input;
 pub mod kbd;
 pub mod mouse;
+pub use capture::{ShotResult, screenshot_element, screenshot_rect, screenshot_window};
 
 pub use action::{
     InputResult, TypeOutcome, click, paste, press_half, press_keys, select_option, set_value,

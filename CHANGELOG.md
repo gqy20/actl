@@ -10,6 +10,17 @@
 ## [Unreleased]
 
 ### Added
+- **`screenshot` 命令(spec,新原语)**:像素捕获兜底通道——**显式请求**(与 --physical
+  同级授权语义;默认观察仍是 UIA,定位哲学不变)。四域:`--app`/`--hwnd`(PrintWindow
+  本体渲染,抗遮挡;bindings 缺失故手写 extern 声明)、`--rect`(BitBlt+CAPTUREBLT,
+  屏幕所见)、`--element`(定位链 bounds 直裁)。**DPI 双 spike 结论落地**:捕获全程
+  线程级 PMv2(collector 模式;实测 PMv2 线程内 UIA bounds 即物理像素——免比例映射,
+  比参照实现更简更准);右键菜单类 UIA 不可见 overlay 不作窗口暴露(spike 实证),
+  瞄准 = right-click 返回 point + --rect。PNG 经 WIC(纯 COM 零新依赖);卫生项:
+  50MP 像素上限、shots 目录 keep-20、最小化窗口如实拒(不隐式恢复)、区域模式
+  截屏幕所见(遮挡者入镜,help 明示)。envelope 只带 path/width/height/bytes——
+  stdout 契约不破,视觉消费归上层。真机三域全通(区域 61ms、窗口 39KB、元素
+  2280×1180)+ 视觉抽验清晰无错位;契约 17/17。
 - 英文版 README(`README.en.md`),与中文版顶部语言互链;英文示例使用英文系统窗口名。
 
 ### Changed

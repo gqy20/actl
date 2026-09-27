@@ -97,6 +97,30 @@ pub(crate) enum Command {
         #[arg(long)]
         paste: bool,
     },
+    /// Capture pixels as a PNG file (explicit fallback when UIA is blind)
+    Screenshot {
+        /// Capture this window (title substring, or --hwnd; PrintWindow-based)
+        #[arg(long, conflicts_with_all = ["shwnd", "srect", "selement"])]
+        app: Option<String>,
+        /// Capture the window at this native handle (decimal or 0x-hex)
+        #[arg(long, id = "shwnd", value_name = "HWND", conflicts_with_all = ["app", "srect", "selement"])]
+        hwnd: Option<String>,
+        /// Capture a screen region: <x>,<y>,<w>,<h> physical pixels
+        #[arg(long, id = "srect", value_name = "X,Y,W,H", conflicts_with_all = ["app", "shwnd", "selement"])]
+        rect: Option<String>,
+        /// Capture an element's bounding rectangle (goes through the locator chain)
+        #[arg(long, id = "selement", conflicts_with_all = ["app", "shwnd", "srect"])]
+        element: Option<String>,
+        /// Window title substring for --element scoping
+        #[arg(long, requires = "selement")]
+        sapp: Option<String>,
+        /// Anchor disambiguation for --element
+        #[arg(long, requires = "selement")]
+        snear: Option<String>,
+        /// Output PNG path (default: %LOCALAPPDATA%\actl\shots, keep-20)
+        #[arg(long)]
+        out: Option<String>,
+    },
     /// Paste (ctrl+v) into the current focus/selection of the target window
     Paste {
         /// Target window by title substring (required: injection is fail-closed)
@@ -406,6 +430,7 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
         Command::Type { .. } => "type",
         Command::Press { .. } => "press",
         Command::Paste { .. } => "paste",
+        Command::Screenshot { .. } => "screenshot",
         Command::SetValue { .. } => "set-value",
         Command::RightClick { .. } => "right-click",
         Command::DoubleClick { .. } => "double-click",
@@ -453,6 +478,18 @@ fn after_help_for(name: &str) -> Option<&'static str> {
         }
         "type" => {
             "Example:\n  actl type id:Edit 'hello world' --app Notepad --paste\n--paste: clipboard+ctrl+v, the only reliable channel under a Chinese-mode IME (uses the shared clipboard, reported in output).\nErrors: PROTOCOL --app required (injection is fail-closed) | PERM_DENIED foreground guard aborted | NOT_FOUND / AMBIGUOUS target | NOT_ACTIONABLE cannot take focus"
+        }
+        "screenshot" => {
+            "Example:
+  actl screenshot --app Notepad
+  actl screenshot --element id:CalculatorResults --app 计算器
+  actl screenshot --rect 100,100,400,300
+Explicit pixel fallback for UIA-blind content (canvases, self-drawn menus, image
+messages) and visual verification. Pixels go to a PNG file; the envelope carries
+only path+metadata (vision consumption is the caller's decision). Region mode
+captures what is ON SCREEN (occluders included); window mode renders the window
+itself even when occluded.
+Errors: PROTOCOL bad args | NOT_FOUND no window | NOT_ACTIONABLE minimized/oversize/empty bounds"
         }
         "paste" => {
             "Example:

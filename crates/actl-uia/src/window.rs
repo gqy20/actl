@@ -835,3 +835,8 @@ pub fn resolve_app_path(program: &str) -> Option<String> {
     let base = format!("SOFTWARE{sep}Microsoft{sep}Windows{sep}CurrentVersion{sep}App Paths");
     lookup(format!("{base}{sep}{program}")).or_else(|| lookup(format!("{base}{sep}{program}.exe")))
 }
+
+/// 元素的原生 HWND 公开入口(capture 窗口域用)
+pub fn hwnd_of(elem: &UIElement) -> Option<windows::Win32::Foundation::HWND> {
+    native_hwnd(elem)
+}

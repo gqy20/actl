@@ -250,3 +250,30 @@ fn paste_requires_app_fail_closed() {
         "clap usage errors stay off stdout"
     );
 }
+
+#[test]
+fn screenshot_region_roundtrip() {
+    // 最小区域(4x4):CI 安全(任何桌面都有像素),验证 envelope 形态 + 文件真实落盘
+    let out = std::env::temp_dir().join("actl_contract_shot.png");
+    let out_str = out.to_string_lossy().into_owned();
+    let (code, stdout) = actl(&["screenshot", "--rect", "1,1,4,4", "--out", &out_str]);
+    assert_eq!(code, 0, "region capture must succeed on any desktop");
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
+    assert_eq!(v["data"]["width"], 4);
+    assert_eq!(v["data"]["height"], 4);
+    assert!(
+        v["data"]["bytes"].as_u64().unwrap_or(0) > 0,
+        "non-trivial PNG"
+    );
+    assert!(out.exists(), "PNG lands at the requested path");
+    let _ = std::fs::remove_file(&out);
+}
+
+#[test]
+fn screenshot_requires_exactly_one_domain() {
+    // 全空 = PROTOCOL;--rect 与 --app 互斥 = clap 层 exit 2
+    let (code, _) = actl(&["screenshot"]);
+    assert_eq!(code, 2);
+    let (code, _) = actl(&["screenshot", "--app", "x", "--rect", "1,1,2,2"]);
+    assert_eq!(code, 2);
+}

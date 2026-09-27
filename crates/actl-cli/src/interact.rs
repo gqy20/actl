@@ -456,3 +456,51 @@ pub(crate) fn paste_cmd(app: &str) -> Result<CommandOutput, CtlError> {
     })
     .into())
 }
+
+/// screenshot:像素捕获兜底(显式请求;envelope 只带文件路径与元数据,
+/// 像素落磁盘——stdout 契约不破,视觉消费是上层 agent 的决定)。
+pub(crate) fn screenshot_cmd(
+    app: Option<&str>,
+    hwnd: Option<&str>,
+    rect: Option<&str>,
+    element: Option<&str>,
+    sapp: Option<&str>,
+    snear: Option<&str>,
+    out: Option<&str>,
+) -> Result<CommandOutput, CtlError> {
+    let shot = if let Some(r) = rect {
+        let parts: Vec<i32> = r
+            .split(',')
+            .map(|p| p.trim().parse::<i32>())
+            .collect::<Result<_, _>>()
+            .map_err(|_| {
+                CtlError::protocol(format!("invalid --rect {r:?}: expected X,Y,W,H integers"))
+            })?;
+        if parts.len() != 4 {
+            return Err(CtlError::protocol(format!(
+                "invalid --rect {r:?}: expected X,Y,W,H"
+            )));
+        }
+        actl_uia::screenshot_rect(parts[0], parts[1], parts[2], parts[3], out)?
+    } else if let Some(h) = hwnd {
+        actl_uia::screenshot_window(actl_uia::WindowRef::Hwnd(actl_uia::parse_hwnd(h)?), out)?
+    } else if let Some(app) = app {
+        actl_uia::screenshot_window(actl_uia::WindowRef::Title(app), out)?
+    } else if let Some(t) = element {
+        let target = actl_core::parse_target(t)?;
+        actl_uia::screenshot_element(sapp, &target, snear, out)?
+    } else {
+        return Err(CtlError::protocol(
+            "screenshot needs one of --app / --hwnd / --rect / --element",
+        ));
+    };
+    Ok(json!({
+        "action": "screenshot",
+        "path": shot.path,
+        "width": shot.width,
+        "height": shot.height,
+        "bytes": shot.bytes,
+        "input_effects": { "keyboard": "none", "clipboard": "untouched", "pointer": "none" },
+    })
+    .into())
+}
