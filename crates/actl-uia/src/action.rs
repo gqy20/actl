@@ -13,7 +13,7 @@ use uiautomation::{UIAutomation, UIElement, UITreeWalker};
 
 use crate::locate::{Located, locate};
 use crate::read::set_clipboard_text;
-use crate::window::find_window;
+use crate::window::{find_window, focus_window};
 use crate::{input, internal, kbd, timing};
 
 /// 键盘命令家族说明:type/press 走 SendInput 键盘事件(键盘语义命令的执行本体,
@@ -414,4 +414,31 @@ pub fn toggle_element(
         .map(|s| format!("{s:?}"))
         .unwrap_or_else(|_| "unknown".into());
     Ok((loc, state))
+}
+
+/// paste:ctrl+v 注入到目标窗口的**当前焦点/选中处**(pack 路线的关键原语:
+/// Excel 选中格、文件管理器选中项、重命名框等"无元素"落点)。护栏链与 press
+/// 相同,但**刻意不做元素级聚焦**——SetFocus 会移动选中,违背本命令语义;
+/// 只做窗口前置 + 物理前台护栏 + 输入锁。剪贴板内容只读不写(消费方)。
+pub fn paste(app: &str) -> Result<String, CtlError> {
+    use actl_core::keys::Key;
+    let title = focus_window(app)?;
+    std::thread::sleep(std::time::Duration::from_millis(timing().press_focus_ms));
+    let fg = kbd::foreground_title().unwrap_or_default();
+    if !fg.contains(app) {
+        return Err(CtlError::new(
+            ErrorCode::PermDenied,
+            format!(
+                "paste ABORTED by verify-then-inject guard: \
+                 physical foreground is {fg:?}, expected a window matching {app:?}; \
+                 clipboard untouched, nothing pasted"
+            ),
+        ));
+    }
+    let _lock = input::InputLock::acquire(timing().lock_wait_ms)?;
+    kbd::send_key_spec(&KeySpec {
+        modifiers: vec!["ctrl".into()],
+        keys: vec![Key::Char('v')],
+    })?;
+    Ok(title)
 }

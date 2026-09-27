@@ -1,0 +1,35 @@
+# actl 应用档案 pack v1 —— agent 消费的数据(核心 CLI 保持原子,不读此文件)
+# 路线知识来源:docs/14-office-scenarios.md(2026-09-27 真机实测)
+name: excel
+display: Excel
+launch: EXCEL            # App Paths 注册表解析,无需完整路径
+window: "Excel"          # 标题子串;打开文件后为 "<文件名> - Excel"
+quirks:
+  - id: protected_view
+    note: 不可信位置(TEMP/下载)文件以受保护视图打开——UIA 读写正常但编辑被静默拒绝
+    unblock: ["click", "name:启用编辑", "--app", "{window}"]
+  - id: formula_bar
+    note: 键盘直写编辑栏会被护栏拒(SetFocus 后物理前台标题瞬时为空);走剪贴板路线
+  - id: cell_names
+    note: 单元格 UIA name 是坐标("A2")非内容;内容检索用 extract 后本地过滤
+routes:
+  - id: cell_write        # 变量 {cell} {value} {window} 由调用方替换
+    description: 写入单元格(剪贴板直灌 + 名称框导航 + paste)
+    steps:
+      - ["set-clipboard", "{value}"]
+      - ["type", "id:1001", "{cell}", "--app", "{window}"]
+      - ["press", "enter", "--app", "{window}"]
+      - ["paste", "--app", "{window}"]
+      - ["press", "enter", "--app", "{window}"]
+  - id: cell_read
+    description: 读单元格(名称框往返 + ctrl+c + 剪贴板读回)
+    steps:
+      - ["type", "id:1001", "{cell}", "--app", "{window}"]
+      - ["press", "enter", "--app", "{window}"]
+      - ["press", "ctrl+c", "--app", "{window}"]
+      - ["get-clipboard"]
+  - id: table_extract
+    description: 表格抠数(GridPattern 直读;须先有数据物化,空簿无网格)
+    steps:
+      - ["extract", "role:DataGrid", "--app", "{window}"]
+verify: 磁盘终验(COM GetActiveObject 读运行实例 / 文件 mtime);保存 = press ctrl+s 原地保存(不弹窗,勿等窗口)

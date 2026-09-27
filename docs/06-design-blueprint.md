@@ -77,6 +77,7 @@ extract @ref [--table]              # 结构化提取(表格→JSON 数组),@ref
 click @e3 [--expect P]     right-click / double-click
 type @e5 "text"            set-value @e5 "v"    # UIA Value pattern 优先
 press ctrl+s               key-down shift / key-up shift  # 状态保持键必须成对
+paste --app Excel                                 # ctrl+v 到当前选中(无元素落点;pack 路线原语)
 select @e7 "选项"          toggle @e8
 scroll @e9 --down 3        drag --from @e3 --to @e8       # drag/hover 无 UIA pattern,默认物理执行
 hover @e3                  (其余物理兜底:同参数 + --physical)

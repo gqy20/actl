@@ -1,0 +1,25 @@
+# actl 应用档案 pack v1 —— 路线知识来源:docs/14(2026-09-27 真机实测)
+name: word
+display: Word
+launch: WINWORD          # App Paths 注册表解析
+window: "Word"           # 打开文件后为 "<文件名> - Word"
+quirks:
+  - id: protected_view
+    note: 不可信位置文件同样走受保护视图;解法同 Excel
+    unblock: ["click", "name:启用编辑", "--app", "{window}"]
+routes:
+  - id: body_read
+    description: 正文读取(TextPattern 文档通道;中英文皆逐字)
+    steps:
+      - ["get", "role:Document", "--app", "{window}", "--property", "text"]
+  - id: body_append
+    description: 正文写入(paste 通道;追加落在焦点处,先 click 定位插入点)
+    steps:
+      - ["set-clipboard", "{text}"]
+      - ["click", "{anchor}", "--app", "{window}"]
+      - ["paste", "--app", "{window}"]
+  - id: save_inplace
+    description: 原地保存(ctrl+s 不弹窗)
+    steps:
+      - ["press", "ctrl+s", "--app", "{window}"]
+verify: TextPattern 读回 + COM GetActiveObject 磁盘态(contains + mtime)双终验

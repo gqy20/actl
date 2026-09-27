@@ -24,7 +24,7 @@ pub mod kbd;
 pub mod mouse;
 
 pub use action::{
-    InputResult, TypeOutcome, click, press_half, press_keys, select_option, set_value,
+    InputResult, TypeOutcome, click, paste, press_half, press_keys, select_option, set_value,
     toggle_element, type_text,
 };
 pub use locate::{
@@ -39,7 +39,7 @@ pub use window::{
     CaptureResult, MAX_DEPTH, MAX_ELEMENTS, WindowEntry, WindowInfo, WindowRef, capture,
     check_snapshot_freshness, check_snapshot_freshness_by_pattern, close_window, close_window_by,
     focus_window, focus_window_by, foreground_window, list_windows, parse_hwnd, persist_snapshot,
-    resize_window, wait_new_window, wait_window, window_identities,
+    resize_window, resolve_app_path, wait_new_window, wait_window, window_identities,
 };
 
 use actl_core::{CtlError, ErrorCode};

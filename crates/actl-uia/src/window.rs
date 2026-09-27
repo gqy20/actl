@@ -780,3 +780,58 @@ pub fn foreground_window() -> Option<(String, isize)> {
     }
     window_title_of(hwnd).map(|t| (t, hwnd.0 as isize))
 }
+
+/// App Paths 解析(launch 的通用增强):裸程序名(WINWORD/notepad)不在 PATH 时,
+/// 查注册表 `HKLM\...\App Paths\<name[.exe]>` 默认值取完整路径——Office/
+/// 商店别名类应用的注册位置。仅在名字不含路径分隔符时尝试。
+pub fn resolve_app_path(program: &str) -> Option<String> {
+    use windows::Win32::System::Registry::{
+        HKEY_LOCAL_MACHINE, KEY_QUERY_VALUE, REG_SZ, RegCloseKey, RegOpenKeyExW, RegQueryValueExW,
+    };
+    use windows::core::PCWSTR;
+    let bs = char::from_u32(0x5C)?; // U+005C 反斜杠(补丁工具转义规避,见 git 史)
+    if program.contains(bs) || program.contains('/') {
+        return None;
+    }
+    let lookup = |subkey: String| -> Option<String> {
+        let wpath: Vec<u16> = subkey.encode_utf16().chain(std::iter::once(0)).collect();
+        let mut hkey = Default::default();
+        let opened = unsafe {
+            RegOpenKeyExW(
+                HKEY_LOCAL_MACHINE,
+                PCWSTR(wpath.as_ptr()),
+                None,
+                KEY_QUERY_VALUE,
+                &mut hkey,
+            )
+        };
+        if opened.is_err() {
+            return None;
+        }
+        let mut buf = [0u16; 1024];
+        let mut len = (buf.len() * 2) as u32;
+        let mut ty = REG_SZ;
+        let ok = unsafe {
+            RegQueryValueExW(
+                hkey,
+                PCWSTR::null(), // 默认值
+                None,
+                Some(&mut ty),
+                Some(buf.as_mut_ptr().cast()),
+                Some(&mut len),
+            )
+            .is_ok()
+        };
+        unsafe {
+            let _ = RegCloseKey(hkey);
+        }
+        ok.then(|| {
+            let end = (len as usize / 2).saturating_sub(1);
+            String::from_utf16_lossy(&buf[..end]).trim().to_string()
+        })
+        .filter(|s| !s.is_empty())
+    };
+    let sep = std::path::MAIN_SEPARATOR_STR;
+    let base = format!("SOFTWARE{sep}Microsoft{sep}Windows{sep}CurrentVersion{sep}App Paths");
+    lookup(format!("{base}{sep}{program}")).or_else(|| lookup(format!("{base}{sep}{program}.exe")))
+}

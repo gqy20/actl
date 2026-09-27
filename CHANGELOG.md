@@ -6,6 +6,20 @@
 ## [Unreleased]
 
 ### Added
+- **`paste` 命令(spec,新原语)**:ctrl+v 到目标窗口**当前焦点/选中处**——无元素
+  落点(Excel 选中格/文件管理器选中项/重命名框)的粘贴原语。刻意不做元素级聚焦
+  (SetFocus 会移动选中);护栏链 = 窗口前置 + 物理前台核对 + 输入锁;
+  `input_effects.clipboard: "consumed"`。真机:Excel F2 写入闭环五步缩四步,
+  读回逐字。
+- **`launch` App Paths 解析 + stdio 分离(通用修复)**:裸程序名(Winword/Office
+  别名)不在 PATH 时查注册表 App Paths 取完整路径(实测 `launch WINWORD` 68ms
+  解析启动);GUI 子进程 stdio 显式分离——继承管道句柄会让调用方(head/$())永远
+  等不到 EOF(实测挂死根因)。
+- **应用档案 pack v1(skills/actl/apps/*.yml)**:路线知识从 docs/14 固化为可校验
+  数据(agent 消费,核心 CLI 保持原子不读它)。excel/word 两档:cell_write/read、
+  table_extract、body_read/append、save_inplace 路线 + 受保护视图等 quirks;
+  `cargo xtask lint-packs` 零依赖校验(结构四键 + 17 步全对 `actl commands`
+  schema——命令全集单一事实来源,防漂移)。SKILL.md 增"应用路线"节。
 - **Office 保存链 + Word 写入闭环(解锁后续测,docs/14 收口)**:真实场景 =
   打开已有文件 → 修改 → ctrl+s **原地保存**(不弹窗——断言走磁盘终验而非
   --expect window,此前对草稿 Book1 等弹窗是场景构造错误,已纠正)。Excel:

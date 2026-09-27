@@ -238,3 +238,15 @@ fn batch_steps_have_no_blocked_by_when_foreground_is_baseline() {
         ),
     }
 }
+
+#[test]
+fn paste_requires_app_fail_closed() {
+    // paste 是注入类命令:--app 必填,缺失在 clap 层即拒(usage error,
+    // 与未知子命令同款:exit 2,stdout 空)
+    let (code, stdout) = actl(&["paste"]);
+    assert_eq!(code, 2);
+    assert!(
+        stdout.trim().is_empty(),
+        "clap usage errors stay off stdout"
+    );
+}

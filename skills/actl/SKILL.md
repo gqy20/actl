@@ -65,6 +65,22 @@ actl verify --value <target> "<期望>" --app <app> # 确认:立即断言
 用 `close-window --pid/--hwnd` 逐一优雅关闭(**禁 taskkill**:记事本/计算器等会话
 恢复型应用强杀会复活一堆窗口)。
 
+## 应用路线(Office 实测背书)
+
+操作 Excel/Word 前先读对应档案:`apps/excel.yml`、`apps/word.yml`(含路线
+steps、quirks 与解法、验证方法)。要点速记:
+
+- **Excel 单元格**:名称框 `id:1001` 导航 + 剪贴板直灌(`set-clipboard` →
+  `paste --app`)——网格单元格不是 UIA 元素,name 是坐标不是内容;表格抠数用
+  `extract role:DataGrid`(GridPattern 直读)。
+- **Word 正文**:`get role:Document --property text`(中英文逐字)/
+  `set-clipboard` + `paste`。
+- **保存 = 原地 ctrl+s,不弹窗**:断言走磁盘终验(文件 mtime/重开读回),
+  不要等"另存为"窗口。
+- **受保护视图**:TEMP/下载来的文件编辑被静默拒绝(ctrl+v ok 不落格)——
+  先 `click name:启用编辑`。
+- **启动**:Office/商店应用裸名即可(`launch WINWORD`,App Paths 注册表解析)。
+
 ## 更多
 
 错误码与恢复动作全表:[references/error-codes.md](references/error-codes.md)

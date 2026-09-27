@@ -79,6 +79,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
     match command {
         Command::Commands => commands().map(Into::into),
         Command::Status => status().map(Into::into),
+        Command::Paste { app } => paste_cmd(app),
         Command::Snapshot { app, skeleton } => snapshot(app.as_deref(), *skeleton),
         Command::Click {
             target,

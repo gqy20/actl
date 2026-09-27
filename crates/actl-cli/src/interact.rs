@@ -200,15 +200,43 @@ pub(crate) fn launch(args: &[String]) -> Result<CommandOutput, CtlError> {
     let Some(program) = args.first() else {
         return Err(CtlError::protocol("launch requires a program name"));
     };
-    let child = std::process::Command::new(program)
+    // App Paths 解析:裸程序名(Office/商店别名)不在 PATH 时查注册表取完整路径
+    // (通用增强,docs/14 实测痛点:launch WINWORD 曾 NotFound)
+    // GUI 程序不得继承控制台句柄:Word 等会攥住 stdout 写端,调用方的
+    // 管道(head/$())永远等不到 EOF(实测挂死)。stdio 显式分离。
+    let detached = |cmd: &mut std::process::Command| {
+        cmd.stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+    };
+    let mut first = std::process::Command::new(program);
+    detached(&mut first);
+    let resolved = first
         .args(&args[1..])
         .spawn()
-        .map_err(|e| {
-            CtlError::new(
+        .map(|child| (child, program.clone()))
+        .or_else(|first_err| match actl_uia::resolve_app_path(program) {
+            Some(full) if full != *program => {
+                let full2 = full.clone();
+                let mut second = std::process::Command::new(&full);
+                detached(&mut second);
+                second
+                    .args(&args[1..])
+                    .spawn()
+                    .map(move |child| (child, full2))
+                    .map_err(|e| {
+                        CtlError::new(
+                            ErrorCode::NotFound,
+                            format!("cannot launch {program:?} (resolved {full:?}): {e}"),
+                        )
+                    })
+            }
+            _ => Err(CtlError::new(
                 ErrorCode::NotFound,
-                format!("cannot launch {program:?}: {e}"),
-            )
+                format!("cannot launch {program:?}: {first_err}"),
+            )),
         })?;
+    let (child, program) = resolved;
     Ok(json!({ "pid": child.id(), "program": program }).into())
 }
 
@@ -414,6 +442,17 @@ pub(crate) fn toggle_cmd(
         "resolved_by": loc.resolved_by,
         "state": state,
         "input_effects": { "keyboard": "none", "clipboard": "untouched", "pointer": "none" },
+    })
+    .into())
+}
+
+/// paste:ctrl+v 到目标窗口当前选中处(无元素落点的粘贴原语)。
+pub(crate) fn paste_cmd(app: &str) -> Result<CommandOutput, CtlError> {
+    let title = actl_uia::paste(app)?;
+    Ok(json!({
+        "action": "paste",
+        "window": title,
+        "input_effects": { "keyboard": "injected", "clipboard": "consumed", "pointer": "none" },
     })
     .into())
 }

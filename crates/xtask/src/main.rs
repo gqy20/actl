@@ -21,13 +21,15 @@ fn main() -> ExitCode {
         Some("gate") => gate(),
         Some("fmt") => code(run(&["fmt", "--all"])),
         Some("regress") => regress(),
+        Some("lint-packs") => lint_packs(),
         Some(_) | None => {
             eprintln!(
                 "tasks:\n  \
                  cargo xtask setup   install git hooks + activate pinned toolchain (run once after clone)\n  \
                  cargo xtask gate    quality gate: file-lines + fmt --check + clippy -D warnings + tests (= pre-push = CI)\n  \
                  cargo xtask fmt     format all code
-                 cargo xtask regress run all live fixtures sequentially (needs an interactive desktop)"
+                 cargo xtask regress run all live fixtures sequentially (needs an interactive desktop)
+  \n                 cargo xtask lint-packs validate skills/actl/apps/*.yml steps against the CLI schema"
             );
             ExitCode::FAILURE
         }
@@ -194,6 +196,88 @@ fn regress() -> ExitCode {
         ExitCode::SUCCESS
     } else {
         eprintln!("✗ regress failed: {}", failed.join(", "));
+        ExitCode::FAILURE
+    }
+}
+
+/// 应用档案 pack 校验(零依赖,不引 YAML 解析器——xtask 须离线可跑):
+/// ① 结构:每 pack 必含 name/launch/window/routes 四键;
+/// ② 语义:steps/unblock 数组的首 token(变量 {x} 先替换哑值)必须是真实
+///    actl 命令——命令全集取自 `actl commands`(单一事实来源,防漂移)。
+fn lint_packs() -> ExitCode {
+    let ws_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let packs_dir = ws_root.join("skills").join("actl").join("apps");
+    let Ok(entries) = std::fs::read_dir(&packs_dir) else {
+        eprintln!("✗ lint-packs: {} not found", packs_dir.display());
+        return ExitCode::FAILURE;
+    };
+    if !run(&["build", "--release", "-p", "actl-cli", "--bins"]) {
+        return ExitCode::FAILURE;
+    }
+    let actl = ws_root.join("target/release/actl.exe");
+    // 命令全集(单一事实来源)
+    let known: Vec<String> = match std::process::Command::new(&actl).arg("commands").output() {
+        Ok(o) if o.status.success() => {
+            let text = String::from_utf8_lossy(&o.stdout).into_owned();
+            text.split("\"name\":\"")
+                .skip(1)
+                .map(|rest| rest.split('"').next().unwrap_or_default().to_string())
+                .collect()
+        }
+        _ => {
+            eprintln!("✗ lint-packs: cannot run `actl commands`");
+            return ExitCode::FAILURE;
+        }
+    };
+    let mut files = 0usize;
+    let mut bad = 0usize;
+    let mut checked = 0usize;
+    for e in entries.flatten() {
+        let path = e.path();
+        if path.extension().and_then(|x| x.to_str()) != Some("yml") {
+            continue;
+        }
+        files += 1;
+        let rel = path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned();
+        let text = std::fs::read_to_string(&path).unwrap_or_default();
+        // ① 结构
+        for key in ["name:", "launch:", "window:", "routes:"] {
+            if !text.contains(key) {
+                eprintln!("✗ {rel}: missing `{key}`");
+                bad += 1;
+            }
+        }
+        // ② 步骤首 token(取每行中第一个 [" 之后的首个引号串)
+        for line in text.lines() {
+            let Some(start) = line.find("[\"") else {
+                continue;
+            };
+            let rest = &line[start + 2..];
+            let Some(end) = rest.find('"') else { continue };
+            let cmd = &rest[..end];
+            if cmd.starts_with('{') {
+                continue; // 变量开头不是命令
+            }
+            checked += 1;
+            if !known.iter().any(|k| k == cmd) {
+                eprintln!("✗ {rel}: unknown command {cmd:?} in step");
+                bad += 1;
+            }
+        }
+    }
+    if files == 0 {
+        eprintln!("✗ lint-packs: no .yml packs found");
+        return ExitCode::FAILURE;
+    }
+    if bad == 0 {
+        eprintln!("✓ lint-packs: {files} packs, {checked} steps, all commands known");
+        ExitCode::SUCCESS
+    } else {
+        eprintln!("✗ lint-packs: {bad} problem(s) across {files} packs");
         ExitCode::FAILURE
     }
 }

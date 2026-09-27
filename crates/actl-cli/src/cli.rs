@@ -97,6 +97,12 @@ pub(crate) enum Command {
         #[arg(long)]
         paste: bool,
     },
+    /// Paste (ctrl+v) into the current focus/selection of the target window
+    Paste {
+        /// Target window by title substring (required: injection is fail-closed)
+        #[arg(long)]
+        app: String,
+    },
     /// Press a key combination acting on the current focus (e.g. ctrl+s)
     Press {
         /// Key expression: ctrl+s, ctrl+shift+t, enter, f5 ...
@@ -399,6 +405,7 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
         Command::Launch { .. } => "launch",
         Command::Type { .. } => "type",
         Command::Press { .. } => "press",
+        Command::Paste { .. } => "paste",
         Command::SetValue { .. } => "set-value",
         Command::RightClick { .. } => "right-click",
         Command::DoubleClick { .. } => "double-click",
@@ -446,6 +453,14 @@ fn after_help_for(name: &str) -> Option<&'static str> {
         }
         "type" => {
             "Example:\n  actl type id:Edit 'hello world' --app Notepad --paste\n--paste: clipboard+ctrl+v, the only reliable channel under a Chinese-mode IME (uses the shared clipboard, reported in output).\nErrors: PROTOCOL --app required (injection is fail-closed) | PERM_DENIED foreground guard aborted | NOT_FOUND / AMBIGUOUS target | NOT_ACTIONABLE cannot take focus"
+        }
+        "paste" => {
+            "Example:
+  actl paste --app Excel
+Ctrl+v into the CURRENT selection (no element needed): the Excel cell route,
+file-manager rename, selected items. Deliberately does NOT focus an element
+(focusing would move the selection); window foreground + guard + lock only.
+Errors: PROTOCOL --app required | PERM_DENIED foreground guard | NOT_FOUND window"
         }
         "press" => {
             "Example:\n  actl press ctrl+s --app Notepad --expect window:另存为\n--expect = a NEW window must appear (pre-existing same-title does not count).\nErrors: PROTOCOL --app required or bad key expr | PERM_DENIED foreground guard aborted | ASSERTION_FAILED --expect window never appeared"
