@@ -9,6 +9,10 @@
 
 ## [Unreleased]
 
+### Fixed
+- **流程预检补齐断言检查**：无条件 wait/verify、错误选择器或等待谓词在执行前拒绝，
+  避免前置步骤已经生效后才发现配置错误；增加发布版跨进程暂停与异常退出评估脚本。
+
 ### Added
 - **YAML 流程 v1**：新增独立 actl-flow 与 flow-validate/run/status/pause/resume。
   全步骤预检、参数数组、不可覆盖计划、写前记录、命令边界暂停、恢复前验证；

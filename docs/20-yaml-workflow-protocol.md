@@ -49,6 +49,7 @@ steps:
 name/title 最多 256 字节；1–256 步；id 使用历史协议的 1–80 位 ASCII ID 规则且不得重复。
 输入文件和规范化计划各最多 256 KiB；每命令最多 128 参数，单参数最多 16 KiB，不含 NUL。
 可选 before/verify 只能调用 verify 或 wait；before 每次实际重放前都重新执行。
+预检同时检查 wait/verify 恰好一个断言模式、断言目标语法及 wait 属性谓词，缺失或无效时在任何步骤前拒绝。
 
 retry 默认为 never；read_only 仅适用于观察命令，最多尝试 3 次，间隔 200ms。
 on_failure 默认 pause，可设 fail。pause_before 默认 false，首次到达该步骤时暂停，继续后不重复暂停。

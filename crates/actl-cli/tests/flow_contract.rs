@@ -37,6 +37,27 @@ impl Drop for Sandbox {
 }
 
 const SIMPLE: &str = "version: 1\nname: Inspect\nsteps:\n  - id: one\n    title: System\n    run: {command: status}\n  - id: two\n    title: System again\n    pause_before: true\n    run: {command: status}\n";
+
+#[test]
+fn preflight_rejects_missing_or_invalid_assertions_before_creating_run() {
+    let s = Sandbox::new();
+    for call in [
+        "{command: wait}",
+        "{command: verify}",
+        "{command: verify, args: [--exists, invalid-selector]}",
+        "{command: wait, args: [--element, 'name:x', --property, invalid-predicate]}",
+    ] {
+        let file=s.file(&format!("version: 1\nname: Invalid assertion\nsteps:\n - id: first\n   title: First\n   run: {{command: status}}\n - id: bad\n   title: Bad\n   run: {call}\n"));
+        let (code, result) = s.invoke(&["flow-validate", "--file", &file]);
+        assert_eq!(code, 2, "{result}");
+        assert_eq!(
+            s.invoke(&["flow-run", "--file", &file, "--id", "invalid"])
+                .0,
+            2
+        );
+        assert!(!s.root.join("actl/flows/invalid").exists());
+    }
+}
 #[test]
 fn validate_checkpoint_resume_and_saved_plan_contract() {
     let s = Sandbox::new();

@@ -32,6 +32,57 @@ fn read_only(cmd: &Command) -> bool {
             | Command::GetClipboard
     )
 }
+
+fn validate_assertion(command: &Command) -> Result<(), CtlError> {
+    match command {
+        Command::Wait {
+            element,
+            window,
+            gone,
+            property,
+            ..
+        } => {
+            if [element.is_some(), window.is_some(), gone.is_some()]
+                .into_iter()
+                .filter(|v| *v)
+                .count()
+                != 1
+            {
+                return Err(CtlError::protocol(
+                    "flow wait requires exactly one of --element/--window/--gone",
+                ));
+            }
+            for target in element.iter().chain(gone.iter()) {
+                actl_core::parse_target(target)?;
+            }
+            if let Some(predicate) = property {
+                actl_uia::WaitPredicate::parse(predicate)?;
+            }
+        }
+        Command::Verify {
+            exists,
+            value,
+            checked,
+            ..
+        } => {
+            if [exists.is_some(), value.is_some(), checked.is_some()]
+                .into_iter()
+                .filter(|v| *v)
+                .count()
+                != 1
+            {
+                return Err(CtlError::protocol(
+                    "flow verify requires exactly one assertion",
+                ));
+            }
+            for target in exists.iter().chain(value.iter()).chain(checked.iter()) {
+                actl_core::parse_target(target)?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
 pub fn validate(plan: &Plan) -> Result<(), CtlError> {
     for step in &plan.steps {
         let command = parse(&step.run)?;
@@ -67,7 +118,7 @@ pub fn validate(plan: &Plan) -> Result<(), CtlError> {
                     "saved flows require semantic selectors; transient refs/snapshot IDs are unsupported",
                 ));
             }
-            parse(call)?;
+            validate_assertion(&parse(call)?)?;
         }
         for check in step.before.iter().chain(step.verify.iter()) {
             if !matches!(parse(check)?, Command::Verify { .. } | Command::Wait { .. }) {
