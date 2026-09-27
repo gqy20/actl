@@ -6,6 +6,12 @@
 ## [Unreleased]
 
 ### Added
+- **微信 pack(skills/actl/apps/wechat.yml)**:知识来源 = 同作者的 wechat-ui-collector
+  项目(weixin-4x profile:mmui:: 选择器体系)+ 本机只读真机验证(session_list 可达、
+  session_item_<名称> 富 id 定位会话、消息区随打开物化)。路线:会话概览/打开会话/
+  读消息(虚拟化 RecyclerListView)/发送(高危标注:核对标题+读回确认+严禁盲发);
+  quirks 六条含后台操作参考(LASTINPUTINFO 空闲检测 + WS_EX_NOACTIVATE 后台点击,
+  actl 后台化列 M3 候选)。lint-packs 3 packs/28 步全绿。
 - **`paste` 命令(spec,新原语)**:ctrl+v 到目标窗口**当前焦点/选中处**——无元素
   落点(Excel 选中格/文件管理器选中项/重命名框)的粘贴原语。刻意不做元素级聚焦
   (SetFocus 会移动选中);护栏链 = 窗口前置 + 物理前台核对 + 输入锁;

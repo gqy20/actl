@@ -1,0 +1,45 @@
+# actl 应用档案 pack v1 —— 微信 4.x(Windows 桌面版,Qt/mmui 界面体系)
+# 知识来源:wechat-ui-collector 项目(同作者)的 weixin-4x profile + 本机真机
+# 只读验证(2026-09-27:session_list/session_item_* 可达;消息区随会话物化)
+name: wechat
+display: 微信
+launch: Weixin           # 进程名 Weixin/WeChat;窗口类 mmui::MainWindow
+window: "微信"
+quirks:
+  - id: materialize_on_open
+    note: 消息区元素(chat_message_list/chat_input_field)仅在打开会话后物化——先点 session_item 再找消息元素
+  - id: rich_session_ids
+    note: 会话条目 automation_id 含名称(session_item_文件传输助手/session_item_<群名>),可直接按 id 定位会话
+  - id: virtualized_messages
+    note: 消息列表 mmui::RecyclerListView 虚拟化,4.1.x 不支持 Scroll pattern——滚动用物理滚轮兜底
+  - id: message_area_buttons
+    note: 消息区按钮(发送(S)/表情/文件/截图/语音聊天/视频聊天)解析消息文本时须排除
+  - id: safety_no_blind_send
+    note: 真实聊天应用——发送前必须核对会话标题(chat_input_field 所属会话);严禁盲发;输入用剪贴板+paste 并读回确认
+  - id: background_ops
+    note: 采集类长任务参考 wechat-ui-collector 的两件套——LASTINPUTINFO 用户空闲检测 + 临时 WS_EX_NOACTIVATE 后台点击(样式记 journal 可恢复);actl 后台化属 M3 候选
+routes:
+  - id: session_scan
+    description: 会话列表概览(只读安全)
+    steps:
+      - ["find", "--id", "session_list", "--app", "{window}"]
+      - ["snapshot", "--app", "{window}", "--skeleton"]
+  - id: open_conversation
+    description: 打开指定会话(session_item id 含会话名)
+    steps:
+      - ["click", "id:session_item_{name}", "--app", "{window}"]
+      - ["wait", "--element", "id:chat_message_list", "--app", "{window}", "--timeout", "3000"]
+  - id: read_messages
+    description: 读当前会话消息(须先 open_conversation;列表虚拟化,读到的是已物化窗口段)
+    steps:
+      - ["extract", "id:chat_message_list", "--app", "{window}"]
+      - ["snapshot", "--app", "{window}", "--skeleton"]
+  - id: send_message
+    description: 发送消息(高危:先核对会话标题;读回确认后再发送)
+    steps:
+      - ["set-clipboard", "{text}"]
+      - ["click", "id:chat_input_field", "--app", "{window}"]
+      - ["paste", "--app", "{window}"]
+      - ["get", "id:chat_input_field", "--app", "{window}", "--property", "value"]
+      - ["click", "name:发送(S)", "--app", "{window}"]
+verify: 发送前 get id:chat_input_field --property value 读回比对;消息落列表后 find 新增 bubble

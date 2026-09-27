@@ -67,7 +67,7 @@ actl verify --value <target> "<期望>" --app <app> # 确认:立即断言
 
 ## 应用路线(Office 实测背书)
 
-操作 Excel/Word 前先读对应档案:`apps/excel.yml`、`apps/word.yml`(含路线
+操作 Excel/Word/微信前先读对应档案:`apps/excel.yml`、`apps/word.yml`、`apps/wechat.yml`(含路线
 steps、quirks 与解法、验证方法)。要点速记:
 
 - **Excel 单元格**:名称框 `id:1001` 导航 + 剪贴板直灌(`set-clipboard` →
