@@ -10,6 +10,17 @@
 ## [Unreleased]
 
 ### Added
+- **浏览器场景实测(docs/16)+ browser pack 翻档**:fixture 轨 8/8(四档投影:
+  full 19764B → skeleton 43% → content 58% → **content+skeleton 80%**,超 PRD 70%
+  线;settle 活体证据:10s 追加窗内阻塞 8410ms、观测 5 次变化);小红书真机
+  闭环全通(地址栏导航 ctrl+l+paste → settle → 读 feed → 滚动×2 增量读;真实页
+  组合投影 71%,较纯 skeleton 再省 38%)。三个发现沉淀为 pack quirks:多文档页
+  AMBIGUOUS(xhs 2×RootWebArea,feed=role:Document#2,通用法 find 枚举+非空
+  定位)、未登录卡片=图片对象(文本通道只见骨架,登录态留待补测)、导航须用
+  paste 而非元素定位(临时窗口用完即关防 AMBIGUOUS)。browser.yml 5 路线翻
+  `verified`(read/read_multidoc/tree/navigate/scroll),open_item/site_search/
+  new_tab 保持 `unverified` 待登录态补测;新增 fixtures:edge-content-view.sh
+  (CI 轨)+ xhs-browse.sh(场景轨)。
 - **`snapshot --view content` + `wait --stable`(spec,浏览器内容通道基建)**:
   ① **内容域投影**——只保留 Document 子树(网页/文档正文)与根→Document 路径,
   应用 chrome(工具栏/ribbon)整枝丢弃;与 `--skeleton` 正交组合,折叠仅作用于
