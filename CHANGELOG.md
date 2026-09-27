@@ -10,6 +10,13 @@
 ## [Unreleased]
 
 ### Added
+- **系统 UI 区域普查(docs/15)**:快速设置(Win+A)**全可达**(ControlCenterRegion,
+  WLAN/蓝牙/勿扰按钮实名可点)、通知中心(Win+N)**全可达**(通知列表/请勿打扰/
+  全部清除实名)、桌面图标全可达(ListItem)——系统控制原语路线(勿扰开关/WiFi
+  切换)可直接进 pack;开始菜单待复测;任务栏/托盘维持退化终审。**更正**:Win 键
+  一直被引擎支持(MODIFIERS 自始含 win→VK_LWIN,清场含双变体)——此前"安全边界/
+  未实现"两说均为误判,如实入档;Win 组合注入的 --app 锚定语义 = 当前前台窗
+  (任务栏不可聚焦)。
 - **`snapshot --hwnd`(spec,加法)+ 特殊窗可达性修复**:Win11 任务栏 XAML 岛/
   TrayNotifyWnd 等无标题特殊窗此前双遮蔽(list-windows 滤空标题 + UIA root 枚举
   不含)。修复:`resolve_window` 的 Hwnd 分支改走 **ElementFromHandle 直取**
