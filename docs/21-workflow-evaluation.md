@@ -76,3 +76,30 @@ pwsh -NoProfile -File fixtures/flow-evaluation.ps1
 检查点与源文件隔离场景总计 1775ms；暂停请求返回 60ms，暂停确认 3192ms（本例 wait 配置 2000ms
 超时，确认时间还包含调用/轮询开销）。五组场景全部通过。
 本机原始记录：`target/flow-evaluation-02eacade773e41baa9a0fa2d81dd86c1/report.json`（不进 Git）。
+
+## Computer Use 真实窗口补测
+
+2026-09-27，Windows 10.0.26200.0，计算器 11.2607.0.0，中文界面。
+使用 computer-use 插件的 `@oai/sky` 启动计算器、观察截图并逐次点击 `2`、`+`、`3`、`=`。
+每次点击后重新观察，最终截图确认显示 `5`。以下流程命令由发布版 CLI 执行，窗口输入全部由
+Computer Use 完成；这是人工介入后的流程恢复测试，不是 YAML 自动点击或托盘菜单验收。
+
+| 场景 | 实际证据 | 结果 |
+|---|---|---|
+| 检查点暂停 | 读取 `CalculatorResults` 的名称为“显示为 2”；第二步尚未执行，reason=checkpoint | 通过 |
+| 条件未满足时恢复 | 仍显示 2 时要求 5，返回 paused/action_failed；末步 attempts=0 | 通过 |
+| 界面操作后恢复 | Computer Use 算出 5 后恢复，三步全部 completed | 通过 |
+| 不重复完成步骤 | 首步 attempts=1，结果检查 attempts=2，末步 attempts=1 | 通过 |
+| 原有停止保护 | 只在隔离 LOCALAPPDATA 下运行只读流程，原停止标志始终保留 | 通过 |
+
+首次试探使用快照中的 `NormalOutput`，但语义定位返回 NOT_FOUND；改用已有 fixture 使用的
+`CalculatorResults`。它的结果在 Name 通道，`verify --value` 返回 actual=null；因此使用
+`wait --property 'name=显示为 5'` 精确检查。该选择器差异保留为应用知识，未修改定位器实现。
+
+**显示端仍未通过点击验收。** Computer Use 的 list_windows/list_apps 不列出运行中的悬浮条，
+显式 launch_app 返回 `launched app did not expose a targetable window`。代码中悬浮条使用
+TOOLWINDOW/NOACTIVATE 样式，但尚不能断言它就是工具过滤窗口的原因。没有绕过工具构造窗口句柄，
+也没有替换正在运行的显示端；托盘暂停/继续、波纹与视觉状态仍待可选中窗口的工具或人工验收。
+
+原始 YAML、检查点、失败和完成 envelope 保存在 `target/computer-use-20260927/`（不进 Git）。
+截图已在 Computer Use 会话中核对；没有另存截图文件。
