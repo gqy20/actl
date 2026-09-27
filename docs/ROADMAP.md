@@ -57,11 +57,15 @@ Agent Skill ✓ · crates.io 已发布且 tag 自动同步(三 crate;cargo insta
 时序评估闭环(Timing 旋钮 + 画像/扫描 fixtures + 三默认值维持,docs/timing-2026-09.md)✓ ·
 外部机器复现 US3 待非开发机验证。
 
-**收官批进展(2026-09-27,v0.1.3 已发;Office 场景见 docs/14)**:Office 实测(Excel 表格 GridPattern 直读+剪贴板直灌读写闭环、Word TextPattern 正文)✓ · 窗口治理(batch windows_created+blocked_by 弹窗闸门+fixtures trap 清理)✓ · 原有项:命令面:命令面 26/31(wait 属性谓词/select/toggle ✓;
-list-notifications 搁置 M3,list-surfaces 待裁定)· 虚拟化容器定位 L4 + Explorer 条目级
-收口 ✓ · 全命令 help 四要素 ✓ · batch 步级可观测 + ACTL_TRACE ✓ · skeleton 单链折叠
-(NFR 修订为分形态:深单链 ≥70%,浏览器/小窗口实测受限)· P50 结构优化落地(绝对值
-待正常日)· 金任务 10 轮全量回归 + 外部机器 US3 = 0.2.0 发版前剩余项。
+**收官批进展(2026-09-27,v0.1.4 已发;Office/微信场景见 docs/14)**:命令面 27/31
+(wait 谓词/select/toggle/paste;list-notifications 搁置 M3,list-surfaces 待裁定)· 窗口
+治理(close/focus --pid/--hwnd、batch windows_created+blocked_by 弹窗闸门、fixtures trap
+清理、GUI 禁 taskkill)· launch App Paths 解析 · help 全命令四要素 · 信号条重设计
+(波纹/自适应/实时耗时/Per-Monitor DPI)· regress 一键回归 · Office 三闭环双应用
+(Excel GridPattern 直读+剪贴板直灌;Word TextPattern;docs/14)· 微信核心通道全通
+(发送/搜索/文件/联系人/朋友圈/@人/群信息;pack 路线+quirks)· 应用档案 pack v1
+(excel/word/wechat + lint-packs + actl×collector 分工协议)。
+0.2.0 剩余:正常日 timing/P50 复测、金任务 10 轮全量回归、外部机器 US3(用户侧)。
 
 **退出标准**:
 - 金任务集全过,US1"跨 3 应用数据搬运"成功率 ≥ 90%(10 次重跑);

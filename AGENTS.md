@@ -31,13 +31,16 @@
 
 ## 仓库地图(分层细节见 docs/TECH_STACK.md §2)
 
-`crates/actl-core`=协议(纯逻辑) · `crates/actl-uia`=UIA/COM(唯一 unsafe 豁免) · `crates/actl-physical`=物理兜底 · `crates/actl-cli`=入口 · `fixtures/`=集成测试 · `hooks/`=git hooks · `docs/`=全部决策文档
+`crates/actl-core`=协议(纯逻辑) · `crates/actl-uia`=UIA/COM(唯一 unsafe 豁免) · `crates/actl-physical`=物理兜底 · `crates/actl-cli`=入口 · `fixtures/`=集成测试 · `hooks/`=git hooks · `docs/`=全部决策文档 · `skills/actl`=agent skill 与应用档案 pack(`apps/*.yml`,应用知识不进核心,改后跑 `cargo xtask lint-packs`)
 
 ## 测试
 
-- 新命令:单测 + envelope 契约 golden 最低配;fixtures 只用系统自带应用(计算器/记事本/ms-settings);
+- 新命令:单测 + envelope 契约 golden 最低配,且 **help 四要素齐备**(Usage/参数/Example/Errors,进 cli.rs 的 after_help 表);fixtures 只用系统自带应用(计算器/记事本/ms-settings);
+- **双轨纪律**:CI fixture 轨(系统应用,可复现)与场景实测轨(真实应用,docs/ 场景记录,不进 CI)分开;场景实测结论落 docs 并同步 pack;
 - 修 bug:**先写复现测试再修**,同 PR;
-- golden 变更只能随 `spec`/`test` 提交,禁止顺手改。
+- golden 变更只能随 `spec`/`test` 提交,禁止顺手改;
+- **GUI 应用禁 taskkill**(会话复活:记事本 TabState+云同步、计算器僵尸框架)——清理一律优雅关闭(close-window --pid/--hwnd),fixture 用 trap EXIT 保证失败也清理;
+- 真机回归:`cargo xtask regress`(需交互桌面;含键盘注入的 fixture 需桌面空闲)。
 
 ## AI agent 附加要求
 
@@ -45,6 +48,10 @@
 - 命令/协议语义以 docs/06-design-blueprint.md 为准,不凭记忆发明;
 - 代码与文档同 PR;范围以 docs/PRD.md §1.3 非目标清单为铁律,拿不准就问,不静默扩大;
 - 安全:不做任何规避权限/隐身执行的功能;涉及 `--physical` 的改动必须显式提示;
-- 提交信息自写、按逻辑分组,禁巨型混合提交。
+- 提交信息自写、按逻辑分组,禁巨型混合提交;
+- **bash 内联中文参数会 GBK 污染**(显示层及应用层均可能)——含中文的命令序列写 UTF-8 脚本文件执行,不内联;
+- **诊断三段法**:状态类矛盾先查环境(锁屏/慢日/受保护视图/遮挡——护栏拒绝通常是对的),再看窗口实际状态(list-windows/截图),最后才怀疑代码;截图核对是最后仲裁手段;
+- 性能/耗时数字只在同环境头内比较(慢日绝对值不可跨日,timing 纪律)。
+
 
 License: TBD(倾向 Apache-2.0);定案前不引入 vendored 外部代码。
