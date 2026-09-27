@@ -141,12 +141,12 @@ full command semantics and the protocol contract live in the
   stop; in-flight injections are rejected at the next action boundary
   (`ABORTED`). Click the strip to clear the stop flag and resume.
 
-### Command surface (30 commands, self-discovered via `actl commands`)
+### Command surface (33 commands, self-discovered via `actl commands`)
 
 | Category | Commands |
 |---|---|
-| Sense | `snapshot` `find` `get` `list-windows` `status` `commands` |
-| Act | `click` `right-click` `double-click` `hover` `drag` `scroll` `type` `paste` `press` `key-down` `key-up` `set-value` `select` `toggle` |
+| Sense | `snapshot` `find` `get` `list-windows` `screenshot` `status` `commands` |
+| Act | `click` `right-click` `double-click` `middle-click` `triple-click` `hover` `drag` `scroll` `type` `paste` `press` `key-down` `key-up` `set-value` `select` `toggle` |
 | Window | `launch` `focus-window` `close-window` `resize-window` `wait` `batch` |
 | Verify | `verify` `extract` |
 | System | `get-clipboard` `set-clipboard` |
@@ -164,7 +164,7 @@ are welcome.
 
 ## Project status
 
-Currently v0.1.x (M2 phase): all 30 commands work end-to-end; end-to-end tasks
+Currently v0.1.x (M2 phase): all 33 commands work end-to-end; end-to-end tasks
 (Calculator, Notepad save) and a cross-3-app data relay pass all tests; Office
 (Excel/Word) and the WeChat core channels are verified in practice, with
 findings continuously folded back into the docs and app packs. See the

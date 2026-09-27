@@ -62,6 +62,11 @@
   stdout 契约不破,视觉消费归上层。真机三域全通(区域 61ms、窗口 39KB、元素
   2280×1180)+ 视觉抽验清晰无错位;契约 17/17。
 - 英文版 README(`README.en.md`),与中文版顶部语言互链;英文示例使用英文系统窗口名。
+- **pack 契约 `skills/actl/PACKS.md`(pack_format: 1)**:字段与占位符语义、路线级
+  `status` 信任分级(verified/manual/unverified,unverified 禁直接执行)、模板、
+  贡献流程与 review 红线(盲发/规避护栏/核心语义冲突即拒)、私有 pack 外挂
+  (`cargo xtask lint-packs <dir>`)与生命周期规则;excel/word/wechat 三 pack 升级
+  format 1(补 pack_format/app_version/verified_date + 全部路线 status)。
 
 ### Changed
 - README 规范化(面向用户重组):安装渠道折叠、快速上手收敛为"感知→执行→断言"
@@ -69,6 +74,16 @@
   改写为用户语言;开发者内容压缩为"参与开发"一段,内部进度黑话(金任务/US1/
   定位链四级)移出 README,详见 ROADMAP 与设计蓝图。
 - AGENTS.md 过期的 License TBD 口径对齐为 MIT(与 LICENSE 文件一致)。
+- **lint-packs 进 gate**(pre-push/CI 随之生效)并强化校验:pack_format 值、id
+  全文件唯一(quirks/routes 共命名空间)、路线 status 必填且取值合法;支持目录
+  参数校验仓库外私有 pack。
+- README 命令面计数跟进 30→33(`screenshot`/`middle-click`/`triple-click`,
+  前批 feat 的文档债)。
+
+### Fixed
+- SKILL.md 视觉兜底示例:`screenshot --element` 的作用域参数 `--app` → `--sapp`
+  (二者 clap 互斥,原写法照抄即拒);wechat pack 游离于路线列表中段的顶层
+  `verify:` 行并入 send_message 路线(原位置在 YAML 中非法)。
 
 ## [0.1.4] - 2026-09-27
 

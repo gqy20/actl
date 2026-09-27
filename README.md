@@ -114,12 +114,12 @@ actl click role:Button --near id:clearButton --app 计算器    # 锚点就近
   灰=空闲 · 暗=失联;**Ctrl+Alt+F12** 全局紧急停止,在途注入在动作边界被拒
   (`ABORTED`),点击状态条清除停止标志恢复。
 
-### 命令一览(30 条,`actl commands` 自发现)
+### 命令一览(33 条,`actl commands` 自发现)
 
 | 类别 | 命令 |
 |---|---|
-| 感知 | `snapshot` `find` `get` `list-windows` `status` `commands` |
-| 执行 | `click` `right-click` `double-click` `hover` `drag` `scroll` `type` `paste` `press` `key-down` `key-up` `set-value` `select` `toggle` |
+| 感知 | `snapshot` `find` `get` `list-windows` `screenshot` `status` `commands` |
+| 执行 | `click` `right-click` `double-click` `middle-click` `triple-click` `hover` `drag` `scroll` `type` `paste` `press` `key-down` `key-up` `set-value` `select` `toggle` |
 | 窗口 | `launch` `focus-window` `close-window` `resize-window` `wait` `batch` |
 | 验证 | `verify` `extract` |
 | 系统 | `get-clipboard` `set-clipboard` |
@@ -134,7 +134,7 @@ actl click role:Button --near id:clearButton --app 计算器    # 锚点就近
 
 ## 项目状态
 
-当前 v0.1.x(M2 阶段):30 条命令全链路可用;计算器与记事本保存的端到端任务、跨
+当前 v0.1.x(M2 阶段):33 条命令全链路可用;计算器与记事本保存的端到端任务、跨
 3 应用数据搬运均实测全绿;Office(Excel/Word)与微信核心通道已实测通达,场景结论
 持续沉淀进 docs 与应用档案。阶段划分与版本口径见 [ROADMAP](docs/ROADMAP.md)。
 
