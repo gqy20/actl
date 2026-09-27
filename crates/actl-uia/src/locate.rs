@@ -171,12 +171,16 @@ fn select(
     level: &'static str,
 ) -> Result<Located, CtlError> {
     // L3 序数直选
-    if let Target::RoleAt(_, n) = target {
+    if let Target::RoleAt(_, n) | Target::IdAt(_, n) = target {
         return match matches.get((*n as usize).saturating_sub(1)) {
             Some(c) => Ok(located_from(
                 c.element.clone(),
                 window_title,
-                "role-ordinal",
+                if matches!(target, Target::IdAt(..)) {
+                    "id-ordinal"
+                } else {
+                    "role-ordinal"
+                },
             )),
             None => Err(CtlError::new(
                 ErrorCode::NotFound,
@@ -366,7 +370,7 @@ fn collect_matches(
                 return dfs_children(walker, elem, depth, target, fuzzy, counter, out);
             }
         }
-        Target::Id(s) => {
+        Target::Id(s) | Target::IdAt(s, _) => {
             let id = elem.get_automation_id().ok().filter(|a| !a.is_empty());
             if id.as_deref() != Some(s.as_str()) {
                 return dfs_children(walker, elem, depth, target, fuzzy, counter, out);
@@ -391,7 +395,7 @@ fn collect_matches(
             (Some(n), false) => n.contains(s.as_str()),
             (None, _) => false,
         },
-        Target::Id(s) => id.as_deref() == Some(s.as_str()),
+        Target::Id(s) | Target::IdAt(s, _) => id.as_deref() == Some(s.as_str()),
         Target::Role(s) | Target::RoleAt(s, _) => role == *s,
     };
     if hit {
@@ -528,12 +532,24 @@ fn collect_containers(
     }
 }
 
+/// wait 族轮询的定位语义:普通失败(NOT_FOUND 等)= 继续等(元素可能晚到);
+/// **AMBIGUOUS = 确定性多命中,等待不可能收敛 → 立即失败**(候选 evidence
+/// 已随错误携带,无需等满超时;2026-09-27 抖音多文档页实测:samples 冻结
+/// 在 1 的误导性 TIMEOUT 根因)。
+fn poll(app: Option<&str>, target: &Target) -> Result<Option<Located>, CtlError> {
+    match locate(app, target, None) {
+        Ok(loc) => Ok(Some(loc)),
+        Err(e) if e.code == ErrorCode::Ambiguous => Err(e),
+        Err(_) => Ok(None),
+    }
+}
+
 /// wait --element:轮询定位直到目标可解析(TIMEOUT 语义;与 --expect 的
 /// "立即断言"分工见 06 §3.6"耐心等待")。
 pub fn wait_element(app: Option<&str>, target: &Target, timeout_ms: u64) -> Result<(), CtlError> {
     let deadline = std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
     loop {
-        if locate(app, target, None).is_ok() {
+        if poll(app, target)?.is_some() {
             return Ok(());
         }
         if std::time::Instant::now() >= deadline {
@@ -553,7 +569,7 @@ pub fn wait_element(app: Option<&str>, target: &Target, timeout_ms: u64) -> Resu
 pub fn wait_gone(app: Option<&str>, target: &Target, timeout_ms: u64) -> Result<(), CtlError> {
     let deadline = std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
     loop {
-        if locate(app, target, None).is_err() {
+        if poll(app, target)?.is_none() {
             return Ok(());
         }
         if std::time::Instant::now() >= deadline {
@@ -607,7 +623,7 @@ pub fn wait_property(
     let deadline = std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
     let mut last: Option<String> = None;
     loop {
-        if let Ok(loc) = locate(app, target, None) {
+        if let Some(loc) = poll(app, target)? {
             let actual = predicate.read(&loc.element);
             if predicate.satisfied(actual.as_deref()) {
                 return Ok(actual.unwrap_or_default());
@@ -653,7 +669,7 @@ pub fn wait_stable(
     let mut samples = 0usize;
     let mut changes = 0usize;
     loop {
-        if let Ok(loc) = locate(app, target, None) {
+        if let Some(loc) = poll(app, target)? {
             let sample = stability_sample(&loc.element);
             samples += 1;
             stable = match &last {

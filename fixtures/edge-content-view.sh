@@ -45,6 +45,7 @@ cat > "$HTML_UX" << EOF
 <nav><a href="#a">Alpha link</a> <a href="#b">Beta link</a> <a href="#c">Gamma link</a></nav>
 <p>The quick brown fox jumps over the lazy dog. 敏捷的棕色狐狸跳过了懒狗。</p>
 <ol id="feed"></ol>
+<button id="dup-a">dup-target</button><button id="dup-b">dup-target</button>
 <script>
 let i = 0;
 const t = setInterval(() => {
@@ -83,6 +84,17 @@ if grep -q '"ok":true' <<<"$SETTLE_OUT"; then
   echo "settle evidence: waited=${WAITED}ms changes=${CHANGES:-n/a}"
 else
   FAIL=$((FAIL+1)); echo "FAIL: wait --stable errored"; head -c 300 <<<"$SETTLE_OUT"; echo
+fi
+
+# ── 2b. wait 族 AMBIGUOUS 快速失败(2026-09-27 spec):同名双按钮 →
+# 等待不可能收敛,必须立即 AMBIGUOUS(不等满超时;samples 冻结类误导性
+# TIMEOUT 的根治)
+AMBIG_OUT=$("$ACTL" wait --element "name:dup-target" --app "$WIN" --timeout 5000 2>&1)
+AMBIG_DUR=$(grep -o '"duration_ms":[0-9]*' <<<"$AMBIG_OUT" | grep -o '[0-9]*')
+if grep -q '"code":"AMBIGUOUS"' <<<"$AMBIG_OUT" && [ "${AMBIG_DUR:-99999}" -lt 3000 ]; then
+  PASS=$((PASS+1)); echo "PASS: wait fast-fails on AMBIGUOUS (${AMBIG_DUR}ms, not 5000ms)"
+else
+  FAIL=$((FAIL+1)); echo "FAIL: AMBIGUOUS fast-fail (code/duration wrong)"; head -c 300 <<<"$AMBIG_OUT"; echo
 fi
 
 # ── 3. 四档快照实测(字节 + 元素数;数字回显,断言只做机制方向) ──────────
