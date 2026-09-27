@@ -93,6 +93,7 @@ CI(GitHub Actions,`windows-latest`):`cargo xtask gate`(file-lines 单文件行�
 4. Rust edition/MSRV 跟进 —— 落后最多一个 stable 周期;
 5. cargo-deny(依赖 license/漏洞审计)—— M2 依赖扩张后引入,当前直接依赖极少,过早;
 6. MSRV 验证 CI job(`rust-version = 1.85` 目前只有声明无验证)—— 首个外部使用者出现前(M2)补。
+7. 显示层渲染栈(GDI → Direct2D/WebView2 内容层)—— 触发条件:docs/11 Phase B/C 面板化立项,或信号条视觉迭代摩擦不可接受;路线矩阵与决策门见 [11 §14](11-desktop-interaction-and-display-research.md);若采 webview2-com 须先登记 §3 依赖清单(+1~2 个直接依赖)。
 
 ## 8. 与既有文档的关系
 

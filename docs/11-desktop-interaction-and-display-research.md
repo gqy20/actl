@@ -1,6 +1,6 @@
 # 11 · 桌面自动化的显示层与人机协作体验
 
-调研日期：2026-09-26 · 状态：后期产品研究与交互提案，未实现、未做用户实测
+调研日期：2026-09-26 · 状态：后期产品研究与交互提案，未实现、未做用户实测 · 2026-09-27 增补 §14（渲染栈选型分析）
 
 关联：[现行 PRD](PRD.md) · [现行命令协议](06-design-blueprint.md) · [Agent/Jev 分工](08-agent-cli-jev-design-proposal.md) · [输入占用边界](09-input-backends-review.md) · [Quicker 需求研究](10-quicker-demand-research.md) · [实时状态维护](13-realtime-state-maintenance.md)
 
@@ -347,6 +347,35 @@ flowchart LR
 
 ## 13. 待决策事项与本轮结论
 
-后续需要决定：首个支持的上层宿主、伴随程序是否独立分发、可访问停止入口如何实现、任务历史保留范围、显示框架与依赖预算，以及哪些应用值得做隔离试验。现阶段没有足够证据选择 UI 框架或承诺后台并行覆盖率。
+后续需要决定：首个支持的上层宿主、伴随程序是否独立分发、可访问停止入口如何实现、任务历史保留范围、显示框架与依赖预算（阶段性分析见 §14），以及哪些应用值得做隔离试验。现阶段没有足够证据选择 UI 框架或承诺后台并行覆盖率。
 
 本轮建议先验证三件事：用户是否理解输入占用、暂停是否真正可靠、人工处理后是否能保留上下文继续。验证成立后，以可选状态条和详情面板作为日常体验，分屏作为调试视图；只有独立环境通过兼容性验证后，才提供“继续用电脑，任务在另一环境运行”的明确承诺。
+
+## 14. 渲染栈选型分析（2026-09-27 增补）
+
+回答 §13 待决事项「显示框架与依赖预算」。本节是阶段性结论，不是最终选型；拉取协议（[13](13-realtime-state-maintenance.md)）已把显示消费端与核心解耦，渲染技术是可随时反悔的局部选择，本节登记的是反悔条件与代价。
+
+**实测基线（v0.1.4 actl-signal）**：249KB 单 exe；常驻 RSS ≈17MB；零新增依赖（GDI + 既有 windows crate）；动画几何为纯函数并有单测。
+
+**同行规律**：常驻小指示器一律原生（Traffic Monitor、PowerToys Awake、AHK 托盘、Win11 输入指示）；应用级面板才走 Web（Slack/Notion/Discord 托盘、Claude Desktop）；overlay 重场景走 CEF（NVIDIA/Discord overlay）；Codex 桌面伴侣 = 原生闭源二进制 + 薄 JS RPC 壳（[12 §1.5](12-codex-computer-use-comparison.md) 一手实证）。一句话：**指示器原生，面板 Web**，栈跟着形态走，不提前预付。actl 当前形态是指示器；§12.1 Phase C 面板化才进入 Web 的适用区。
+
+**路线矩阵**：
+
+| 路线 | 判定 | 关键依据 |
+|---|---|---|
+| Electron | 排除 | 200MB+ 分发、150–300MB RSS，与单 exe <10MB 的产品体量及“存在感不喧宾夺主”正面冲突 |
+| Tauri | 不采 | tokio 依赖违反 ADR-001；依赖树 + npm 工具链破坏硬规则 6 与单点门禁 |
+| 现有 Rust 壳 + WebView2 内容子窗口（webview2-com） | **面板期候选** | 无 tokio（回调 + 现有 GetMessage 泵）；+1~2 个直接依赖须登记 [TECH_STACK §3](TECH_STACK.md)；CSS 布局/动画与 Chromium 内建 UIA、prefers-reduced-motion、forced-colors 恰好承接 Phase C 需求 |
+| Rust GUI 库（egui/iced/slint） | 不采 | 依赖量不小而无障碍仍弱；slint 的 GPL/商业双许可与本仓库 license 相性差 |
+| GDI → Direct2D + DirectWrite | 近期可选增强 | windows crate 加 feature，零新增依赖；圆角/抗锯齿/IDWriteTextLayout 级 CJK 排版，维持基线身位 |
+
+**决策门（面板化立项前复核，四项全过才动手）**：
+
+1. 焦点纪律 spike：WS_EX_NOACTIVATE 宿主内 webview 点击全程不夺焦点（§1 把“控制真实有效”排在第一位；GDI 版天然免疫，Chromium 是已知坑区，需专门工程与实测）；
+2. 常驻 RSS 预算（建议 ≤100MB，对照基线 ≈17MB；WebView2 进程组实测常见 80–150MB）；
+3. WebView2 Evergreen 运行时对目标用户群的覆盖方案（Win11/新 Win10 预装；LTSC/Server 需 bootstrapper 或 fixed 打包故事，否则违反轻量分发承诺）；
+4. 自靶向与注入面：WebView2 暴露完整 Chromium UIA 树，actl snapshot 必须显式排除自身窗口（§5.3）；state 字符串进 webview 必须走 textContent/postMessage 映射，DrawTextW 的不透明文本语义不再白拿，恶意窗口标题不得能伪造“已停止”显示。
+
+**现在可做的零承诺动作**：§12.1 Phase A 交互原型直接用 HTML/CSS/TS + mock 数据，TS 先定位为设计工具，不进发布栈；原型结论反过来补齐 §13 认为缺乏的证据。
+
+**与栈无关的近期工程卫生**（不依赖上述任何决策）：actl-signal.rs 拆分（959 行，已过 xtask 800 行警告线；壳/轮询/渲染/几何四模块，仍留在 actl-uia 唯一 unsafe 豁免点内）；布局魔数收敛成表；评估响应系统“减少动态效果”设置（SPI_GETCLIENTAREAANIMATION，§11 要求）。
