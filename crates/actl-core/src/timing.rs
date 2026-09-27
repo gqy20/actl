@@ -25,6 +25,9 @@ pub struct Timing {
     pub modifier_wait_ms: u64,
     /// 输入占用锁等待上限
     pub lock_wait_ms: u32,
+    /// wait --stable 的采样间隔(settle 判定:连续两次样本相等即稳定;
+    /// 与 poll_ms 分开——内容加载的稳定窗需要比存在性轮询更长的间隔)
+    pub settle_ms: u64,
 }
 
 impl Default for Timing {
@@ -39,6 +42,7 @@ impl Default for Timing {
             segment_chars: 32,
             modifier_wait_ms: 1500,
             lock_wait_ms: 3000,
+            settle_ms: 250,
         }
     }
 }
@@ -66,6 +70,7 @@ impl Timing {
                 segment_chars: env_num("ACTL_SEGMENT_CHARS", d.segment_chars),
                 modifier_wait_ms: env_num("ACTL_MODIFIER_WAIT_MS", d.modifier_wait_ms),
                 lock_wait_ms: env_num("ACTL_LOCK_WAIT_MS", d.lock_wait_ms),
+                settle_ms: env_num("ACTL_SETTLE_MS", d.settle_ms),
             }
         })
     }
@@ -84,6 +89,7 @@ mod tests {
         assert_eq!(d.lock_wait_ms, 3000);
         assert_eq!(d.modifier_wait_ms, 1500);
         assert_eq!(d.focus_retries, 3);
+        assert_eq!(d.settle_ms, 250); // 稳定窗 = 2×250ms
     }
 
     #[test]

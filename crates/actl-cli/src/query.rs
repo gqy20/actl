@@ -52,7 +52,9 @@ pub(crate) fn snapshot_cmd(
     app: Option<&str>,
     hwnd: Option<&str>,
     skeleton: bool,
+    view: Option<crate::cli::ViewMode>,
 ) -> Result<CommandOutput, CtlError> {
+    use actl_core::Projection;
     let cap = match (app, hwnd) {
         (_, Some(h)) => actl_uia::capture_hwnd(actl_uia::parse_hwnd(h)?)?,
         (a, None) => actl_uia::capture(a)?,
@@ -63,9 +65,16 @@ pub(crate) fn snapshot_cmd(
             break;
         }
     }
-    let out = builder.finish(skeleton);
+    // 投影映射:--view content 与 --skeleton 正交组合(折叠仅作用于 Document
+    // 子树内部);content 模式下无 Document → NOT_FOUND(core 层裁定)
+    let projection = match view {
+        Some(crate::cli::ViewMode::Content) => Projection::Content { skeleton },
+        None if skeleton => Projection::Skeleton,
+        None => Projection::Full,
+    };
+    let out = builder.finish(projection)?;
     actl_uia::persist_snapshot(&out.snapshot_id, &cap.window.title, &cap.window_runtime_id);
-    let data = json!({
+    let mut data = json!({
         "window": {
             "title": cap.window.title,
             "class": cap.window.class,
@@ -76,6 +85,9 @@ pub(crate) fn snapshot_cmd(
         "wake_ms": cap.wake_ms,
         "elements": serde_json::to_value(&out.elements).expect("elements serialize"),
     });
+    if matches!(view, Some(crate::cli::ViewMode::Content)) {
+        data["view"] = json!("content");
+    }
     Ok(CommandOutput {
         data,
         snapshot_id: Some(out.snapshot_id),
@@ -138,7 +150,10 @@ pub(crate) fn find_cmd(
             break;
         }
     }
-    let out = builder.finish(false);
+    // find 定向查找不做投影:命中集本就窄,投影反而可能滤掉候选
+    let out = builder
+        .finish(actl_core::Projection::Full)
+        .expect("full projection cannot fail");
     actl_uia::persist_snapshot(&out.snapshot_id, &cap.window.title, &cap.window_runtime_id);
     let role_want = role.map(str::to_lowercase);
     let matched: Vec<&actl_core::snapshot::ElementOut> = out
@@ -239,12 +254,14 @@ pub(crate) fn set_clipboard_cmd(text: &str) -> Result<CommandOutput, CtlError> {
     Ok(json!({ "chars": text.chars().count() }).into())
 }
 
+#[allow(clippy::too_many_arguments)] // 参数面与 clap 命令定义一一对应
 pub(crate) fn wait_cmd(
     element: Option<&str>,
     window: Option<&str>,
     gone: Option<&str>,
     property: Option<&str>,
     contains: bool,
+    stable: bool,
     app: Option<&str>,
     timeout: Option<u64>,
 ) -> Result<CommandOutput, CtlError> {
@@ -253,8 +270,19 @@ pub(crate) fn wait_cmd(
     let what = match (element, window, gone) {
         (Some(t), _, _) => {
             let target = actl_core::parse_target(t)?;
-            // --property:谓词等待(隐含存在性;元素未解析继续等)
-            if let Some(raw) = property {
+            if stable {
+                // settle 谓词:内容稳定等待(滚动/导航加载判定;与 --property
+                // 的"到达期望值"分工——stable 回答"什么时候停",不回答"是什么")
+                let out = actl_uia::wait_stable(app, &target, timeout)?;
+                json!({
+                    "element": target.describe(),
+                    "stable": true,
+                    "samples": out.samples,
+                    "changes": out.changes,
+                    "last_len": out.last_len,
+                })
+            } else if let Some(raw) = property {
+                // --property:谓词等待(隐含存在性;元素未解析继续等)
                 let mut pred = actl_uia::WaitPredicate::parse(raw)?;
                 pred.contains = contains;
                 let actual = actl_uia::wait_property(app, &target, &pred, timeout)?;

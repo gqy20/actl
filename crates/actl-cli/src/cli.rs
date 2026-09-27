@@ -15,6 +15,13 @@ pub(crate) struct Cli {
     pub(crate) command: Command,
 }
 
+/// snapshot 视图参数(06 §3.2 L2 投影;值域扩展属 spec 提交)。
+#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ViewMode {
+    /// Keep only Document content subtrees (web/document body); drop app chrome
+    Content,
+}
+
 #[derive(Subcommand)]
 pub(crate) enum Command {
     /// List every command with its argument schema (machine-readable self-description)
@@ -33,6 +40,11 @@ pub(crate) enum Command {
         /// Keep only interactive elements and their ancestor chain (token saver)
         #[arg(long)]
         skeleton: bool,
+        /// Content-scoped view: keep only Document (web/document body) subtrees,
+        /// drop app chrome entirely; combines with --skeleton (folding applies
+        /// inside the document only) — the token saver for browsers/editors
+        #[arg(long, value_enum)]
+        view: Option<ViewMode>,
     },
     /// Click an element (UIA Invoke by default; --physical for a real mouse click)
     Click {
@@ -404,6 +416,11 @@ pub(crate) enum Command {
         /// value=<expected> | name=<substr> | checked=on|off (requires --element)
         #[arg(long, requires = "element")]
         property: Option<String>,
+        /// Wait until --element settles: its observed sample (text > value > name
+        /// channel) stops changing across consecutive polls (scroll/navigation
+        /// load detection; sample interval settle_ms, stable window ~500ms)
+        #[arg(long, requires = "element", conflicts_with = "property")]
+        stable: bool,
         /// Substring semantics for the value/name predicate (exact by default)
         #[arg(long, requires = "property")]
         contains: bool,
@@ -496,7 +513,7 @@ fn after_help_for(name: &str) -> Option<&'static str> {
         }
         "status" => "Example:\n  actl status\nOutput: version, protocol version, platform",
         "snapshot" => {
-            "Example:\n  actl snapshot --app Notepad --skeleton\n--skeleton keeps interactive elements + collapsed ancestors (token saver).\nErrors: NOT_FOUND no window matches --app"
+            "Example:\n  actl snapshot --app Notepad --skeleton\n  actl snapshot --app Edge --view content --skeleton\n--skeleton keeps interactive elements + collapsed ancestors (token saver).\n--view content keeps only Document (web/document body) subtrees, drops app chrome;\ncombines with --skeleton (folding inside the document) — the browser/editor token saver.\nErrors: NOT_FOUND no window matches --app, or no Document region for --view content"
         }
         "click" => {
             "Example:\n  actl click @e3 --app Notepad --snapshot s1a2b\n  actl click name:item --app Explorer --physical --with ctrl\n(multi-select)\nErrors: NOT_FOUND no match | AMBIGUOUS multi-match (candidates returned) | STALE_REF stale @eN (re-snapshot) | NOT_ACTIONABLE no pattern | PERM_DENIED foreground guard (--physical)"
@@ -603,7 +620,7 @@ Errors: NOT_FOUND / AMBIGUOUS | NOT_ACTIONABLE no clickable point or occluded"
             "Example:\n  actl set-clipboard 'text to place'\nReplaces current clipboard content (that is the semantics).\nErrors: NOT_ACTIONABLE clipboard held by another process"
         }
         "wait" => {
-            "Example:\n  actl wait --element name:完成 --property value=OK --timeout 8000 --app 应用\nPredicates: value=<expected> | name=<substr> | checked=on|off; --contains for substring; existence implied.\nErrors: TIMEOUT predicate unmet or element absent | PROTOCOL bad predicate | ASSERTION_FAILED (--window)"
+            "Example:\n  actl wait --element name:完成 --property value=OK --timeout 8000 --app 应用\n  actl wait --element role:Document --stable --app Edge\nPredicates: value=<expected> | name=<substr> | checked=on|off; --contains for substring; existence implied.\n--stable waits until the element's observed sample (text > value > name) stops changing\nacross consecutive polls — settle detection after scroll/navigation.\nErrors: TIMEOUT predicate unmet, element absent, or content still changing | PROTOCOL bad predicate | ASSERTION_FAILED (--window)"
         }
         "batch" => {
             "Example:\n  actl batch --json '[\"focus-window Notepad\",\"press ctrl+s --app Notepad\"]'\nStops on first error; steps[] carries per-step ok/duration (partial steps ride the error evidence); windows_created reports windows opened during the run (cleanup: close-window --pid/--hwnd); steps may carry blocked_by when an unexpected window holds the foreground.\nErrors: PROTOCOL bad JSON/nesting | the first failing step's code is propagated"

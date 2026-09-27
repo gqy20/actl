@@ -14,8 +14,8 @@ pub mod trace;
 
 pub use keys::{Key, KeySpec, parse_key_expr};
 pub use snapshot::{
-    ElementOut, INTERACTIVE_ROLES, SnapshotBuilder, SnapshotOutput, UiNode, is_interactive_role,
-    new_snapshot_id,
+    ElementOut, INTERACTIVE_ROLES, Projection, SnapshotBuilder, SnapshotOutput, UiNode,
+    is_interactive_role, new_snapshot_id,
 };
 pub use target::{Target, parse_target};
 

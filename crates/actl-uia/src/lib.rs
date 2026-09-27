@@ -31,7 +31,8 @@ pub use action::{
     toggle_element, type_text,
 };
 pub use locate::{
-    Located, WaitPredicate, WaitProp, locate, wait_element, wait_gone, wait_property,
+    Located, StableOutcome, WaitPredicate, WaitProp, locate, wait_element, wait_gone,
+    wait_property, wait_stable,
 };
 pub use pointer::{PointerAction, click_physical, drag_physical, pointer_physical, scroll_element};
 pub use read::{

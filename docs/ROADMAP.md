@@ -67,6 +67,12 @@ Agent Skill ✓ · crates.io 已发布且 tag 自动同步(三 crate;cargo insta
 (excel/word/wechat + lint-packs + actl×collector 分工协议)。
 0.2.0 剩余:正常日 timing/P50 复测、金任务 10 轮全量回归、外部机器 US3(用户侧)、actl-signal.rs 拆分(959 行已过 800 警告线;壳/轮询/渲染/几何四模块,登记于 docs/11 §14)。
 
+**追加批·浏览器内容通道(2026-09-27,spec)**:`snapshot --view content`(内容域
+投影,chrome 整枝丢弃,与 skeleton 组合)与 `wait --stable`(settle 谓词)——
+真实会话浏览器赛道的机制地基(Chrome 136 起默认 profile 禁 CDP,UIA 是唯一
+非视觉通道);browser pack + 场景实测(docs/16)随后跟进,PRD §4 浏览器形态
+token 豁免项待实测数字复核。
+
 **退出标准**:
 - 金任务集全过,US1"跨 3 应用数据搬运"成功率 ≥ 90%(10 次重跑);
 - 冷启动、输出体积、token 消耗三项 NFR 达标(PRD §4);

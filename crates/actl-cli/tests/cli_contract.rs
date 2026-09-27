@@ -185,6 +185,68 @@ fn wait_property_predicate_validated_at_protocol_level() {
 }
 
 #[test]
+fn snapshot_view_values_and_stable_flag_validated_at_protocol_level() {
+    // --view 值域(content):未知值 clap 层 exit 2(spec:投影值域扩展走 spec)
+    let (code, _) = actl(&["snapshot", "--view", "bogus", "--app", "x"]);
+    assert_eq!(code, 2);
+    // --stable 依赖 --element、与 --property 互斥
+    let (code, _) = actl(&["wait", "--stable"]);
+    assert_eq!(code, 2);
+    let (code, _) = actl(&[
+        "wait",
+        "--element",
+        "name:x",
+        "--stable",
+        "--property",
+        "value=y",
+    ]);
+    assert_eq!(code, 2);
+}
+
+#[test]
+fn snapshot_view_content_missing_window_is_not_found() {
+    // 离线可测:窗口不存在 → NOT_FOUND exit 1(内容域裁定之前先挡在窗口解析)
+    let (code, stdout) = actl(&[
+        "snapshot",
+        "--view",
+        "content",
+        "--app",
+        "definitely-no-such-window-xyz",
+    ]);
+    assert_eq!(code, 1);
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
+    assert_eq!(v["error"]["code"], "NOT_FOUND");
+}
+
+#[test]
+fn commands_schema_carries_view_and_stable_args() {
+    // 自发现同步:snapshot 带 view 参数、wait 带 stable 参数(schema 与 help 同源)
+    let (code, stdout) = actl(&["commands"]);
+    assert_eq!(code, 0);
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
+    let cmds = v["data"]["commands"].as_array().expect("commands array");
+    let find_args = |name: &str| -> Vec<String> {
+        cmds.iter()
+            .find(|c| c["name"] == name)
+            .and_then(|c| c["args"].as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|x| x["name"].as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    assert!(
+        find_args("snapshot").contains(&"view".to_string()),
+        "snapshot schema lists view"
+    );
+    assert!(
+        find_args("wait").contains(&"stable".to_string()),
+        "wait schema lists stable"
+    );
+}
+
+#[test]
 fn close_window_by_missing_pid_is_not_found() {
     // FR3:--pid 定位;无此进程的窗口 → NOT_FOUND exit 1(离线可测,不碰真实窗口)
     let (code, stdout) = actl(&["close-window", "--pid", "3999999"]);

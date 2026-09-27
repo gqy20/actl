@@ -101,7 +101,8 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             app,
             hwnd,
             skeleton,
-        } => snapshot_cmd(app.as_deref(), hwnd.as_deref(), *skeleton),
+            view,
+        } => snapshot_cmd(app.as_deref(), hwnd.as_deref(), *skeleton, *view),
         Command::Click {
             target,
             app,
@@ -286,6 +287,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             gone,
             property,
             contains,
+            stable,
             app,
             timeout,
         } => wait_cmd(
@@ -294,6 +296,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             gone.as_deref(),
             property.as_deref(),
             *contains,
+            *stable,
             app.as_deref(),
             *timeout,
         ),

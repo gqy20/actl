@@ -10,6 +10,21 @@
 ## [Unreleased]
 
 ### Added
+- **`snapshot --view content` + `wait --stable`(spec,浏览器内容通道基建)**:
+  ① **内容域投影**——只保留 Document 子树(网页/文档正文)与根→Document 路径,
+  应用 chrome(工具栏/ribbon)整枝丢弃;与 `--skeleton` 正交组合,折叠仅作用于
+  Document 内部、chrome 交互元素不参与保留判定——这是纯 skeleton 对浏览器形态
+  仅削 ~36%(PRD §4 实测豁免项)的根因修复,目标是把该形态推向 70%+ 削减;
+  窗口无 Document → `NOT_FOUND`(不静默回退);投影实现在 actl-core
+  (`Projection` 枚举,keep-set 纯函数),`--view` 值域扩展预留 spec 通道。
+  ② **settle 谓词**——`wait --element <t> --stable`:观测样本(text>value>name
+  通道,避开 Chromium Document Value=URL 陷阱)连续两次采样(settle_ms=250ms,
+  `ACTL_SETTLE_MS` 可调)不变即就绪,滚动/导航后的内容加载判定;超时 evidence
+  带 samples/changes;与 `--property` 互斥("什么时候停"vs"到达什么值")。
+  契约测试新增 view 值域/stable 互斥/schema 同源三项 golden;docs/06 §3.2/§3.4/§6
+  同步。定位:浏览器/WebView2/Electron 是桌面 UI 主体,Chrome 136 起默认 profile
+  禁 CDP,真实登录会话只有 UIA 一条路——本批是"真实会话浏览器自动化"赛道的
+  机制地基(场景实测随 docs/16 跟进)。
 - **截图→视觉工作流端到端实证 + pack 路线**:Notepad 实测 `screenshot --element
   role:Document` → PNG(24KB/2280×1180)→ 视觉模型**逐字读回**中英文混合内容
   ("actl + vision = the screenshot loop works. 敏捷的棕色狐狸。")——UIA 失明

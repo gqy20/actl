@@ -35,7 +35,7 @@
 | 层 | 内容 | 时机 |
 |---|---|---|
 | **L1 通用原语**(统一) | 只依赖 OS 契约(accessibility 树 / 窗口系统 / 剪贴板),一套命令吃遍所有应用;**动词集合封闭**(~45 封顶,新增动词需 spec 提交评审) | M1–M2 全量 |
-| **L2 语义投影**(机制统一,内容是应用数据) | 同一命令的视图参数(`--skeleton`、`--max-depth`、未来的 `--view grid`),解决大 UI 的 token 膨胀;投影规则是**数据**(pack.toml,参考 desktop-cli 的 application packs),不是代码 | M2 做 skeleton;packs 视真实使用数据再定 |
+| **L2 语义投影**(机制统一,内容是应用数据) | 同一命令的视图参数(`--skeleton`、`--max-depth`、`--view content`),解决大 UI 的 token 膨胀;投影规则是**数据**(pack.toml,参考 desktop-cli 的 application packs),不是代码 | `--skeleton` 与 `--view content`(2026-09-27)已落地;packs 视真实使用数据再定 |
 | **L3 应用适配**(受控逃生舱) | 仅当 accessibility 残缺(Electron 无 aria / Canvas / 老 Win32)或语义不可达(Excel cell 语义):以 **strategy 插件 + fallback 定位链**在命令内部实现,agent 无感知;确有必要才允许 `actl app <name> ...` 独立命名空间,与 L1 永不混淆 | M3,按需 |
 
 **核心纪律:适配是数据/策略,不是新动词。** 应用知识(选择器、投影规则、执行策略)永远不侵蚀 L1 动词空间——这是与 RPA "每个应用一套 activity 库"路线的根本分野,也是命令面不随适配数量膨胀的保证。
@@ -59,6 +59,12 @@ status                     # 版本、权限、屏幕信息
 #### 观察(observe)
 ```
 snapshot [--app X] [--skeleton]     # 可交互元素树 + @eN ref + snapshot_id
+                                     # --view content:内容域投影——只保留 Document 子树
+                                     # (网页/文档正文)与根→Document 路径,应用 chrome
+                                     # (工具栏/ribbon)整枝丢弃;与 --skeleton 组合时折叠
+                                     # 仅作用于 Document 内部,chrome 交互元素不参与保留
+                                     # 判定(浏览器形态 skeleton 仅削 ~36% 的根因修复;
+                                     # 窗口无 Document → NOT_FOUND,不静默回退)
 find --role button [--name "确定"]   # 条件查元素(带 ref);与 snapshot 的分工见 §3.6
                                      # 已物化树 0 命中且可映射精确属性时走 L4 虚拟化容器(§5)
 get @e3 [--property p] [--raw]      # 读元素属性;--raw 全量含 pattern 支持(合并原 inspect)
@@ -98,6 +104,11 @@ list-notifications              # 系统通知读取
 ```
 wait --element @e3 [--timeout 5000]                # 等元素可解析(存在性)
 wait --element @e3 --property value="OK" [--contains]   # 谓词等待:value/name/checked
+wait --element @e3 --stable                        # settle 等待:观测样本(text>value>name
+                                                     # 通道)连续两次采样不变(settle_ms,
+                                                     # 默认 250ms→稳定窗 500ms)→ 内容就绪;
+                                                     # 滚动/导航后的加载判定,evidence 带
+                                                     # samples/changes;与 --property 互斥
 wait --window "保存" | --gone @e3                        # 等窗口出现 | 等元素消失
 verify --exists @e3 / --value @e3 "x" / --checked @e8 / --order ...
 batch --json '<commands>'   # 单进程内顺序执行,共享 snapshot;每步结果与耗时进 steps[]
@@ -215,6 +226,9 @@ L2  actl commands     机器 schema:全命令+参数的 JSON(agent 自发现入�
 
 - `snapshot` 默认输出紧凑模式(role + name + ref + actionable,一行一元素);
 - `--skeleton`:大 UI 折叠非交互容器(agent-desktop 实测 78–96% token 削减);
+- `--view content`:内容域投影(2026-09-27,spec)——Document 子树外的 chrome 整枝
+  丢弃,浏览器/编辑器形态的主削减通道;与 `--skeleton` 组合时折叠仅在 Document 内部
+  生效(chrome 交互元素不再强制保留——纯 skeleton 对浏览器仅削 ~36% 的根因);
 - `find`/`inspect` 是"按需深查",鼓励 agent 先窄后深,反对全树 dump。
 
 ## 7. 安全边界

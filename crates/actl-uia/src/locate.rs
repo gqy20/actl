@@ -621,6 +621,85 @@ pub fn wait_property(
     }
 }
 
+/// wait --stable 的结果(settle 证据:采样数/变化数/末次样本长度)。
+pub struct StableOutcome {
+    pub samples: usize,
+    pub changes: usize,
+    pub last_len: usize,
+}
+
+/// wait --stable:settle 谓词——轮询直到元素可解析且观测样本连续两次不变
+/// (采样间隔 settle_ms,默认 250ms → 稳定窗 500ms)。样本通道:text 优先、
+/// value 次之、name 兜底(Chromium Document 的 Value=URL 对内容 settle 无
+/// 意义,正文只能走 TextPattern,与 get 的 text/value 分工一致)。元素消失
+/// 期间稳定计数清零(隐含存在性);超时 TIMEOUT 附 samples/changes evidence。
+pub fn wait_stable(
+    app: Option<&str>,
+    target: &Target,
+    timeout_ms: u64,
+) -> Result<StableOutcome, CtlError> {
+    const STABLE_SAMPLES: usize = 2;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
+    let mut last: Option<String> = None;
+    let mut stable = 0usize;
+    let mut samples = 0usize;
+    let mut changes = 0usize;
+    loop {
+        if let Ok(loc) = locate(app, target, None) {
+            let sample = stability_sample(&loc.element);
+            samples += 1;
+            stable = match &last {
+                Some(prev) if prev == &sample => stable + 1,
+                Some(_) => {
+                    changes += 1;
+                    1
+                }
+                None => 1,
+            };
+            last = Some(sample);
+            if stable >= STABLE_SAMPLES {
+                return Ok(StableOutcome {
+                    samples,
+                    changes,
+                    last_len: last.as_deref().map(str::len).unwrap_or(0),
+                });
+            }
+        } else {
+            stable = 0;
+        }
+        if std::time::Instant::now() >= deadline {
+            return Err(CtlError::with_evidence(
+                ErrorCode::Timeout,
+                format!(
+                    "{} did not settle within {timeout_ms}ms (content still changing or element absent)",
+                    target.describe()
+                ),
+                serde_json::json!({
+                    "samples": samples,
+                    "changes": changes,
+                    "last_len": last.as_deref().map(str::len),
+                }),
+            ));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(timing().settle_ms));
+    }
+}
+
+/// 稳定性采样:text > value > name(富文本正文只有 TextPattern 可读;
+/// value 通道兜底纯控件,name 最后)。
+fn stability_sample(elem: &UIElement) -> String {
+    use uiautomation::patterns::UITextPattern;
+    if let Some(t) = elem
+        .get_pattern::<UITextPattern>()
+        .ok()
+        .and_then(|t| t.get_document_range().ok())
+        .and_then(|r| r.get_text(-1).ok())
+    {
+        return t;
+    }
+    crate::read::read_value(elem).unwrap_or_else(|| elem.get_name().unwrap_or_default())
+}
+
 /// wait/verify 共用的属性谓词(解析与判定分离,便于单测)。
 pub struct WaitPredicate {
     pub prop: WaitProp,
