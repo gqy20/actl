@@ -1,15 +1,21 @@
-# 来源: docs/24-application-adaptation-round1.md；真实窗口只读验证。
+# 来源: docs/24；docs/27-batch1-deep-tests.md；搜索、播放切换与队列真机验证。
 pack_format: 1
 name: cloudmusic
 display: 网易云音乐
 launch: cloudmusic
 window: "hwnd:{hwnd}"
 app_version: "3.1.41.205529"
-verified_date: 2026-09-27
+verified_date: 2026-09-28
 verified_env: Windows 10.0.26200.0 zh-cn
 quirks:
   - id: sparse_tree_rich_text
-    note: 实测快照只有 6 个节点，但唯一 Document 的 TextPattern 能读到推荐、歌单和歌曲信息。文本出现“播放”不代表有可调用的播放按钮；搜索和播放操作尚未验证。
+    note: 初轮快照只有 6 个节点；本轮还原并观察后出现完整控件树、搜索 Edit 和播放 MenuItem。稀疏树时先检查窗口状态和重新观察，不能断言该版本永远不提供 UIA；树恢复的具体触发原因未确定。
+  - id: search_placeholder_name
+    note: 搜索 Edit 的 name 可能是变化的推荐词，不等于已输入查询。确认唯一 Edit 后输入，提交后核对查询标题和结果；不要以 name 读回查询词。
+  - id: playback_control
+    note: 底栏播放控件的稳定 ID 为 btn_pc_minibar_play，MenuItem 的 name 在 play/pause 间切换。name:play 会与推荐卡片按钮、图片重名。Ctrl+P 真机验证可切换；使用前核对目标窗口与播放状态。
+  - id: playlist_ambiguity
+    note: name:playlist 同时匹配 Image 和 MenuItem，find 时限制 role=MenuItem，再用当前 ref；打开后核对队列表格，不操作清空/删除按钮。
 routes:
   - id: observe
     description: 根据 list-windows 确认目标 HWND 后读取控件树
@@ -22,3 +28,28 @@ routes:
     verify: 文本非空，并与截图可见栏目对应；不把歌曲列表当作播放状态
     steps:
       - ["get", "role:Document", "--property", "text", "--app", "{window}"]
+  - id: search
+    description: 确认唯一搜索 Edit 及空查询后，中文粘贴并提交；已有查询先在该框内全选
+    status: verified
+    verify: 结果页出现提交的查询标题及对应歌曲/歌手；输入框 name 仅作提示词，不作内容断言。
+    steps:
+      - ["find", "--role", "Edit", "--app", "{window}"]
+      - ["type", "{search_ref}", "{query}", "--paste", "--app", "{window}"]
+      - ["press", "enter", "--app", "{window}"]
+      - ["snapshot", "--app", "{window}"]
+  - id: toggle_playback
+    description: Ctrl+P 切换播放状态；scenarios/cloudmusic-playback.ps1 交替比较键盘与 UIA，每轮恢复初始状态
+    status: verified
+    verify: get 的 name 必须从 play 变 pause 或反向变化；仅证明应用报告的播放状态，不证明扬声器输出。脚本本轮 8 次切换全部通过。
+    steps:
+      - ["get", "id:btn_pc_minibar_play", "--app", "{window}"]
+      - ["press", "ctrl+p", "--app", "{window}"]
+      - ["get", "id:btn_pc_minibar_play", "--app", "{window}"]
+  - id: open_queue
+    description: 限定 MenuItem 消除播放列表入口同名歧义
+    status: verified
+    verify: 队列展开出现 Table，截图和当前歌曲对应；再次点击入口可收起。
+    steps:
+      - ["find", "--name", "playlist", "--role", "MenuItem", "--app", "{window}"]
+      - ["click", "{queue_ref}", "--app", "{window}"]
+      - ["snapshot", "--app", "{window}"]

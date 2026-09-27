@@ -1,0 +1,90 @@
+# 来源: docs/27-batch1-deep-tests.md、docs/28-meeting-quark-visual-deep.md；后续 sky 实测路线的 actl 迁移待复验。
+pack_format: 1
+name: quark
+display: 夸克浏览器与网盘
+launch: "{installed_executable}"
+window: "hwnd:{hwnd}"
+app_version: "7.2.2.1003"
+verified_date: 2026-09-28
+verified_env: Windows 10.0.26200.0 zh-cn; existing signed-in profile
+quirks:
+  - id: invoke_without_navigation
+    note: 浏览器工具栏夸克网盘 Button 的 Invoke 返回成功但未进入网盘；新标签页左侧可见网盘入口通过截图定位及显式 physical 点击走通。不可只凭 ok 或标题验收。
+  - id: duplicate_names
+    note: 夸克网盘、上传文件同时匹配文本与按钮，文件名也可能重名；find 限定角色后读取当次 ref，不跨状态复用。
+  - id: two_search_surfaces
+    note: 网页的搜网盘 Edit 与原生地址栏 view_1012 是不同输入面。sky 实测点击搜索框或 Ctrl+F 后焦点落到原生地址栏且出现建议层，再输入并 Enter 才完成换词搜索；上轮对网页 Edit 写值后结果不变。提交后核对 Document 路由 keyword、范围与实际结果，不能只验输入值。
+  - id: search_scope
+    note: 目录中 Ctrl+F 后 Tab 可切换网盘全部文件/当前目录；sky 实测通过。结果支持部分匹配，后台备份也会改变数量，不得固定匹配数。文档筛选后 Document 路由 searchType=doc；目录范围另看标签，不能只看 URL。
+  - id: delayed_observation
+    note: 动作后首个 UIA 快照可能仍旧，稍后只读刷新可见新状态。等待内容收敛，不重复点击或提交。详情与预览是独立窗口；下载目录框在 sky 中出现过节点不可操作和目标窗口绑定拒绝，已取消，未完成下载。
+  - id: existing_backup
+    note: 本轮正常配置进入网盘后显示已有自动备份任务运行；不要将其当作本次手动上传，也不要擅改用户备份配置。
+routes:
+  - id: launch_browser
+    description: list-windows 核对没有现有夸克窗口后启动已安装程序；有窗口则观察复用
+    status: verified
+    verify: 重新枚举窗口，核对实际进程路径、Chrome_WidgetWin_1 和夸克界面，不仅信 launch PID。
+    steps:
+      - ["list-windows"]
+      - ["launch", "{installed_executable}"]
+      - ["list-windows"]
+  - id: open_drive_visual
+    description: 在已观察的新标签页，按当前截图定位左侧网盘入口；每次重新确定坐标并核对 hover 图
+    status: verified
+    verify: 网盘 Document、唯一上传文件 Button、Table 和文件行同时出现，截图确认首页；登录页不能算通过。
+    steps:
+      - ["snapshot", "--app", "{window}"]
+      - ["screenshot", "--app", "{window}"]
+      - ["hover", "xy:{entry_x},{entry_y}", "--app", "{window}"]
+      - ["screenshot", "--app", "{window}"]
+      - ["click", "xy:{entry_x},{entry_y}", "--physical", "--app", "{window}"]
+      - ["snapshot", "--app", "{window}"]
+      - ["find", "--name", "上传文件", "--role", "Button", "--app", "{window}"]
+      - ["screenshot", "--app", "{window}"]
+  - id: inspect_drive
+    description: 读取已进入的网盘首页，文件名和截图只保存到本地证据目录
+    status: verified
+    steps:
+      - ["snapshot", "--app", "{window}"]
+      - ["find", "--role", "Table", "--app", "{window}"]
+  - id: search_drive
+    description: sky 真机已通过空结果和命中查询；以下为 actl 迁移草案，待复验。Ctrl+F 后先截图核对建议层与范围再粘贴，不再 type 网页 Edit
+    status: manual
+    verify: 结果 Document 路由 keyword 匹配，加载结束且内容与查询一致；空查询显示暂无搜索内容。目录内还要核对范围标签。
+    steps:
+      - ["press", "ctrl+f", "--app", "{window}"]
+      - ["screenshot", "--app", "{window}"]
+      - ["set-clipboard", "{query}"]
+      - ["paste", "--app", "{window}"]
+      - ["screenshot", "--app", "{window}"]
+      - ["press", "enter", "--app", "{window}"]
+      - ["get", "id:RootWebArea", "--app", "{window}"]
+      - ["snapshot", "--app", "{window}"]
+  - id: inspect_file_menu
+    description: sky 已验证文件行右键菜单及详情、打开文件位置；actl 迁移待复验。先核对唯一文件行名称和大小，再从当前菜单选择操作
+    status: manual
+    verify: 详情核对文件名/大小/目录；打开文件位置核对面包屑与选中文件。不得将菜单出现算作文件操作完成。
+    steps:
+      - ["find", "--name", "{file_name}", "--role", "DataItem", "--app", "{window}"]
+      - ["right-click", "{file_selector}", "--app", "{window}"]
+      - ["snapshot", "--app", "{window}"]
+      - ["find", "--name", "{menu_name}", "--role", "MenuItem", "--app", "{window}"]
+      - ["click", "{menu_ref}", "--app", "{window}"]
+      - ["list-windows"]
+      - ["screenshot", "--app", "hwnd:{result_hwnd}"]
+  - id: preview_text
+    description: sky 已验证双击测试 TXT 后独立预览正文；actl 迁移待复验
+    status: manual
+    verify: 重新选取预览窗口，核对标题和正文；本轮2B测试文件正文ss，不能只靠标题。
+    steps:
+      - ["double-click", "{file_selector}", "--app", "{window}"]
+      - ["list-windows"]
+      - ["snapshot", "--app", "hwnd:{preview_hwnd}"]
+      - ["screenshot", "--app", "hwnd:{preview_hwnd}"]
+  - id: download_file
+    description: 仅走到下载目录选择框，尚未落盘；需要专项验证独立宿主窗口绑定后才能继续
+    status: unverified
+    verify: 实际文件在指定隔离目录落盘，大小/内容/哈希验证，不能凭下载按钮成功。
+    steps:
+      - ["list-windows"]

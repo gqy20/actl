@@ -8,6 +8,8 @@ app_version: "10.0.3"
 verified_date: 2026-09-28
 verified_env: Windows 10.0.26200.0 zh-cn
 quirks:
+  - id: export_dialog_ids
+    note: docs/27 真机验证元数据编辑后导出 CSL JSON；文件菜单用 id:fileMenu。导出另存为是独立进程的系统对话框，按新 HWND、owner_title、class 核对；数字 ID 1001/1 与工具栏/文件行重复，文件名用 find 限定 Edit，保存用 name:保存(S)。
   - id: search_value_unavailable
     note: 初轮空搜索框 get value 返回空 properties。深测确认非空搜索词可从 ValuePattern 和 TextPattern 读回；空 properties 不足以证明搜索恢复，应核验实际条目行。
   - id: dynamic_refs
@@ -22,6 +24,29 @@ routes:
     status: verified
     steps:
       - ["snapshot", "--app", "{window}"]
+  - id: edit_publication_test_item
+    description: 独立测试库中选中已核对的合成条目，find 出版物/Edit 后必须再按 name 精确等于出版物过滤，排除我的出版物
+    status: verified
+    verify: Tab 提交后通过 UI 导出 CSL JSON，核对唯一条目的 title、container-title 和 author；不把旧 ref 读回作为落库证据。完整脚本 scenarios/zotero-search.ps1。
+    steps:
+      - ["find", "--name", "出版物", "--role", "Edit", "--app", "{window}"]
+      - ["type", "{publication_ref}", "{publication}", "--paste", "--app", "{window}"]
+      - ["press", "tab", "--app", "{window}"]
+      - ["right-click", "{owned_item_selector}", "--app", "{window}"]
+      - ["click", "name:导出条目", "--app", "{window}"]
+      - ["list-windows"]
+  - id: export_csl_json
+    description: 导出格式窗口选择 CSL JSON，再在独立系统保存窗口填写唯一新路径；HWND 均重新观察获取
+    status: verified
+    verify: 等待文件完整并解析为 JSON，核对条目数量和关键字段，不以保存按钮 ok 判成功。
+    steps:
+      - ["click", "id:format-menu", "--app", "hwnd:{format_hwnd}"]
+      - ["click", "name:CSL JSON", "--app", "hwnd:{format_hwnd}"]
+      - ["click", "name:OK", "--app", "hwnd:{format_hwnd}"]
+      - ["list-windows"]
+      - ["find", "--name", "文件名:", "--role", "Edit", "--app", "hwnd:{save_hwnd}"]
+      - ["set-value", "{filename_ref}", "{new_export_path}", "--app", "hwnd:{save_hwnd}"]
+      - ["click", "name:保存(S)", "--app", "hwnd:{save_hwnd}"]
   - id: locate_search
     description: 定位中文界面的快速搜索框，仅查找
     status: verified

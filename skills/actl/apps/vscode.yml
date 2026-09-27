@@ -1,4 +1,4 @@
-# 来源: docs/24-application-adaptation-round1.md；docs/25-deep-edit-search-tests.md。
+# 来源: docs/24-application-adaptation-round1.md；docs/25-deep-edit-search-tests.md；docs/27-batch1-deep-tests.md。
 pack_format: 1
 name: vscode
 display: Visual Studio Code
@@ -15,6 +15,32 @@ quirks:
   - id: edit_regression
     note: scenarios/vscode-edit.ps1 使用独立 profile 和临时文件，覆盖三轮中英文/符号输入、Ctrl+Z 撤销、Ctrl+Y 重做、Ctrl+A 全文替换和关闭重开。每次保存均核验磁盘全文，重开另验编辑器 TextPattern；不能用文件标题作为保存证据。
 routes:
+  - id: navigate_by_command
+    description: 中文界面 F1 命令面板搜索转到行或转到文件，逐步取唯一 ref；Ctrl+G 本轮未生效
+    status: verified
+    verify: 行号输入后在第二行插入标记并核验磁盘；文件路径输入后读取目标编辑器 TextPattern。scenarios/vscode-edit.ps1 共 15 项通过。
+    steps:
+      - ["press", "f1", "--app", "{window}"]
+      - ["find", "--name", "键入要运行的命令的名称。", "--role", "Edit", "--app", "{window}"]
+      - ["type", "{command_input_ref}", "{command_query}", "--paste", "--app", "{window}"]
+      - ["find", "--name", "{command_prefix}", "--role", "ListItem", "--app", "{window}"]
+      - ["click", "{command_ref}", "--app", "{window}"]
+      - ["find", "--name", "{input_name}", "--role", "Edit", "--app", "{window}"]
+      - ["type", "{input_ref}", "{line_or_owned_path}", "--paste", "--app", "{window}"]
+      - ["press", "enter", "--app", "{window}"]
+  - id: replace_owned_text
+    description: 仅在归属明确的测试文件中替换；Ctrl+F 后 Esc 未能可靠返回待替换选区，改用显式替换面板
+    status: verified
+    verify: 保存后磁盘全文精确等于预期；本轮验证数字替换。两个 ref 分别在各自写入前重新定位。
+    steps:
+      - ["press", "ctrl+h", "--app", "{window}"]
+      - ["find", "--name", "查找", "--role", "Edit", "--app", "{window}"]
+      - ["set-value", "{find_ref}", "{search}", "--app", "{window}"]
+      - ["find", "--name", "替换", "--role", "Edit", "--app", "{window}"]
+      - ["set-value", "{replace_ref}", "{replacement}", "--app", "{window}"]
+      - ["click", "name:全部替换 (Ctrl+Alt+Enter)", "--app", "{window}"]
+      - ["click", "name:关闭 (Escape)", "--app", "{window}"]
+      - ["press", "ctrl+s", "--app", "{window}"]
   - id: observe
     description: 读取独立测试窗口的控件结构
     status: verified

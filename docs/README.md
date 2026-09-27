@@ -49,3 +49,6 @@
 | [14-office-scenarios.md](14-office-scenarios.md) | Office 场景实测战记:Excel GridPattern 直读+剪贴板直灌、Word TextPattern 三闭环 |
 | [15-system-ui-census.md](15-system-ui-census.md) | 系统 UI 区域普查:快速设置/通知中心/桌面全可达,任务栏退化终审,Win 键勘误 |
 | [16-browser-scenarios.md](16-browser-scenarios.md) | 浏览器场景实测战记:内容域投影数字、settle 证据、xhs/bili/douyin 三站深度闭环、扩展操作面、视觉兜底 xy: 端到端 |
+| [26-tencent-meeting-interactions.md](26-tencent-meeting-interactions.md) | 腾讯会议：单人开会、预定/取消、云录制播放下载与 UIA/视觉边界 |
+| [27-batch1-deep-tests.md](27-batch1-deep-tests.md) | 第一批应用深测：网易云、Zotero、VS Code、腾讯会议与夸克网盘入口 |
+| [28-meeting-quark-visual-deep.md](28-meeting-quark-visual-deep.md) | 腾讯会议时间/时长点击、夸克搜索焦点与组件分析、预览和目录导航 |
