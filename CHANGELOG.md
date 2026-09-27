@@ -9,171 +9,36 @@
 
 ## [Unreleased]
 
-### Added
-- **寻址层打磨批(2026-09-27,docs/16 §5.7)**:① **wait 族 AMBIGUOUS 快速
-  失败**(fix):轮询把确定性多命中当"未解析"吞掉,产生 samples 冻结的误导性
-  TIMEOUT(抖音多文档页实测根因)——现 NOT_FOUND 继续等、AMBIGUOUS 立即失败
-  (候选 evidence 随错带出);fixture 断言 1.3s 快败 vs 5s 超时。②
-  **`id:<Id>#N` 序数寻址**(spec,加法):与 role 序数同机制,多文档页
-  (iframe/扩展弹层)同名 AutomationId 的确定性寻址,不走 provider 快路径;
-  `resolved_by` 新值 `id-ordinal`。③ **`--app hwnd:<n>` 窗口锚**(spec,
-  加法):SPA 整页跳转改标题(bilibili 三次踩)的根治——HWND 是窗口身份,
-  所有 --app 消费方(find_window 单点)自动生效。④ **#3 猜想证伪入档**:
-  非交互元素的物理点击机制存在(bounds-center 不查交互性),但 Chromium
-  不为无语义文本暴露 a11y 元素(bare span find 恒空)——该路径仅当应用
-  显式给 name 时可用,无名元素仍归 xy: 视觉兜底。⑤ ref 漂移 hazard 登记
-  docs/06 §5(弹层开合平移 @eN;纪律:覆盖层开关后重拍快照);xy 点击
-  标准闭环纪律(hover 预探→截图核对→click→verify)入 SKILL。
-- **`xy:x,y` 坐标寻址(spec,视觉兜底闭环的"手")**:click 家族(click/
-  right-click/double-click/middle-click/triple-click)与 hover 接受屏幕坐标
-  目标——`click xy:1420,856 --app 抖音 --physical`。无元素可校验的物理专用
-  通道,守卫三重:①强制 `--app` + 显式 `--physical`(元素类命令对 xy 统一
-  PROTOCOL 拒绝);②**窗口边界守卫**:注入瞬间坐标须落在 --app 窗口当前
-  bounds 内(PMv2 物理像素,与 screenshot 同坐标系;DWM 可见边界口径)——
-  窗口移动/最小化即拒,防"截图后窗口漂移点进窗外";③复用遮挡检查
-  (WindowFromPoint 命中须属目标)。坐标来源是调用方(screenshot+VLM/人),
-  core 不做视觉(PRD §1.3 非目标不破)。至此视觉兜底协议闭环:screenshot
-  (眼)+ VLM(脑,调用方)+ click xy(手)。解锁四类 UIA 失明场景:抖音
-  互动层、微信自绘右键菜单、chrome://extensions 的 WebUI 开关、通用
-  Canvas。契约 +1 golden(协议门六态);wechat/browser pack quirks 的
-  "M3 候选"注记全部翻为已落地路线。
-- **[BC] list-windows 的 rect 统一物理像素**(随 xy: 同批 spec):此前
-  GetWindowRect 在非 PMv2 线程读出**逻辑坐标**,与 screenshot/xy: 的物理
-  像素跨缩放混层——抖音实测踩坑(200% 缩放副屏,逻辑 rect 当物理基准换算
-  差点错点,窗口边界守卫拦下后定位根因)。现于 PMv2 上下文枚举,rect 与
-  截图/坐标寻址同坐标系,视觉兜底换算("窗口左上角 + PNG 坐标")不再需要
-  缩放修正。依赖旧逻辑 rect 的消费方需按 DPI 换算迁移。
-- **登录态深度闭环(docs/16 §5)**:用户 Chrome 完成两家登录后补测——① xhs
-  "点开具体笔记 → 读正文+评论 → esc 返回"**全链成功**(ref 精点 @e164 →
-  弹层 → 文本 4451→8170B,评论区"回复"×85);关键发现:**text 通道读整个
-  文档范围而非视口**——评论区未滚到也能读,零滚动成本。诊断方法沉淀:
-  UIA 文本与截图矛盾时以截图仲裁(未登录误判由此推翻——卡片标题在树里,
-  是 find 默认视图没暴露全)。② bilibili 整页跳转形态:点击/新标题锚全通,
-  评论读取未完成(卡点全在选卡/锚点层:整页跳转标题变锚失效、卡片标题
-  AMBIGUOUS、活动卡两连踩、共享桌面锚漂移——五怪癖全部入 pack)。
-  browser.yml:+5 quirks(modal_vs_page/card_name_ambiguous/
-  text_reads_beyond_viewport/promo_card_trap/shared_desktop_drift),
-  open_item 翻 verified,新增 read_note_comments(verified);fixtures:
-  xhs-deep2/xhs-login-check/bili-deep5 定稿。
-- **抖音深度实测(docs/16 §5.4):"读屏标签"开关发现 + 坐标缺口登记**:
-  ① 抖音默认 a11y 半盲(文案/作者/推荐视觉可见不在树)——**钥匙是
-  Button "开启读屏标签"**(抖音检测 UIA 客户端后暴露的开关,点开后内容层
-  全进树,+294 行);② 互动层(卡片链接/评论图标)无 name 无 ref——评论栏
-  展开需要坐标点击,**登记 M3 候选 `click --at x,y --physical`**(视觉
-  兜底闭环的"手",与微信自绘右键菜单同源缺口);③ /explore 已 404,
-  登录态首页为单视频沉浸流。三家横向 a11y 友好度:xhs > bilibili >
-  douyin,pack 按站分级(2 quirks 入档)。
-- **扩展操作面验证(docs/16 §5.5)**:三未知点全裁定——① 工具栏按钮 name
-  在树但 **UIA Invoke 报 INTERNAL,须 `click --physical`**;② 弹层是
-  独立 Document(5→6→5 实测),**内容树形通道全读**(猫抓全部功能按钮
-  name 采样在案)而 text 通道空(与普通页面相反的通道互补);③
-  `press esc` 直达并关闭弹层,观察命令期间弹层存活。chrome://extensions
-  视觉渲染但 WebUI a11y 弱暴露(开关切换再指向坐标 M3 缺口);右键菜单
-  扩展项因用户桌面并发两次被护栏正确拦截,待空闲复验。媒体嗅探(猫抓)
-  与跨语言读取(沉浸式翻译)路线就此可编排;凭据类扩展按安全边界跳过。
-  browser.yml +2 quirks(extension_surfaces/webui_weak_a11y)。
-- **浏览器场景实测(docs/16)+ browser pack 翻档**:fixture 轨 8/8(四档投影:
-  full 19764B → skeleton 43% → content 58% → **content+skeleton 80%**,超 PRD 70%
-  线;settle 活体证据:10s 追加窗内阻塞 8410ms、观测 5 次变化);小红书真机
-  闭环全通(地址栏导航 ctrl+l+paste → settle → 读 feed → 滚动×2 增量读;真实页
-  组合投影 71%,较纯 skeleton 再省 38%)。三个发现沉淀为 pack quirks:多文档页
-  AMBIGUOUS(xhs 2×RootWebArea,feed=role:Document#2,通用法 find 枚举+非空
-  定位)、未登录卡片=图片对象(文本通道只见骨架,登录态留待补测)、导航须用
-  paste 而非元素定位(临时窗口用完即关防 AMBIGUOUS)。browser.yml 5 路线翻
-  `verified`(read/read_multidoc/tree/navigate/scroll),open_item/site_search/
-  new_tab 保持 `unverified` 待登录态补测;新增 fixtures:edge-content-view.sh
-  (CI 轨)+ xhs-browse.sh(场景轨)。**Chrome 对照实测**(xhs-browse-chrome.sh):
-  全链同构通过,feed 同为 Document#2,组合投影 72%(Edge 71%)——pack 的
-  "Chromium 系同源套用"断言就此实证,quirks 无一分叉。
-- **`snapshot --view content` + `wait --stable`(spec,浏览器内容通道基建)**:
-  ① **内容域投影**——只保留 Document 子树(网页/文档正文)与根→Document 路径,
-  应用 chrome(工具栏/ribbon)整枝丢弃;与 `--skeleton` 正交组合,折叠仅作用于
-  Document 内部、chrome 交互元素不参与保留判定——这是纯 skeleton 对浏览器形态
-  仅削 ~36%(PRD §4 实测豁免项)的根因修复,目标是把该形态推向 70%+ 削减;
-  窗口无 Document → `NOT_FOUND`(不静默回退);投影实现在 actl-core
-  (`Projection` 枚举,keep-set 纯函数),`--view` 值域扩展预留 spec 通道。
-  ② **settle 谓词**——`wait --element <t> --stable`:观测样本(text>value>name
-  通道,避开 Chromium Document Value=URL 陷阱)连续两次采样(settle_ms=250ms,
-  `ACTL_SETTLE_MS` 可调)不变即就绪,滚动/导航后的内容加载判定;超时 evidence
-  带 samples/changes;与 `--property` 互斥("什么时候停"vs"到达什么值")。
-  契约测试新增 view 值域/stable 互斥/schema 同源三项 golden;docs/06 §3.2/§3.4/§6
-  同步。定位:浏览器/WebView2/Electron 是桌面 UI 主体,Chrome 136 起默认 profile
-  禁 CDP,真实登录会话只有 UIA 一条路——本批是"真实会话浏览器自动化"赛道的
-  机制地基(场景实测随 docs/16 跟进)。
-- **截图→视觉工作流端到端实证 + pack 路线**:Notepad 实测 `screenshot --element
-  role:Document` → PNG(24KB/2280×1180)→ 视觉模型**逐字读回**中英文混合内容
-  ("actl + vision = the screenshot loop works. 敏捷的棕色狐狸。")——UIA 失明
-  场景的完整读取链路打通。wechat pack 增 read_image_message(图片消息:定位
-  bubble → screenshot --element → 上层多模态)和 capture_context_menu(右键
-  point + screenshot --rect);SKILL.md 增视觉兜底协议节(三域用法 + 三典型
-  场景 + "显式请求的兜底,默认路径永远是 UIA"定位);lint 76 步全绿。
-- **PointerSpec 模型化 + 输入面三缺口收口(spec)**:① pointer.rs 的扁平
-  PointerAction 枚举重构为 **PointerSpec**(button×clicks×modifiers 参数化,
-  键盘侧 KeySpec 的镜像)——新增操作 = 新数据而非新分支;② **middle-click**
-  (浏览器链接新标签/任务栏新实例)、**triple-click**(编辑器段落选,Notepad
-  实测:三击 → ctrl+c → 剪贴板得到整行"Third and final line.")、
-  **click --physical --with ctrl,shift**(修饰键与点击原子组合:按下修饰→
-  N 击→释放,一批注入自拥有自释放;多选/范围选的刚需通道);③ 修饰键保持
-  事件经 kbd::modifier_hold_events 复用编译层。契约 18/18。输入操作面至此
-  规范化完整(操作×通道×授权×护栏×input_effects 全覆盖)。
-- **裸修饰键 + 开始菜单可达(用户场景闭环)**:① `press win`/`press shift` 等
-  裸修饰键此前被解析层拒("纯修饰键不是可按键")——放宽为修饰键本身即按键
-  (与 key-down shift 同语义;单测+垃圾用例同步);② **开始菜单全可达**(更正
-  普查的"待复测":窗口预创建故差集法失明;实测 snapshot --app 开始 = 搜索框
-  Edit + AppsList + 钉住应用实名 Word/Edge/任务计划程序等);③ 用户工作流闭环:
-  **自动隐藏任务栏 + Win 呼出**——`press win --app <前台>` 弹开始菜单并同时
-  呼出任务栏,之后 `snapshot --app 开始` 全交互,esc 即收;系统 shell 交互面
-  就此齐了(flyout/开始/桌面可达,仅任务栏按钮层退化)。
-- **系统 UI 区域普查(docs/15)**:快速设置(Win+A)**全可达**(ControlCenterRegion,
-  WLAN/蓝牙/勿扰按钮实名可点)、通知中心(Win+N)**全可达**(通知列表/请勿打扰/
-  全部清除实名)、桌面图标全可达(ListItem)——系统控制原语路线(勿扰开关/WiFi
-  切换)可直接进 pack;开始菜单待复测;任务栏/托盘维持退化终审。**更正**:Win 键
-  一直被引擎支持(MODIFIERS 自始含 win→VK_LWIN,清场含双变体)——此前"安全边界/
-  未实现"两说均为误判,如实入档;Win 组合注入的 --app 锚定语义 = 当前前台窗
-  (任务栏不可聚焦)。
-- **`snapshot --hwnd`(spec,加法)+ 特殊窗可达性修复**:Win11 任务栏 XAML 岛/
-  TrayNotifyWnd 等无标题特殊窗此前双遮蔽(list-windows 滤空标题 + UIA root 枚举
-  不含)。修复:`resolve_window` 的 Hwnd 分支改走 **ElementFromHandle 直取**
-  (不再依赖 root 枚举),snapshot 增 `--hwnd`;实测 TrayNotifyWnd/XAML 岛可
-  快照。**托盘交互现状结论(Win11 24H2+)**:任务栏 UIA 全面退化——根级仅
-  Shell_TrayWnd、深扫 3 个空 Pane、XAML 岛树空,.NET 对照一致;托盘图标
-  **UIA 路线不可行**,可行路线 = screenshot --rect 托盘区 + 视觉定位 + 坐标点击
-  原语(待立项)或 Shell API 枚举(collector 式,非 UIA);溢出窗
-  (TopLevelWindowForOverflowXamlIsland)待展开后复测。登记 M3 候选。
-- **`screenshot` 命令(spec,新原语)**:像素捕获兜底通道——**显式请求**(与 --physical
-  同级授权语义;默认观察仍是 UIA,定位哲学不变)。四域:`--app`/`--hwnd`(PrintWindow
-  本体渲染,抗遮挡;bindings 缺失故手写 extern 声明)、`--rect`(BitBlt+CAPTUREBLT,
-  屏幕所见)、`--element`(定位链 bounds 直裁)。**DPI 双 spike 结论落地**:捕获全程
-  线程级 PMv2(collector 模式;实测 PMv2 线程内 UIA bounds 即物理像素——免比例映射,
-  比参照实现更简更准);右键菜单类 UIA 不可见 overlay 不作窗口暴露(spike 实证),
-  瞄准 = right-click 返回 point + --rect。PNG 经 WIC(纯 COM 零新依赖);卫生项:
-  50MP 像素上限、shots 目录 keep-20、最小化窗口如实拒(不隐式恢复)、区域模式
-  截屏幕所见(遮挡者入镜,help 明示)。envelope 只带 path/width/height/bytes——
-  stdout 契约不破,视觉消费归上层。真机三域全通(区域 61ms、窗口 39KB、元素
-  2280×1180)+ 视觉抽验清晰无错位;契约 17/17。
-- 英文版 README(`README.en.md`),与中文版顶部语言互链;英文示例使用英文系统窗口名。
-- **pack 契约 `skills/actl/PACKS.md`(pack_format: 1)**:字段与占位符语义、路线级
-  `status` 信任分级(verified/manual/unverified,unverified 禁直接执行)、模板、
-  贡献流程与 review 红线(盲发/规避护栏/核心语义冲突即拒)、私有 pack 外挂
-  (`cargo xtask lint-packs <dir>`)与生命周期规则;excel/word/wechat 三 pack 升级
-  format 1(补 pack_format/app_version/verified_date + 全部路线 status)。
+## [0.1.5] - 2026-09-27
 
-### Changed
-- README 规范化(面向用户重组):安装渠道折叠、快速上手收敛为"感知→执行→断言"
-  三步、命令面改分组表格并修正过期计数(26→30,补上 0.1.4 的 `paste`)、安全设计
-  改写为用户语言;开发者内容压缩为"参与开发"一段,内部进度黑话(金任务/US1/
-  定位链四级)移出 README,详见 ROADMAP 与设计蓝图。
-- AGENTS.md 过期的 License TBD 口径对齐为 MIT(与 LICENSE 文件一致)。
-- **lint-packs 进 gate**(pre-push/CI 随之生效)并强化校验:pack_format 值、id
-  全文件唯一(quirks/routes 共命名空间)、路线 status 必填且取值合法;支持目录
-  参数校验仓库外私有 pack。
-- README 命令面计数跟进 30→33(`screenshot`/`middle-click`/`triple-click`,
-  前批 feat 的文档债)。
+浏览器真实会话的内容通道、视觉兜底闭环、输入与寻址面规范化。场景实测与
+踩坑细节见 docs/16 与 git 日志,此处只记变更本体。
+
+### Added
+- **浏览器内容通道**:`snapshot --view content` 内容域投影(应用工具栏等
+  chrome 整枝丢弃,与 `--skeleton` 组合对浏览器页面的 token 削减达 70-80%);
+  `wait --stable` settle 谓词(观测样本连续两次不变即就绪,滚动/导航后的
+  加载判定,替代固定 sleep)。
+- **坐标寻址 `xy:<x>,<y>`(视觉兜底的"手")**:click 家族与 hover 接受屏幕
+  坐标,面向 UIA 失明区(自绘菜单、无名按钮、Canvas)——screenshot 出图、
+  多模态读坐标、`click xy:` 落点,闭环补全。守卫:强制 `--app` + 显式
+  `--physical` + 窗口边界检查(坐标须落在目标窗口当前 bounds 内,窗口
+  移动即拒)。
+- **寻址与窗口锚补强**:`id:<Id>#N` 序数(多文档页同名 AutomationId);
+  `--app hwnd:<n>` 句柄锚(SPA 站点导航改标题后锚点不失效);
+  `snapshot --hwnd`(任务栏 XAML 岛等无标题特殊窗可达)。
+- **输入面补全**:middle-click(新标签页/新实例)、triple-click(段落选)、
+  `--with ctrl,shift`(修饰键与点击原子组合,多选/范围选);`press win`/
+  `press shift` 等裸修饰键可用。
+- **浏览器应用档案 pack**(quirks + 路线,Edge/Chrome 双实测背书)与
+  SKILL 的 actl×playwright 分工协议;pack 契约校验入 gate。
+- **文档**:docs/15 系统 UI 区域普查、docs/16 浏览器场景战记。
 
 ### Fixed
-- SKILL.md 视觉兜底示例:`screenshot --element` 的作用域参数 `--app` → `--sapp`
-  (二者 clap 互斥,原写法照抄即拒);wechat pack 游离于路线列表中段的顶层
-  `verify:` 行并入 send_message 路线(原位置在 YAML 中非法)。
+- **wait 族对 AMBIGUOUS 快速失败**:确定性多命中原先会等满超时并报误导性
+  TIMEOUT,现在立即失败并附候选。
+- **[BC] `list-windows` 的 rect 统一为物理像素**:此前为逻辑坐标,与截图/
+  坐标寻址在高 DPI 多屏下跨缩放混层;依赖旧值的消费方需按 DPI 换算迁移。
 
 ## [0.1.4] - 2026-09-27
 

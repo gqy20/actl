@@ -61,6 +61,8 @@ crate 名 [actl-cli](https://crates.io/crates/actl-cli),二进制名 `actl`;work
 ```bash
 # 1. 感知:目标窗口有哪些可操作元素(拿到稳定引用 @eN)
 actl snapshot --app 记事本 --skeleton
+#    浏览器页面用内容域投影:工具栏整枝丢弃,token 削减 70-80%(实测)
+actl snapshot --app Edge --view content --skeleton
 
 # 2. 执行:点击(UIA Invoke,后台执行不抢鼠标)
 actl click id:clearButton --app 计算器
@@ -128,6 +130,7 @@ actl click role:Button --near id:clearButton --app 计算器    # 锚点就近
 
 - [设计蓝图](docs/06-design-blueprint.md)——完整命令语义与协议契约
 - [场景实测记录](docs/14-office-scenarios.md)——Office 三闭环、微信核心通道等真实应用战记
+- [浏览器场景战记](docs/16-browser-scenarios.md)——Edge/Chrome 双验证、xhs/bili/douyin 登录态深度闭环、扩展操作面、视觉兜底 xy: 端到端
 - [调研与设计全索引](docs/README.md)——竞品调研、PRD、技术选型、实测战记
 - [Agent Skill](skills/actl)——给 agent 的 actl 使用技能与应用档案
 - [路线图](docs/ROADMAP.md)——阶段划分与版本口径
@@ -135,8 +138,10 @@ actl click role:Button --near id:clearButton --app 计算器    # 锚点就近
 ## 项目状态
 
 当前 v0.1.x(M2 阶段):33 条命令全链路可用;计算器与记事本保存的端到端任务、跨
-3 应用数据搬运均实测全绿;Office(Excel/Word)与微信核心通道已实测通达,场景结论
-持续沉淀进 docs 与应用档案。阶段划分与版本口径见 [ROADMAP](docs/ROADMAP.md)。
+3 应用数据搬运均实测全绿;Office(Excel/Word)与微信核心通道已实测通达;浏览器
+内容通道(`--view content` 投影、`--stable` settle、坐标寻址 `xy:` 视觉兜底)经
+Edge/Chrome 双验证,xhs/bili/douyin 登录态深度闭环实测;场景结论持续沉淀进 docs
+与应用档案。阶段划分与版本口径见 [ROADMAP](docs/ROADMAP.md)。
 
 ## 参与开发
 

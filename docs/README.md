@@ -46,3 +46,6 @@
 | [11-desktop-interaction-and-display-research.md](11-desktop-interaction-and-display-research.md) | 后期显示层、分屏与隔离、暂停接管、人工介入、状态协议及用户研究方案 |
 | [12-codex-computer-use-comparison.md](12-codex-computer-use-comparison.md) | Codex Computer Use(26.924)本机实证、sky window2 API × actl 命令面对照与生态定位 |
 | [13-realtime-state-maintenance.md](13-realtime-state-maintenance.md) | 窗口/应用实时状态:三层机制、轮询 vs 事件生态实践、事故清单与 wait/serve 映射 |
+| [14-office-scenarios.md](14-office-scenarios.md) | Office 场景实测战记:Excel GridPattern 直读+剪贴板直灌、Word TextPattern 三闭环 |
+| [15-system-ui-census.md](15-system-ui-census.md) | 系统 UI 区域普查:快速设置/通知中心/桌面全可达,任务栏退化终审,Win 键勘误 |
+| [16-browser-scenarios.md](16-browser-scenarios.md) | 浏览器场景实测战记:内容域投影数字、settle 证据、xhs/bili/douyin 三站深度闭环、扩展操作面、视觉兜底 xy: 端到端 |
