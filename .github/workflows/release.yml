@@ -137,6 +137,23 @@ jobs:
           awk -v tag="## [${ver}" \
             'index($0, "## [") == 1 { p = (substr($0, 1, length(tag)) == tag); next } p' \
             CHANGELOG.md > changelog_section.md || true
+          # 反换行(unwrap):CHANGELOG 为 diff 可读在条目内手工折行,而 GitHub
+          # release 正文把 soft break 渲染成真换行(v0.1.5 实测:条目被拆行、
+          # 右侧大片留白)。续行拼回前一行:ASCII 词间断行补空格,中文直接拼;
+          # 标题/列表项/表格/引用行原样。
+          awk '
+            function flush() { if (held != "") { print held; held = "" } }
+            function strip() { sub(/^[ \t]+/, "", $0) }
+            /^$/ || /^#/ || /^\|/ || /^>/ { flush(); print; next }
+            /^- / { flush(); held = $0; next }
+            {
+              strip()
+              if (held == "") held = $0
+              else if (held ~ /[A-Za-z0-9`.)\]]$/ && $0 ~ /^[A-Za-z0-9`([]/) held = held " " $0
+              else held = held $0
+            }
+            END { flush() }
+          ' changelog_section.md > changelog_unwrapped.md
           if [ -s changelog_section.md ]; then
             {
               echo "### 下载"
@@ -147,7 +164,7 @@ jobs:
               echo "| \`actl_${GITHUB_REF_NAME}_windows_amd64.zip\` | 完整包(actl + actl-signal 状态条 + README + LICENSE) |"
               echo "| \`checksums.txt\` | SHA-256 校验 |"
               echo
-              cat changelog_section.md
+              cat changelog_unwrapped.md
             } > release_notes.md
           else
             echo "CHANGELOG has no section for ${GITHUB_REF_NAME}" > release_notes.md
