@@ -86,3 +86,27 @@ actl 保持原子操作 CLI 定位。智能体负责跨调用任务编排、成�
 - [Power Automate 错误处理](https://learn.microsoft.com/en-us/power-automate/desktop-flows/errors)：按动作或动作组组织恢复策略。
 
 验收重点：用户是否需要一直盯屏、接管是否明确、结束后成果和桌面是否符合预期。
+
+## 6. 报告分类与证据可用性
+
+`task-archive` 接受 `artifacts: [{id, kind, reference}]`；kind 为 local_file 或 external_reference。
+本地引用必须是绝对非 UNC 路径；外部引用只记录，不联网读取。归档不自动复制、上传或删除证据。
+完整示例见 `fixtures/task-report.example.json`，使用前替换为真实任务、调用 ID 和证据路径。
+
+feedback 可显式指定 kind 和 evidence_ids：
+
+- fact：调用方已验证，要求 verified=true 和至少一个有效证据 ID。
+- inference：推测，不能标 verified=true。
+- user_feedback：用户原话或反馈，source 必须为 user。
+- 旧报告未填 kind 时保留原样，不自动升级为事实。
+
+分类是调用方声明；引用存在和 verified=true 都不是系统替调用方证明内容真实。
+`history --task <id> --reports` 返回报告及 evidence_status：available/missing/not_a_file/unreadable/unchecked，
+附 checked_ms。available 仅说明查询时可以打开本地文件；不验证内容、哈希或将来可访问性。
+外部引用 unchecked；旧 evidence 字符串不自动解释为路径。
+
+保留政策：操作日志 7 天 / 64 MiB，单调用最多 1 MiB；报告 30 天 / 32 MiB；
+近期文件及活动调用按原规则保护。证据文件由所属任务按需管理，不被日志轮转删除。
+未完成 flows 与 desktop 恢复记录不参与上述清理。历史事件新增 run_id/step_id，
+完整关系为 run_id → step_id → call_id → action_id，同一次调用可包含多个步骤。
+

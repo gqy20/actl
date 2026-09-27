@@ -485,9 +485,11 @@ pub(crate) fn list_windows_cmd() -> Result<CommandOutput, CtlError> {
     Ok(json!({ "windows": list, "count": list.len() }).into())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn verify_cmd(
     exists: Option<&str>,
     value_target: Option<&str>,
+    property: Option<&str>,
     expected: Option<&str>,
     contains: bool,
     checked: Option<&str>,
@@ -502,6 +504,7 @@ pub(crate) fn verify_cmd(
             actl_uia::VerifyKind::Value {
                 expected: expected.unwrap_or_default().to_string(),
                 contains,
+                property: property.unwrap_or("auto").into(),
             },
         )
     } else if let Some(t) = checked {
@@ -512,13 +515,40 @@ pub(crate) fn verify_cmd(
         ));
     };
     let target = actl_core::parse_target(raw)?;
-    let out = actl_uia::verify(app, &target, near, kind)?;
+    let out = actl_uia::verify(app, &target, near, kind).map_err(|mut error| {
+        let mut evidence = error.evidence.take().unwrap_or_else(|| json!({}));
+        if !evidence.is_object() {
+            evidence = json!({"details":evidence});
+        }
+        evidence["target"] = json!(target.describe());
+        evidence["property"] = json!(if exists.is_some() {
+            "exists"
+        } else if checked.is_some() {
+            "checked"
+        } else {
+            property.unwrap_or("value")
+        });
+        evidence["expected"] = json!(if checked.is_some() {
+            Some("On")
+        } else {
+            expected
+        });
+        if evidence.get("actual").is_none() {
+            evidence["actual"] = Value::Null;
+        }
+        if evidence.get("channel").is_none() {
+            evidence["channel"] = Value::Null;
+        }
+        error.evidence = Some(evidence);
+        error
+    })?;
     Ok(json!({
         "action": "verify",
         "mode": out.mode,
         "target": target.describe(),
         "resolved_by": out.located.resolved_by,
         "actual": out.actual,
+        "channel": out.channel,
     })
     .into())
 }

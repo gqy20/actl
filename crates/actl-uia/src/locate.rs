@@ -639,7 +639,7 @@ pub fn wait_property(
                     target.describe(),
                     predicate.describe()
                 ),
-                serde_json::json!({ "last_actual": last }),
+                serde_json::json!({ "last_actual": last, "actual":last, "target":target.describe(), "expected":predicate.expected, "property":predicate.describe().split('=').next(), "channel":match predicate.prop { WaitProp::Value => "value-or-text-pattern", WaitProp::Name => "name", WaitProp::Text => "text-pattern", WaitProp::Checked => "toggle-pattern" }, "comparison":if predicate.contains {"contains"} else {"exact"} }),
             ));
         }
         std::thread::sleep(std::time::Duration::from_millis(timing().poll_ms));
@@ -733,26 +733,28 @@ pub struct WaitPredicate {
 }
 
 pub enum WaitProp {
+    Text,
     Value,
     Name,
     Checked,
 }
 
 impl WaitPredicate {
-    /// 解析 "prop=expected" 形态(prop ∈ value|name|checked;checked 期望 on/off)
+    /// 解析 "prop=expected" 形态(prop ∈ value|name|text|checked;checked 期望 on/off)
     pub fn parse(raw: &str) -> Result<Self, CtlError> {
         let Some((prop, expected)) = raw.split_once('=') else {
             return Err(CtlError::protocol(format!(
-                "invalid predicate {raw:?}: expected <prop>=<expected> with prop in value|name|checked"
+                "invalid predicate {raw:?}: expected <prop>=<expected> with prop in value|name|text|checked"
             )));
         };
         let prop = match prop.trim() {
             "value" => WaitProp::Value,
             "name" => WaitProp::Name,
+            "text" => WaitProp::Text,
             "checked" => WaitProp::Checked,
             other => {
                 return Err(CtlError::protocol(format!(
-                    "unknown predicate property {other:?}: expected value|name|checked"
+                    "unknown predicate property {other:?}: expected value|name|text|checked"
                 )));
             }
         };
@@ -778,6 +780,7 @@ impl WaitPredicate {
         let p = match self.prop {
             WaitProp::Value => "value",
             WaitProp::Name => "name",
+            WaitProp::Text => "text",
             WaitProp::Checked => "checked",
         };
         format!("{p}={}", self.expected)
@@ -787,6 +790,7 @@ impl WaitPredicate {
     pub fn read(&self, elem: &uiautomation::UIElement) -> Option<String> {
         match self.prop {
             WaitProp::Value => crate::read::read_value(elem),
+            WaitProp::Text => crate::read::read_text(elem),
             WaitProp::Name => elem.get_name().ok().filter(|n| !n.is_empty()),
             WaitProp::Checked => elem
                 .get_pattern::<uiautomation::patterns::UITogglePattern>()
@@ -800,10 +804,12 @@ impl WaitPredicate {
     pub fn satisfied(&self, actual: Option<&str>) -> bool {
         let Some(a) = actual else { return false };
         match (&self.prop, self.contains) {
-            (WaitProp::Checked, _) | (WaitProp::Value, false) | (WaitProp::Name, false) => {
-                a == self.expected
+            (WaitProp::Checked, _)
+            | (WaitProp::Value, false)
+            | (WaitProp::Name | WaitProp::Text, false) => a == self.expected,
+            (WaitProp::Value, true) | (WaitProp::Name | WaitProp::Text, true) => {
+                a.contains(&self.expected)
             }
-            (WaitProp::Value, true) | (WaitProp::Name, true) => a.contains(&self.expected),
         }
     }
 }

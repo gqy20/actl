@@ -113,7 +113,7 @@ before/verify 中的等待因暂停被打断时保留原步骤阶段，不把暂
 未完成运行记录不参与历史日志轮转；v1 不自动删除运行目录，完成后可按归档政策人工保留或清理。
 本机用户可以编辑文件，因此这些文件不是防篡改审计或安全授权机制。
 
-run/resume 的历史 task_id 固定为运行 ID，workflow 事件仅存 run_id/status，动作日志沿用原协议。
+run/resume 的历史 task_id 固定为运行 ID，workflow 事件存状态元数据，流程内事件附 run_id/step_id 上下文。
 信号快照 workflow 在 run_id/title/status 外可带 reason、step_id、error_code、actions；旧快照兼容。
 工作流事件同样记录步骤 ID、原因与错误码，不自动记录标题或操作正文。状态条区分检查点、用户暂停、
 前置条件失败和操作失败；详情说明下一步。actions 只是建议，不能绕过执行时检查。
@@ -135,3 +135,42 @@ run/resume 的历史 task_id 固定为运行 ID，workflow 事件仅存 run_id/s
 自动测试覆盖严格解析、状态 golden、边界暂停、检查点、未确认写入不重放、显式重试、
 有限只读重试、停止粘性、锁释放、持久化失败阻止动作及 CLI 跨进程控制。
 真实业务应用的 selector 与断言需要另外实测；`fixtures/flows/inspect.yml` 是无写入的入门流程。
+
+## 6. 编辑器提示与断言证据
+
+Schema 位于 `schemas/flow-v1.schema.json`。支持 YAML Language Server 的编辑器可在文件首行写
+`# yaml-language-server: $schema=../../schemas/flow-v1.schema.json`，路径相对于 YAML 文件。
+示例见 `fixtures/flows/calculator-verified.yml`。Schema 提供字段、枚举和结构提示；
+UTF-8 字节限制、重复步骤 ID、CLI 参数和写操作验证政策仍以 `actl flow-validate` 为准。
+结构和语义错误返回 `error.evidence.field`（如 `steps[0].run.args[2]`）和可用的 `step_id`；
+YAML 语法错误由解析器给出位置，不保证存在可解析的步骤 ID。
+
+| 断言 | 读取内容 | 用法 |
+| --- | --- | --- |
+| Name | 控件名称，包括部分应用的结果标签 | `verify --value id:CalculatorResults "显示为 2" --property name` |
+| Value | 严格 ValuePattern | `verify --value id:Amount "100" --property value` |
+| Text | 严格 TextPattern 正文 | `verify --value role:Document "已保存" --property text --contains` |
+| 兼容默认 | ValuePattern，失败后尝试 TextPattern | 省略 `--property` |
+
+以上命令应加目标应用作用域。快照可见、选择器可定位、属性可读取是三个独立条件。
+`wait --property text=...` 支持等待正文；旧 `wait value=...` 保留 Value/Text 回退。
+verify 返回实际读取的 channel；断言失败带 target/property/channel/expected/actual/comparison，
+定位失败时实际值和通道可为 null。wait 超时同时保留 last_actual，channel 表示所用读取策略。
+不可读取不是空字符串，也不能自动视为成功。
+
+每步新增 `evidence: metadata | full`，默认 metadata。state.json 中的 error_evidence 默认仅保留
+property/channel/comparison 和 redacted=true；full 才保存断言内容，单条上限 8 KiB，超限标记 omitted。
+这只控制流程错误证据落盘，CLI 直接返回值和 plan.json 的原始参数仍可能包含内容；不要把秘密写进 YAML。
+恢复时再次验证失败会更新错误码和证据，避免显示上一次结果。
+
+写操作的 verify 应核对该操作产生的业务结果。计算器示例先清零再输入 2，分别核对结果名称为 0/2；
+不要把“计算器窗口存在”当作输入完成。提交场景应检查回执编号、目标记录状态或保存后的字段值。
+断言的业务充分性由作者负责，CLI 不能从窗口存在推导业务成功。
+
+## 7. 操作追溯
+
+流程运行 ID 同时是历史 task_id。流程内事件新增顶层 run_id/step_id，call_id 标识一次 CLI 调用，
+action 事件的 data.action_id 标识该调用中的动作。因此动作身份是 `(call_id, action_id)`，不是全局数字。
+`actl history --task <run_id> --step <step_id> --reports` 可返回该步的事件、调用边界和任务报告。
+报告是任务级，--step 不会把报告内容伪装成某一步的事实。历史轮转后不能保证永久追溯，
+未完成 flows 恢复记录独立保留。

@@ -10,6 +10,75 @@ fn root() -> std::path::PathBuf {
         actl_core::snapshot::new_snapshot_id()
     ))
 }
+
+#[test]
+fn workflow_actions_and_report_evidence_can_be_traced() {
+    let root = root();
+    let mut session = SignalSession::start_with_task(
+        SignalPaths::at(&root),
+        "flow-run",
+        None,
+        Some("run-1".into()),
+    );
+    actl_core::signal_session::workflow(
+        serde_json::from_value(
+            json!({"run_id":"run-1","step_id":"submit","title":"Private task","status":"running"}),
+        )
+        .unwrap(),
+    );
+    let mut action = actl_core::signal_session::ActionGuard::begin(
+        "click",
+        Default::default(),
+        Default::default(),
+    );
+    action.delivered();
+    session.finish(Phase::Done, None);
+    let linked = query(&root, Some("run-1"), Some("submit"), 20, false).unwrap();
+    let event = linked["calls"][0]["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["event"] == "action")
+        .unwrap();
+    assert_eq!(event["run_id"], "run-1");
+    assert_eq!(event["step_id"], "submit");
+    assert!(event["call_id"].is_string());
+    assert!(event["data"]["action_id"].is_number());
+    let mut normalized = event.clone();
+    normalized["call_id"] = json!("call-1");
+    normalized["ts_ms"] = json!(0);
+    normalized["seq"] = json!(3);
+    normalized["data"]["action_id"] = json!(1);
+    assert_eq!(
+        normalized,
+        serde_json::from_str::<Value>(include_str!("golden/workflow_action_v1.json")).unwrap()
+    );
+
+    assert!(!linked.to_string().contains("Private task"));
+    let evidence = root.join("result.txt");
+    std::fs::write(&evidence, "test evidence").unwrap();
+    let file = root.join("report.json");
+    let mut report = json!({"task_id":"run-1","outcome":"completed","summary":"done","verification":"observed","call_ids":[],
+        "artifacts":[{"id":"result","kind":"local_file","reference":evidence}],
+        "feedback":[{"source":"agent","kind":"fact","text":"observed result","verified":true,"evidence_ids":["result"]}]});
+    std::fs::write(&file, report.to_string()).unwrap();
+    archive(&root, &file).unwrap();
+    assert_eq!(
+        query(&root, Some("run-1"), None, 20, true).unwrap()["reports"][0]["evidence_status"][0]["availability"],
+        "available"
+    );
+    std::fs::remove_file(evidence).unwrap();
+    assert_eq!(
+        query(&root, Some("run-1"), None, 20, true).unwrap()["reports"][0]["evidence_status"][0]["availability"],
+        "missing"
+    );
+    report["feedback"][0]["kind"] = json!("inference");
+    std::fs::write(&file, report.to_string()).unwrap();
+    assert!(archive(&root, &file).is_err());
+    drop(action);
+    drop(session);
+    std::fs::remove_dir_all(root).unwrap();
+}
 #[test]
 fn journal_preserves_task_events_without_private_content_or_heartbeats() {
     let root = root();

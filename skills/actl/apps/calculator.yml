@@ -9,7 +9,7 @@ verified_date: 2026-09-27
 verified_env: Windows 10.0.26200.0 zh-cn
 quirks:
   - id: result_name_channel
-    note: CalculatorResults 的结果在 Name 通道，实测 verify --value 返回 actual=null。使用 get --property name 或 wait 的 name 谓词；中文界面的值为“显示为 5”等。
+    note: CalculatorResults 的结果在 Name 通道，实测 verify --value 返回 actual=null。使用 verify --property name、get --property name 或 wait 的 name 谓词；中文界面的值为“显示为 5”等。
   - id: nested_output_not_resolved
     note: 本次快照包含 NormalOutput，但 get/wait 的语义定位返回 NOT_FOUND。优先使用 CalculatorResults，不把快照出现等同于选择器可定位。
 routes:
@@ -25,3 +25,10 @@ routes:
     verify: name 谓词精确匹配，超时表示结果未满足；本次未满足与满足分支均已验证。
     steps:
       - ["wait", "--element", "id:CalculatorResults", "--property", "name=显示为 {expected}", "--app", "{window}", "--timeout", "1000"]
+
+  - id: assert_expected_result
+    description: 立即核对中文标准计算器结果
+    status: verified
+    verify: Computer Use 点击 2 并截图确认后，Name 断言成功；显式 Value/Text 返回 actual=null。
+    steps:
+      - ["verify", "--value", "id:CalculatorResults", "显示为 {expected}", "--property", "name", "--app", "{window}"]

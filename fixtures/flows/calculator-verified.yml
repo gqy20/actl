@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=../../schemas/flow-v1.schema.json
+# Start a disposable Chinese Windows Calculator in Standard mode before running.
+# This clears its current calculation; do not target a calculator containing user work.
+version: 1
+name: 验证计算器结果
+steps:
+  - id: clear
+    title: 清空测试计算器
+    pause_before: true
+    before:
+      command: verify
+      args: [--exists, 'id:clearButton', --app, 计算器]
+    run:
+      command: click
+      args: ['id:clearButton', --app, 计算器]
+    verify:
+      command: verify
+      args: [--value, 'id:CalculatorResults', '显示为 0', --property, name, --app, 计算器]
+    retry: never
+    evidence: metadata
+  - id: enter_two
+    title: 输入并核对数字
+    run:
+      command: click
+      args: ['id:num2Button', --app, 计算器]
+    verify:
+      command: verify
+      args: [--value, 'id:CalculatorResults', '显示为 2', --property, name, --app, 计算器]
+    retry: never
+    on_failure: pause

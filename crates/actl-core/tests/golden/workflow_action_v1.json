@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "call_id": "call-1",
+  "task_id": "run-1",
+  "seq": 3,
+  "ts_ms": 0,
+  "event": "action",
+  "run_id": "run-1",
+  "step_id": "submit",
+  "data": {
+    "action_id": 1,
+    "kind": "click",
+    "phase": "preparing",
+    "effects": {
+      "keyboard": false,
+      "pointer": false,
+      "clipboard": "untouched",
+      "focus": false
+    }
+  }
+}

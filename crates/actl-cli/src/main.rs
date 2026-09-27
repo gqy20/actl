@@ -100,14 +100,19 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
         Command::Flow(command) => flow::dispatch(command).map(Into::into),
         Command::Commands => commands().map(Into::into),
         Command::Status => status().map(Into::into),
-        Command::Desktop(DesktopCommand::History { task, limit }) => {
-            actl_core::history::read_history(
-                &actl_core::state::SignalPaths::default().dir,
-                task.as_deref(),
-                *limit,
-            )
-            .map(Into::into)
-        }
+        Command::Desktop(DesktopCommand::History {
+            task,
+            step,
+            reports,
+            limit,
+        }) => actl_core::history::query(
+            &actl_core::state::SignalPaths::default().dir,
+            task.as_deref(),
+            step.as_deref(),
+            *limit,
+            *reports,
+        )
+        .map(Into::into),
         Command::Desktop(DesktopCommand::TaskArchive { file }) => {
             let path = actl_core::history::archive(
                 &actl_core::state::SignalPaths::default().dir,
@@ -306,6 +311,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
         Command::Verify {
             exists,
             value,
+            property,
             expected,
             contains,
             checked,
@@ -314,6 +320,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
         } => verify_cmd(
             exists.as_deref(),
             value.as_deref(),
+            property.as_deref(),
             expected.as_deref(),
             *contains,
             checked.as_deref(),

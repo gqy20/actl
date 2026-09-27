@@ -1,0 +1,16 @@
+{
+  "task_id": "calculator-demo",
+  "outcome": "completed",
+  "summary": "测试计算器显示 2",
+  "verification": "重新读取 CalculatorResults 的 Name 并核对截图",
+  "call_ids": [],
+  "evidence": [],
+  "artifacts": [
+    {"id": "result", "kind": "local_file", "reference": "C:/actl-evidence/calculator-result.png"}
+  ],
+  "feedback": [
+    {"kind": "fact", "source": "agent", "text": "结果显示 2", "verified": true, "evidence_ids": ["result"]},
+    {"kind": "inference", "source": "agent", "text": "其他语言版本可能需要不同的 Name 断言", "verified": false},
+    {"kind": "user_feedback", "source": "user", "text": "示例反馈，请替换为用户实际意见", "verified": false}
+  ]
+}

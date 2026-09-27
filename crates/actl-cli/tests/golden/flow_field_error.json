@@ -1,0 +1,14 @@
+{
+  "version": "1",
+  "ok": false,
+  "command": "flow-validate",
+  "error": {
+    "code": "PROTOCOL",
+    "message": "argument must be a string",
+    "evidence": {
+      "field": "steps[0].run.args[0]",
+      "step_id": "target"
+    },
+    "hint": "fix the command arguments (see `actl <cmd> -h`)"
+  }
+}

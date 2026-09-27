@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "actl workflow v1",
+  "description": "Editor assistance. flow-validate additionally enforces UTF-8 byte limits, unique step IDs, CLI arguments and write verification policy.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "name",
+    "steps"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": {
+        "$ref": "#/$defs/step"
+      }
+    }
+  },
+  "$defs": {
+    "invocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "command"
+      ],
+      "properties": {
+        "command": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "args": {
+          "type": "array",
+          "maxItems": 128,
+          "items": {
+            "type": "string",
+            "maxLength": 16384,
+            "pattern": "^[^\\u0000]*$"
+          }
+        }
+      }
+    },
+    "check": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/invocation"
+        },
+        {
+          "properties": {
+            "command": {
+              "enum": [
+                "verify",
+                "wait"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "run"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,80}$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "run": {
+          "$ref": "#/$defs/invocation"
+        },
+        "before": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/check"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "verify": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/check"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pause_before": {
+          "type": "boolean",
+          "default": false
+        },
+        "retry": {
+          "enum": [
+            "never",
+            "read_only"
+          ],
+          "default": "never"
+        },
+        "on_failure": {
+          "enum": [
+            "pause",
+            "fail"
+          ],
+          "default": "pause"
+        },
+        "evidence": {
+          "enum": [
+            "metadata",
+            "full"
+          ],
+          "default": "metadata",
+          "description": "Persist redacted metadata by default; full opts into saving assertion contents (8 KiB limit)."
+        }
+      }
+    }
+  }
+}

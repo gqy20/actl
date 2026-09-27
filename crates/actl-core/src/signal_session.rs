@@ -14,7 +14,7 @@ struct Publisher {
 impl Publisher {
     fn event(&mut self, event: &str, data: serde_json::Value) {
         if let Some(journal) = &mut self.journal {
-            journal.record(event, data);
+            journal.record_context(event, data, self.state.workflow.as_ref());
         }
     }
     fn action_event(&mut self) {
@@ -152,6 +152,7 @@ pub fn workflow(progress: crate::state::WorkflowProgress) {
     if let Some(shared) = CURRENT.with(|c| c.borrow().upgrade())
         && let Ok(mut p) = shared.lock()
     {
+        p.state.workflow = Some(progress.clone());
         p.event(
             "workflow",
             serde_json::json!({"run_id":progress.run_id,"status":progress.status,

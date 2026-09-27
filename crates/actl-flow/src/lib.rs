@@ -1,5 +1,6 @@
 //! Optional workflow layer. No Windows dependencies, shell evaluation or asynchronous runtime.
 pub mod engine;
+mod schema;
 pub mod store;
 use actl_core::CtlError;
 use serde::{Deserialize, Serialize};
@@ -25,6 +26,35 @@ pub struct Step {
     pub retry: Retry,
     #[serde(default)]
     pub on_failure: Failure,
+    #[serde(default)]
+    pub evidence: EvidencePolicy,
+}
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum EvidencePolicy {
+    #[default]
+    Metadata,
+    Full,
+}
+
+pub fn failure_evidence(policy: EvidencePolicy, error: &CtlError) -> Option<serde_json::Value> {
+    let source = error.evidence.as_ref()?;
+    if policy == EvidencePolicy::Full {
+        return Some(
+            if serde_json::to_vec(source).is_ok_and(|v| v.len() <= 8192) {
+                source.clone()
+            } else {
+                serde_json::json!({"omitted":"evidence_exceeds_8_kib"})
+            },
+        );
+    }
+    let mut value = serde_json::json!({"redacted":true});
+    for key in ["property", "channel", "comparison"] {
+        if let Some(v) = source.get(key) {
+            value[key] = v.clone();
+        }
+    }
+    Some(value)
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -67,42 +97,71 @@ pub fn parse(text: &str) -> Result<Plan, CtlError> {
     budget.max_nodes = 50_000;
     budget.max_total_scalar_bytes = 262_144;
     options.budget = Some(budget);
-    let plan: Plan = serde_saphyr::from_str_with_options(text, options)
+    let raw: serde_json::Value = serde_saphyr::from_str_with_options(text, options)
         .map_err(|e| CtlError::protocol(format!("invalid flow YAML: {e}")))?;
-    if plan.version != 1
-        || plan.name.trim().is_empty()
-        || plan.name.len() > 256
-        || plan.steps.is_empty()
-        || plan.steps.len() > 256
-    {
-        return Err(CtlError::protocol(
-            "flow requires version 1, a name (<=256 bytes) and 1-256 steps",
-        ));
+    let plan = schema::decode(raw)?;
+    for (field, invalid, message) in [
+        ("version", plan.version != 1, "expected version 1"),
+        (
+            "name",
+            plan.name.trim().is_empty() || plan.name.len() > 256,
+            "name requires 1-256 UTF-8 bytes",
+        ),
+        (
+            "steps",
+            plan.steps.is_empty() || plan.steps.len() > 256,
+            "expected 1-256 steps",
+        ),
+    ] {
+        if invalid {
+            return Err(schema::error(field, None, message));
+        }
     }
     let mut ids = std::collections::HashSet::new();
-    for step in &plan.steps {
-        if !actl_core::history::valid_id(&step.id)
-            || !ids.insert(&step.id)
-            || step.title.trim().is_empty()
-            || step.title.len() > 256
-        {
-            return Err(CtlError::protocol(
-                "step IDs must be unique and valid; titles require 1-256 bytes",
+    for (index, step) in plan.steps.iter().enumerate() {
+        let base = format!("steps[{index}]");
+        if !actl_core::history::valid_id(&step.id) || !ids.insert(&step.id) {
+            return Err(schema::error(
+                &format!("{base}.id"),
+                Some(&step.id),
+                "step ID must be unique and valid",
             ));
         }
-        for call in std::iter::once(&step.run)
-            .chain(step.before.iter())
-            .chain(step.verify.iter())
-        {
-            if call.command.is_empty()
-                || call.command.len() > 64
-                || call.args.len() > 128
-                || call
-                    .args
-                    .iter()
-                    .any(|a| a.len() > 16_384 || a.contains('\0'))
-            {
-                return Err(CtlError::protocol("invalid flow invocation size"));
+        if step.title.trim().is_empty() || step.title.len() > 256 {
+            return Err(schema::error(
+                &format!("{base}.title"),
+                Some(&step.id),
+                "title requires 1-256 UTF-8 bytes",
+            ));
+        }
+        for (phase, call) in [
+            ("run", Some(&step.run)),
+            ("before", step.before.as_ref()),
+            ("verify", step.verify.as_ref()),
+        ] {
+            let Some(call) = call else { continue };
+            if call.command.is_empty() || call.command.len() > 64 {
+                return Err(schema::error(
+                    &format!("{base}.{phase}.command"),
+                    Some(&step.id),
+                    "command requires 1-64 bytes",
+                ));
+            }
+            if call.args.len() > 128 {
+                return Err(schema::error(
+                    &format!("{base}.{phase}.args"),
+                    Some(&step.id),
+                    "at most 128 arguments",
+                ));
+            }
+            for (j, arg) in call.args.iter().enumerate() {
+                if arg.len() > 16_384 || arg.contains('\0') {
+                    return Err(schema::error(
+                        &format!("{base}.{phase}.args[{j}]"),
+                        Some(&step.id),
+                        "argument exceeds 16 KiB or contains NUL",
+                    ));
+                }
             }
         }
     }

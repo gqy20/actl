@@ -29,6 +29,12 @@ pub(crate) enum DesktopCommand {
         /// Filter by the caller-provided ACTL_TASK_ID
         #[arg(long)]
         task: Option<String>,
+        /// Filter by workflow step ID (requires --task)
+        #[arg(long, requires = "task")]
+        step: Option<String>,
+        /// Include archived reports and current local evidence availability
+        #[arg(long, requires = "task")]
+        reports: bool,
         /// Maximum calls (1-100)
         #[arg(long, default_value_t = 20)]
         limit: usize,
@@ -403,6 +409,9 @@ pub(crate) enum Command {
         /// Assert the element's value (expected string is positional)
         #[arg(long, requires = "expected")]
         value: Option<String>,
+        /// Read channel for --value: value (legacy fallback), name, or text
+        #[arg(long, requires = "value", value_parser = ["value", "name", "text"])]
+        property: Option<String>,
         /// Expected value (exact unless --contains)
         expected: Option<String>,
         /// Substring match instead of exact
@@ -515,7 +524,7 @@ pub(crate) enum Command {
         #[arg(long)]
         gone: Option<String>,
         /// Wait until --element satisfies a property predicate:
-        /// value=<expected> | name=<substr> | checked=on|off (requires --element)
+        /// value=<expected> | name=<substr> | text=<expected> | checked=on|off (requires --element)
         #[arg(long, requires = "element")]
         property: Option<String>,
         /// Wait until --element settles: its observed sample (text > value > name
@@ -642,7 +651,7 @@ fn after_help_for(name: &str) -> Option<&'static str> {
             "Example:\n  actl task-archive --file report.json\nImmutable caller report, retained 30 days; never implies verified task success.\nErrors: PROTOCOL invalid report | INTERNAL file/storage failure"
         }
         "history" => {
-            "Example:\n  actl history --task report-01 --limit 20\nContent-minimal events, newest calls first. Incomplete means running, interrupted or truncated.\nErrors: PROTOCOL invalid task/limit | INTERNAL storage failure"
+            "Example:\n  actl history --task report-01 --step submit --reports --limit 20\nContent-minimal events, newest calls first. Incomplete means running, interrupted or truncated.\nErrors: PROTOCOL invalid task/limit | INTERNAL storage failure"
         }
         "display-status" => {
             "Example:\n  actl display-status\nReports readiness, lease, and sticky stop state; never starts the companion.\nErrors: INTERNAL unavailable state storage"
@@ -750,7 +759,7 @@ Errors: NOT_FOUND / AMBIGUOUS | NOT_ACTIONABLE no clickable point or occluded"
             "Example:\n  actl resize-window 记事本 --width 800 --height 600\nErrors: NOT_FOUND / AMBIGUOUS window | NOT_ACTIONABLE no native handle"
         }
         "verify" => {
-            "Example:\n  actl verify --value id:results '56,877' --contains --app 计算器\nImmediate assertion (vs wait): fails now, not later; failure carries evidence.actual.\nErrors: ASSERTION_FAILED | NOT_FOUND / AMBIGUOUS | PROTOCOL bad flags"
+            "Example:\n  actl verify --value id:CalculatorResults '56,877' --property name --contains --app 计算器\nImmediate assertion (vs wait): fails now, not later; failure carries expected/actual/target/channel. --property name|value|text selects an explicit channel; omitted uses Value then Text fallback.\nErrors: ASSERTION_FAILED | NOT_FOUND / AMBIGUOUS | PROTOCOL bad flags"
         }
         "extract" => {
             "Example:\n  actl extract role:List --app 系统信息\nGrid pattern rows first (source: grid-pattern), tree flattening fallback (source: tree-flatten).\nErrors: NOT_FOUND / AMBIGUOUS | NOT_ACTIONABLE no rows found"
@@ -774,7 +783,7 @@ Errors: NOT_FOUND / AMBIGUOUS | NOT_ACTIONABLE no clickable point or occluded"
             "Example:\n  actl set-clipboard 'text to place'\nReplaces current clipboard content (that is the semantics).\nErrors: NOT_ACTIONABLE clipboard held by another process"
         }
         "wait" => {
-            "Example:\n  actl wait --element name:完成 --property value=OK --timeout 8000 --app 应用\n  actl wait --element role:Document --stable --app Edge\nPredicates: value=<expected> | name=<substr> | checked=on|off; --contains for substring; existence implied.\n--stable waits until the element's observed sample (text > value > name) stops changing\nacross consecutive polls — settle detection after scroll/navigation.\nErrors: TIMEOUT predicate unmet, element absent, or content still changing | PROTOCOL bad predicate | ASSERTION_FAILED (--window)"
+            "Example:\n  actl wait --element name:完成 --property value=OK --timeout 8000 --app 应用\n  actl wait --element role:Document --stable --app Edge\nPredicates: value=<expected> | name=<substr> | text=<expected> | checked=on|off; --contains for substring; existence implied.\n--stable waits until the element's observed sample (text > value > name) stops changing\nacross consecutive polls — settle detection after scroll/navigation.\nErrors: TIMEOUT predicate unmet, element absent, or content still changing | PROTOCOL bad predicate | ASSERTION_FAILED (--window)"
         }
         "batch" => {
             "Example:\n  actl batch --json '[\"focus-window Notepad\",\"press ctrl+s --app Notepad\"]'\nStops on first error; steps[] carries per-step ok/duration (partial steps ride the error evidence); windows_created reports windows opened during the run (cleanup: close-window --pid/--hwnd); steps may carry blocked_by when an unexpected window holds the foreground.\nErrors: PROTOCOL bad JSON/nesting | the first failing step's code is propagated"

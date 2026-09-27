@@ -32,6 +32,8 @@ pub struct StepRecord {
     pub checkpoint_passed: bool,
     pub verified: bool,
     pub error_code: Option<ErrorCode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_evidence: Option<serde_json::Value>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -61,6 +63,7 @@ impl Run {
                     checkpoint_passed: false,
                     verified: false,
                     error_code: None,
+                    error_evidence: None,
                 })
                 .collect(),
         }
@@ -142,12 +145,20 @@ pub fn execute(
             if let Some(verify) = &step.verify {
                 run.steps[i].status = StepStatus::Verifying;
                 run.save(store, host)?;
-                if host.execute(verify).is_ok() {
-                    run.steps[i].status = StepStatus::Completed;
-                    run.steps[i].verified = true;
-                    run.steps[i].error_code = None;
-                    run.save(store, host)?;
-                    continue;
+                match host.execute(verify) {
+                    Ok(()) => {
+                        run.steps[i].status = StepStatus::Completed;
+                        run.steps[i].verified = true;
+                        run.steps[i].error_code = None;
+                        run.steps[i].error_evidence = None;
+                        run.save(store, host)?;
+                        continue;
+                    }
+                    Err(error) => {
+                        run.steps[i].error_evidence =
+                            crate::failure_evidence(step.evidence, &error);
+                        run.steps[i].error_code = Some(error.code);
+                    }
                 }
             }
             if boundary(run, store, host)? {
@@ -179,6 +190,7 @@ pub fn execute(
             {
                 return Ok(());
             }
+            run.steps[i].error_evidence = crate::failure_evidence(step.evidence, &error);
             run.steps[i].error_code = Some(error.code);
             if boundary(run, store, host)? {
                 return Ok(());
@@ -199,6 +211,7 @@ pub fn execute(
                 .checked_add(1)
                 .ok_or_else(|| CtlError::protocol("step attempt count overflow"))?;
             run.steps[i].error_code = None;
+            run.steps[i].error_evidence = None;
             // Write-ahead record is required: failure to persist prevents the side effect.
             run.save(store, host)?;
             let result = host.execute(&step.run);
@@ -209,10 +222,12 @@ pub fn execute(
                 {
                     run.steps[i].status = StepStatus::Pending;
                     run.steps[i].error_code = None;
+                    run.steps[i].error_evidence = None;
                     if boundary(run, store, host)? {
                         return Ok(());
                     }
                 }
+                run.steps[i].error_evidence = crate::failure_evidence(step.evidence, &error);
                 run.steps[i].error_code = Some(error.code);
                 run.steps[i].status = if host.read_only(&step.run) {
                     StepStatus::Failed
@@ -264,6 +279,8 @@ pub fn execute(
                         {
                             return Ok(());
                         }
+                        run.steps[i].error_evidence =
+                            crate::failure_evidence(step.evidence, &error);
                         run.steps[i].error_code = Some(error.code);
                         run.steps[i].status = StepStatus::Uncertain;
                         if boundary(run, store, host)? {

@@ -121,13 +121,25 @@ pub(crate) fn read_value(elem: &UIElement) -> Option<String> {
     read_value_via(elem).0
 }
 
+pub(crate) fn read_text(elem: &UIElement) -> Option<String> {
+    use uiautomation::patterns::UITextPattern;
+    elem.get_pattern::<UITextPattern>()
+        .ok()
+        .and_then(|p| p.get_document_range().ok())
+        .and_then(|r| r.get_text(-1).ok())
+}
+
 /// verify:立即断言(与 wait 的"耐心等待"分工,06 §3.6)。
 /// 断言失败 → ASSERTION_FAILED,evidence 携带实际值。
 pub enum VerifyKind {
     /// 元素存在(经定位链解析成功)
     Exists,
     /// ValuePattern 值 == 期望(exact)或包含期望(contains)
-    Value { expected: String, contains: bool },
+    Value {
+        expected: String,
+        contains: bool,
+        property: String,
+    },
     /// Toggle 状态为 On
     Checked,
 }
@@ -136,6 +148,7 @@ pub struct VerifyOutcome {
     pub located: Located,
     pub actual: Option<String>,
     pub mode: &'static str,
+    pub channel: Option<&'static str>,
 }
 
 pub fn verify(
@@ -160,23 +173,54 @@ pub fn verify(
                 located: loc,
                 actual: None,
                 mode: "exists",
+                channel: None,
             })
         }
-        VerifyKind::Value { expected, contains } => {
+        VerifyKind::Value {
+            expected,
+            contains,
+            property,
+        } => {
             let loc = locate(app, target, near)?;
-            let actual = read_value(&loc.element);
+            let (actual, channel) = match property.as_str() {
+                "name" => (loc.element.get_name().ok(), Some("name")),
+                "text" => (read_text(&loc.element), Some("text-pattern")),
+                "value" => (
+                    loc.element
+                        .get_pattern::<UIValuePattern>()
+                        .ok()
+                        .and_then(|p| p.get_value().ok()),
+                    Some("value-pattern"),
+                ),
+                _ => read_value_via(&loc.element),
+            };
             let ok = match (&actual, contains) {
                 (Some(a), true) => a.contains(&expected),
                 (Some(a), false) => a == &expected,
                 (None, _) => false,
             };
             if !ok {
-                return Err(fail("value", actual));
+                return Err(CtlError::with_evidence(
+                    ErrorCode::AssertionFailed,
+                    "verify result did not match",
+                    serde_json::json!({
+                          "target":target.describe(),"property":if property == "auto" {"value"} else {&property},"channel":channel,
+                        "expected":expected,"actual":actual,"comparison":if contains {"contains"} else {"exact"}
+                    }),
+                ));
             }
             Ok(VerifyOutcome {
                 located: loc,
                 actual,
-                mode: if contains { "value-contains" } else { "value" },
+                mode: match (property.as_str(), contains) {
+                    ("name", false) => "name",
+                    ("name", true) => "name-contains",
+                    ("text", false) => "text",
+                    ("text", true) => "text-contains",
+                    (_, true) => "value-contains",
+                    _ => "value",
+                },
+                channel,
             })
         }
         VerifyKind::Checked => {
@@ -194,6 +238,7 @@ pub fn verify(
                 located: loc,
                 actual: state,
                 mode: "checked",
+                channel: Some("toggle-pattern"),
             })
         }
     }

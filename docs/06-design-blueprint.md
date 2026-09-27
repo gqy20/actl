@@ -398,3 +398,19 @@ WINDOWPLACEMENT，操作后保存确认状态。失败 evidence 带 session 和�
 
 新命令错误：PROTOCOL 参数或记录不合法；NOT_FOUND 窗口/会话不存在；AMBIGUOUS 目标不唯一；
 NOT_ACTIONABLE 显示或窗口未就绪；ABORTED 用户停止；INTERNAL 持久化或原生调用错误。
+
+### YAML 断言与归档补充契约（2026-09）
+
+- flow-v1 Schema：`schemas/flow-v1.schema.json`；字段诊断含 `error.evidence.field/step_id`。
+- verify 新增 `--property name|value|text`（依赖 --value），分别严格读 Name/ValuePattern/TextPattern；
+  省略保持 Value→Text 兼容策略。成功含 channel；失败含 target/property/channel/expected/actual，
+  比较失败另含 comparison。wait 新增 text 谓词，超时补上述证据及 last_actual。
+- 步骤 evidence 默认 metadata，可选 full；StepRecord 可含 error_evidence，旧运行记录可读取。
+  metadata 隐去期望值、实际值和目标；full 超过 8 KiB 时只记 omitted。
+- history 新增 `--step` 和 `--reports`，均要求 --task；先按步骤过滤再应用调用条数限制，
+  返回匹配步骤事件及 call_started/call_finished。流程上下文事件含 run_id/step_id；
+  data.action_id 在 call_id 内唯一。
+- task-archive 新增 artifacts、feedback.kind/evidence_ids；报告分类和引用检查见 docs/19 §6。
+  history --reports 返回任务级报告及查询时的证据可用性，不代替业务核验。
+
+完整 YAML 与写后验证示例见 docs/20 §6 和 fixtures/flows/calculator-verified.yml。

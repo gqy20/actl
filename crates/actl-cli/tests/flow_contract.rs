@@ -39,6 +39,39 @@ impl Drop for Sandbox {
 const SIMPLE: &str = "version: 1\nname: Inspect\nsteps:\n  - id: one\n    title: System\n    run: {command: status}\n  - id: two\n    title: System again\n    pause_before: true\n    run: {command: status}\n";
 
 #[test]
+fn structural_and_command_errors_identify_the_step_and_field() {
+    let s = Sandbox::new();
+    for (call, field) in [
+        ("{command: wait, args: [99]}", "steps[0].run.args[0]"),
+        ("{command: wait}", "steps[0].run.args"),
+    ] {
+        let file = s.file(&format!(
+            "version: 1\nname: Bad\nsteps:\n - id: target\n   title: Target\n   run: {call}\n"
+        ));
+        let (_, mut result) = s.invoke(&["flow-validate", "--file", &file]);
+        assert_eq!(result["error"]["evidence"]["step_id"], "target");
+        assert_eq!(result["error"]["evidence"]["field"], field);
+        if field.ends_with("[0]") {
+            result.as_object_mut().unwrap().remove("duration_ms");
+            assert_eq!(
+                result,
+                serde_json::from_str::<Value>(include_str!("golden/flow_field_error.json"))
+                    .unwrap()
+            );
+        }
+    }
+    let (_, valid) = s.invoke(&[
+        "flow-validate",
+        "--file",
+        concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../fixtures/flows/calculator-verified.yml"
+        ),
+    ]);
+    assert_eq!(valid["ok"], true, "{valid}");
+}
+
+#[test]
 fn preflight_rejects_missing_or_invalid_assertions_before_creating_run() {
     let s = Sandbox::new();
     for call in [

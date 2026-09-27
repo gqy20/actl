@@ -84,46 +84,63 @@ fn validate_assertion(command: &Command) -> Result<(), CtlError> {
     Ok(())
 }
 pub fn validate(plan: &Plan) -> Result<(), CtlError> {
-    for step in &plan.steps {
-        let command = parse(&step.run)?;
-        if matches!(
-            command,
-            Command::Batch { .. }
-                | Command::Flow(_)
-                | Command::Desktop(_)
-                | Command::Commands
-                | Command::KeyDown { .. }
-                | Command::KeyUp { .. }
-        ) {
-            return Err(CtlError::protocol(
-                "flows cannot contain batch, flow, management or held-key commands",
-            ));
-        }
-        if !read_only(&command) && (step.verify.is_none() || step.retry != Retry::Never) {
-            return Err(CtlError::protocol(
-                "side-effect steps require verify and retry: never",
-            ));
-        }
-        for call in std::iter::once(&step.run)
-            .chain(step.before.iter())
-            .chain(step.verify.iter())
-        {
-            // Persisted ordinal refs cannot survive process/desktop changes reliably.
-            if call.args.iter().any(|a| {
-                a.strip_prefix("@e")
-                    .is_some_and(|n| !n.is_empty() && n.bytes().all(|c| c.is_ascii_digit()))
-                    || a == "--snapshot"
-            }) {
-                return Err(CtlError::protocol(
-                    "saved flows require semantic selectors; transient refs/snapshot IDs are unsupported",
+    for (index, step) in plan.steps.iter().enumerate() {
+        let context = |field: &str, e: CtlError| {
+            CtlError::with_evidence(
+                e.code,
+                format!("step {} / {field}: {}", step.id, e.message),
+                json!({"step_id":step.id,"step_index":index,"field":format!("steps[{index}].{field}")}),
+            )
+        };
+        for (field, call) in [
+            ("run", Some(&step.run)),
+            ("before", step.before.as_ref()),
+            ("verify", step.verify.as_ref()),
+        ] {
+            let Some(call) = call else {
+                continue;
+            };
+            let command = parse(call).map_err(|e| context(&format!("{field}.args"), e))?;
+            validate_assertion(&command).map_err(|e| context(&format!("{field}.args"), e))?;
+            if field != "run" && !matches!(command, Command::Verify { .. } | Command::Wait { .. }) {
+                return Err(context(
+                    field,
+                    CtlError::protocol("checks require verify or wait"),
                 ));
             }
-            validate_assertion(&parse(call)?)?;
-        }
-        for check in step.before.iter().chain(step.verify.iter()) {
-            if !matches!(parse(check)?, Command::Verify { .. } | Command::Wait { .. }) {
-                return Err(CtlError::protocol(
-                    "before/verify must use verify or wait assertions",
+            if matches!(
+                command,
+                Command::Batch { .. }
+                    | Command::Flow(_)
+                    | Command::Desktop(_)
+                    | Command::Commands
+                    | Command::KeyDown { .. }
+                    | Command::KeyUp { .. }
+            ) {
+                return Err(context(
+                    field,
+                    CtlError::protocol(
+                        "nested flows and management/held-key commands are not allowed",
+                    ),
+                ));
+            }
+            if field == "run"
+                && !read_only(&command)
+                && (step.verify.is_none() || step.retry != Retry::Never)
+            {
+                return Err(context(
+                    "verify",
+                    CtlError::protocol("side effects require verify and retry=never"),
+                ));
+            }
+            if call.args.iter().any(|a| {
+                a == "--snapshot"
+                    || a.strip_prefix("@e")
+                        .is_some_and(|n| !n.is_empty() && n.bytes().all(|c| c.is_ascii_digit()))
+            }) {
+                return Err(context(
+                    &format!("{field}.args"),
+                    CtlError::protocol("persisted flows require semantic selectors"),
                 ));
             }
         }
@@ -153,12 +170,6 @@ impl Host for Adapter<'_> {
             .iter()
             .position(|s| s.status != engine::StepStatus::Completed)
             .unwrap_or(run.steps.len().saturating_sub(1));
-        actl_core::signal_session::step(
-            &self.plan.steps[current].run.command,
-            None,
-            current + 1,
-            run.steps.len(),
-        );
         let status = match run.status {
             Status::Ready => "ready",
             Status::Running => "running",
@@ -184,6 +195,12 @@ impl Host for Adapter<'_> {
             error_code: run.steps[current].error_code,
             actions: actions.into_iter().map(str::to_owned).collect(),
         });
+        actl_core::signal_session::step(
+            &self.plan.steps[current].run.command,
+            None,
+            current + 1,
+            run.steps.len(),
+        );
     }
 }
 fn state(store: &Store) -> Result<Value, CtlError> {

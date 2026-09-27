@@ -9,6 +9,7 @@ pub mod activity;
 pub mod display;
 pub mod history;
 pub mod keys;
+pub mod reports;
 pub mod signal_session;
 pub mod snapshot;
 pub mod state;

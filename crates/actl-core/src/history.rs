@@ -62,12 +62,24 @@ impl Journal {
     }
 
     pub fn record(&mut self, event: &str, data: serde_json::Value) {
+        self.record_context(event, data, None);
+    }
+    pub fn record_context(
+        &mut self,
+        event: &str,
+        data: serde_json::Value,
+        context: Option<&crate::state::WorkflowProgress>,
+    ) {
         if self.failed {
             return;
         }
         self.seq += 1;
-        let value = serde_json::json!({"version":1,"call_id":self.call,"task_id":self.task,
+        let mut value = serde_json::json!({"version":1,"call_id":self.call,"task_id":self.task,
             "seq":self.seq,"ts_ms":crate::state::unix_ms(),"event":event,"data":data});
+        if let Some(context) = context {
+            value["run_id"] = serde_json::json!(context.run_id);
+            value["step_id"] = serde_json::json!(context.step_id);
+        }
         let result = (|| -> std::io::Result<()> {
             let mut line = serde_json::to_vec(&value)?;
             line.push(b'\n');
@@ -157,6 +169,8 @@ pub struct TaskReport {
     /// References only: archiving does not copy or open screenshots or documents.
     #[serde(default)]
     pub evidence: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub artifacts: Vec<crate::reports::EvidenceRef>,
 }
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -172,6 +186,10 @@ pub struct Feedback {
     pub source: FeedbackSource,
     pub text: String,
     pub verified: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<crate::reports::StatementKind>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub evidence_ids: Vec<String>,
 }
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -184,6 +202,14 @@ pub enum FeedbackSource {
 pub fn read_history(
     root: &Path,
     task: Option<&str>,
+    limit: usize,
+) -> Result<serde_json::Value, CtlError> {
+    read_filtered(root, task, None, limit)
+}
+fn read_filtered(
+    root: &Path,
+    task: Option<&str>,
+    step: Option<&str>,
     limit: usize,
 ) -> Result<serde_json::Value, CtlError> {
     if !(1..=100).contains(&limit) || task.is_some_and(|id| !valid_id(id)) {
@@ -240,7 +266,16 @@ pub fn read_history(
                 }
             }
         }
+        if step.is_some_and(|id| !events.iter().any(|e| e["step_id"].as_str() == Some(id))) {
+            continue;
+        }
         let finished = events.last().is_some_and(|e| e["event"] == "call_finished");
+        if let Some(id) = step {
+            events.retain(|e| {
+                e["step_id"].as_str() == Some(id)
+                    || matches!(e["event"].as_str(), Some("call_started" | "call_finished"))
+            });
+        }
         if !valid || !finished {
             incomplete += 1;
         }
@@ -265,6 +300,7 @@ pub fn archive(root: &Path, input: &Path) -> Result<PathBuf, CtlError> {
     }
     let report: TaskReport = serde_json::from_slice(&bytes)
         .map_err(|e| CtlError::protocol(format!("invalid task report: {e}")))?;
+    crate::reports::validate(&report)?;
     if !valid_id(&report.task_id)
         || report.call_ids.iter().any(|id| !valid_id(id))
         || report.summary.trim().is_empty()
@@ -295,4 +331,23 @@ pub fn archive(root: &Path, input: &Path) -> Result<PathBuf, CtlError> {
         return Err(io_error(error));
     }
     Ok(path)
+}
+
+pub fn query(
+    root: &Path,
+    task: Option<&str>,
+    step: Option<&str>,
+    limit: usize,
+    reports: bool,
+) -> Result<serde_json::Value, CtlError> {
+    if step.is_some_and(|s| !valid_id(s)) || ((step.is_some() || reports) && task.is_none()) {
+        return Err(CtlError::protocol(
+            "step/report queries require a task and valid step ID",
+        ));
+    }
+    let mut result = read_filtered(root, task, step, limit)?;
+    if reports {
+        result["reports"] = crate::reports::read(root, task.unwrap_or_default(), limit)?;
+    }
+    Ok(result)
 }

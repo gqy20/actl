@@ -3,6 +3,44 @@ use actl_flow::{engine::*, store::Store, *};
 fn plan() -> Plan {
     parse("version: 1\nname: test\nsteps:\n  - id: write\n    title: Write\n    run: {command: write}\n    verify: {command: check}\n  - id: read\n    title: Read\n    run: {command: read}\n").unwrap()
 }
+
+#[test]
+fn assertion_evidence_is_redacted_unless_explicitly_enabled() {
+    let error = CtlError::with_evidence(
+        ErrorCode::AssertionFailed,
+        "mismatch",
+        serde_json::json!({
+            "expected":"SECRET", "actual":"PRIVATE", "target":"name:PERSON", "property":"name", "channel":"name", "comparison":"exact"
+        }),
+    );
+    let metadata = failure_evidence(EvidencePolicy::Metadata, &error).unwrap();
+    assert!(!metadata.to_string().contains("PRIVATE"));
+    assert!(!metadata.to_string().contains("SECRET"));
+    assert_eq!(
+        metadata,
+        serde_json::from_str::<serde_json::Value>(include_str!("golden/evidence_metadata_v1.json"))
+            .unwrap()
+    );
+    assert_eq!(
+        failure_evidence(EvidencePolicy::Full, &error).unwrap()["actual"],
+        "PRIVATE"
+    );
+    let huge = CtlError::with_evidence(
+        ErrorCode::AssertionFailed,
+        "large",
+        serde_json::json!({"actual":"X".repeat(9000)}),
+    );
+    assert_eq!(
+        failure_evidence(EvidencePolicy::Full, &huge).unwrap()["omitted"],
+        "evidence_exceeds_8_kib"
+    );
+    let schema: serde_json::Value =
+        serde_json::from_str(include_str!("../../../schemas/flow-v1.schema.json")).unwrap();
+    assert_eq!(
+        schema["$defs"]["step"]["properties"]["evidence"]["default"],
+        "metadata"
+    );
+}
 fn setup(plan: &Plan) -> (std::path::PathBuf, Store, Run) {
     let root = std::env::temp_dir().join(format!(
         "actl-flow-{}",
@@ -160,6 +198,7 @@ fn uncertain_result_requires_verification_or_explicit_retry() {
     execute(&p, &mut run, &store, &mut h, None).unwrap();
     assert_eq!(run.status, Status::NeedsReview);
     assert_eq!(h.calls, vec!["check"]);
+    assert_eq!(run.steps[0].error_code, Some(ErrorCode::AssertionFailed));
     execute(&p, &mut run, &store, &mut h, Some("write")).unwrap();
     assert_eq!(h.calls, vec!["check", "check", "write", "check"]);
     assert_eq!(run.status, Status::NeedsReview);
