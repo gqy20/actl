@@ -52,7 +52,23 @@ skeleton——内容交互密度高,组合才是解。
    组合档比纯 skeleton **再省 38%**——XHS 内容交互密度高,skeleton 的
    削减大头(工具栏)不够,组合才是主通道的实证。
 
-## 4. 三个实测发现(沉淀为 pack quirks)
+## 4. Chrome 对照实测(同案例,"同源套用"断言验证)
+
+`fixtures/xhs-browse-chrome.sh`(用户真实 Chrome 会话,唯一标题起始页防
+about:blank 歧义)——**全链通过,与 Edge 同构**:
+
+| 项 | Edge | Chrome |
+|---|---|---|
+| 导航链(ctrl+l+paste+enter+settle) | ✓ | ✓ |
+| 文档结构 | 2×RootWebArea,feed=Document#2 | **同**(枚举顺序略异,feed 同为 #2) |
+| feed 读→滚×2 | 4454→4464→4625B(净增) | 4468→4478→4317B(第二轮净减) |
+| 四档:full / skel / **both** | 42464B / 53% / **71%** | 45273B / 47% / **72%** |
+
+滚动第二轮文本净减(4317 < 4478)同样是虚拟化的正常表现——旧卡卸载多于
+新卡进场,窗口段内容换血;增减方向不作为判定依据,settle 的 changes 计数才是
+加载信号。结论:**pack 的"Chrome 同源直接套用"成立**,quirks 无一需要分叉。
+
+## 5. 三个实测发现(沉淀为 pack quirks)
 
 1. **多文档页 AMBIGUOUS**:xiaohongshu.com 有 **2 个 `RootWebArea`**(主文档
    + 登录墙 iframe)——`id:RootWebArea` 一律 AMBIGUOUS;feed 正主 =
@@ -66,15 +82,16 @@ skeleton——内容交互密度高,组合才是解。
    当前选中,不经元素定位)→ enter。两个坑:`paste` 无 `--timeout` 参数;
    残留 about:blank 窗口会让后续 --app 匹配 AMBIGUOUS(临时窗口用完即关)。
 
-## 5. 开放项
+## 6. 开放项
 
 - 登录态 feed 闭环(标题文本可读性、open_item 点开笔记、site_search)——
   需用户扫码,未验路线在 browser.yml 保持 `unverified`;
-- XHS 文档序数(#2)是否跨会话稳定——多会话复验后再决定是否固化进 pack;
+- XHS 文档序数(#2)是否跨会话稳定——多会话复验后再决定是否固化进 pack
+  (Edge/Chrome 双浏览器已同构,跨会话待复验);
 - 平台风控节奏:注入是人类级信号,但连续机器速率循环有风险,采集类任务
   控制节奏(pack 已记)。
 
-## 6. 结论
+## 7. 结论
 
 机制层(`--view content` 组合投影、`--stable` settle、text 通道)在真实
 Chromium 页面全部按设计工作;数字上组合投影达标(71–80% vs PRD 70%);

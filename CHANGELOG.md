@@ -20,7 +20,9 @@
   paste 而非元素定位(临时窗口用完即关防 AMBIGUOUS)。browser.yml 5 路线翻
   `verified`(read/read_multidoc/tree/navigate/scroll),open_item/site_search/
   new_tab 保持 `unverified` 待登录态补测;新增 fixtures:edge-content-view.sh
-  (CI 轨)+ xhs-browse.sh(场景轨)。
+  (CI 轨)+ xhs-browse.sh(场景轨)。**Chrome 对照实测**(xhs-browse-chrome.sh):
+  全链同构通过,feed 同为 Document#2,组合投影 72%(Edge 71%)——pack 的
+  "Chromium 系同源套用"断言就此实证,quirks 无一分叉。
 - **`snapshot --view content` + `wait --stable`(spec,浏览器内容通道基建)**:
   ① **内容域投影**——只保留 Document 子树(网页/文档正文)与根→Document 路径,
   应用 chrome(工具栏/ribbon)整枝丢弃;与 `--skeleton` 正交组合,折叠仅作用于

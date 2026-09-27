@@ -1,15 +1,16 @@
 # actl 应用档案 pack(pack_format: 1)—— 浏览器(Chromium 系,以 Edge 为准)
 # 知识来源:docs/16-browser-scenarios.md(2026-09-27 真机实测:投影四档数字、
-# settle 活体证据、小红书闭环)+ edge-content-view.sh fixture(8/8)。Chrome
-# 同源可直接套用(window 换 "Chrome");Firefox UIA 暴露较弱,未验证。
+# settle 活体证据、小红书闭环,Edge + Chrome 双浏览器)+ edge-content-view.sh
+# fixture(8/8)。Chrome 同源直接套用已实证(标题后缀 "Google Chrome",
+# window 换 "Chrome");Firefox UIA 暴露较弱,未验证。
 pack_format: 1
 name: browser
 display: 浏览器(Edge/Chrome)
 launch: msedge           # App Paths 注册表解析;Chrome 用 chrome
 window: "Edge"           # 标题子串(页面标题 - Microsoft Edge);Chrome 换 "Chrome"
-app_version: "Edge 1xx(Chromium 系)"
+app_version: "Edge 1xx / Chrome 1xx(Chromium 系)"
 verified_date: 2026-09-27
-verified_env: Win11 zh-cn
+verified_env: Win11 zh-cn(Edge + Chrome 双实证,docs/16)
 quirks:
   - id: content_view_projection
     note: 树形观察一律 snapshot --view content --skeleton——Document(网页正文)子树
@@ -48,7 +49,9 @@ quirks:
           RootWebArea(主文档+登录墙 iframe),id:RootWebArea 一律 AMBIGUOUS;
           feed 正主 = role:Document#2(#1/#3/#4 空壳)。通用法:find --role
           document 枚举 → 逐个量 text 长度找非空;settle 同样须带序数
-          (locate 失败被当作未解析,samples 冻结会超时)
+          (locate 失败被当作未解析,samples 冻结会超时)。Chrome 同构实证
+          (2026-09-27:同样 2×RootWebArea、feed 同为 #2、组合投影 72% 与
+          Edge 71% 对齐)——Chromium 系一致性,同源套用成立
   - id: risk_control_pacing
     note: 平台风控是现实——注入虽是人类级信号(SendInput/剪贴板,无 CDP 指纹),
           但机器速率的连续"滚动-读取"循环可能触发行为检测;采集类任务控制
