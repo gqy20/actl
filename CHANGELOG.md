@@ -30,6 +30,15 @@
   兜底闭环的"手",与微信自绘右键菜单同源缺口);③ /explore 已 404,
   登录态首页为单视频沉浸流。三家横向 a11y 友好度:xhs > bilibili >
   douyin,pack 按站分级(2 quirks 入档)。
+- **扩展操作面验证(docs/16 §5.5)**:三未知点全裁定——① 工具栏按钮 name
+  在树但 **UIA Invoke 报 INTERNAL,须 `click --physical`**;② 弹层是
+  独立 Document(5→6→5 实测),**内容树形通道全读**(猫抓全部功能按钮
+  name 采样在案)而 text 通道空(与普通页面相反的通道互补);③
+  `press esc` 直达并关闭弹层,观察命令期间弹层存活。chrome://extensions
+  视觉渲染但 WebUI a11y 弱暴露(开关切换再指向坐标 M3 缺口);右键菜单
+  扩展项因用户桌面并发两次被护栏正确拦截,待空闲复验。媒体嗅探(猫抓)
+  与跨语言读取(沉浸式翻译)路线就此可编排;凭据类扩展按安全边界跳过。
+  browser.yml +2 quirks(extension_surfaces/webui_weak_a11y)。
 - **浏览器场景实测(docs/16)+ browser pack 翻档**:fixture 轨 8/8(四档投影:
   full 19764B → skeleton 43% → content 58% → **content+skeleton 80%**,超 PRD 70%
   线;settle 活体证据:10s 追加窗内阻塞 8410ms、观测 5 次变化);小红书真机
