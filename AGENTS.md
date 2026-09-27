@@ -54,4 +54,4 @@
 - 性能/耗时数字只在同环境头内比较(慢日绝对值不可跨日,timing 纪律)。
 
 
-License: TBD(倾向 Apache-2.0);定案前不引入 vendored 外部代码。
+License: MIT(见 [LICENSE](LICENSE));不引入 vendored 外部代码。
