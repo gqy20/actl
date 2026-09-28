@@ -91,8 +91,10 @@ pub fn type_text(
     text: &str,
     paste: bool,
     near: Option<&str>,
+    verify_value: Option<&str>,
 ) -> Result<TypeOutcome, CtlError> {
     let loc = locate(app, target, near)?;
+    let identity = crate::identity::identity(&loc.element);
     let _lock = input::InputLock::acquire(timing().lock_wait_ms)?;
     let mut action = crate::feedback::prepare(
         "type",
@@ -111,20 +113,14 @@ pub fn type_text(
         )
     })?;
     // 护栏与 press 相同:元素置焦后仍要物理前台核对,文本才允许注入
-    if let Some(pattern) = app {
+    if app.is_some() {
         std::thread::sleep(std::time::Duration::from_millis(timing().type_focus_ms));
         let fg = kbd::foreground_title().unwrap_or_default();
         if fg != loc.window_title {
-            return Err(CtlError::new(
-                ErrorCode::PermDenied,
-                format!(
-                    "text injection ABORTED by verify-then-inject guard: \
-                     physical foreground is {fg:?}, expected a window matching {pattern:?}; \
-                     no text was sent"
-                ),
-            ));
+            return Err(actl_core::handoff::foreground_error(&loc.window_title, &fg));
         }
     }
+    let _focus = crate::identity::FocusGuard::enter(&loc.element)?;
     // 输入占用锁(doc 09 §6.2):多 actl 实例互斥;持锁覆盖整个注入动作段
     let _anchor = crate::feedback::KeyboardAnchor::capture()?;
     crate::feedback::check_foreground(&loc.window_title)?;
@@ -145,6 +141,7 @@ pub fn type_text(
             keys: vec![actl_core::keys::Key::Char('v')],
         })?;
         action.delivered();
+        crate::input_verify::verify_value(&loc.element, &identity, verify_value, total)?;
         Ok(outcome(total, false))
     } else {
         // 键盘逐字通道:分批注入,批间复核物理前台——焦点被抢(真人点走/弹窗
@@ -162,14 +159,15 @@ pub fn type_text(
                 })
             },
             || {
-                pattern
-                    .as_ref()
-                    .map(|p| {
-                        kbd::foreground_title()
-                            .map(|t| t.contains(p.as_str()))
-                            .unwrap_or(false)
-                    })
-                    .unwrap_or(false)
+                crate::identity::check_focus_anchor().is_ok()
+                    && pattern
+                        .as_ref()
+                        .map(|p| {
+                            kbd::foreground_title()
+                                .map(|t| t.contains(p.as_str()))
+                                .unwrap_or(false)
+                        })
+                        .unwrap_or(false)
             },
         )?;
         if delivered < total {
@@ -177,6 +175,7 @@ pub fn type_text(
         } else {
             action.delivered();
         }
+        crate::input_verify::verify_value(&loc.element, &identity, verify_value, delivered)?;
         Ok(outcome(delivered, delivered < total))
     }
 }
@@ -198,8 +197,25 @@ pub struct TypeOutcome {
 /// 物理前台(GetForegroundWindow)验证前台确为目标窗口——UIA 焦点视图可能与物理前台
 /// 不一致,"看起来聚焦了"不等于键会进目标。不匹配则拒绝注入,宁可失败不可错发。
 pub fn press_keys(spec: &KeySpec, app: Option<&str>) -> Result<Option<String>, CtlError> {
+    press_keys_targeted(spec, app, None)
+}
+
+/// With a target, assert existing focus without focusing another field/window.
+pub fn press_keys_targeted(
+    spec: &KeySpec,
+    app: Option<&str>,
+    target: Option<&Target>,
+) -> Result<Option<String>, CtlError> {
     let _lock = input::InputLock::acquire(timing().lock_wait_ms)?;
-    let focused = prepare_keyboard(app)?;
+    let loc = target.map(|t| locate(app, t, None)).transpose()?;
+    let _focus = loc
+        .as_ref()
+        .map(|l| crate::identity::FocusGuard::enter(&l.element))
+        .transpose()?;
+    let focused = match &loc {
+        Some(l) => Some(l.window_title.clone()),
+        None => prepare_keyboard(app)?,
+    };
     // 输入占用锁(doc 09 §6.2):护栏之后、注入之前取得,覆盖整个按键序列
     let _anchor = crate::feedback::KeyboardAnchor::capture()?;
     let mut action = crate::feedback::prepare(
@@ -264,14 +280,7 @@ fn prepare_keyboard(app: Option<&str>) -> Result<Option<String>, CtlError> {
             // 护栏:物理前台必须是目标窗口,否则注入会打进别处(已发生过真实事故)
             let fg = kbd::foreground_title().unwrap_or_default();
             if fg != title {
-                return Err(CtlError::new(
-                    ErrorCode::PermDenied,
-                    format!(
-                        "keyboard injection ABORTED by verify-then-inject guard: \
-                         physical foreground is {fg:?}, expected a window matching {pattern:?}; \
-                         no keys were sent"
-                    ),
-                ));
+                return Err(actl_core::handoff::foreground_error(&title, &fg));
             }
             Some(title)
         }
@@ -303,7 +312,9 @@ fn ensure_element_focus(pattern: &str) -> Result<(), CtlError> {
         return Ok(());
     }
     for _ in 0..timing().focus_retries {
+        crate::feedback::check_stop()?;
         if let Some(edit) = find_editable_element(pattern) {
+            crate::feedback::check_stop()?;
             let _ = edit.set_focus();
         }
         std::thread::sleep(std::time::Duration::from_millis(timing().poll_ms));
@@ -503,14 +514,7 @@ pub fn paste(app: &str) -> Result<String, CtlError> {
     std::thread::sleep(std::time::Duration::from_millis(timing().press_focus_ms));
     let fg = kbd::foreground_title().unwrap_or_default();
     if fg != title {
-        return Err(CtlError::new(
-            ErrorCode::PermDenied,
-            format!(
-                "paste ABORTED by verify-then-inject guard: \
-                 physical foreground is {fg:?}, expected a window matching {app:?}; \
-                 clipboard untouched, nothing pasted"
-            ),
-        ));
+        return Err(actl_core::handoff::foreground_error(&title, &fg));
     }
     let _anchor = crate::feedback::KeyboardAnchor::capture()?;
     let mut action = crate::feedback::prepare(

@@ -121,9 +121,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             Ok(serde_json::json!({"archived":true,"path":path,"source":"caller"}).into())
         }
         Command::Desktop(DesktopCommand::DisplayStatus) => {
-            let paths = actl_core::state::SignalPaths::default();
-            let lease = paths.display_lease();
-            Ok(serde_json::json!({"ready":lease.as_ref().is_some_and(|l| l.ready(actl_core::state::unix_ms())),"lease":lease,"stop_requested":paths.stop_requested()}).into())
+            Ok(actl_uia::display_gate::diagnostics().into())
         }
         Command::Desktop(DesktopCommand::DisplayStart) => {
             let lease = actl_uia::display_gate::ensure()?;
@@ -211,7 +209,11 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             near.as_deref(),
             snapshot.as_deref(),
         ),
-        Command::Launch { args } => launch(args),
+        Command::Launch {
+            args,
+            wait_window,
+            timeout,
+        } => launch(args, wait_window.as_deref(), *timeout),
         Command::Type {
             target,
             text,
@@ -219,6 +221,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             near,
             snapshot,
             paste,
+            verify_value,
         } => type_cmd(
             target,
             text,
@@ -226,13 +229,23 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             near.as_deref(),
             snapshot.as_deref(),
             *paste,
+            verify_value.as_deref(),
         ),
         Command::Press {
             keys,
             app,
             expect,
             timeout,
-        } => press(keys, app.as_deref(), expect.as_deref(), *timeout),
+            target,
+            snapshot,
+        } => press(
+            keys,
+            app.as_deref(),
+            expect.as_deref(),
+            *timeout,
+            target.as_deref(),
+            snapshot.as_deref(),
+        ),
         Command::SetValue {
             target,
             value,
@@ -343,7 +356,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
         Command::CloseWindow { pattern, pid, hwnd } => {
             close_window_cmd(pattern.as_deref(), *pid, hwnd.as_deref())
         }
-        Command::ListWindows => list_windows_cmd(),
+        Command::ListWindows { native, hwnd } => list_windows_cmd(*native, hwnd.as_deref()),
         Command::Find {
             name,
             role,

@@ -20,7 +20,7 @@ pub(crate) fn click(
     timeout: Option<u64>,
 ) -> Result<CommandOutput, CtlError> {
     let target = actl_core::parse_target(target_raw)?;
-    replay_guard(snapshot, app)?;
+    let _replay = replay_guard(snapshot, app)?;
     // --expect = 新窗口断言:动作前取 RuntimeId 基线(与 press 相同语义)
     let expect_substr = match expect {
         Some(raw) => Some(parse_expect(raw)?),
@@ -110,6 +110,7 @@ pub(crate) fn click(
     Ok(data.into())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn type_cmd(
     target_raw: &str,
     text: &str,
@@ -117,22 +118,34 @@ pub(crate) fn type_cmd(
     near: Option<&str>,
     snapshot: Option<&str>,
     paste: bool,
+    verify_value: Option<&str>,
 ) -> Result<CommandOutput, CtlError> {
     let app = require_app(app, "type")?;
-    replay_guard(snapshot, Some(app))?;
+    let _replay = replay_guard(snapshot, Some(app))?;
     let target = actl_core::parse_target(target_raw)?;
-    let res = actl_uia::type_text(Some(app), &target, text, paste, near)?;
+    let res = actl_uia::type_text(Some(app), &target, text, paste, near, verify_value)?;
+    Ok(type_output(&target, &res, paste, verify_value.is_some()).into())
+}
+
+fn type_output(
+    target: &actl_core::Target,
+    res: &actl_uia::TypeOutcome,
+    paste: bool,
+    verified: bool,
+) -> serde_json::Value {
     let keyboard = if res.stopped_early {
         "partial"
     } else {
         "injected"
     };
-    Ok(json!({
+    json!({
         "action": "type",
         "target": target.describe(),
         "chars": res.total,
         "delivered": res.delivered,
         "stopped_early": res.stopped_early,
+        "value_verified": verified.then_some(true),
+        "focus_verified": true,
         "via": if paste { "clipboard-paste" } else { "keyboard" },
         "input_effects": {
             "keyboard": keyboard,
@@ -141,7 +154,6 @@ pub(crate) fn type_cmd(
         },
         "resolved": { "role": res.located.role, "name": res.located.name },
     })
-    .into())
 }
 
 pub(crate) fn press(
@@ -149,8 +161,12 @@ pub(crate) fn press(
     app: Option<&str>,
     expect: Option<&str>,
     timeout: Option<u64>,
+    target_raw: Option<&str>,
+    snapshot: Option<&str>,
 ) -> Result<CommandOutput, CtlError> {
     let app = require_app(app, "press")?;
+    let _replay = replay_guard(snapshot, Some(app))?;
+    let target = target_raw.map(actl_core::parse_target).transpose()?;
     let spec = actl_core::parse_key_expr(keys)?;
     // --expect = "本动作导致新窗口":注入前先取窗口基线,断言时排除既有同名窗口
     // (存在性检查会被预先打开的同名窗口恒真欺骗,doc 09 §2)
@@ -165,7 +181,7 @@ pub(crate) fn press(
     };
     // 键盘作用于全局焦点:裸 SendInput 会打进当下前台(实测坑)。
     // press_keys 内部在 --app 时先置前台并稳定窗(--app 语义,focus+delay 在 uia 层)。
-    let focused = actl_uia::press_keys(&spec, Some(app))?;
+    let focused = actl_uia::press_keys_targeted(&spec, Some(app), target.as_ref())?;
     let mut expect_window = None;
     if let Some(substr) = expect_substr {
         // 06 §4:--expect = 执行后隐式 wait(默认 2s),失败 ASSERTION_FAILED
@@ -176,6 +192,7 @@ pub(crate) fn press(
         "action": "press",
         "keys": keys,
         "focused": focused,
+        "focus_verified": target.is_some(),
         "expect": expect_window,
         "input_effects": {
             "keyboard": "injected",
@@ -188,14 +205,17 @@ pub(crate) fn press(
 
 /// --snapshot <id> 回放校验:仅对 @eN 目标有意义;窗口实例与快照记录
 /// 不一致 → STALE_REF(同标题 ≠ 同实例,重开窗口后计数重放会点错)。
-pub(crate) fn replay_guard(snapshot: Option<&str>, app: Option<&str>) -> Result<(), CtlError> {
-    let Some(id) = snapshot else { return Ok(()) };
+pub(crate) fn replay_guard(
+    snapshot: Option<&str>,
+    app: Option<&str>,
+) -> Result<Option<actl_uia::ReplayGuard>, CtlError> {
+    let Some(id) = snapshot else { return Ok(None) };
     let Some(pattern) = app else {
         return Err(CtlError::protocol(
             "--snapshot requires --app (the window to freshness-check)",
         ));
     };
-    actl_uia::check_snapshot_freshness_by_pattern(id, pattern)
+    actl_uia::ReplayGuard::enter(id, pattern).map(Some)
 }
 
 /// 键盘注入命令的 fail-closed 门:必须显式 --app 绑定目标窗口。
@@ -217,7 +237,7 @@ pub(crate) fn set_value_cmd(
     snapshot: Option<&str>,
 ) -> Result<CommandOutput, CtlError> {
     let target = actl_core::parse_target(target_raw)?;
-    replay_guard(snapshot, app)?;
+    let _replay = replay_guard(snapshot, app)?;
     let res = actl_uia::set_value(app, &target, value, near)?;
     Ok(json!({
         "action": "set-value",
@@ -239,7 +259,11 @@ fn parse_expect(raw: &str) -> Result<String, CtlError> {
         })
 }
 
-pub(crate) fn launch(args: &[String]) -> Result<CommandOutput, CtlError> {
+pub(crate) fn launch(
+    args: &[String],
+    wait_window: Option<&str>,
+    timeout: Option<u64>,
+) -> Result<CommandOutput, CtlError> {
     let Some(program) = args.first() else {
         return Err(CtlError::protocol("launch requires a program name"));
     };
@@ -303,7 +327,24 @@ pub(crate) fn launch(args: &[String]) -> Result<CommandOutput, CtlError> {
         })?;
     let (child, program) = resolved;
     action.delivered();
-    Ok(json!({ "pid": child.id(), "program": program }).into())
+    let mut result = json!({ "pid": child.id(), "program": program, "window_ready": false });
+    if let Some(pattern) = wait_window {
+        match actl_uia::wait_window_ready(pattern, timeout.unwrap_or(5000)) {
+            Ok(window) => {
+                result["window_ready"] = true.into();
+                result["window"] = window;
+            }
+            Err(mut error) => {
+                let mut evidence = error.evidence.take().unwrap_or_else(|| json!({}));
+                evidence["spawned_pid"] = child.id().into();
+                evidence["process_started"] = true.into();
+                evidence["relaunch"] = false.into();
+                error.evidence = Some(evidence);
+                return Err(error);
+            }
+        }
+    }
+    Ok(result.into())
 }
 
 // ─── 物理指针族(M2 第二批) ────────────────────────────────────────────────
@@ -593,4 +634,33 @@ pub(crate) fn screenshot_cmd(
         "input_effects": { "keyboard": "none", "clipboard": "untouched", "pointer": "none" },
     })
     .into())
+}
+
+#[cfg(test)]
+mod input_contract_tests {
+    #[test]
+    fn verified_type_success_and_partial_readback_status() {
+        let mut outcome = actl_uia::TypeOutcome {
+            located: actl_uia::InputResult {
+                window_title: "fixture".into(),
+                role: "Edit".into(),
+                name: Some("Search".into()),
+            },
+            total: 5,
+            delivered: 5,
+            stopped_early: false,
+        };
+        let data = super::type_output(&actl_core::Target::Ref(3), &outcome, true, true);
+        let envelope =
+            serde_json::to_value(actl_core::Envelope::success("type", Some(data), 0)).unwrap();
+        let golden: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/golden/type_verified.json")).unwrap();
+        assert_eq!(envelope, golden);
+        outcome.delivered = 2;
+        outcome.stopped_early = true;
+        let partial = super::type_output(&actl_core::Target::Ref(3), &outcome, false, false);
+        assert_eq!(partial["input_effects"]["keyboard"], "partial");
+        assert_eq!(partial["delivered"], 2);
+        assert!(partial["value_verified"].is_null());
+    }
 }

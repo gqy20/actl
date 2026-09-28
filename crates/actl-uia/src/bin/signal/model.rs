@@ -4,6 +4,11 @@ use actl_core::state::{Phase, SessionState};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode {
     Idle,
+    Background,
+    Desktop,
+    Paused,
+    Waiting,
+    Blocked,
     Preparing,
     Running,
     Done,
@@ -16,9 +21,26 @@ pub enum Mode {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct View {
     pub mode: Mode,
+    pub control: Control,
     pub label: String,
     pub effects: InputEffects,
     pub details: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Control {
+    Pause { call: String, flow: Option<String> },
+    Continue { flow: String },
+    Details,
+}
+impl Control {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Pause { .. } => "暂停任务",
+            Self::Continue { .. } => "检查并继续",
+            Self::Details => "查看状态与原因",
+        }
+    }
 }
 
 pub fn action_name(command: &str) -> &str {
@@ -80,6 +102,7 @@ pub fn selected(states: &[SessionState], now: u64) -> Option<&SessionState> {
                         || a.effects.keyboard
                         || a.effects.clipboard != actl_core::activity::ClipboardEffect::Untouched)
             }),
+            s.action.is_some() || s.handoff_reason.is_some() || s.workflow.is_some(),
             s.ts_ms,
         )
     })
@@ -88,6 +111,7 @@ pub fn view(states: &[SessionState], now: u64, stop_ms: Option<u64>, busy: Optio
     let selected = selected(states, now);
     let Some(s) = selected else {
         return View {
+            control: Control::Details,
             mode: if stop_ms.is_some() {
                 Mode::StopRequested
             } else if busy != Some(false) {
@@ -321,17 +345,135 @@ pub fn view(states: &[SessionState], now: u64, stop_ms: Option<u64>, busy: Optio
             .into(),
         );
     }
+    let mut control = Control::Details;
+    let flow = s.workflow.as_ref();
+    let valid_flow = flow.filter(|f| actl_core::history::valid_id(&f.run_id));
+    let blocked =
+        matches!(mode, Mode::StopRequested | Mode::Stopped | Mode::Unknown) || stop_ms.is_some();
+    let reason = s
+        .handoff_reason
+        .as_deref()
+        .or_else(|| flow.and_then(|f| f.reason.as_deref()));
+    let mut compact = false;
+    if !blocked {
+        match reason {
+            Some("handoff_pending") if s.phase == Phase::Running => {
+                mode = Mode::Waiting;
+                text = "等待交接 · 可操作".into();
+                compact = true;
+            }
+            Some("human_takeover_or_grant_expired") => {
+                mode = Mode::Paused;
+                text = "已让行 · 可操作".into();
+                compact = true;
+            }
+            Some("user_paused" | "pause_requested") => {
+                mode = Mode::Paused;
+                text = "已暂停 · 可操作".into();
+                compact = true;
+            }
+            Some("handoff_pending" | "user_deferred") => {
+                mode = Mode::Paused;
+                text = "等待继续 · 可操作".into();
+                compact = true;
+            }
+            Some(_) if s.handoff_reason.is_some() => {
+                mode = Mode::Blocked;
+                text = "无法继续 · 查看原因".into();
+                compact = true;
+            }
+            _ => {}
+        }
+        if let Some(f) = valid_flow {
+            match f.status.as_str() {
+                "paused" | "needs_review" => {
+                    control = Control::Continue {
+                        flow: f.run_id.clone(),
+                    };
+                    if !compact {
+                        let (new_mode, label) = match f.reason.as_deref() {
+                            Some("precondition_failed") => (Mode::Blocked, "条件未满足 · 可操作"),
+                            Some("action_failed") => (Mode::Blocked, "操作未完成 · 可操作"),
+                            _ if f.status == "needs_review" => {
+                                (Mode::Partial, "待核对结果 · 可操作")
+                            }
+                            _ => (Mode::Paused, "已暂停 · 可操作"),
+                        };
+                        mode = new_mode;
+                        text = label.into();
+                        compact = true;
+                    }
+                    details.push("继续时先核对上一步；结果不明确不会自动重做".into());
+                }
+                "running" if s.phase == Phase::Running => {
+                    control = Control::Pause {
+                        call: s.call_id.clone(),
+                        flow: Some(f.run_id.clone()),
+                    }
+                }
+                _ => {}
+            }
+        } else if matches!(mode, Mode::Paused | Mode::Blocked) {
+            details.push("当前调用已结束，没有自动恢复入口；调用方须核对结果后发起后续任务".into());
+        }
+        if s.phase == Phase::Running && !stale && !compact {
+            let desktop = states.iter().any(|state| {
+                state.phase == Phase::Running
+                    && now.saturating_sub(state.ts_ms) < 10_000
+                    && state.action.as_ref().is_some_and(|a| a.active())
+            });
+            if desktop || busy == Some(true) {
+                mode = Mode::Desktop;
+                text = "桌面操作 · 暂勿操作".into();
+                compact = true;
+            } else if busy == Some(false)
+                && matches!(
+                    command,
+                    "snapshot"
+                        | "find"
+                        | "get"
+                        | "extract"
+                        | "verify"
+                        | "wait"
+                        | "list-windows"
+                        | "status"
+                        | "get-clipboard"
+                        | "screenshot"
+                )
+            {
+                mode = Mode::Background;
+                text = "后台处理 · 可操作".into();
+                compact = true;
+            }
+        }
+        if valid_flow.is_none()
+            && s.phase == Phase::Running
+            && !stale
+            && (active.is_some() || s.handoff_reason.as_deref() == Some("handoff_pending"))
+        {
+            control = Control::Pause {
+                call: s.call_id.clone(),
+                flow: None,
+            };
+        }
+    }
+    details.push(control.label().into());
     View {
         mode,
+        control,
         effects,
-        label: format!(
-            "{} · {text}",
-            if target.chars().count() > 9 {
-                format!("{}…", target.chars().take(8).collect::<String>())
-            } else {
-                target.into()
-            }
-        ),
+        label: if compact {
+            text
+        } else {
+            format!(
+                "{} · {text}",
+                if target.chars().count() > 9 {
+                    format!("{}…", target.chars().take(8).collect::<String>())
+                } else {
+                    target.into()
+                }
+            )
+        },
         details: details.join("\n"),
     }
 }
@@ -424,6 +566,89 @@ mod tests {
         assert_eq!(
             view(std::slice::from_ref(&s), s.ts_ms, Some(s.ts_ms), Some(true)).mode,
             Mode::StopRequested
+        );
+    }
+}
+
+#[cfg(test)]
+mod cooperation_tests {
+    use super::*;
+    #[test]
+    fn human_takeover_is_not_a_generic_failure() {
+        let mut s = SessionState::now(1, "type", None, None, Phase::Error);
+        s.handoff_reason = Some("human_takeover_or_grant_expired".into());
+        let v = view(&[s], actl_core::state::unix_ms(), None, Some(false));
+        assert!(v.label.contains("已让行"));
+        assert!(!v.label.contains("失败"));
+        assert!(v.details.contains("没有自动恢复入口"));
+    }
+    #[test]
+    fn readonly_work_explicitly_permits_human_input() {
+        let s = SessionState::now(1, "snapshot", None, None, Phase::Running);
+        assert!(
+            view(&[s], actl_core::state::unix_ms(), None, Some(false))
+                .label
+                .contains("可操作")
+        );
+    }
+}
+
+#[cfg(test)]
+mod continuation_tests {
+    use super::*;
+    fn paused() -> SessionState {
+        let mut s = SessionState::now(1, "flow-run", None, None, Phase::Error);
+        s.call_id = "call-a".into();
+        s.handoff_reason = Some("human_takeover_or_grant_expired".into());
+        s.workflow = Some(
+            serde_json::from_value(
+                serde_json::json!({"run_id":"flow-a","title":"Write","status":"paused"}),
+            )
+            .unwrap(),
+        );
+        s
+    }
+    #[test]
+    fn passive_pause_is_bound_to_its_flow_and_stop_disables_resume() {
+        let s = paused();
+        let v = view(std::slice::from_ref(&s), s.ts_ms, None, Some(false));
+        assert_eq!(
+            v.control,
+            Control::Continue {
+                flow: "flow-a".into()
+            }
+        );
+        assert_eq!(
+            view(
+                std::slice::from_ref(&s),
+                s.ts_ms,
+                Some(s.ts_ms),
+                Some(false)
+            )
+            .control,
+            Control::Details
+        );
+    }
+    #[test]
+    fn diagnostic_completion_does_not_hide_a_paused_task() {
+        let s = paused();
+        let mut query = SessionState::now(2, "display-status", None, None, Phase::Done);
+        query.ts_ms = s.ts_ms + 1;
+        let v = view(&[s, query], actl_core::state::unix_ms(), None, Some(false));
+        assert_eq!(
+            v.control,
+            Control::Continue {
+                flow: "flow-a".into()
+            }
+        );
+    }
+    #[test]
+    fn standalone_pause_does_not_offer_fake_resume() {
+        let mut s = paused();
+        s.workflow = None;
+        assert_eq!(
+            view(std::slice::from_ref(&s), s.ts_ms, None, Some(false)).control,
+            Control::Details
         );
     }
 }

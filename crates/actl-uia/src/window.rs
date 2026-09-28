@@ -24,6 +24,7 @@ pub struct CaptureResult {
     pub window_runtime_id: Vec<i32>,
     /// DFS 序节点流,`parent` 指向同流索引(供 core 层 skeleton 投影)
     pub nodes: Vec<UiNode>,
+    pub element_identities: Vec<serde_json::Value>,
     pub truncated: bool,
     /// 激活感知等待的毫秒数(0 = 目标本就在响应;>0 = 目标曾挂起,已唤醒)
     pub wake_ms: u32,
@@ -55,15 +56,24 @@ pub fn capture(app: Option<&str>) -> Result<CaptureResult, CtlError> {
     let window_runtime_id = target.get_runtime_id().unwrap_or_default();
 
     let mut nodes = Vec::new();
+    let mut element_identities = Vec::new();
     {
         let _t = actl_core::trace::scope("capture.walk");
-        walk(&walker, &target, 0, None, &mut nodes);
+        walk(
+            &walker,
+            &target,
+            0,
+            None,
+            &mut nodes,
+            &mut element_identities,
+        );
     }
     let truncated = nodes.len() >= MAX_ELEMENTS;
     Ok(CaptureResult {
         window,
         window_runtime_id,
         nodes,
+        element_identities,
         truncated,
         wake_ms,
     })
@@ -74,7 +84,7 @@ pub fn capture(app: Option<&str>) -> Result<CaptureResult, CtlError> {
 /// (同标题 ≠ 同实例),纯计数重放会静默点进新窗口的巧合位置。方案:快照
 /// 落盘 {snapshot_id → 窗口 RuntimeId};回放命令带 `--snapshot <id>` 时
 /// 校验当前窗口实例与快照一致,不一致 → STALE_REF。
-/// 元素级校验(树前缀比对)留待完整会话设计,与 fallback 链的 evidence 演进同批。
+/// 元素身份与同次 DFS ref 序列一并保存，由 ReplayGuard 在实际 locate 命中时核验。
 const SNAPSHOT_KEEP: usize = 20;
 
 fn snapshot_dir() -> Option<std::path::PathBuf> {
@@ -85,17 +95,24 @@ fn snapshot_dir() -> Option<std::path::PathBuf> {
 }
 
 /// 快照记录落盘(保留最近 SNAPSHOT_KEEP 份,按修改时间淘汰)。
-pub fn persist_snapshot(id: &str, window_title: &str, window_runtime_id: &[i32]) {
-    let Some(dir) = snapshot_dir() else { return };
+pub fn persist_snapshot(
+    id: &str,
+    window_title: &str,
+    window_runtime_id: &[i32],
+    elements: &[serde_json::Value],
+) -> Result<(), CtlError> {
+    let dir = snapshot_dir().ok_or_else(|| crate::internal("snapshot directory unavailable"))?;
     let record = serde_json::json!({
         "snapshot_id": id,
         "window_title": window_title,
         "window_runtime_id": window_runtime_id,
+        "elements": elements,
     });
-    let _ = std::fs::write(
+    std::fs::write(
         dir.join(format!("{id}.json")),
-        serde_json::to_string(&record).unwrap_or_default(),
-    );
+        serde_json::to_vec(&record).map_err(crate::internal)?,
+    )
+    .map_err(crate::internal)?;
     // 淘汰旧记录:按修改时间留最新 SNAPSHOT_KEEP 份
     if let Ok(entries) = std::fs::read_dir(&dir) {
         let mut files: Vec<_> = entries
@@ -113,19 +130,30 @@ pub fn persist_snapshot(id: &str, window_title: &str, window_runtime_id: &[i32])
             let _ = std::fs::remove_file(path);
         }
     }
+    Ok(())
+}
+
+pub(crate) fn load_snapshot_record(id: &str) -> Option<serde_json::Value> {
+    if id.is_empty()
+        || !id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    {
+        return None;
+    }
+    let dir = snapshot_dir()?;
+    let text = std::fs::read_to_string(dir.join(format!("{id}.json"))).ok()?;
+    serde_json::from_str(&text).ok()
 }
 
 fn load_snapshot(id: &str) -> Option<(String, Vec<i32>)> {
-    let dir = snapshot_dir()?;
-    let text = std::fs::read_to_string(dir.join(format!("{id}.json"))).ok()?;
-    let v: serde_json::Value = serde_json::from_str(&text).ok()?;
-    let title = v["window_title"].as_str()?.to_string();
+    let v = load_snapshot_record(id)?;
     let rid = v["window_runtime_id"]
         .as_array()?
         .iter()
-        .filter_map(|x| x.as_i64().map(|n| n as i32))
-        .collect();
-    Some((title, rid))
+        .map(|x| x.as_i64().and_then(|n| i32::try_from(n).ok()))
+        .collect::<Option<Vec<_>>>()?;
+    Some((v["window_title"].as_str()?.to_string(), rid))
 }
 
 /// 回放校验:当前窗口实例须与快照记录一致(RuntimeId 比对)。
@@ -137,7 +165,7 @@ pub fn check_snapshot_freshness(snapshot_id: &str, current: &UIElement) -> Resul
         ));
     };
     let now = current.get_runtime_id().unwrap_or_default();
-    if !recorded.is_empty() && now != recorded {
+    if !runtime_ids_match(&recorded, &now) {
         return Err(CtlError::new(
             ErrorCode::StaleRef,
             format!(
@@ -150,13 +178,11 @@ pub fn check_snapshot_freshness(snapshot_id: &str, current: &UIElement) -> Resul
 
 /// 激活感知目标解析(M2 第一批,docs/spike-findings"UWP 挂起 = UIA 停摆"):
 /// 挂起应用的每个跨进程 UIA 属性调用都会 stall ~2s(DCOM 等待应用恢复)。
-/// 先用不阻塞调用方的 WM_NULL 探针测目标是否在泵消息;不在 → ShowWindowAsync
-/// 异步唤醒 + 有界等待(≤1.6s)。把隐形的逐调用 stall 变成一次有界的、
+/// 先用 WM_NULL 探针测目标是否在泵消息，再做有界等待(≤1.6s)。
+/// 观察路径不再调用 ShowWindowAsync，避免用户尚未交接就被抢焦点。把 stall 变成一次有界的、
 /// 可上报的等待。无原生句柄的元素(UIA-only)直接放行。
 pub(crate) fn ensure_window_responsive(elem: &UIElement) -> u32 {
-    use windows::Win32::UI::WindowsAndMessaging::{
-        SMTO_ABORTIFHUNG, SW_SHOW, SendMessageTimeoutW, ShowWindowAsync, WM_NULL,
-    };
+    use windows::Win32::UI::WindowsAndMessaging::{SMTO_ABORTIFHUNG, SendMessageTimeoutW, WM_NULL};
 
     let Some(hwnd) = native_hwnd(elem) else {
         return 0;
@@ -178,10 +204,8 @@ pub(crate) fn ensure_window_responsive(elem: &UIElement) -> u32 {
         return 0;
     }
     let started = std::time::Instant::now();
-    unsafe {
-        // 异步投递不等待应用;激活请求本身是 UWP 恢复的最常见触发器
-        let _ = ShowWindowAsync(hwnd, SW_SHOW);
-    }
+    // Read-only observation must not steal focus while the user is typing.
+    // Explicit focus-window performs guarded restoration/activation instead.
     while started.elapsed() < std::time::Duration::from_millis(timing().wake_bound_ms) {
         std::thread::sleep(std::time::Duration::from_millis(timing().poll_ms));
         if pumps(60) {
@@ -257,12 +281,6 @@ fn owned_dialogs_of(walker: &UITreeWalker, host: &UIElement) -> Vec<UIElement> {
         sub = walker.get_next_sibling(&d).ok();
     }
     out
-}
-
-fn scan_top_window(auto: &UIAutomation, walker: &UITreeWalker, pattern: &str) -> Option<UIElement> {
-    top_windows(auto, walker)
-        .into_iter()
-        .find(|w| name_matches(w, pattern))
 }
 
 fn name_matches(elem: &UIElement, pattern: &str) -> bool {
@@ -375,15 +393,20 @@ fn walk(
     depth: u32,
     parent: Option<usize>,
     nodes: &mut Vec<UiNode>,
+    identities: &mut Vec<serde_json::Value>,
 ) {
     if nodes.len() >= MAX_ELEMENTS || depth > MAX_DEPTH {
         return;
     }
-    nodes.push(to_node(elem, depth, parent));
+    let node = to_node(elem, depth, parent);
+    if actl_core::is_interactive_role(&node.role) {
+        identities.push(crate::identity::identity(elem));
+    }
+    nodes.push(node);
     let idx = nodes.len() - 1;
     let mut child = walker.get_first_child(elem).ok();
     while let Some(c) = child {
-        walk(walker, &c, depth + 1, Some(idx), nodes);
+        walk(walker, &c, depth + 1, Some(idx), nodes, identities);
         child = walker.get_next_sibling(&c).ok();
     }
 }
@@ -403,13 +426,14 @@ fn to_node(elem: &UIElement, depth: u32, parent: Option<usize>) -> UiNode {
 
 /// 等待标题包含 `substr` 的顶层窗口出现(--expect 的执行体,06 §4:默认 2s 轮询)。
 pub fn wait_window(substr: &str, timeout_ms: u64) -> Result<String, CtlError> {
-    let auto = UIAutomation::new().map_err(internal)?;
-    let walker = auto.create_tree_walker().map_err(internal)?;
     let deadline = std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
     loop {
         actl_core::wait_control::check()?;
-        if let Some(title) = scan_top_windows(&auto, &walker, substr) {
-            return Ok(title);
+        if let Some(window) = crate::native_windows()?
+            .into_iter()
+            .find(|w| w.visible && w.title.contains(substr))
+        {
+            return Ok(window.title);
         }
         if std::time::Instant::now() >= deadline {
             return Err(CtlError::new(
@@ -473,23 +497,14 @@ pub fn wait_new_window(
     }
 }
 
-fn scan_top_windows(auto: &UIAutomation, walker: &UITreeWalker, substr: &str) -> Option<String> {
-    scan_top_window(auto, walker, substr).and_then(|w| w.get_name().ok())
-}
-
-/// focus-window:把标题匹配的顶层窗口带到前台(UIA SetFocus,即等效前台)。
+/// focus-window:经交接后请求 UIA SetFocus，并有界核验原生前台句柄。
 /// press/type 等键盘命令作用于全局焦点——多窗口场景必须先 focus-window(06 §3.6 裁定表)。
 pub fn focus_window(pattern: &str) -> Result<String, CtlError> {
     let auto = UIAutomation::new().map_err(internal)?;
     let walker = auto.create_tree_walker().map_err(internal)?;
     let win = find_window(&auto, &walker, pattern)?;
     let mut action = crate::feedback::window_action("focus-window", &win, true)?;
-    win.set_focus().map_err(|e| {
-        CtlError::new(
-            ErrorCode::NotActionable,
-            format!("cannot focus window {pattern:?}: {e:?}"),
-        )
-    })?;
+    crate::window_ready::activate(&win)?;
     action.delivered();
     Ok(win.get_name().unwrap_or_default())
 }
@@ -795,12 +810,7 @@ pub fn close_window_by(r: WindowRef<'_>) -> Result<String, CtlError> {
 pub fn focus_window_by(r: WindowRef<'_>) -> Result<String, CtlError> {
     let win = resolve_window(r)?;
     let mut action = crate::feedback::window_action("focus-window", &win, true)?;
-    win.set_focus().map_err(|e| {
-        CtlError::new(
-            ErrorCode::NotActionable,
-            format!("cannot focus window: {e:?}"),
-        )
-    })?;
+    crate::window_ready::activate(&win)?;
     action.delivered();
     Ok(win.get_name().unwrap_or_default())
 }
@@ -889,16 +899,38 @@ pub fn capture_hwnd(hwnd_raw: isize) -> Result<CaptureResult, CtlError> {
     let wake_ms = ensure_window_responsive(&target);
     let window_runtime_id = target.get_runtime_id().unwrap_or_default();
     let mut nodes = Vec::new();
+    let mut element_identities = Vec::new();
     {
         let _t = actl_core::trace::scope("capture.walk");
-        walk(&walker, &target, 0, None, &mut nodes);
+        walk(
+            &walker,
+            &target,
+            0,
+            None,
+            &mut nodes,
+            &mut element_identities,
+        );
     }
     let truncated = nodes.len() >= MAX_ELEMENTS;
     Ok(CaptureResult {
         window,
         window_runtime_id,
         nodes,
+        element_identities,
         truncated,
         wake_ms,
     })
+}
+
+fn runtime_ids_match(recorded: &[i32], current: &[i32]) -> bool {
+    !recorded.is_empty() && recorded == current
+}
+
+#[cfg(test)]
+mod identity_regression_tests {
+    #[test]
+    fn missing_window_identity_must_not_authorize_replay() {
+        assert!(!super::runtime_ids_match(&[], &[]));
+        assert!(!super::runtime_ids_match(&[], &[42]));
+    }
 }

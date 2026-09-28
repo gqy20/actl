@@ -227,6 +227,21 @@ pub fn execute(
                         return Ok(());
                     }
                 }
+                if let Some(evidence) = error.evidence.as_ref()
+                    && evidence["stage"] == "handoff"
+                {
+                    run.steps[i].error_evidence = crate::failure_evidence(step.evidence, &error);
+                    run.steps[i].error_code = Some(error.code);
+                    run.steps[i].status = if evidence["action_started"] == false {
+                        StepStatus::Pending
+                    } else {
+                        StepStatus::Uncertain
+                    };
+                    run.status = Status::Paused;
+                    run.reason = evidence["reason"].as_str().map(str::to_owned);
+                    run.save(store, host)?;
+                    return Ok(());
+                }
                 run.steps[i].error_evidence = crate::failure_evidence(step.evidence, &error);
                 run.steps[i].error_code = Some(error.code);
                 run.steps[i].status = if host.read_only(&step.run) {

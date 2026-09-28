@@ -73,7 +73,12 @@ pub(crate) fn snapshot_cmd(
         None => Projection::Full,
     };
     let out = builder.finish(projection)?;
-    actl_uia::persist_snapshot(&out.snapshot_id, &cap.window.title, &cap.window_runtime_id);
+    actl_uia::persist_snapshot(
+        &out.snapshot_id,
+        &cap.window.title,
+        &cap.window_runtime_id,
+        &cap.element_identities,
+    )?;
     let mut data = json!({
         "window": {
             "title": cap.window.title,
@@ -102,7 +107,7 @@ pub(crate) fn get(
     snapshot: Option<&str>,
 ) -> Result<CommandOutput, CtlError> {
     let target = actl_core::parse_target(target_raw)?;
-    replay_guard(snapshot, app)?;
+    let _replay = replay_guard(snapshot, app)?;
     let info = actl_uia::read_property(app, &target, property, near)?;
     let mut props = serde_json::Map::new();
     if let Some(v) = &info.name {
@@ -154,7 +159,12 @@ pub(crate) fn find_cmd(
     let out = builder
         .finish(actl_core::Projection::Full)
         .expect("full projection cannot fail");
-    actl_uia::persist_snapshot(&out.snapshot_id, &cap.window.title, &cap.window_runtime_id);
+    actl_uia::persist_snapshot(
+        &out.snapshot_id,
+        &cap.window.title,
+        &cap.window_runtime_id,
+        &cap.element_identities,
+    )?;
     let role_want = role.map(str::to_lowercase);
     let matched: Vec<&actl_core::snapshot::ElementOut> = out
         .elements
@@ -326,11 +336,7 @@ pub(crate) fn batch_cmd(json_str: &str) -> Result<CommandOutput, CtlError> {
     // 窗口基线(进入时的 hwnd 集):结束时差集 = 本轮新开的窗口。
     // 如实上报(windows_created: title/pid/hwnd),不代管生命周期——
     // 关不关是编排层(agent/fixture)的决定,清理武器是 close-window --pid/--hwnd。
-    let baseline: std::collections::HashSet<isize> = actl_uia::list_windows()
-        .unwrap_or_default()
-        .iter()
-        .filter_map(|w| w.hwnd)
-        .collect();
+    let baseline = window_baseline(actl_uia::native_windows())?;
     // 弹窗闸门的合法目标集:batch 自身声明的 --app 值(launch-then-interact 模式里,
     // 自启窗口会成为前台,不该误报)
     let app_patterns: Vec<String> = cmds
@@ -358,7 +364,9 @@ pub(crate) fn batch_cmd(json_str: &str) -> Result<CommandOutput, CtlError> {
         let fg_blocked = || {
             actl_uia::foreground_window().and_then(|(title, hwnd)| {
                 if baseline.contains(&hwnd)
-                    || app_patterns.iter().any(|p| title.contains(p.as_str()))
+                    || app_patterns
+                        .iter()
+                        .any(|p| batch_window_matches(p, &title, hwnd))
                 {
                     None
                 } else {
@@ -412,44 +420,72 @@ pub(crate) fn batch_cmd(json_str: &str) -> Result<CommandOutput, CtlError> {
                     entry["blocked_by"] = b.clone();
                 }
                 steps.push(entry);
+                let mut evidence = json!({"executed": executed, "steps": steps});
+                attach_created_windows(&mut evidence, windows_created_since(&baseline));
                 return Err(CtlError::with_evidence(
                     err.code,
                     format!(
                         "batch[{i}] {:?} failed after {executed} ok: {}",
                         line, err.message
                     ),
-                    json!({
-                        "executed": executed,
-                        "steps": steps,
-                        "windows_created": windows_created_since(&baseline),
-                    }),
+                    evidence,
                 ));
             }
         }
         executed += 1;
     }
     let mut data = json!({ "executed": executed, "steps": steps });
-    let created = windows_created_since(&baseline);
-    if created.as_array().is_some_and(|a| !a.is_empty()) {
-        data["windows_created"] = created;
-    }
+    attach_created_windows(&mut data, windows_created_since(&baseline));
     Ok(data.into())
 }
 
-/// 基线差集:本轮 batch 新开的窗口(title/pid/hwnd)。空省略(token);
-/// 失败路径必带(evidence)——那是清理地基。
-fn windows_created_since(baseline: &std::collections::HashSet<isize>) -> Value {
-    let created: Vec<Value> = actl_uia::list_windows()
-        .unwrap_or_default()
+fn window_baseline(
+    windows: Result<Vec<actl_uia::WindowEntry>, CtlError>,
+) -> Result<std::collections::HashSet<isize>, CtlError> {
+    Ok(windows?.iter().filter_map(|w| w.hwnd).collect())
+}
+
+fn batch_window_matches(pattern: &str, title: &str, hwnd: isize) -> bool {
+    match pattern.strip_prefix("hwnd:") {
+        Some(raw) => actl_uia::parse_hwnd(raw).is_ok_and(|target| target == hwnd),
+        None => title.contains(pattern),
+    }
+}
+
+fn attach_created_windows(data: &mut Value, result: Result<Value, CtlError>) {
+    match result {
+        Ok(created) => {
+            data["windows_created"] = created;
+        }
+        Err(error) => {
+            data["window_observation_error"] =
+                json!({"code": error.code, "message": error.message});
+        }
+    }
+}
+
+/// Native HWND difference, not task ownership. Observation errors propagate so
+/// callers cannot mistake an unknown result for an empty window list.
+fn windows_created_since(baseline: &std::collections::HashSet<isize>) -> Result<Value, CtlError> {
+    let created: Vec<Value> = actl_uia::native_windows()?
         .into_iter()
         .filter(|w| w.hwnd.map(|h| !baseline.contains(&h)).unwrap_or(false))
         .map(|w| json!({ "title": w.title, "pid": w.pid, "hwnd": w.hwnd }))
         .collect();
-    json!(created)
+    Ok(json!(created))
 }
 
-pub(crate) fn list_windows_cmd() -> Result<CommandOutput, CtlError> {
-    let wins = actl_uia::list_windows()?;
+pub(crate) fn list_windows_cmd(
+    native: bool,
+    hwnd: Option<&str>,
+) -> Result<CommandOutput, CtlError> {
+    let wins = if let Some(raw) = hwnd {
+        actl_uia::native_window(actl_uia::parse_hwnd(raw)?)?
+    } else if native {
+        actl_uia::native_windows()?
+    } else {
+        actl_uia::list_windows()?
+    };
     let list: Vec<Value> = wins
         .into_iter()
         .map(|w| {
@@ -564,4 +600,39 @@ pub(crate) fn extract_cmd(target_raw: &str, app: Option<&str>) -> Result<Command
         "table": rows,
     })
     .into())
+}
+
+#[cfg(test)]
+mod window_baseline_tests {
+    use super::*;
+    #[test]
+    fn enumeration_error_is_not_an_empty_baseline() {
+        let error = CtlError::new(actl_core::ErrorCode::Internal, "enumeration failed");
+        assert!(window_baseline(Err(error)).is_err());
+    }
+    #[test]
+    fn hwnd_target_does_not_match_by_title() {
+        assert!(batch_window_matches("hwnd:42", "Excel", 42));
+        assert!(batch_window_matches("hwnd:0x2a", "Excel", 42));
+        assert!(!batch_window_matches("hwnd:42", "hwnd:42", 7));
+        assert!(batch_window_matches("Excel", "Book - Excel", 7));
+    }
+    #[test]
+    fn failed_final_inventory_preserves_steps_and_reports_unknown_windows() {
+        let mut data =
+            json!({"executed":1,"steps":[{"i":0,"cmd":"status","ok":true,"duration_ms":0}]});
+        attach_created_windows(
+            &mut data,
+            Err(CtlError::new(
+                actl_core::ErrorCode::Internal,
+                "enumeration failed",
+            )),
+        );
+        let golden: Value = serde_json::from_str(include_str!(
+            "../tests/golden/batch_window_observation_error.json"
+        ))
+        .unwrap();
+        assert_eq!(data, golden);
+        assert!(data.get("windows_created").is_none());
+    }
 }

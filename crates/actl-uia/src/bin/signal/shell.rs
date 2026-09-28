@@ -14,6 +14,7 @@ use windows::Win32::UI::Shell::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
 use windows::core::{PCWSTR, w};
 
+static PRESSED: Mutex<Option<model::Control>> = Mutex::new(None);
 static VIEW: Mutex<Option<model::View>> = Mutex::new(None);
 static REQUEST_MESSAGE: Mutex<String> = Mutex::new(String::new());
 static MENU_FLOW: Mutex<Option<(String, bool)>> = Mutex::new(None);
@@ -111,8 +112,10 @@ unsafe fn tick(hwnd: HWND) {
     let states = call_snapshot();
     let stop = stop_timestamp(&paths);
     let mut v = model::view(&states, now, stop, actl_uia::display_support::input_busy());
-    if v.mode == model::Mode::Running
-        && let Some(flow) = model::selected(&states, now).and_then(|s| s.workflow.as_ref())
+    if matches!(
+        v.mode,
+        model::Mode::Running | model::Mode::Background | model::Mode::Desktop
+    ) && let Some(flow) = model::selected(&states, now).and_then(|s| s.workflow.as_ref())
         && actl_core::history::valid_id(&flow.run_id)
         && paths
             .dir
@@ -128,7 +131,7 @@ unsafe fn tick(hwnd: HWND) {
         DRAG_STOP.store(false, Ordering::Relaxed);
     }
     if DRAG_STOP.load(Ordering::Relaxed) {
-        v.label = "移动状态条 · 已请求停止".into();
+        v.label = "移动状态条 · 已请求暂停".into();
         v.details
             .push_str("\n移动状态条会请求停止；可在菜单允许后续操作");
     }
@@ -152,9 +155,12 @@ unsafe fn tick(hwnd: HWND) {
         }
     }
     let changed = if let Ok(mut old) = VIEW.lock() {
-        let changed = old
-            .as_ref()
-            .is_none_or(|o| o.mode != v.mode || o.label != v.label || o.effects != v.effects);
+        let changed = old.as_ref().is_none_or(|o| {
+            o.mode != v.mode
+                || o.label != v.label
+                || o.effects != v.effects
+                || o.control != v.control
+        });
         *old = Some(v.clone());
         changed
     } else {
@@ -173,7 +179,7 @@ unsafe fn tick(hwnd: HWND) {
             if HOTKEY.load(Ordering::Relaxed) {
                 "Ctrl+Alt+F12 请求停止"
             } else {
-                "点击方框停止"
+                "右键菜单：紧急停止"
             }
         ));
         let n = tip.len().saturating_sub(1).min(126);
@@ -307,10 +313,15 @@ unsafe fn update_icon(hwnd: HWND, mode: model::Mode) -> HICON {
     let dpi = windows::Win32::UI::HiDpi::GetDpiForWindow(hwnd);
     let size = windows::Win32::UI::HiDpi::GetSystemMetricsForDpi(SM_CXSMICON, dpi).max(16);
     let color = match mode {
-        model::Mode::Failed => 0xE59188,
-        model::Mode::StopRequested | model::Mode::Preparing | model::Mode::Partial => 0xD4B879,
+        model::Mode::Failed | model::Mode::Blocked => 0xE59188,
+        model::Mode::StopRequested
+        | model::Mode::Preparing
+        | model::Mode::Partial
+        | model::Mode::Desktop
+        | model::Mode::Paused
+        | model::Mode::Waiting => 0xD4B879,
         model::Mode::Done => 0x8AB698,
-        model::Mode::Running => 0x93B4CA,
+        model::Mode::Running | model::Mode::Background => 0x93B4CA,
         _ => 0xB4BAC0,
     };
     let Ok(mut old) = TRAY_ICON.lock() else {
@@ -417,6 +428,58 @@ unsafe fn menu_action(hwnd: HWND, cmd: usize) {
     tick(hwnd);
 }
 
+unsafe fn primary(hwnd: HWND, control: model::Control) {
+    let result = match control {
+        model::Control::Pause { call, flow } => {
+            super::handoff::pause_call(&call);
+            match flow {
+                Some(id) => flow_action(&id, false),
+                None => Ok(()),
+            }
+        }
+        model::Control::Continue { flow } => {
+            let current = VIEW
+                .lock()
+                .ok()
+                .and_then(|v| v.as_ref().map(|v| v.control.clone()));
+            if current != Some(model::Control::Continue { flow: flow.clone() }) {
+                super::popup::show(hwnd, vec!["显示任务已变化，请重新查看".into()], false);
+                return;
+            }
+            // Re-read persisted state. A stale button must never revive completed/stopped work.
+            let state = super::flow_ui::read(&SignalPaths::default(), &flow);
+            if !state
+                .as_ref()
+                .is_some_and(|s| matches!(s["status"].as_str(), Some("paused" | "needs_review")))
+            {
+                Err("任务状态已变化，请重新查看".into())
+            } else if !state
+                .as_ref()
+                .is_some_and(|s| super::flow_ui::continue_ready(s, unix_ms()))
+            {
+                Err("刚刚暂停，请确认任务状态后再点继续".into())
+            } else if super::flow_ui::pending(&flow, true) {
+                Ok(())
+            } else if !super::handoff::allow_flow(&flow) {
+                Err("尚不能交接：请检查停止状态和输入监听".into())
+            } else {
+                let result = flow_action(&flow, true);
+                if result.is_err() {
+                    super::handoff::revoke();
+                }
+                result
+            }
+        }
+        model::Control::Details => {
+            details(hwnd);
+            Ok(())
+        }
+    };
+    if let Err(error) = result {
+        super::popup::show(hwnd, vec!["任务状态未改变".into(), error], false);
+    }
+}
+
 pub(super) fn flow_action(id: &str, resume: bool) -> Result<(), String> {
     super::flow_ui::request(id, resume)
 }
@@ -450,11 +513,29 @@ unsafe fn place(hwnd: HWND) {
 
 unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
     match msg {
+        actl_core::handoff::REQUEST_MESSAGE | actl_core::handoff::CHECK_MESSAGE => {
+            LRESULT(super::handoff::message(msg, wp.0 as u32) as isize)
+        }
+        actl_core::handoff::RECOVER_MESSAGE => {
+            place(hwnd);
+            let _ = SetWindowPos(
+                hwnd,
+                Some(HWND_TOPMOST),
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+            );
+            let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+            LRESULT(1)
+        }
         msg if msg == WM_APP + 44 => {
             menu(hwnd);
             LRESULT(0)
         }
         WM_TIMER => {
+            super::handoff::tick();
             tick(hwnd);
             LRESULT(0)
         }
@@ -489,7 +570,13 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
         }
         WM_ENTERSIZEMOVE => {
             DRAG_STOP.store(true, Ordering::Relaxed);
-            SignalPaths::default().request_stop();
+            let control = VIEW
+                .lock()
+                .ok()
+                .and_then(|v| v.as_ref().map(|v| v.control.clone()));
+            if let Some(control @ model::Control::Pause { .. }) = control {
+                primary(hwnd, control);
+            }
             overlay::hide();
             super::perimeter::hide();
             LRESULT(0)
@@ -505,12 +592,24 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
             }
             LRESULT(0)
         }
+        WM_LBUTTONDOWN => {
+            let x = (lp.0 as u16 as i16) as i32;
+            if x >= paint::pixels(246, windows::Win32::UI::HiDpi::GetDpiForWindow(hwnd))
+                && let Ok(mut pressed) = PRESSED.lock()
+            {
+                *pressed = VIEW
+                    .lock()
+                    .ok()
+                    .and_then(|v| v.as_ref().map(|v| v.control.clone()));
+            }
+            LRESULT(0)
+        }
         WM_LBUTTONUP => {
             let x = (lp.0 as u16 as i16) as i32;
+            let captured = PRESSED.lock().ok().and_then(|mut p| p.take());
             if x >= paint::pixels(246, windows::Win32::UI::HiDpi::GetDpiForWindow(hwnd)) {
-                let paths = SignalPaths::default();
-                if !paths.stop_requested() {
-                    paths.request_stop();
+                if let Some(control) = captured {
+                    primary(hwnd, control);
                 }
                 tick(hwnd);
             } else {
@@ -732,6 +831,7 @@ pub unsafe fn run() -> windows::core::Result<()> {
     if std::env::args().any(|a| a == "--menu") {
         menu(hwnd);
     }
+    let _input_watch = super::handoff::watch()?;
     let mut msg = MSG::default();
     loop {
         let result = GetMessageW(&mut msg, None, 0, 0).0;

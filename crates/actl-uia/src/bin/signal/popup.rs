@@ -30,9 +30,21 @@ pub unsafe fn hide() {
         let _ = DestroyWindow(HWND(p.hwnd as *mut _));
     }
 }
+fn report(reason: &str, detail: &str) {
+    let paths = actl_core::state::SignalPaths::default();
+    let _ = paths.write_display(
+        "popup.json",
+        &serde_json::json!({"reason":reason,"detail":detail,
+        "pid":std::process::id(),"ts_ms":actl_core::state::unix_ms()}),
+    );
+}
 pub unsafe fn show(owner: HWND, lines: Vec<String>, menu: bool) {
     hide();
     let Ok(instance) = GetModuleHandleW(None) else {
+        report(
+            "module_unavailable",
+            &windows::core::Error::from_thread().to_string(),
+        );
         return;
     };
     let class = w!("actl_signal_details");
@@ -81,6 +93,10 @@ pub unsafe fn show(owner: HWND, lines: Vec<String>, menu: bool) {
         Some(instance.into()),
         None,
     ) else {
+        report(
+            "create_window_failed",
+            &windows::core::Error::from_thread().to_string(),
+        );
         return;
     };
     if let Ok(mut p) = POPUP.lock() {
@@ -124,7 +140,30 @@ pub unsafe fn show(owner: HWND, lines: Vec<String>, menu: bool) {
         paint::draw_popup(hwnd, &p.lines, p.menu, p.selected);
     }
     let _ = ShowWindow(hwnd, SW_SHOW);
-    let _ = SetForegroundWindow(hwnd);
+    let requested = SetForegroundWindow(hwnd).as_bool();
+    if !IsWindowVisible(hwnd).as_bool() {
+        report("hidden", "popup was created but is not visible");
+    } else if GetForegroundWindow() != hwnd {
+        report(
+            "foreground_not_acquired",
+            if requested {
+                "activation pending; popup remains visible"
+            } else {
+                "Windows rejected activation; popup remains visible"
+            },
+        );
+        // Draw attention without stealing focus or repeatedly sending activation requests.
+        let flash = FLASHWINFO {
+            cbSize: std::mem::size_of::<FLASHWINFO>() as u32,
+            hwnd,
+            dwFlags: FLASHW_TRAY,
+            uCount: 3,
+            dwTimeout: 0,
+        };
+        let _ = FlashWindowEx(&flash);
+    } else {
+        report("ready", "popup visible and foreground");
+    }
     if menu && let Ok(button) = GetDlgItem(Some(hwnd), 100) {
         let _ = windows::Win32::UI::Input::KeyboardAndMouse::SetFocus(Some(button));
     }

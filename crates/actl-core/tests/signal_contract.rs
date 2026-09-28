@@ -15,7 +15,7 @@ fn workflow_progress_preserves_reason_and_reads_legacy() {
 }
 
 #[test]
-fn display_v3_contract_and_action_ack_identity() {
+fn display_v5_contract_and_action_ack_identity() {
     use actl_core::display::*;
     let l = DisplayLease {
         protocol: DISPLAY_PROTOCOL,
@@ -26,7 +26,7 @@ fn display_v3_contract_and_action_ack_identity() {
         ts_ms: 100,
     };
     let expected: serde_json::Value =
-        serde_json::from_str(include_str!("golden/display_v3.json")).unwrap();
+        serde_json::from_str(include_str!("golden/display_v5.json")).unwrap();
     assert_eq!(serde_json::to_value(l).unwrap(), expected);
     let p = paths();
     let now = unix_ms();
@@ -188,4 +188,47 @@ fn cancelled_and_partial_actions_never_generate_click_feedback() {
             .is_empty()
     );
     let _ = std::fs::remove_dir_all(p.dir);
+}
+
+#[test]
+fn handoff_failure_requires_human_and_preserves_machine_reason() {
+    let error = actl_core::handoff::error("human_takeover_or_grant_expired");
+    let envelope = actl_core::ErrorEnvelope::new("type", &error, 0);
+    let expected: serde_json::Value =
+        serde_json::from_str(include_str!("golden/handoff_yielded.json")).unwrap();
+    assert_eq!(serde_json::to_value(envelope).unwrap(), expected);
+}
+
+#[test]
+fn task_handoff_identity_is_shared_only_when_explicit() {
+    let p = paths();
+    let mut a = SignalSession::start_with_task(p.clone(), "type", None, Some("task-a".into()));
+    let (call, task) = actl_core::signal_session::handoff_identity().unwrap();
+    assert_eq!(task, "task-a");
+    assert_ne!(call, task);
+    a.finish(Phase::Done, None);
+    drop(a);
+    let mut b = SignalSession::start(p.clone(), "type", None);
+    let (call, task) = actl_core::signal_session::handoff_identity().unwrap();
+    assert_eq!(call, task);
+    b.finish(Phase::Done, None);
+    drop(b);
+    std::fs::remove_dir_all(p.dir).unwrap();
+}
+
+#[test]
+fn handoff_state_is_published_without_turning_a_pause_into_stop() {
+    let p = paths();
+    let mut session = SignalSession::start(p.clone(), "type", None);
+    actl_core::signal_session::handoff_event("user_paused");
+    assert_eq!(
+        p.read_state().unwrap().handoff_reason.as_deref(),
+        Some("user_paused")
+    );
+    assert!(!p.stop_requested());
+    actl_core::signal_session::handoff_event("allowed");
+    assert!(p.read_state().unwrap().handoff_reason.is_none());
+    session.finish(Phase::Done, None);
+    drop(session);
+    std::fs::remove_dir_all(p.dir).unwrap();
 }

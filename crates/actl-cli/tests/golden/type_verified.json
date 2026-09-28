@@ -1,0 +1,25 @@
+{
+  "version": "1",
+  "ok": true,
+  "command": "type",
+  "duration_ms": 0,
+  "data": {
+    "action": "type",
+    "chars": 5,
+    "delivered": 5,
+    "focus_verified": true,
+    "input_effects": {
+      "clipboard": "used",
+      "keyboard": "injected",
+      "pointer": "none"
+    },
+    "resolved": {
+      "name": "Search",
+      "role": "Edit"
+    },
+    "stopped_early": false,
+    "target": "@e3",
+    "value_verified": true,
+    "via": "clipboard-paste"
+  }
+}

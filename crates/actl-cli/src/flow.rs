@@ -22,7 +22,7 @@ fn read_only(cmd: &Command) -> bool {
     matches!(
         cmd,
         Command::Status
-            | Command::ListWindows
+            | Command::ListWindows { .. }
             | Command::Snapshot { .. }
             | Command::Find { .. }
             | Command::Get { .. }

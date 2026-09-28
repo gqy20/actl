@@ -29,6 +29,8 @@ pub enum Phase {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionState {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub handoff_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workflow: Option<WorkflowProgress>,
     #[serde(default)]
     pub version: u32,
@@ -66,6 +68,7 @@ impl SessionState {
         phase: Phase,
     ) -> Self {
         Self {
+            handoff_reason: None,
             workflow: None,
             version: 1,
             call_id: String::new(),

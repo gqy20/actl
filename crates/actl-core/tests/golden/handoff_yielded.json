@@ -1,0 +1,16 @@
+{
+  "version": "1",
+  "ok": false,
+  "command": "type",
+  "error": {
+    "code": "NOT_ACTIONABLE",
+    "message": "desktop handoff required; user must choose Start/Continue in actl, then re-observe before retrying interrupted work",
+    "hint": "wait for explicit user handoff; inspect partial results before retrying; never clear emergency stop automatically",
+    "evidence": {
+      "stage": "handoff",
+      "reason": "human_takeover_or_grant_expired",
+      "retry_input": false
+    }
+  },
+  "duration_ms": 0
+}

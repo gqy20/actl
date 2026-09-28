@@ -51,7 +51,10 @@ actl verify --value <target> "<期望>" --app <app> # 确认:立即断言
    `click @eN --app X` 重试,不必重新 snapshot。
 5. **ref 是树遍历序号，动态界面会漂移**:即使同窗口，通知/弹层/列表变化也可能让 @eN 指向另一控件，
    不保证报 STALE_REF。变化后重新定位并核对名称、角色和内容；写操作优先稳定语义选择器。
-   `--snapshot <id>` 校验窗口实例，不能替代控件身份核验。Zotero 实证见 docs/25。
+   `--snapshot <id>` 现在同时核验窗口与实际命中控件的 RuntimeId/PID/角色/名称/AutomationId。
+   旧快照缺少元素记录时拒绝 ref 重放，重新 snapshot；不带 --snapshot 的 ref 仍只有序号语义。
+   `type --verify-value <完整期望值>` 在同一控件上读回验证；失败可能已输入，不自动重试。
+   `press enter --target <输入框> --app X` 核对现有焦点，不主动切换输入框；可加 --snapshot 绑定 ref。
 6. **人在用电脑时**:注入会被焦点护栏拒绝(PERM_DENIED/部分送达 stopped_early)——
    这是保护,不是 bug;等空闲再试。紧急情况人按 Ctrl+Alt+F12(actl-signal),你的注入会收到 ABORTED。
 
@@ -74,6 +77,12 @@ actl verify --value <target> "<期望>" --app <app> # 确认:立即断言
 ## 弹窗处理协议
 
 弹窗分三类,处理方式不同;判定入口是 `list-windows`(看 `foreground`/`owner_title`/`topmost`):
+
+窗口清单与画面矛盾时，补 `list-windows --native`：原生顶层 HWND 清单包含隐藏和无标题窗口，
+不依赖 UIA 树就绪。它不能证明任意子 HWND 已销毁；不要仅凭默认 UIA 清单缺项宣称窗口关闭。
+确认已知窗口是否销毁应使用 `list-windows --native --hwnd <n>`，支持计算器这类子 HWND。
+batch 的 `windows_created` 是原生前后差集，不是任务归属证明。出现
+`window_observation_error` 时，已执行步骤仍有效，但新增窗口情况未知；先观察，不自动清理或重放写操作。
 
 1. **宿主弹窗(另存为/打开等)**:owner_title 非空 = 挂靠某窗口的对话框。直接
    `snapshot --app <弹窗标题>` → 定位控件操作(文件名走 `set-value`);用
@@ -188,3 +197,14 @@ collector 检索到结论 → actl 实时发消息回应。
 ## 更多
 
 错误码与恢复动作全表:[references/error-codes.md](references/error-codes.md)
+
+
+### 桌面交接（显示 v5）
+
+开始写操作前告知用户会出现「开始 / 继续」提示，使用同一 ACTL_TASK_ID 标识当前任务。
+只允许用户点击授权，不能自动点击、写授权文件或清急停。handoff_pending / user_deferred /
+human_takeover_or_grant_expired 表示让行；停止后续输入，核对部分结果，再等用户交接。
+launch 默认只说明进程启动；可用 --wait-window（选项在程序名前），或显式等待后 focus-window。
+查看 display-status.reason 区分提示端异常；focus-window 的 foreground_not_acquired 不等于要提权。
+
+状态栏右侧暂停不等于急停；flow 的继续会核对结果，单条 CLI/脚本没有自动续跑入口。不要把 Details 按钮当作 Continue，也不要因人工让行而自动重放命令。

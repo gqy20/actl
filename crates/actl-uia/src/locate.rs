@@ -64,7 +64,10 @@ pub fn locate(app: Option<&str>, target: &Target, near: Option<&str>) -> Result<
         let mut counter = 0u32;
         let _t = actl_core::trace::scope("locate.ref-replay");
         return match collect_until_ref(&walker, &root, 0, *n, &mut counter) {
-            Some(hit) => Ok(located_from(hit, window_title, "ref-replay")),
+            Some(hit) => {
+                crate::identity::check_ref(&root, &hit, *n)?;
+                Ok(located_from(hit, window_title, "ref-replay"))
+            }
             None => Err(CtlError::new(
                 ErrorCode::StaleRef,
                 format!(

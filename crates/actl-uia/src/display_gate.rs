@@ -46,6 +46,51 @@ fn alive(l: &actl_core::display::DisplayLease) -> bool {
             || (unsafe { IsWindowVisible(hwnd).as_bool() }
                 && crate::display_support::surface_exposed(hwnd)))
 }
+/// Read-only diagnostics: lease freshness alone does not prove a visible renderer.
+pub fn diagnostics() -> serde_json::Value {
+    use windows::Win32::{
+        Foundation::{LPARAM, WPARAM},
+        UI::WindowsAndMessaging::*,
+    };
+    let paths = SignalPaths::default();
+    let lease = paths.display_lease();
+    let hwnd = unsafe { FindWindowW(w!("actl_signal_window"), None) }.ok();
+    let responsive = hwnd.is_some_and(|h| unsafe {
+        SendMessageTimeoutW(
+            h,
+            WM_NULL,
+            WPARAM(0),
+            LPARAM(0),
+            SMTO_ABORTIFHUNG | SMTO_BLOCK,
+            150,
+            None,
+        )
+        .0 != 0
+    });
+    let reason = match (&lease, hwnd) {
+        (_, None) => "companion_missing",
+        (None, _) => "lease_missing",
+        (Some(l), _)
+            if l.protocol != actl_core::display::DISPLAY_PROTOCOL
+                || l.build != env!("CARGO_PKG_VERSION") =>
+        {
+            "version_mismatch"
+        }
+        (_, _) if !responsive => "companion_unresponsive",
+        (Some(l), _) if !l.compatible(unix_ms()) => "lease_stale",
+        (_, Some(h)) if !unsafe { IsWindowVisible(h).as_bool() } => "hidden",
+        (Some(l), _) if l.state == "capture" => "capture_in_progress",
+        (_, Some(h)) if !crate::display_support::surface_exposed(h) => "covered_or_offscreen",
+        (Some(l), _) if !l.ready(unix_ms()) => "frame_not_ready",
+        (Some(l), _) if !alive(l) => "window_identity_mismatch",
+        _ => "ready",
+    };
+    let popup = std::fs::read(paths.dir.join("popup.json"))
+        .ok()
+        .and_then(|data| serde_json::from_slice::<serde_json::Value>(&data).ok());
+    serde_json::json!({"popup":popup, "ready":reason == "ready", "reason":reason, "lease":lease,
+        "hwnd":hwnd.map(|h|h.0 as isize), "responsive":responsive, "stop_requested":paths.stop_requested()})
+}
 pub fn ensure() -> Result<actl_core::display::DisplayLease, CtlError> {
     let paths = SignalPaths::default();
     if let Some(l) = paths
@@ -54,7 +99,34 @@ pub fn ensure() -> Result<actl_core::display::DisplayLease, CtlError> {
     {
         return Ok(l);
     }
-    // A hidden or incompatible companion is a user-visible condition, not permission to replace it.
+    // Restore only a compatible companion. Replacement is explicit and preserves stop state.
+    if let Some(l) = paths
+        .display_lease()
+        .filter(|l| l.compatible(unix_ms()) && l.state != "capture")
+        && let Ok(hwnd) = unsafe { FindWindowW(w!("actl_signal_window"), None) }
+    {
+        use windows::Win32::{
+            Foundation::{LPARAM, WPARAM},
+            UI::WindowsAndMessaging::*,
+        };
+        let mut pid = 0;
+        unsafe {
+            GetWindowThreadProcessId(hwnd, Some(&mut pid));
+        }
+        if pid == l.pid {
+            unsafe {
+                SendMessageTimeoutW(
+                    hwnd,
+                    actl_core::handoff::RECOVER_MESSAGE,
+                    WPARAM(0),
+                    LPARAM(0),
+                    SMTO_ABORTIFHUNG | SMTO_BLOCK,
+                    500,
+                    None,
+                );
+            }
+        }
+    }
     if unsafe { FindWindowW(w!("actl_signal_window"), None) }.is_err() {
         let exe = std::env::current_exe()
             .map_err(crate::internal)?
@@ -104,8 +176,10 @@ pub fn ensure() -> Result<actl_core::display::DisplayLease, CtlError> {
         }
         std::thread::sleep(Duration::from_millis(25));
     }
-    Err(unavailable(
-        "display not ready: show the status strip and use a matching companion; stop state was preserved",
+    Err(CtlError::with_evidence(
+        ErrorCode::NotActionable,
+        "display not ready; inspect evidence.reason; use a matching companion for version_mismatch; stop state was preserved",
+        diagnostics(),
     ))
 }
 pub(crate) fn wait_presented(

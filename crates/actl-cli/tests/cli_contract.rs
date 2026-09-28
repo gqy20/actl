@@ -50,11 +50,24 @@ fn display_and_desktop_commands_contract() {
     result.as_object_mut().unwrap().remove("duration_ms");
     let golden: serde_json::Value =
         serde_json::from_str(include_str!("golden/display_status.json")).unwrap();
-    assert_eq!(result, golden);
+    // LOCALAPPDATA is isolated, native windows are shared with the real desktop.
+    let present = !result["data"]["hwnd"].is_null();
     assert_eq!(
-        result["data"],
-        serde_json::json!({"ready":false,"lease":null,"stop_requested":false})
+        result["data"]["reason"],
+        if present {
+            "lease_missing"
+        } else {
+            "companion_missing"
+        }
     );
+    assert!(result["data"]["responsive"].is_boolean());
+    if present {
+        assert!(result["data"]["hwnd"].is_i64());
+    }
+    result["data"]["hwnd"] = serde_json::Value::Null;
+    result["data"]["responsive"] = false.into();
+    result["data"]["reason"] = "companion_missing".into();
+    assert_eq!(result, golden);
     for args in [
         vec!["minimize-window"],
         vec!["restore-window"],

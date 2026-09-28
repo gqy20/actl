@@ -58,10 +58,19 @@ struct Fake {
     failures: u32,
     stop_on_check: bool,
     interrupt_check: Option<Store>,
+    handoff: bool,
+    before_start: bool,
 }
 impl Host for Fake {
     fn execute(&mut self, call: &Invocation) -> Result<(), CtlError> {
         self.calls.push(call.command.clone());
+        if call.command == "write" && self.handoff {
+            return Err(CtlError::with_evidence(
+                ErrorCode::NotActionable,
+                "yielded",
+                serde_json::json!({"stage":"handoff","reason":"human_takeover_or_grant_expired", "action_started":!self.before_start}),
+            ));
+        }
         if call.command == "check"
             && let Some(store) = self.interrupt_check.take()
         {
@@ -106,6 +115,8 @@ fn fake() -> Fake {
         failures: 0,
         stop_on_check: false,
         interrupt_check: None,
+        handoff: false,
+        before_start: false,
     }
 }
 
@@ -255,5 +266,41 @@ fn run_state_golden_and_immutable_id() {
         serde_json::from_str(include_str!("golden/run_v1.json")).unwrap();
     assert_eq!(serde_json::to_value(run).unwrap(), expected);
     assert!(Store::at(&root, "../escape").is_err());
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn handoff_pauses_and_does_not_replay_uncertain_action() {
+    let p = plan();
+    let (root, store, mut run) = setup(&p);
+    let mut host = fake();
+    host.handoff = true;
+    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    assert_eq!(run.status, Status::Paused);
+    assert_eq!(
+        run.reason.as_deref(),
+        Some("human_takeover_or_grant_expired")
+    );
+    assert_eq!(run.steps[0].status, StepStatus::Uncertain);
+    host.handoff = false;
+    host.verified = false;
+    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    assert_eq!(host.calls.iter().filter(|x| *x == "write").count(), 1);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn consent_refusal_before_any_action_can_resume_without_replay_override() {
+    let p = plan();
+    let (root, store, mut run) = setup(&p);
+    let mut host = fake();
+    host.handoff = true;
+    host.before_start = true;
+    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    assert_eq!(run.status, Status::Paused);
+    assert_eq!(run.steps[0].status, StepStatus::Pending);
+    host.handoff = false;
+    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    assert_eq!(run.status, Status::Completed);
     std::fs::remove_dir_all(root).unwrap();
 }

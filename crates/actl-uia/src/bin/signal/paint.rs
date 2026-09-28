@@ -106,9 +106,15 @@ unsafe fn raster(view: &View, hovered: bool, dpi: u32) -> Result<Vec<u8>> {
     brush.SetColor(&color(0x383B3E));
     target.DrawRoundedRectangle(&rounded(0.5, 0.5, 279., 33., 9.5), &brush, 0.5, None);
     let status_color = match view.mode {
-        Mode::Preparing | Mode::Unknown | Mode::StopRequested | Mode::Partial => 0xD4B879,
-        Mode::Running => 0x93B4CA,
-        Mode::Failed => 0xE59188,
+        Mode::Preparing
+        | Mode::Unknown
+        | Mode::StopRequested
+        | Mode::Partial
+        | Mode::Paused
+        | Mode::Waiting
+        | Mode::Desktop => 0xD4B879,
+        Mode::Running | Mode::Background => 0x93B4CA,
+        Mode::Failed | Mode::Blocked => 0xE59188,
         Mode::Done => 0x8AB698,
         _ => 0xB4BAC0,
     };
@@ -116,11 +122,7 @@ unsafe fn raster(view: &View, hovered: bool, dpi: u32) -> Result<Vec<u8>> {
     target.FillRoundedRectangle(&rounded(10., 11., 12., 12., 6.), &brush);
     let pending = matches!(view.mode, Mode::StopRequested | Mode::Stopped);
     let label = if hovered && view.mode != Mode::Preparing {
-        match view.mode {
-            Mode::StopRequested => "已请求停止",
-            Mode::Stopped => "已停止",
-            _ => "请求停止",
-        }
+        view.control.label()
     } else {
         &view.label
     };
@@ -171,7 +173,23 @@ unsafe fn raster(view: &View, hovered: bool, dpi: u32) -> Result<Vec<u8>> {
     }));
     target.FillRoundedRectangle(&rounded(250., 5., 26., 24., 6.), &brush);
     brush.SetColor(&color(if pending { 0x757A80 } else { 0xC1C5C8 }));
-    outline(258., 12., 10., 10., 2.);
+    match &view.control {
+        super::model::Control::Pause { .. } => {
+            bar(258., 11., 3., 12.);
+            bar(265., 11., 3., 12.);
+        }
+        super::model::Control::Continue { .. } => {
+            // A triangle formed by progressively shorter vertical strokes.
+            for i in 0..10 {
+                let h = 14. - i as f32 * 1.3;
+                bar(258. + i as f32, 17. - h / 2., 1., h);
+            }
+        }
+        super::model::Control::Details => {
+            outline(258., 12., 10., 10., 5.);
+            bar(262.5, 16., 1., 4.);
+        }
+    }
     target.EndDraw(None, None)?;
     let mut data = vec![0u8; width as usize * height as usize * 4];
     bitmap.CopyPixels(std::ptr::null(), width * 4, &mut data)?;

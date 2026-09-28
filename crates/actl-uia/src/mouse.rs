@@ -48,7 +48,7 @@ fn mouse_event(flags: MOUSE_EVENT_FLAGS, nx: i32, ny: i32, data: i32) -> INPUT {
                 mouseData: data as u32,
                 dwFlags: flags,
                 time: 0,
-                dwExtraInfo: 0,
+                dwExtraInfo: actl_core::handoff::INPUT_TAG,
             },
         },
     }
@@ -56,6 +56,12 @@ fn mouse_event(flags: MOUSE_EVENT_FLAGS, nx: i32, ny: i32, data: i32) -> INPUT {
 
 /// 单批注入:原子性最大化,缩小"检查后窗口移动"的竞态窗。
 fn send_all(inputs: &[INPUT]) -> Result<(), CtlError> {
+    crate::feedback::check_stop()?;
+    send_raw(inputs)
+}
+
+// Cleanup releases remain possible after consent was revoked.
+fn send_raw(inputs: &[INPUT]) -> Result<(), CtlError> {
     let sent = unsafe { SendInput(inputs, std::mem::size_of::<INPUT>() as i32) };
     if sent == inputs.len() as u32 {
         Ok(())
@@ -122,7 +128,7 @@ pub fn drag_to(x1: i32, y1: i32, x2: i32, y2: i32) -> Result<(), CtlError> {
     ]);
     if result.is_err() {
         // 按钮可能仍被按住:尽力释放,结果仍如实上报失败
-        let _ = send_all(&[mouse_event(MOUSEEVENTF_LEFTUP, bx, by, 0)]);
+        let _ = send_raw(&[mouse_event(MOUSEEVENTF_LEFTUP, bx, by, 0)]);
     }
     result
 }

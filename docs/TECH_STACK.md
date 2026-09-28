@@ -137,3 +137,15 @@ WM_CLOSE 和有界等待完成正常替换；句柄在成功/失败路径均释�
 屏幕边缘提示复用 actl-uia 的原生 layered window 与 paint 的预乘 Alpha 提交函数，无新增依赖。
 perimeter 内 unsafe 用于显示器枚举、各屏 DPI、窗口生命周期与绘制；枚举回调只同步写入调用栈内 Vec，
 窗口失败时清理已创建部分，隐藏/退出/截图均销毁。每屏仅存四条窄边像素，不分配全屏动画缓冲。
+
+窗口基线复用现有 windows 依赖：`actl-uia/native_windows` 的 unsafe 仅用于 EnumWindows
+同步回调及读取 HWND 的原生属性。回调 LPARAM 指向调用栈中存活的 Vec，不保留指针，
+不取得窗口所有权、不发送消息、不更改前台。原生枚举错误向上传播，不伪装为空列表。
+
+
+桌面交接复用现有 std + serde_json + windows，无新增依赖。纯授权逻辑位于 actl-core/handoff。
+actl-uia/bin/signal/handoff 的 unsafe 用于原生非激活提示窗口和低级输入 hook：回调仅读取
+系统在回调期提供的 KBDLLHOOKSTRUCT/MSLLHOOKSTRUCT，递增原子序号并始终 CallNextHookEx，
+不持有指针、不做回调内 IO、不屏蔽输入；RAII 卸载 hooks。客户端仅用有界 SendMessageTimeout
+查询，不跨进程传递指针。window_ready 的 unsafe 仅诊断/恢复/核验目标 HWND，不绕过前台限制。
+显示 v5 强制新旧两端兼容；grant 只在显示进程内存，磁盘请求不是授权。

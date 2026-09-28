@@ -1,0 +1,7 @@
+{
+  "version": "1",
+  "ok": true,
+  "command": "list-windows",
+  "duration_ms": "<duration>",
+  "data": {"count": "<count>", "windows": "<windows>"}
+}

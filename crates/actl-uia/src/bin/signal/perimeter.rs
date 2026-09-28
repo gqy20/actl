@@ -26,8 +26,19 @@ fn tone(view: &View, states: &[SessionState], now: u64) -> Option<Tone> {
         .iter()
         .any(|s| s.phase == Phase::Running && now.saturating_sub(s.ts_ms) <= 10_000);
     match view.mode {
-        Mode::Running | Mode::Preparing if fresh => Some(Tone::Running),
+        Mode::Desktop | Mode::Preparing if fresh => Some(Tone::Running),
         Mode::StopRequested if fresh => Some(Tone::Attention),
+        Mode::Paused => Some(
+            if super::model::selected(states, now)
+                .and_then(|s| s.workflow.as_ref())
+                .is_some_and(|f| matches!(f.reason.as_deref(), Some("checkpoint" | "start_paused")))
+            {
+                Tone::Attention
+            } else {
+                Tone::Paused
+            },
+        ),
+        Mode::Blocked => Some(Tone::Attention),
         Mode::Partial | Mode::Failed => super::model::selected(states, now)
             .filter(|s| {
                 s.workflow

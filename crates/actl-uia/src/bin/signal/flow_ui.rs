@@ -163,7 +163,9 @@ pub fn details(paths: &SignalPaths, id: &str) -> String {
     if let Some(reason) = state["reason"].as_str() {
         let reason = match reason {
             "checkpoint" | "start_paused" => "等待确认后继续",
-            "pause_requested" => "用户请求暂停",
+            "pause_requested" | "user_paused" => "用户请求暂停",
+            "human_takeover_or_grant_expired" => "已让行，检测到人工操作或授权过期",
+            "handoff_pending" | "user_deferred" => "等待用户交接",
             "stop_requested" => "用户请求停止",
             "precondition_failed" => "前置条件未满足",
             "action_failed" => "操作失败",
@@ -216,5 +218,28 @@ mod tests {
         std::fs::write(dir.join("state.json"), br#"{"status":"paused"}"#).unwrap();
         assert!(discover(&paths).is_none());
         std::fs::remove_dir_all(paths.dir).unwrap();
+    }
+}
+
+/// A click aimed at Pause must not instantly reverse a just-detected takeover.
+pub fn continue_ready(state: &serde_json::Value, now: u64) -> bool {
+    matches!(state["status"].as_str(), Some("paused" | "needs_review"))
+        && state["updated_ms"]
+            .as_u64()
+            .is_some_and(|t| now >= t && now - t >= 800)
+}
+#[cfg(test)]
+mod continue_tests {
+    use super::*;
+    #[test]
+    fn continuation_requires_settled_paused_state() {
+        let mut s = serde_json::json!({"status":"paused","updated_ms":100});
+        assert!(!continue_ready(&s, 99));
+        assert!(!continue_ready(&s, 899));
+        assert!(continue_ready(&s, 900));
+        for status in ["running", "completed", "stopped", "failed"] {
+            s["status"] = status.into();
+            assert!(!continue_ready(&s, 1000));
+        }
     }
 }

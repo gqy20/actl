@@ -164,7 +164,7 @@ pub(crate) enum Command {
         /// Disambiguate multi-matches by picking the one nearest to this anchor element's name
         #[arg(long)]
         near: Option<String>,
-        /// Validate ref replay against this snapshot id (window-instance check)
+        /// Validate window and ref element identities against this snapshot id
         #[arg(long)]
         snapshot: Option<String>,
         /// Physically move the mouse and click at the UIA clickable point
@@ -194,12 +194,18 @@ pub(crate) enum Command {
         /// Disambiguate multi-matches by picking the one nearest to this anchor element's name
         #[arg(long)]
         near: Option<String>,
-        /// Validate ref replay against this snapshot id (window-instance check)
+        /// Validate window and ref element identities against this snapshot id
         #[arg(long)]
         snapshot: Option<String>,
     },
     /// Launch a program with optional arguments
     Launch {
+        /// Wait for a unique native window title match, restore and verify foreground
+        #[arg(long)]
+        wait_window: Option<String>,
+        /// Window readiness timeout in milliseconds (requires --wait-window)
+        #[arg(long, requires = "wait_window", value_parser = clap::value_parser!(u64).range(1..=60000))]
+        timeout: Option<u64>,
         /// Program and arguments (everything after `launch`)
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
@@ -216,13 +222,16 @@ pub(crate) enum Command {
         /// Disambiguate multi-matches by picking the one nearest to this anchor element's name
         #[arg(long)]
         near: Option<String>,
-        /// Validate ref replay against this snapshot id (window-instance check)
+        /// Validate window and ref element identities against this snapshot id
         #[arg(long)]
         snapshot: Option<String>,
         /// Deliver via clipboard + ctrl+v (the only reliable text channel
         /// under a Chinese-mode IME; uses the shared clipboard, reported in output)
         #[arg(long)]
         paste: bool,
+        /// Read back the complete value on the same element within 2s; never repeats input
+        #[arg(long)]
+        verify_value: Option<String>,
     },
     /// Capture pixels as a PNG file (explicit fallback when UIA is blind)
     Screenshot {
@@ -258,6 +267,12 @@ pub(crate) enum Command {
     Press {
         /// Key expression: ctrl+s, ctrl+shift+t, enter, f5 ...
         keys: String,
+        /// Assert this exact element already has focus; do not refocus or guess a field
+        #[arg(long)]
+        target: Option<String>,
+        /// Bind a target ref to its snapshot identity
+        #[arg(long, requires = "target")]
+        snapshot: Option<String>,
         /// Target window by title substring (required: injection is global and
         /// unguarded without a pinned target — fail-closed)
         #[arg(long)]
@@ -282,7 +297,7 @@ pub(crate) enum Command {
         /// Disambiguate multi-matches by picking the one nearest to this anchor element's name
         #[arg(long)]
         near: Option<String>,
-        /// Validate ref replay against this snapshot id (window-instance check)
+        /// Validate window and ref element identities against this snapshot id
         #[arg(long)]
         snapshot: Option<String>,
     },
@@ -462,7 +477,14 @@ pub(crate) enum Command {
         hwnd: Option<String>,
     },
     /// List top-level windows (title, class, pid)
-    ListWindows,
+    ListWindows {
+        /// Enumerate Win32 HWNDs directly, including hidden and untitled windows; no UIA dependency
+        #[arg(long)]
+        native: bool,
+        /// Read exactly this HWND (including child windows); requires --native
+        #[arg(long, requires = "native")]
+        hwnd: Option<String>,
+    },
     /// Find elements by condition (token-saving targeted search vs snapshot)
     Find {
         /// Match element name containing this substring
@@ -618,7 +640,7 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
         Command::Toggle { .. } => "toggle",
         Command::FocusWindow { .. } => "focus-window",
         Command::CloseWindow { .. } => "close-window",
-        Command::ListWindows => "list-windows",
+        Command::ListWindows { .. } => "list-windows",
         Command::Find { .. } => "find",
         Command::GetClipboard => "get-clipboard",
         Command::SetClipboard { .. } => "set-clipboard",
@@ -654,10 +676,10 @@ fn after_help_for(name: &str) -> Option<&'static str> {
             "Example:\n  actl history --task report-01 --step submit --reports --limit 20\nContent-minimal events, newest calls first. Incomplete means running, interrupted or truncated.\nErrors: PROTOCOL invalid task/limit | INTERNAL storage failure"
         }
         "display-status" => {
-            "Example:\n  actl display-status\nReports readiness, lease, and sticky stop state; never starts the companion.\nErrors: INTERNAL unavailable state storage"
+            "Example:\n  actl display-status\nReports native readiness, reason, lease, popup diagnostics, and sticky stop state; never starts the companion.\nErrors: INTERNAL unavailable state storage"
         }
         "display-start" => {
-            "Example:\n  actl display-start\nStarts sibling actl-signal.exe only if missing; waits up to 4s for a matching visible frame. Does not clear stop.\nErrors: NOT_ACTIONABLE missing/hidden/incompatible display | INTERNAL launch failure"
+            "Example:\n  actl display-start\nStarts sibling actl-signal.exe if missing; restores a hidden/offscreen matching display; waits up to 4s for a matching visible frame. Does not clear stop.\nErrors: NOT_ACTIONABLE missing/hidden/incompatible display | INTERNAL launch failure"
         }
         "minimize-window" => {
             "Example:\n  actl minimize-window --hwnd 12345\nExactly one title, --pid or --hwnd. Only ordinary unowned windows.\nErrors: PROTOCOL missing selector | NOT_FOUND | AMBIGUOUS | NOT_ACTIONABLE | ABORTED"
@@ -685,10 +707,10 @@ fn after_help_for(name: &str) -> Option<&'static str> {
             "Example:\n  actl get name:状态 --app 设置 --property value\nProperties: name role automation_id offscreen value text (text = TextPattern body; Chromium Document value is the URL).\nErrors: PROTOCOL unknown property | NOT_FOUND no match | AMBIGUOUS multi-match"
         }
         "launch" => {
-            "Example:\n  actl launch notepad\nNote: no already-running detection; use focus-window for an existing window.\nErrors: NOT_FOUND program not found"
+            "Example:\n  actl launch notepad\nOptional: actl launch --wait-window Notepad --timeout 5000 notepad\nOptions precede the program. Default returns window_ready:false (process started only). --wait-window matches an explicit title, reports matched PID/HWND, and verifies foreground; no automatic relaunch. For an existing instance use focus-window.\nErrors: NOT_FOUND program | TIMEOUT no window | AMBIGUOUS multiple windows | NOT_ACTIONABLE handoff/activation | ABORTED stop"
         }
         "type" => {
-            "Example:\n  actl type id:Edit 'hello world' --app Notepad --paste\n--paste: clipboard+ctrl+v, the only reliable channel under a Chinese-mode IME (uses the shared clipboard, reported in output).\nErrors: PROTOCOL --app required (injection is fail-closed) | PERM_DENIED foreground guard aborted | NOT_FOUND / AMBIGUOUS target | NOT_ACTIONABLE cannot take focus"
+            "Example:\n  actl type id:Edit 'hello world' --app Notepad --paste\n--verify-value <expected>: poll the same element for an exact complete value for up to 2s after input; no write retries.\n--paste: clipboard+ctrl+v, the only reliable channel under a Chinese-mode IME (uses the shared clipboard, reported in output).\nErrors: PROTOCOL --app required (injection is fail-closed) | NOT_ACTIONABLE foreground guard aborted | NOT_FOUND / AMBIGUOUS target | NOT_ACTIONABLE cannot take or verify exact focus | STALE_REF identity changed | ASSERTION_FAILED --verify-value readback failed (input may already be delivered)"
         }
         "screenshot" => {
             "Example:
@@ -711,7 +733,7 @@ file-manager rename, selected items. Deliberately does NOT focus an element
 Errors: PROTOCOL --app required | PERM_DENIED foreground guard | NOT_FOUND window"
         }
         "press" => {
-            "Example:\n  actl press ctrl+s --app Notepad --expect window:另存为\n--expect = a NEW window must appear (pre-existing same-title does not count).\nErrors: PROTOCOL --app required or bad key expr | PERM_DENIED foreground guard aborted | ASSERTION_FAILED --expect window never appeared"
+            "Example:\n  actl press ctrl+s --app Notepad --expect window:另存为\n--target <selector>: assert this element already has keyboard focus, without refocusing. --snapshot binds a target ref to its captured identity.\n--expect = a NEW window must appear (pre-existing same-title does not count).\nErrors: PROTOCOL --app required or bad key expr | NOT_ACTIONABLE foreground guard aborted | ASSERTION_FAILED --expect window never appeared | NOT_ACTIONABLE target focus mismatch | STALE_REF snapshot identity changed"
         }
         "set-value" => {
             "Example:\n  actl set-value id:1001 'report.txt' --app 另存为\nUIValue direct write, no keyboard (vs type).\nErrors: NOT_FOUND / AMBIGUOUS target | NOT_ACTIONABLE no Value pattern (try type)"
@@ -771,7 +793,7 @@ Errors: NOT_FOUND / AMBIGUOUS | NOT_ACTIONABLE no clickable point or occluded"
             "Example:\n  actl close-window 记事本\nGraceful WM_CLOSE (unsaved work may prompt).\nErrors: NOT_FOUND / AMBIGUOUS window | NOT_ACTIONABLE no native handle"
         }
         "list-windows" => {
-            "Example:\n  actl list-windows\nEach entry: title/class/pid + stacking facts (foreground, topmost, minimized, visible, z_order 0=top, rect, owner_title)."
+            "Example:\n  actl list-windows\n  actl list-windows --native\n  actl list-windows --native --hwnd 123\nEach entry: title/class/pid + stacking facts (foreground, topmost, minimized, visible, z_order 0=top, rect, owner_title).\n--native reads Win32 top-level HWNDs without UIA, including hidden/untitled windows; not a list of task-owned resources. --hwnd requires --native and directly queries one handle, including child windows.\nErrors: INTERNAL native observation failed; never substituted with an empty list | PROTOCOL invalid HWND"
         }
         "find" => {
             "Example:\n  actl find --name 保存 --role button --app 记事本\nRefs interchangeable with snapshot @eN. Zero realized hits + exact name/id falls through to virtualized containers (resolved_by: item-container).\nErrors: PROTOCOL needs >=1 filter | NOT_FOUND nothing matches"
@@ -786,7 +808,7 @@ Errors: NOT_FOUND / AMBIGUOUS | NOT_ACTIONABLE no clickable point or occluded"
             "Example:\n  actl wait --element name:完成 --property value=OK --timeout 8000 --app 应用\n  actl wait --element role:Document --stable --app Edge\nPredicates: value=<expected> | name=<substr> | text=<expected> | checked=on|off; --contains for substring; existence implied.\n--stable waits until the element's observed sample (text > value > name) stops changing\nacross consecutive polls — settle detection after scroll/navigation.\nErrors: TIMEOUT predicate unmet, element absent, or content still changing | PROTOCOL bad predicate | ASSERTION_FAILED (--window)"
         }
         "batch" => {
-            "Example:\n  actl batch --json '[\"focus-window Notepad\",\"press ctrl+s --app Notepad\"]'\nStops on first error; steps[] carries per-step ok/duration (partial steps ride the error evidence); windows_created reports windows opened during the run (cleanup: close-window --pid/--hwnd); steps may carry blocked_by when an unexpected window holds the foreground.\nErrors: PROTOCOL bad JSON/nesting | the first failing step's code is propagated"
+            "Example:\n  actl batch --json '[\"focus-window Notepad\",\"press ctrl+s --app Notepad\"]'\nStops on first error; steps[] carries per-step ok/duration. windows_created is the native HWND difference, not proof of task ownership. A final inventory failure preserves steps and reports window_observation_error instead of windows_created. steps may carry blocked_by for an unexpected foreground window.\nErrors: PROTOCOL bad JSON/nesting | INTERNAL initial native enumeration failed (no steps run) | the first failing step's code is propagated"
         }
         _ => return None,
     })

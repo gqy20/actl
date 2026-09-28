@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod activity;
 pub mod display;
+pub mod handoff;
 pub mod history;
 pub mod keys;
 pub mod reports;
@@ -187,7 +188,9 @@ impl ErrorEnvelope {
             error: ErrorBody {
                 code: err.code,
                 message: err.message.clone(),
-                hint: Some(err.code.recovery_hint().to_owned()),
+                hint: Some(if err.evidence.as_ref().is_some_and(|e| e["stage"] == "handoff") {
+                    "wait for explicit user handoff; inspect partial results before retrying; never clear emergency stop automatically"
+                } else { err.code.recovery_hint() }.to_owned()),
                 evidence: err.evidence.clone(),
             },
             duration_ms,

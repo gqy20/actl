@@ -1,0 +1,5 @@
+{
+  "executed": 1,
+  "steps": [{"i": 0, "cmd": "status", "ok": true, "duration_ms": 0}],
+  "window_observation_error": {"code": "INTERNAL", "message": "enumeration failed"}
+}

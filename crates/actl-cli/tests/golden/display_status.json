@@ -1,1 +1,14 @@
-{"version":"1","ok":true,"command":"display-status","data":{"ready":false,"lease":null,"stop_requested":false}}
+{
+  "version": "1",
+  "ok": true,
+  "command": "display-status",
+  "data": {
+    "ready": false,
+    "lease": null,
+    "stop_requested": false,
+    "hwnd": null,
+    "responsive": false,
+    "reason": "companion_missing",
+    "popup": null
+  }
+}

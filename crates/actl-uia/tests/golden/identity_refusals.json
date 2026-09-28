@@ -1,0 +1,69 @@
+[
+  {
+    "version": "1",
+    "ok": false,
+    "command": "get",
+    "error": {
+      "code": "STALE_REF",
+      "message": "snapshot element identity changed or unavailable; refresh the snapshot",
+      "hint": "run `snapshot` to refresh refs, then retry",
+      "evidence": {
+        "ref": "@e3",
+        "expected": {
+          "runtime_id": [
+            42,
+            7
+          ],
+          "pid": 123,
+          "role": "Edit",
+          "automation_id": "search",
+          "name": "Search"
+        },
+        "current": {
+          "runtime_id": [
+            42,
+            8
+          ],
+          "pid": 123,
+          "role": "Edit",
+          "automation_id": "search",
+          "name": "Search"
+        }
+      }
+    },
+    "duration_ms": 0
+  },
+  {
+    "version": "1",
+    "ok": false,
+    "command": "press",
+    "error": {
+      "code": "NOT_ACTIONABLE",
+      "message": "keyboard focus is not the intended element; input refused",
+      "hint": "scroll or focus the element first; for value writes consider `set-value`",
+      "evidence": {
+        "expected": {
+          "runtime_id": [
+            42,
+            7
+          ],
+          "pid": 123,
+          "role": "Edit",
+          "automation_id": "search",
+          "name": "Search"
+        },
+        "current": {
+          "runtime_id": [
+            42,
+            8
+          ],
+          "pid": 123,
+          "role": "Edit",
+          "automation_id": "search",
+          "name": "Search"
+        }
+      }
+    },
+    "duration_ms": 0
+  }
+]

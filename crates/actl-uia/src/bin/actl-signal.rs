@@ -5,6 +5,8 @@
 mod controls;
 #[path = "signal/flow_ui.rs"]
 mod flow_ui;
+#[path = "signal/handoff.rs"]
+mod handoff;
 #[path = "signal/icon.rs"]
 mod icon;
 #[path = "signal/model.rs"]

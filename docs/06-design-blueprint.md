@@ -73,7 +73,7 @@ find --role button [--name "确定"]   # 条件查元素(带 ref);与 snapshot �
 get @e3 [--property p] [--raw]      # 读元素属性;--raw 全量含 pattern 支持(合并原 inspect)
                                      # property 白名单含 text(TextPattern 文档正文专用通道,
                                      # 与 value 分工:Chromium 的 Document Value=URL 会掩盖正文)
-list-windows / list-surfaces        # 窗口/虚拟桌面枚举(list-surfaces 未实现)
+list-windows [--native [--hwnd <n>]] / list-surfaces # 窗口/虚拟桌面枚举(list-surfaces 未实现)
                                      # list-windows 附物理层叠放事实:foreground / topmost /
                                      # minimized / visible / z_order(0=最顶) / rect / owner_title
                                      # (rect 为物理像素,PMv2 口径——与 screenshot/xy: 同坐标系)
@@ -123,6 +123,23 @@ batch --json '<commands>'   # 单进程内顺序执行,共享 snapshot;每步结
                              # 清理地基;生命周期归编排层,CLI 不代管);
                              # 步前弹窗闸门:前台非基线且不匹配本批 --app → steps 附 blocked_by(warning)
 ```
+
+窗口诊断与批处理基线（2026-09-28）：
+
+- `list-windows` 保持 UIA 枚举；`list-windows --native` 使用 Win32 EnumWindows，
+  不依赖 UIA 初始化，返回包含隐藏、无标题窗口的原生顶层窗口列表；沿用默认模式字段，省略 z_order。
+  显示端自身窗口仍排除。子 HWND 不属于这个列表，不能用它证明任意子控件已销毁。
+  `--native --hwnd <n>` 改为原生直接查询指定句柄，支持子窗口：存在时返回一项，已销毁时返回空列表。
+  该参数必须与 --native 一起使用，格式错误返回 PROTOCOL；查询期间身份变化且句柄仍存在时返回错误。
+  `visible` 仅反映 Win32 可见样式，不等于实际屏幕可见或文档仍打开。
+- 原生枚举失败返回 `INTERNAL`，不转为空列表。窗口可能在采样期间创建或销毁，列表不是桌面事务快照。
+- `batch` 开始与结束均用原生枚举。初始枚举失败时直接返回错误，尚未执行任何步骤。
+  `blocked_by` 的 `hwnd:` 目标按句柄比较，普通目标保持标题子串匹配。
+- 最终枚举成功时，`windows_created` 为前后 HWND 差集，允许空数组；只表示新观察到的原生窗口，
+  不证明任务归属，不足以授权关闭。HWND 生命周期复用及期间创建又关闭的窗口不由差集解决。
+- 最终枚举失败时，不输出 `windows_created`，改为 `window_observation_error: {code,message}`。
+  已完成步骤仍保留；步骤全成功时该字段在 `data` 中，已有步骤失败时在 `error.evidence` 中，
+  不覆盖原步骤错误。调用方必须将窗口结果视为未知，不得重放写操作或自动清理。
 
 ### 3.5 帮助系统规范(`-h` 的设计与层级)
 
@@ -417,3 +434,77 @@ NOT_ACTIONABLE 显示或窗口未就绪；ABORTED 用户停止；INTERNAL 持久
   history --reports 返回任务级报告及查询时的证据可用性，不代替业务核验。
 
 完整 YAML 与写后验证示例见 docs/20 §6 和 fixtures/flows/calculator-verified.yml。
+
+
+### 控件身份与输入焦点补充（2026-09-28）
+
+- `snapshot`/`find` 在本地快照记录中按同次完整 DFS 的 ref 顺序保存控件 RuntimeId、PID、
+  role、name、AutomationId；投影不重编号，输出 envelope 的元素形状保持不变。快照落盘失败返回 INTERNAL。
+- `click/type/set-value/get --snapshot <id>`：窗口实例校验后，在实际 locate 命中的 ref 上
+  比对上述身份。任一不符或缺少有效 RuntimeId/PID，返回 `STALE_REF`，不自动按名称写入另一个控件。
+  旧快照没有元素身份记录时，ref 重放同样拒绝。无 `--snapshot` 的 ref 仍是兼容的序号重放。
+  语义选择器每次重新定位；`--snapshot` 与语义选择器组合仅校验窗口，不绑定某个历史控件。
+- RuntimeId 是当前实例身份，不是跨启动永久 ID。UIA 树采样和注入不是原子事务，无法消除最后检查后
+  的外部竞态，也不能检测 provider 将同一身份和相同元数据复用于不同业务对象。
+- `type`：SetFocus 后同时核对 UIA 具体控件 RuntimeId/PID 与现有原生前台、焦点锚点。
+  注入边界继续检查两种焦点；provider 无法证明焦点时返回 `NOT_ACTIONABLE`，不降级为仅窗口匹配。
+- `type <target> <text> --app X [--paste] [--snapshot ID] [--verify-value <expected>]`：
+  可选在原控件上最多等待 2000ms，ValuePattern 优先、不可用时 TextPattern，精确比较完整字符串，
+  包括空串和换行，不归一化、不重复输入。成功新增 `focus_verified:true`，`value_verified:true`；
+  未要求读回时后者为 null。读回不符/不可读返回 `ASSERTION_FAILED`；实例改变返回 `STALE_REF`。
+  错误 evidence 含 delivered/value_verified；输入可能已经生效，调用方先核实，不能直接重放。
+- `press <keys> --app X [--target <selector>] [--snapshot ID]`：`--snapshot` 要求 `--target`。
+  指定目标时只断言其已拥有焦点，不切换窗口、不 SetFocus、不猜测首个 Edit；不符返回
+  `NOT_ACTIONABLE`，尚未发键。目标歧义遵循现有 `AMBIGUOUS`，ref 可绑定快照身份。
+  成功新增 `focus_verified`，有目标为 true、无目标为 false。原 `--expect/--timeout` 继续适用。
+  无目标的 press 保持现有窗口级行为。
+- 键盘沿用 §1 的显式 `--app` 授权；鼠标物理路径仍要求 `--physical`。
+
+
+### 桌面交接与窗口就绪（2026-09-28，显示协议 v4）
+
+完整规则见 [32-desktop-handoff.md](32-desktop-handoff.md)。动作反馈门禁在展示动作前要求
+人工点击任务交接窗口，25 秒未响应返回 NOT_ACTIONABLE；ACTL_TASK_ID / flow ID 范围内
+可短期复用，输入活动、60 秒空闲、10 分钟总长、急停及显示端重启撤销。无任务 ID 只限单调用。
+物理鼠标仍须显式 --physical。只读观察不再偷偷唤醒窗口。
+
+错误 evidence.stage=handoff，reason 为 handoff_pending / user_deferred /
+human_takeover_or_grant_expired / companion_missing / companion_unresponsive /
+request_rejected / missing_session / handoff_panel_unavailable / input_monitor_unavailable；retry_input=false。
+flow 因交接中断保存 paused，写步骤 uncertain，恢复先验证而不自动重放。
+分段注入失败保留 delivered_before_error（已确认的前缀）及 failed_segment_size。
+
+focus-window 成功须验证原生前台根 HWND；错误按 window_prepare 阶段报告具体 reason，
+前台不匹配属于 NOT_ACTIONABLE，不代表权限不足。
+launch 新增 --wait-window <标题子串> 与 --timeout <1..60000 毫秒>（默认 5000，要求前者），
+选项置于程序之前。默认结果新增 window_ready:false；等待成功新增 window 对象
+{hwnd,pid,title,foreground:true,matched_by:"title"}，window_ready:true。
+匹配不证明窗口来自新 PID；失败 evidence 保留 spawned_pid/process_started/relaunch:false。
+不自动重启、重复注入、清急停或跨权限强行激活。
+
+display-status 新增 reason/hwnd/responsive/popup，ready 同时校验真实可见窗口、进程身份及租约。
+display-start 可对兼容显示端无激活恢复及位置校正；版本不符仍拒绝并保留停止状态。
+popup 是最后一次菜单/详情诊断，带 ts_ms/pid，不代表当前存在。显示 v4 租约 golden 替代 v3。
+
+wait --window 的标题出现轮询改用原生可见顶层窗口枚举，避免 UIA provider 阻塞协作暂停；不激活窗口，失败不伪装成空列表。
+
+
+### 暂停与继续控制（显示协议 v5）
+
+显示租约升级 v5，避免旧版方框按钮仍执行急停。SessionState 新增可选 handoff_reason，
+旧记录缺省 None；人工交接事件同时刷新状态和历史，allowed 清除该字段。
+右侧按钮按当前状态显示暂停、检查并继续或详情：按下时绑定调用/流程，释放时不改绑其他任务。
+暂停只撤销该调用授权（返回 handoff reason=user_paused）并请求 flow-pause，不写 stop-requested；
+拖动状态条也只请求暂停。紧急停止仍由菜单、Ctrl+Alt+F12 或关闭显示端显式触发。
+
+只有 paused / needs_review 流程提供继续；点击前重读存档状态，停止标记存在时拒绝，
+同一次点击授予这个 flow ID 的短期桌面授权并执行 flow-resume，不自动清急停。
+已完成/已停止/缺失/发生变化的任务不续跑。单 CLI 和普通脚本没有续跑入口，显示详情并说明
+需由调用方核对结果，按钮不宣称已恢复。
+
+第一次交接在任何动作开始前被拒绝时，handoff 错误证据增加 action_started:false，flow 保存
+步骤为 pending，显式继续后可执行；其他情况保持 uncertain，恢复先验证，不能确认则 needs_review，
+不自动重放。状态文案区分后台处理（明确的只读观察）、桌面操作、等待交接、暂停让行与条件阻塞；
+UIA 写操作也按桌面操作显示，不能仅因无物理键鼠就声称可并发操作。
+
+继续入口要求暂停状态至少稳定 800ms，避免移鼠标去暂停时触发让行、紧接着的点击却反向恢复；时钟回退时不放行。

@@ -39,6 +39,7 @@ impl Drop for KeyboardAnchor {
 }
 pub(crate) fn check_keyboard_anchor() -> Result<(), CtlError> {
     check_stop()?;
+    crate::identity::check_focus_anchor()?;
     if let Some(expected) = KEYBOARD_ANCHOR.with(|a| a.get())
         && physical_focus()? != expected
     {
@@ -84,7 +85,8 @@ pub(crate) fn check_stop() -> Result<(), CtlError> {
             "stop requested before action; clear the flag explicitly to allow new actions",
         ))
     } else {
-        crate::display_gate::check_active()
+        crate::display_gate::check_active()?;
+        crate::handoff::check()
     }
 }
 
@@ -124,6 +126,7 @@ pub(crate) fn prepare(
 ) -> Result<ActionGuard, CtlError> {
     check_stop()?;
     let lease = crate::display_gate::ensure()?;
+    crate::handoff::prepare(target.window.as_deref().unwrap_or(kind))?;
     let guard = ActionGuard::begin(kind, effects, target);
     if guard.is_recording() {
         crate::display_gate::wait_presented(&guard, &lease.epoch)?;

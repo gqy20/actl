@@ -10,6 +10,7 @@ struct Publisher {
     paths: SignalPaths,
     state: SessionState,
     journal: Option<crate::history::Journal>,
+    task: Option<String>,
 }
 impl Publisher {
     fn event(&mut self, event: &str, data: serde_json::Value) {
@@ -59,7 +60,7 @@ impl SignalSession {
         let journal = if command == "history" {
             None
         } else {
-            match crate::history::Journal::open(&paths.dir, &state.call_id, task) {
+            match crate::history::Journal::open(&paths.dir, &state.call_id, task.clone()) {
                 Ok(journal) => Some(journal),
                 Err(e) => {
                     eprintln!("[actl-history] INTERNAL: history unavailable: {e}");
@@ -71,6 +72,7 @@ impl SignalSession {
             paths,
             state,
             journal,
+            task,
         }));
         CURRENT.with(|c| *c.borrow_mut() = Arc::downgrade(&publisher));
         if let Ok(mut p) = publisher.lock() {
@@ -263,4 +265,29 @@ impl Drop for ActionGuard {
             });
         }
     }
+}
+
+/// Identity shared by commands in ACTL_TASK_ID / one flow run.
+pub fn handoff_identity() -> Option<(String, String)> {
+    CURRENT.with(|c| {
+        let p = c.borrow().upgrade()?;
+        let p = p.lock().ok()?;
+        Some((
+            p.state.call_id.clone(),
+            p.task.clone().unwrap_or_else(|| p.state.call_id.clone()),
+        ))
+    })
+}
+
+/// Content-free handoff transitions in the existing per-call journal.
+pub fn handoff_event(reason: &str) {
+    CURRENT.with(|c| {
+        if let Some(shared) = c.borrow().upgrade()
+            && let Ok(mut publisher) = shared.lock()
+        {
+            publisher.state.handoff_reason = (reason != "allowed").then(|| reason.to_owned());
+            publisher.event("handoff", serde_json::json!({"reason":reason}));
+            publisher.publish();
+        }
+    });
 }

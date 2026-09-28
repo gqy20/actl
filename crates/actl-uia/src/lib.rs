@@ -20,19 +20,27 @@ pub mod desktop;
 pub mod display_gate;
 pub mod display_support;
 mod feedback;
+mod handoff;
+mod identity;
+mod input_verify;
 mod locate;
+pub use identity::ReplayGuard;
+mod native_windows;
 mod pointer;
 mod read;
 mod window;
+mod window_ready;
+pub use window_ready::wait_window_ready;
 
 pub mod input;
 pub mod kbd;
 pub mod mouse;
 pub use capture::{ShotResult, screenshot_element, screenshot_rect, screenshot_window};
+pub use native_windows::{native_window, native_windows};
 
 pub use action::{
     InputResult, TypeOutcome, click, paste, press_half, press_half_with_direction, press_keys,
-    select_option, set_value, toggle_element, type_text,
+    press_keys_targeted, select_option, set_value, toggle_element, type_text,
 };
 pub use locate::{
     Located, StableOutcome, WaitPredicate, WaitProp, locate, wait_element, wait_gone,

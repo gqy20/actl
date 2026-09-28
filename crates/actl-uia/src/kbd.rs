@@ -80,7 +80,7 @@ fn vk_event(vk: VIRTUAL_KEY, up: bool) -> INPUT {
                 wScan: scan,
                 dwFlags: if up { KEYEVENTF_KEYUP } else { KEYDOWN },
                 time: 0,
-                dwExtraInfo: 0,
+                dwExtraInfo: actl_core::handoff::INPUT_TAG,
             },
         },
     }
@@ -99,7 +99,7 @@ fn uni_event(ch: u16, up: bool) -> INPUT {
                     KEYEVENTF_UNICODE
                 },
                 time: 0,
-                dwExtraInfo: 0,
+                dwExtraInfo: actl_core::handoff::INPUT_TAG,
             },
         },
     }

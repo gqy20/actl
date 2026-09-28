@@ -105,7 +105,19 @@ where
         if done > 0 && !focus_ok() {
             return Ok(done);
         }
-        send(seg)?;
+        if let Err(mut error) = send(seg) {
+            let mut evidence = error
+                .evidence
+                .take()
+                .unwrap_or_else(|| serde_json::json!({}));
+            if !evidence.is_object() {
+                evidence = serde_json::json!({"cause":evidence});
+            }
+            evidence["delivered_before_error"] = done.into();
+            evidence["failed_segment_size"] = seg.len().into();
+            error.evidence = Some(evidence);
+            return Err(error);
+        }
         done += seg.len();
     }
     Ok(done)
@@ -175,7 +187,7 @@ mod tests {
     }
 
     #[test]
-    fn segment_error_propagates_with_done_loss() {
+    fn segment_error_preserves_delivered_prefix() {
         let items: Vec<usize> = vec![1, 2, 3, 4];
         let err = send_in_segments(
             &items,
@@ -191,5 +203,6 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(err.code, ErrorCode::Internal);
+        assert_eq!(err.evidence.as_ref().unwrap()["delivered_before_error"], 2);
     }
 }
