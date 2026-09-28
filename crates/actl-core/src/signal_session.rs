@@ -48,7 +48,17 @@ impl SignalSession {
         app: Option<&str>,
         task: Option<String>,
     ) -> Self {
-        let _ = paths.read_calls();
+        let _trace = crate::trace::scope("session.start");
+        let calls = paths.dir.join("calls");
+        let maintenance = std::fs::create_dir_all(&calls).and_then(|()| {
+            crate::maintenance::periodic_with_interval(&calls, unix_ms(), 1000, || {
+                let _ = paths.read_calls();
+                Ok(())
+            })
+        });
+        if let Err(error) = maintenance {
+            eprintln!("[actl-signal] INTERNAL: snapshot retention unavailable: {error}");
+        }
         let mut state = SessionState::now(std::process::id(), command, app, None, Phase::Running);
         state.version = 2;
         state.call_id = format!(

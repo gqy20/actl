@@ -56,7 +56,9 @@ impl Journal {
         }
         let dir = root.join("history");
         fs::create_dir_all(&dir)?;
-        cleanup(&dir, 7 * DAY, 64 * 1024 * 1024)?;
+        crate::maintenance::periodic(&dir, crate::state::unix_ms(), || {
+            cleanup(&dir, 7 * DAY, 64 * 1024 * 1024)
+        })?;
         let file = OpenOptions::new()
             .write(true)
             .create_new(true)

@@ -13,6 +13,7 @@ pub mod history;
 pub mod keys;
 pub mod log_health;
 pub mod log_integrity;
+mod maintenance;
 pub mod reports;
 pub mod selector;
 pub mod signal_session;
