@@ -106,7 +106,20 @@ quirks:
     note: 平台风控是现实——注入虽是人类级信号(SendInput/剪贴板,无 CDP 指纹),
           但机器速率的连续"滚动-读取"循环可能触发行为检测;采集类任务控制
           节奏,重要账号操作前确认
+  - id: github_single_rootwebarea
+    note: 主文档识别因站而异(2026-09-28 GitHub releases 页实测:窗口内 6 个
+          role:Document,但 id:RootWebArea 唯一且 name=页面名,可直接精确定位;
+          与 xhs 的 2×RootWebArea AMBIGUOUS 相反)。页面级文本契约先 find
+          枚举确认结构,再决定用 id:RootWebArea 还是序数
 routes:
+  - id: window_title_read
+    description: 读浏览器窗口标题(=当前标签页页面名+浏览器后缀;标签切换标题随变)
+    status: verified
+    verify: 标题含页面名与 "- Google Chrome" 后缀;多窗口时 AMBIGUOUS 拒绝。
+      2026-09-28 Chrome 真机验证(release-review-draft 流程读段,窗口根
+      uia 组合定位与标题输出绑定)
+    steps:
+      - ["get", "uia:{\"match\":{\"role\":\"Window\"}}", "--property", "name", "--app", "{window}"]
   - id: read_page
     description: 读当前页正文(单文档页;多文档页见 read_page_multidoc)
     status: verified

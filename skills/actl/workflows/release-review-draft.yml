@@ -1,0 +1,90 @@
+# yaml-language-server: $schema=../../schemas/flow-v1.schema.json
+# 业务流程:读取已打开的 actl Releases 页(Chrome),在 Word 新文档生成核对草稿并落盘。
+# 前置条件:
+#   1. Chrome 已打开发布页,且它是 Chrome 的当前标签页(窗口标题含 Releases · gqy20/actl);
+#      出现多个标题含 Google Chrome 的窗口时会 AMBIGUOUS 拒绝,须先收窄
+#   2. 本机未打开其他 Word 窗口(launch 的窗口核验按标题子串匹配)
+# 副作用与边界:
+#   - type --paste 使用系统剪贴板,会覆盖当前剪贴板内容
+#   - 草稿保存为 Word 默认文档目录下的 actl-release-draft.docx,同名覆盖:
+#     它是"当前核对状态",不是历史留痕,需要留痕请自行改名归档
+#   - 读段(前两步)只读;写段从 open_word 检查点开始,需要 actl 显示端的人工开始授权
+version: 1
+name: 生成 actl 发布页核对草稿
+steps:
+  - id: locate_page
+    title: 读取发布页窗口标题
+    retry: stale_read
+    run:
+      command: get
+      args: ['uia:{"match":{"role":"Window"}}', '--property', 'name', '--app', 'Google Chrome']
+    outputs:
+      page_title: {pointer: /properties/name, type: string, max_age_ms: 1800000}
+  - id: page_contract
+    title: 页面内容契约
+    retry: stale_read
+    run:
+      command: verify
+      args: ['--value', 'id:RootWebArea', 'actl', '--property', 'text', '--contains', '--app', 'Google Chrome']
+  - id: open_word
+    title: 打开 Word 并停在写前检查点
+    pause_before: true
+    resume_check:
+      command: verify
+      args: ['--value', 'uia:{"match":{"role":"Window"}}', 'placeholder', '--property', 'name', '--app', 'Google Chrome']
+      bind: {'2': locate_page.page_title}
+    run:
+      command: launch
+      args: ['WINWORD']
+    verify:
+      command: wait
+      args: ['--window', 'Word', '--timeout', '20000']
+  - id: write_header
+    title: 写入草稿首行
+    run:
+      command: type
+      args: ['role:Document', '发布核对记录：\n', '--paste', '--app', 'Word']
+    verify:
+      command: verify
+      args: ['--value', 'role:Document', '发布核对记录', '--property', 'text', '--contains', '--app', 'Word']
+  - id: write_title
+    title: 写入来源标题行
+    run:
+      command: type
+      args: ['role:Document', 'placeholder', '--paste', '--app', 'Word']
+      bind: {'1': locate_page.page_title}
+    verify:
+      command: verify
+      args: ['--value', 'role:Document', 'placeholder', '--property', 'text', '--contains', '--app', 'Word']
+      bind: {'2': locate_page.page_title}
+  - id: open_save_as
+    title: 打开另存为页
+    run:
+      command: press
+      args: ['ctrl+s', '--app', 'Word']
+    verify:
+      command: wait
+      args: ['--element', 'role:Edit', '--app', 'Word', '--timeout', '8000']
+  - id: type_filename
+    title: 输入草稿文件名
+    run:
+      command: type
+      args: ['role:Edit', 'actl-release-draft.docx', '--paste', '--verify-value', 'actl-release-draft.docx', '--app', 'Word']
+    verify:
+      command: verify
+      args: ['--value', 'role:Edit', 'actl-release-draft.docx', '--property', 'value', '--app', 'Word']
+  - id: confirm_save
+    title: 在文件名框回车保存
+    run:
+      command: press
+      args: ['enter', '--app', 'Word']
+    verify:
+      command: wait
+      args: ['--window', 'actl-release-draft', '--timeout', '15000']
+  - id: verify_draft
+    title: 写后业务核验
+    retry: stale_read
+    run:
+      command: verify
+      args: ['--value', 'role:Document', 'placeholder', '--property', 'text', '--contains', '--app', 'Word']
+      bind: {'2': locate_page.page_title}
