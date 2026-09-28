@@ -120,6 +120,7 @@ pub fn validate(plan: &Plan) -> Result<(), CtlError> {
             if matches!(
                 command,
                 Command::Batch { .. }
+                    | Command::Preview { .. }
                     | Command::Flow(_)
                     | Command::Desktop(_)
                     | Command::Commands

@@ -106,6 +106,8 @@ CI(GitHub Actions,`windows-latest`):`cargo xtask gate`(file-lines 单文件行�
 
 ## 8. 与既有文档的关系
 
+独立预览使用既有 Win32/UIA/GDI 依赖，unsafe 仅在 actl-uia 的 preview_window 模块：创建/销毁本次窗口、消息派发、只读窗口检查及绘制；不注入输入、不持有桌面授权。所有原生窗口由 RAII 清理，无新增依赖或常驻服务。
+
 Phase 2 输入监听冗余使用既有 windows 依赖的 Raw Input 注册、消息窗口和计时器，
 unsafe 限定在 actl-uia 的显示程序模块。原生资源由专用线程创建并释放，接收活动但不记录输入内容。
 历史清理限频使用标准库文件锁；没有新增直接依赖、async 或外部常驻服务。验收见 [44](44-phase2-acceptance.md)。

@@ -34,6 +34,20 @@ pub(crate) fn validate(command: &Command) -> Result<(), CtlError> {
         check(target, None)?;
     }
     match command {
+        Command::Preview {
+            target,
+            app,
+            snapshot,
+            message,
+            duration,
+            ..
+        } => {
+            if app.trim().is_empty() {
+                return Err(CtlError::protocol("preview requires a nonempty --app"));
+            }
+            let target = parse_target(target)?;
+            actl_uia::preview::validate(&target, snapshot.as_deref(), message, *duration)?;
+        }
         Command::Click { target, near, .. }
         | Command::Get { target, near, .. }
         | Command::Type { target, near, .. }

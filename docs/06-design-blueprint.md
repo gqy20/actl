@@ -92,6 +92,21 @@ state/run 响应的步骤可带 outputs，显式保存的业务数据不受 erro
 
 ### 3.2 分层模型:哪些统一,哪些适配
 
+#### 独立目标预览（2026-09-29）
+
+`preview <target> --app <window> [--snapshot <id>] [--message <text>] [--duration <ms>]`。
+只展示已定位 UIA 元素的边框和调用方提供的动作说明，不执行目标动作、输入、剪贴板修改或授权。
+默认说明为预览提示；说明须为 1–160 字符且无控制字符，duration 为 500–30000ms（默认 3000）。
+坐标目标拒绝；ref 必须绑定 snapshot，语义目标每次定位。支持组合选择器，歧义沿用 AMBIGUOUS，不自动选择候选。
+临时窗口不激活、不修改 flow 的显示会话；可关闭或超时结束。不允许作为持久化 flow 的 run/check，不构成业务结果验证。
+
+成功 data 为 `{previewed:true,executed:false,exit_reason:"expired"|"dismissed",target,window,bounds,resolved_by,message}`；
+bounds 是屏幕物理像素 `[left,top,right,bottom]`。成功表示显示帧已提交，不能证明用户已经看到或认可。
+目标离屏、窗口最小化、无有效边界或中心点遮挡返回 NOT_ACTIONABLE；查询失败保留原错误。
+预览期间重查同一元素的身份和边界；变化返回 STALE_REF（reason=preview_target_changed），停止返回 ABORTED，均销毁本次窗口。
+中心点命中检查不证明控件全区域无遮挡。同步 COM 调用无硬超时，窗口变化与下一次采样之间存在竞态。
+显示渲染的 unsafe 限定在 actl-uia，复用现有依赖。设计与验收见 [46](46-target-preview.md)。
+
 #### 结构化 UIA 组合定位（2026-09）
 
 元素目标新增 `uia:<JSON>`，CLI 与 flow 的字符串参数共用同一解析器。例如：

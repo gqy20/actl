@@ -78,6 +78,7 @@ pub fn is_display_window(hwnd: HWND) -> bool {
     if matches!(
         class.as_str(),
         "actl_signal_window"
+            | "actl_target_preview"
             | "actl_signal_marker"
             | "actl_signal_controls"
             | "actl_signal_perimeter"

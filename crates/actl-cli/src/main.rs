@@ -51,7 +51,7 @@ fn main() {
             crate::cli::FlowCommand::Validate { .. }
                 | crate::cli::FlowCommand::Status { .. }
                 | crate::cli::FlowCommand::Pause { .. }
-        )
+        ) | Command::Preview { .. }
     ) {
         finish(
             command_name,
@@ -102,6 +102,18 @@ fn main() {
 pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
     selector_input::validate(command)?;
     match command {
+        Command::Preview {
+            target,
+            app,
+            snapshot,
+            message,
+            duration,
+        } => {
+            let target = actl_core::parse_target(target)?;
+            actl_uia::preview::validate(&target, snapshot.as_deref(), message, *duration)?;
+            let _replay = replay_guard(snapshot.as_deref(), Some(app))?;
+            actl_uia::preview::show(app, &target, message, *duration).map(Into::into)
+        }
         Command::Flow(command) => flow::dispatch(command).map(Into::into),
         Command::Commands => commands().map(Into::into),
         Command::Status => status().map(Into::into),

@@ -30,6 +30,9 @@ pub use identity::ReplayGuard;
 mod native_windows;
 mod observation;
 mod pointer;
+pub mod preview;
+#[allow(unsafe_op_in_unsafe_fn)] // Temporary no-activate preview windows and GDI resources.
+mod preview_window;
 mod read;
 mod read_channel;
 mod scoped_locate;

@@ -1,0 +1,1 @@
+{"version":"1","ok":false,"command":"preview","error":{"code":"PROTOCOL","message":"preview refs require --snapshot","hint":"fix the command arguments (see `actl <cmd> -h`)"}}

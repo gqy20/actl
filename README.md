@@ -72,6 +72,15 @@ crate 名 [actl-cli](https://crates.io/crates/actl-cli),二进制名 `actl`;work
 
 ## 快速上手
 
+需要先向用户展示目标时，可用独立预览（当前源码新增，旧版二进制需先更新）：
+
+```powershell
+actl preview id:saveButton --app MyApp --message 'Save this draft here' --duration 5000
+```
+
+只显示边框和说明，不点击、不输入；点击预览窗口右上角关闭或等待自动结束。
+ref 目标必须同时传 `--snapshot`。预览不是授权或业务核验，执行前仍需重新核对目标。
+
 三条命令走一遍"感知 → 执行 → 断言":
 
 ```bash

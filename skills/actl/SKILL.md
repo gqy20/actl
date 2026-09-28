@@ -47,6 +47,13 @@ actl 是统一技能入口。收到包含多步决策或跨应用操作的任务
 
 ## 执行循环
 
+### 向用户预览目标
+
+当前源码新增 `preview <target> --app <window> --message <动作说明> --duration 5000`。
+先用 `actl commands` 确认所用二进制支持。它只显示目标边框和说明，用户可关闭，超时自动结束；不点击、不输入、不授予桌面权限。
+`@eN` 必须传同次观察的 `--snapshot`。目标变化时停止预览并重新观察；不要将成功预览解释为用户确认或操作完成。
+技术诊断由 agent 使用，给用户说明拟执行的业务动作，不默认展示 UIA 树。首批无候选选择，不得把歧义中的第一个目标当作用户选择。
+
 ```bash
 actl snapshot --app <窗口标题子串> --skeleton   # 感知:拿 @eN 引用(省 token 用 --skeleton)
 actl click @e7 --app <app>                       # 执行:引用重放

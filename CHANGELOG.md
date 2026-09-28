@@ -17,14 +17,15 @@
 
 ### Added
 
+- **独立目标预览**：`preview` 为单一 UIA 目标显示边框与动作说明，支持关闭和超时退出；不点击、不输入、不授予桌面权限。ref 要求快照绑定，目标变化、离屏或中心点遮挡时停止，预览窗口不抢焦点并随调用清理。首批不含坐标预览、候选选择或流程编辑器；验收见 [46](docs/46-target-preview.md)。
 - **无人值守验收入口**：`cargo xtask regress --unattended` 仅运行明确登记的无输入用例，其余保留 skipped，并通过 complete 区分局部运行与全量验收。新增只读性能/观察采样脚本，保存环境、二进制哈希、逐调用输出、100 次新进程耗时和稳定观察下的字节削减率；不把字节数宣称为 tokenizer token 数。浏览器原型失败报告保留有界异常原因链。验收与遗留项见 [44](docs/44-phase2-acceptance.md)。
 
 - **首条业务流程 YAML**：交付 `skills/actl/workflows/release-review-draft.yml`——读取已打开的 actl Releases 页(Chrome)，在 Word 新文档生成核对草稿并以静态文件名另存为。演练输出绑定（标题跨应用进入草稿）、时效声明、检查点授权边界、恢复后源稳定性核验（resume_check 绑定）与写后业务核验；全静态锚点、零逐次输入。协议预检、读段真机（检查点前零派发）与时效拒绝路径（过期不派发动作）已验证；写段联测待用户授权执行，不宣称业务闭环。浏览器 pack 新增窗口标题读取路线与 GitHub 页主文档定位知识，索引与限制见 [43](docs/43-release-review-draft.md)。
 
 ### Fixed
 
-- **桌面根枚举瞬态毒化（原始标题 fixture STALE_REF 根因）**：标题定位（`find_window` 与 `uia:` 作用域标题路径）对桌面根做一次整批 `FindAll(Children)`，任何无关顶层窗口处于创建/销毁中途都会让整批枚举失败——所有应用的标题定位报 STALE_REF，无匹配窗口时把 NOT_FOUND 误报成 STALE_REF（350ms 周期的 `Start-Process notepad` 扰动下 9/10 复现，本机无 notepad 关联时启动退化为系统选应用对话框，顶层窗口竞态同样成立；HWND 路径不做桌面根枚举故不受影响，当日差异由此解释）。修复为仅对桌面根枚举做有界瞬态重试（仅 StaleRef、3 次/200ms，与 stale_read 同参数；持久失败保留错误并附 attempts），`uia:` 作用域此前把枚举失败误映射 Internal 一并统一为 StaleRef；窗口子树枚举与既有控件失效语义不变。净环境 fixture 8/8 完整通过、扰动与显示端重启下直查 36/36、无匹配探针 30/30 NOT_FOUND；显示端创建叠加扰动的元素级瞬态 NOT_FOUND 作为独立观察项登记，见 [38](docs/38-flow-output-bindings.md)。
 - **应用 YAML 同步输入身份规范**：更新 10 份应用档案，补齐 ref 与同次快照绑定、输入框焦点断言、读取后的结果比较要求，修复微信空点击目标及旧右键参数、浏览器链接消歧和固定正文序号。修改过的已验证路线改记 manual 待复验，保留历史日期与证据；不把静态检查记为新版真机通过。详见 [45](docs/45-app-pack-refresh.md)。
+- **桌面根枚举瞬态毒化（原始标题 fixture STALE_REF 根因）**：标题定位（`find_window` 与 `uia:` 作用域标题路径）对桌面根做一次整批 `FindAll(Children)`，任何无关顶层窗口处于创建/销毁中途都会让整批枚举失败——所有应用的标题定位报 STALE_REF，无匹配窗口时把 NOT_FOUND 误报成 STALE_REF（350ms 周期的 `Start-Process notepad` 扰动下 9/10 复现，本机无 notepad 关联时启动退化为系统选应用对话框，顶层窗口竞态同样成立；HWND 路径不做桌面根枚举故不受影响，当日差异由此解释）。修复为仅对桌面根枚举做有界瞬态重试（仅 StaleRef、3 次/200ms，与 stale_read 同参数；持久失败保留错误并附 attempts），`uia:` 作用域此前把枚举失败误映射 Internal 一并统一为 StaleRef；窗口子树枚举与既有控件失效语义不变。净环境 fixture 8/8 完整通过、扰动与显示端重启下直查 36/36、无匹配探针 30/30 NOT_FOUND；显示端创建叠加扰动的元素级瞬态 NOT_FOUND 作为独立观察项登记，见 [38](docs/38-flow-output-bindings.md)。
 - **完整发布包补齐技能**：ZIP 包含可独立安装的 `skills/actl/`，保留应用档案和流程索引，流程与归档说明收进 references；技能内只使用本地相对链接，不包含 URL；设计与验收记录留在开发仓库，不打包完整 docs。打包后核对必需文件、内容和技能内部链接，缺失即失败。安装说明明确技能须由 Agent 加载、桌面写操作需要配套显示端。此修复不修改已发布的 0.1.6 附件。
 
 ## [0.1.6] - 2026-09-28

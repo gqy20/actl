@@ -154,6 +154,23 @@ pub(crate) enum Command {
         #[arg(long, value_enum)]
         view: Option<ViewMode>,
     },
+    /// Preview one element without clicking or typing; close the preview or let it expire
+    Preview {
+        /// UIA element selector or snapshot-bound @eN (coordinates are not supported)
+        target: String,
+        /// Target window title substring or hwnd:<n>
+        #[arg(long)]
+        app: String,
+        /// Snapshot identity required for @eN
+        #[arg(long)]
+        snapshot: Option<String>,
+        /// Intended action shown to the user (maximum 160 characters; no control characters)
+        #[arg(long, default_value = "Preview only; no action will be performed")]
+        message: String,
+        /// Display duration in milliseconds, 500..30000
+        #[arg(long, default_value_t = 3000)]
+        duration: u64,
+    },
     /// Click an element (UIA Invoke by default; --physical for a real mouse click)
     Click {
         /// Target: uia:<JSON> (strict match/within/scope) | @eN (needs --app) | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | xy:<x>,<y> (physical-only; needs --app)
@@ -615,6 +632,7 @@ pub(crate) enum Command {
 /// 从命令提取 --app 摘要(状态展示用;batch 递归取首步)。
 pub(crate) fn app_of(cmd: &Command) -> Option<String> {
     match cmd {
+        Command::Preview { app, .. } => Some(app.clone()),
         Command::Click { app, .. }
         | Command::Get { app, .. }
         | Command::Type { app, .. }
@@ -640,6 +658,7 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
     match cmd {
         Command::Commands => "commands",
         Command::Status => "status",
+        Command::Preview { .. } => "preview",
         Command::Desktop(DesktopCommand::DisplayStatus) => "display-status",
         Command::Desktop(DesktopCommand::TaskArchive { .. }) => "task-archive",
         Command::Flow(FlowCommand::Validate { .. }) => "flow-validate",
@@ -740,6 +759,9 @@ fn after_help_for(name: &str) -> Option<&'static str> {
         }
         "click" => {
             "Example:\n  actl click @e3 --app Notepad --snapshot s1a2b\n  actl click name:item --app Explorer --physical --with ctrl\n(multi-select)\n  actl click id:session_item_x --app 微信 --physical --no-activate\n  actl click id:session_item_x --app 微信 --expect element:id:chat_message_list\n--expect window:<substr> = a NEW window must appear; element:<target> = postcondition:\nthe element must resolve afterwards (implicit wait, default 2s) — the materialization\ncheck for apps whose UIA actions report success without effect.\n--no-activate (--physical only): the click lands but the window does not come to the\nforeground or steal focus (WS_EX_NOACTIVATE guard; cursor returned afterwards).\nErrors: NOT_FOUND no match | AMBIGUOUS multi-match (candidates returned) | STALE_REF stale @eN (re-snapshot) | NOT_ACTIONABLE no pattern, occluded, or xy: point outside window bounds | PERM_DENIED foreground guard (--physical) or no-activate style rejected (elevated window) | ASSERTION_FAILED --expect unmet | PROTOCOL xy: without --physical/--app, bad --expect, or --no-activate without --physical"
+        }
+        "preview" => {
+            "Example:\n  actl preview id:saveButton --app MyApp --message 'Save this draft' --duration 5000\n  actl preview @e3 --app MyApp --snapshot s123\nPreview only: no click, typing, clipboard change or desktop consent. Close the preview window or wait for expiry. Target movement or identity changes stop the preview. Not allowed in persisted flows.\nErrors: PROTOCOL invalid duration/message, coordinate or unbound ref | NOT_FOUND | AMBIGUOUS | STALE_REF target changed | NOT_ACTIONABLE invisible/invalid bounds or unavailable preview | ABORTED stop | INTERNAL observation/render failure"
         }
         "get" => {
             "Example:\n  actl get name:状态 --app 设置 --property value\nProperties: name role automation_id offscreen value text (text = TextPattern body; Chromium Document value is the URL).\nEmpty strings are values. Value falls back to Text only when ValuePattern is unsupported. Default reads list unsupported channels; explicit unsupported reads fail.\nErrors: PROTOCOL unknown property | NOT_FOUND no match | AMBIGUOUS multi-match | NOT_ACTIONABLE unsupported channel | STALE_REF stale provider | PERM_DENIED access denied | INTERNAL observation failed"
