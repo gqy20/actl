@@ -89,7 +89,7 @@ CI(GitHub Actions,`windows-latest`):`cargo xtask gate`(file-lines 单文件行�
 1. **手动部分**:整理 CHANGELOG(`Unreleased` → `## [X.Y.Z] - 日期`,注意吸收合并历史条目、清理被取代的中间里程碑)、bump 根 Cargo.toml 的 `version`,一个 `chore(release)` 提交;
 2. **先 push 再打 tag(顺序纪律,不许跳步)**:`git push origin main` → **等 CI 在该 commit 上全绿**(`gh run watch` 或 Actions 页确认)→ 才 `git tag vX.Y.Z && git push origin vX.Y.Z`。禁止 commit+tag 一步推:tag 指向未经 CI 验证的 commit,一旦红的就要删 tag 重打;release.yml 的 verify 段虽会重跑门禁,但那是最后防线而非流程依据;
 3. tag 推送 → workflow 三路:**verify**(与 CI 完全同门禁)→ 并行 **release**(打包+冒烟+checksums+发布同 job 直传;仅真 tag 执行 gh release,从 CHANGELOG 提取对应版本段作 notes,缺段落回退自动生成)与 **crates**(仅真 tag:CARGO_REGISTRY_TOKEN secret 经 gh 配置;版本守卫 tag==Cargo.toml 后按依赖序 publish 四 crate（core → uia → flow → cli）)——GitHub Release 与 crates.io 由同一条 tag 同步驱动;发布产物同 job 直传 Release,不走 artifact 中转(artifact 存储是账号级共享配额,删除后 6-12h 才重算,曾连续阻断 v0.1.0 发版);artifact 归档保留为 best-effort 步骤(continue-on-error,配额不足自动跳过,永不阻塞),供演练下载核对;
-4. 产物命名对齐 zotero_cli 体系:`actl_vX.Y.Z_windows_amd64.zip` + 裸 `actl_vX.Y.Z_windows_amd64.exe` + `checksums.txt`;
+4. 完整 ZIP 包含 actl.exe、actl-signal.exe、skills/、README.md 和 LICENSE；打包统一调用 `crates/xtask/package-release.ps1`，压缩后校验技能入口、skills 文件内容及内部链接，门禁用隔离假二进制覆盖打包和缺文件拒绝。技能的运行说明集中在 `skills/actl/references/`，技能内不包含 URL，设计与验收文档留在开发仓库，不打包完整 docs。技能不会随解压自动注册，安装方式见 README。产物命名对齐 zotero_cli 体系:`actl_vX.Y.Z_windows_amd64.zip` + 裸 `actl_vX.Y.Z_windows_amd64.exe` + `checksums.txt`;
 5. **不使用 UPX 压缩**:解压开销损害冷启动(违反 PRD 冷启动 P95 < 50ms 的 NFR);
 6. 版本号单源于 Cargo.toml(`CARGO_PKG_VERSION` 编译期注入,无需 ldflags 类机制);commit/buildDate 注入 M2 需要时再加 build.rs;
 7. workflow_dispatch 可手动演练(手动运行不发布,只出 artifact)。

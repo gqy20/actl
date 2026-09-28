@@ -84,6 +84,10 @@ fn gate() -> ExitCode {
     if !step("pwsh", &["-NoProfile", "-File", &tests.to_string_lossy()]) {
         return ExitCode::FAILURE;
     }
+    let tests = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/release-package.Tests.ps1");
+    if !step("pwsh", &["-NoProfile", "-File", &tests.to_string_lossy()]) {
+        return ExitCode::FAILURE;
+    }
     eprintln!("✓ gate passed (file-lines + fmt + clippy + test + lint-packs + regression harness)");
     ExitCode::SUCCESS
 }

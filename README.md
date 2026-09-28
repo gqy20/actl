@@ -20,10 +20,10 @@
 | 让 AI 写 AutoHotkey 脚本 | 能力够,但是"整段盲跑":没有逐步反馈,失败只能整段重来 |
 | 仅提供 MCP 接口 | 本机 shell 调用还需额外服务；actl 的 CLI 可独立使用 |
 
-一句话定位:**Playwright 之于浏览器,actl 之于 Windows 桌面**。Codex Computer Use 的官方降级顺序即"有结构化集成就优先于 computer use"——actl 就是 Windows 桌面上的那个结构化集成([对照分析](docs/12-codex-computer-use-comparison.md))。
+一句话定位:**Playwright 之于浏览器,actl 之于 Windows 桌面**。Codex Computer Use 的官方降级顺序即"有结构化集成就优先于 computer use"——actl 就是 Windows 桌面上的那个结构化集成([对照分析](https://github.com/gqy20/actl/blob/main/docs/12-codex-computer-use-comparison.md))。
 
 平台范围：Windows；Linux/macOS 桌面执行后端暂不考虑实现。计划提供可选 MCP 服务，
-在被控 Windows 设备本地启动，供其他设备调用本设备能力；当前尚未实现，见 [路线图](docs/ROADMAP.md)。
+在被控 Windows 设备本地启动，供其他设备调用本设备能力；当前尚未实现，见 [路线图](https://github.com/gqy20/actl/blob/main/docs/ROADMAP.md)。
 
 ## 安装
 
@@ -38,9 +38,13 @@ scoop install https://raw.githubusercontent.com/gqy20/actl/main/scoop/actl.json
 <details>
 <summary><b>直接下载</b>(免包管理器)</summary>
 
-从 [Releases](https://github.com/gqy20/actl/releases/latest) 拿
-`actl_vX.Y.Z_windows_amd64.exe`,主程序单文件即可用;完整包 zip 额外含
-`actl-signal.exe`(桌面信号条,建议同装)。
+从 [Releases](https://github.com/gqy20/actl/releases/latest) 下载完整 ZIP，将
+`actl.exe` 和同版本 `actl-signal.exe` 保存在同一目录，并把该目录加入 PATH。
+只读观察可独立使用主程序；桌面写操作需要配套显示端就绪和人工交接。
+
+后续发布的完整 ZIP 还包含 `skills/actl/`、README 和 LICENSE。
+已发布的 0.1.6 ZIP 尚未包含 skills；使用该版本时，请从仓库的
+[v0.1.6 源码包](https://github.com/gqy20/actl/archive/refs/tags/v0.1.6.zip) 获取配套文件。
 
 </details>
 
@@ -49,6 +53,7 @@ scoop install https://raw.githubusercontent.com/gqy20/actl/main/scoop/actl.json
 
 ```bash
 cargo install actl-cli
+cargo install actl-uia --bin actl-signal
 ```
 
 crate 名 [actl-cli](https://crates.io/crates/actl-cli),二进制名 `actl`;workspace 另有
@@ -56,6 +61,14 @@ crate 名 [actl-cli](https://crates.io/crates/actl-cli),二进制名 `actl`;work
 [actl-uia](https://crates.io/crates/actl-uia)(UIA 后端)两个可独立复用的 crate。
 
 </details>
+
+## 给 Agent 加载技能
+
+技能入口是 `skills/actl/SKILL.md`，应用知识、错误说明和流程索引在同目录下。
+解压 ZIP 不会自动安装技能；按所用 Agent 的技能配置方式，将完整的 `skills/actl`
+目录注册或链接到它的技能目录，并确保 Agent 能调用 PATH 中的 `actl`。
+流程编写、恢复、任务归档和错误说明随技能保存在 `references/` 中，可单独复制完整
+`skills/actl/` 目录；不要只复制 `SKILL.md`。技能内仅使用本地相对链接，无需联网查阅使用说明。
 
 ## 快速上手
 
@@ -97,7 +110,7 @@ actl click role:Button --near id:clearButton --app 计算器    # 锚点就近
 ```
 
 每条命令 `actl <cmd> -h` 均有四要素 help(用途/参数/示例/错误码);完整命令语义与
-协议契约见[设计蓝图](docs/06-design-blueprint.md)。
+协议契约见[设计蓝图](https://github.com/gqy20/actl/blob/main/docs/06-design-blueprint.md)。
 
 ## 核心特性
 
@@ -131,13 +144,13 @@ actl click role:Button --near id:clearButton --app 计算器    # 锚点就近
 
 ## 文档
 
-- [设计蓝图](docs/06-design-blueprint.md)——完整命令语义与协议契约
-- [场景实测记录](docs/14-office-scenarios.md)——Office 三闭环、微信核心通道等真实应用战记
-- [浏览器场景战记](docs/16-browser-scenarios.md)——Edge/Chrome 双验证、xhs/bili/douyin 登录态深度闭环、扩展操作面、视觉兜底 xy: 端到端
-- [调研与设计全索引](docs/README.md)——竞品调研、PRD、技术选型、实测战记
+- [设计蓝图](https://github.com/gqy20/actl/blob/main/docs/06-design-blueprint.md)——完整命令语义与协议契约
+- [场景实测记录](https://github.com/gqy20/actl/blob/main/docs/14-office-scenarios.md)——Office 三闭环、微信核心通道等真实应用战记
+- [浏览器场景战记](https://github.com/gqy20/actl/blob/main/docs/16-browser-scenarios.md)——Edge/Chrome 双验证、xhs/bili/douyin 登录态深度闭环、扩展操作面、视觉兜底 xy: 端到端
+- [调研与设计全索引](https://github.com/gqy20/actl/blob/main/docs/README.md)——竞品调研、PRD、技术选型、实测战记
 - [Agent Skill](skills/actl)——给 agent 的 actl 使用技能与应用档案
 - [业务流程目录](skills/actl/workflows/README.md)——actl 技能内部的业务 YAML 归属、索引与实现边界
-- [路线图](docs/ROADMAP.md)——阶段划分与版本口径
+- [路线图](https://github.com/gqy20/actl/blob/main/docs/ROADMAP.md)——阶段划分与版本口径
 
 ## 项目状态
 
@@ -145,7 +158,7 @@ actl click role:Button --near id:clearButton --app 计算器    # 锚点就近
 3 应用数据搬运均实测全绿;Office(Excel/Word)与微信核心通道已实测通达;浏览器
 内容通道(`--view content` 投影、`--stable` settle、坐标寻址 `xy:` 视觉兜底)经
 Edge/Chrome 双验证,xhs/bili/douyin 登录态深度闭环实测;场景结论持续沉淀进 docs
-与应用档案。阶段划分与版本口径见 [ROADMAP](docs/ROADMAP.md)。
+与应用档案。阶段划分与版本口径见 [ROADMAP](https://github.com/gqy20/actl/blob/main/docs/ROADMAP.md)。
 
 ## 参与开发
 

@@ -23,7 +23,7 @@ actl 是统一技能入口。收到包含多步决策或跨应用操作的任务
 先核对流程适用条件、必需信息、用户授权和验证状态，再按现行协议准备计划并运行
 `actl flow-validate --file <计划文件>`；校验通过不代表真实应用验收通过。
 当前没有已交付的业务流程。只读步骤支持显式 `outputs` 导出和后续完整参数 `bind`，
-用法见 [流程协议](../../docs/20-yaml-workflow-protocol.md)；变量插值和子流程调用仍未实现。
+用法见 [流程使用说明](references/flows.md)；变量插值和子流程调用仍未实现。
 个人任务值和运行状态不回写技能文件，测试计划仍放 `fixtures/flows/`。
 
 ## 任务启动与桌面整理
@@ -92,7 +92,6 @@ actl verify --value <target> "<期望>" --app <app> # 确认:立即断言
 不能仅凭节点数量断言 actl 漏项。保留退出码、stderr 和原始 JSON，失败不转成空树。
 winapp 的 slug 不作为 actl ref 使用；回到 actl 后重新观察并绑定 snapshot。
 不通过外部工具绕过急停、让行、权限或焦点护栏；截图/录制可能改变窗口状态，不按纯查询处理。
-安装、实测边界和优化流程见 [winapp 诊断专题](../../docs/36-winapp-uia-diagnostics.md)。
 
 ## 假成功应用的操作范式(UIA 撒谎时)
 
@@ -155,7 +154,7 @@ batch 的 `windows_created` 是原生前后差集，不是任务归属证明。�
 ## 任务记录与反馈
 
 复杂且可预先确定步骤的任务可先写 YAML，使用 `flow-validate --file` 全部预检，再
-`flow-run --file <file> --id <id>`；可加 `--paused` 先保存待运行计划。完整格式见 docs/20。
+`flow-run --file <file> --id <id>`；可加 `--paused` 先保存待运行计划。编写与恢复见 [流程使用说明](references/flows.md)。
 使用语义选择器和参数数组；写操作必须有业务充分的 verify，禁止自动重试。
 通过 `flow-pause --id` 请求暂停，以 `flow-status` 的 paused 确认；在途调用可能仍未结束。
 `flow-resume --id` 先核对未确认步骤，needs_review 时先观察实际结果；只有明确需要重复时
@@ -166,7 +165,7 @@ batch 的 `windows_created` 是原生前后差集，不是任务归属证明。�
   在当前任务的进程环境中设置，避免修改用户全局环境或混用其他任务的 ID。
 - `actl history --task <id> --limit 20` 查询事件与 call_id。记录不含输入正文、窗口标题、截图，
   仅覆盖 CLI 成功解析后的调用；没有结束事件可能是仍在运行、被中断或记录失败。
-- 验证最终结果后，用 `actl task-archive --file report.json` 归档简短报告，格式见 docs/06 §7.6。
+- 验证最终结果后，用 `actl task-archive --file report.json` 归档简短报告，格式见 [任务记录](references/task-records.md)。
   分别写清结果、验证依据、部分完成项和反馈；推测标为未验证，用户反馈与智能体判断分开。
   报告是调用方陈述，不会自动证明任务成功；截图/文档只记引用，不自动复制。
 - 重复提交、发送、写入的结果不明确时先核实，不盲目重试；定位失效可以重新观察再判断。

@@ -100,23 +100,7 @@ jobs:
           ./target/release/actl.exe status
           ./target/release/actl.exe commands
 
-          artifact_base="actl_${VERSION}_windows_amd64"
-          mkdir -p "package/${artifact_base}" dist
-          cp target/release/actl.exe "package/${artifact_base}/actl.exe"
-          cp target/release/actl-signal.exe "package/${artifact_base}/actl-signal.exe"
-          cp README.md "package/${artifact_base}/README.md" 2>/dev/null || true
-          cp LICENSE "package/${artifact_base}/LICENSE" 2>/dev/null || true
-
-          # Windows runner 用 PowerShell 打包(Compress-Archive 系统自带,不依赖 zip.exe)
-          powershell -NoProfile -Command "Compress-Archive -Path 'package/${artifact_base}/*' -DestinationPath 'dist/${artifact_base}.zip'"
-
-          # 同时发布裸 exe,便于直接下载使用
-          cp target/release/actl.exe "dist/${artifact_base}.exe"
-
-          cd dist
-          sha256sum * > checksums.txt
-          cat checksums.txt
-          ls -la
+          pwsh -NoProfile -File crates/xtask/package-release.ps1 -Version "$VERSION" -BinaryDir target/release -OutputDir dist
 
       # 产物归档(best-effort,永不阻塞):配额充足时归档供 workflow_dispatch
       # 演练下载核对;配额不足(账号级共享、删后 6-12h 才重算)自动跳过。
@@ -162,8 +146,8 @@ jobs:
               echo
               echo "| 文件 | 说明 |"
               echo "|------|------|"
-              echo "| \`actl_${GITHUB_REF_NAME}_windows_amd64.exe\` | Windows x64 主程序,下载即用 |"
-              echo "| \`actl_${GITHUB_REF_NAME}_windows_amd64.zip\` | 完整包(actl + actl-signal 状态条 + README + LICENSE) |"
+              echo "| \`actl_${GITHUB_REF_NAME}_windows_amd64.exe\` | Windows x64 主程序；桌面写操作需配套显示端 |"
+              echo "| \`actl_${GITHUB_REF_NAME}_windows_amd64.zip\` | 完整包(actl + actl-signal + skills + README + LICENSE) |"
               echo "| \`checksums.txt\` | SHA-256 校验 |"
               echo
               cat changelog_unwrapped.md

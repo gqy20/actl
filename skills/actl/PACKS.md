@@ -82,7 +82,7 @@ routes:
 1. 复制模板建 `apps/<slug>.yml`,注释头写知识来源;
 2. `cargo xtask lint-packs` 本地过(gate 也会跑);
 3. PR 内容 = pack + 轻量实测记录(关键 envelope 输出、踩坑两三行即可;
-   深度战记进 docs/,参照 docs/14 体例);
+   深度实测记录保存在开发仓库，应用档案只保留经验证的结论);
 4. review 清单(红线见下)通过即合并;贡献者即该 pack 的维护责任人。
 
 ### review 红线(违反即拒)

@@ -98,10 +98,10 @@ quirks:
           name 就绪)、沉浸式翻译(触发→text 读译文)。凭据类扩展
           (Cookie-Editor)不碰——白名单归上层 agent 策略
   - id: webui_weak_a11y
-    note: chrome:// 页面(WebUI)视觉完全渲染但 a11y 弱暴露(extensions
+    note: Chrome 内置页面(WebUI)视觉完全渲染但 a11y 弱暴露(extensions
           管理页实测:text 空、toggle 无 ref、仅零星 Text)——开关切换走
           视觉兜底坐标点击(click xy: --physical,2026-09-27 已落地)或键盘
-          Tab 导航;普通网页 chrome-extension:// 全标签页不受影响
+          Tab 导航;扩展的独立标签页不受影响
   - id: risk_control_pacing
     note: 平台风控是现实——注入虽是人类级信号(SendInput/剪贴板,无 CDP 指纹),
           但机器速率的连续"滚动-读取"循环可能触发行为检测;采集类任务控制
