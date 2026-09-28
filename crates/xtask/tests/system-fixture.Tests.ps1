@@ -1,6 +1,11 @@
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path "$PSScriptRoot/../../..").Path
 . "$root/fixtures/system-fixture.ps1"
+$handoffContext = @{}
+$handoffTask = Get-FixtureTaskId $handoffContext ''
+Assert-Fixture ($handoffTask -eq (Get-FixtureTaskId $handoffContext '')) 'Same fixture must reuse handoff task'
+Assert-Fixture ($handoffTask -ne (Get-FixtureTaskId @{} '')) 'Independent fixtures must not share handoff task'
+Assert-Fixture ((Get-FixtureTaskId $handoffContext 'caller-task') -eq 'caller-task') 'Explicit caller task must win'
 $window = [pscustomobject]@{hwnd=42;pid=7;class='TestWindow';title='owned-marker'}
 $owner = @{hwnd=42;pid=7;class='TestWindow';marker='owned-marker';started=123}
 Assert-Fixture (Test-FixtureIdentity $owner $window 123) 'Expected matching identity'
@@ -59,7 +64,10 @@ try {
     function Invoke-FixtureCli($Context,[string[]]$Arguments) {
         $script:issued.Add($Arguments[0])
         switch ($Arguments[0]) {
-            'list-windows' { return [pscustomobject]@{windows=@($script:visible | Where-Object { $null -ne $_ })} }
+            'list-windows' {
+                Assert-Fixture ($Arguments.Count -eq 4 -and $Arguments[1] -eq '--native' -and $Arguments[2] -eq '--hwnd' -and $Arguments[3] -eq '42') 'Cleanup did not directly query the owned native HWND'
+                return [pscustomobject]@{windows=@($script:visible | Where-Object { $null -ne $_ })}
+            }
             'snapshot' { return [pscustomobject]@{elements=$script:tabs} }
             'close-window' {
                 Assert-Fixture ($Arguments[1] -eq '--hwnd' -and $Arguments[2] -eq '42') 'Cleanup targeted wrong window'

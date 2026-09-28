@@ -1,12 +1,13 @@
 # actl 应用档案 pack(pack_format: 1)—— agent 消费的数据(核心 CLI 保持原子,不读此文件)
-# 路线知识来源:docs/14-office-scenarios.md(2026-09-27 真机实测)
+# 路线知识来源:docs/14 与 docs/29-office-deep-tests.md；后者附可重复场景脚本
 pack_format: 1
 name: excel
 display: Excel
 launch: EXCEL            # App Paths 注册表解析,无需完整路径
 window: "Excel"          # 标题子串;打开文件后为 "<文件名> - Excel"
-app_version: "2021 家庭和学生版"
-verified_date: 2026-09-27
+app_version: "16.0.20326.20158"
+verified_date: 2026-09-28
+verified_env: "Windows 10.0.26200.0 zh-CN；真实 Office 用户配置；独立合成 XLSX"
 quirks:
   - id: protected_view
     note: 不可信位置(TEMP/下载)文件以受保护视图打开——UIA 读写正常但编辑被静默拒绝
@@ -15,6 +16,10 @@ quirks:
     note: 键盘直写编辑栏会被护栏拒(SetFocus 后物理前台标题瞬时为空);走剪贴板路线
   - id: cell_names
     note: 单元格 UIA name 是坐标("A2")非内容;内容检索用 extract 后本地过滤
+  - id: save_read_lock
+    note: ctrl+s 返回不代表保存结束；文件可能短暂被独占或替换，读回需允许共享读写并有界等待，不重复保存动作
+  - id: hidden_empty_host
+    note: 关闭工作簿后可能保留不可见的 Excel 空宿主；只有文件释放且控件树无工作簿内容时才记录文档关闭，不宣称进程退出
 routes:
   - id: cell_write        # 变量 {cell} {value} {window} 由调用方替换
     description: 写入单元格(剪贴板直灌 + 名称框导航 + paste)
@@ -38,4 +43,34 @@ routes:
     status: verified
     steps:
       - ["extract", "role:DataGrid", "--app", "{window}"]
-verify: 磁盘终验(COM GetActiveObject 读运行实例 / 文件 mtime);保存 = press ctrl+s 原地保存(不弹窗,勿等窗口)
+  - id: tsv_formulas
+    description: 名称框选择起点，批量粘贴 TSV（含中文、数字与公式），保存并核验 XLSX
+    status: verified
+    steps:
+      - ["type", "id:1001", "{cell}", "--app", "{window}"]
+      - ["press", "enter", "--app", "{window}"]
+      - ["set-clipboard", "{tsv}"]
+      - ["paste", "--app", "{window}"]
+      - ["press", "esc", "--app", "{window}"]
+      - ["press", "ctrl+s", "--app", "{window}"]
+    verify: 解包 XLSX 核对各单元格值、f 公式及 v 计算结果；不以名称框或窗口标题证明写入成功
+  - id: range_copy
+    description: 按区域复制数据（Tab 分列、CRLF 分行），读取剪贴板并退出复制状态
+    status: verified
+    steps:
+      - ["type", "id:1001", "{range}", "--app", "{window}"]
+      - ["press", "enter", "--app", "{window}"]
+      - ["press", "ctrl+c", "--app", "{window}"]
+      - ["get-clipboard"]
+      - ["press", "esc", "--app", "{window}"]
+    verify: 比较整块 TSV，包含空单元格；场景脚本另验证重开后 D4 等于 71
+  - id: undo_redo_recalculate
+    description: 修改数值后撤销/重做，每次保存核对原始值与依赖公式结果
+    status: verified
+    steps:
+      - ["press", "ctrl+z", "--app", "{window}"]
+      - ["press", "ctrl+s", "--app", "{window}"]
+      - ["press", "ctrl+y", "--app", "{window}"]
+      - ["press", "ctrl+s", "--app", "{window}"]
+    verify: 每次保存后分别读取 XLSX；本轮 B2 为 2/4 时，D2 为 25/50、D4 为 46/71
+verify: scenarios/excel-table.ps1 使用独立 XLSX，按 HWND 绑定；公式和值通过磁盘 XML 核验，重开后通过区域复制读回；不调用 COM 写入业务数据

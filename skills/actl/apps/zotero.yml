@@ -13,7 +13,7 @@ quirks:
   - id: search_value_unavailable
     note: 初轮空搜索框 get value 返回空 properties。深测确认非空搜索词可从 ValuePattern 和 TextPattern 读回；空 properties 不足以证明搜索恢复，应核验实际条目行。
   - id: dynamic_refs
-    note: 通知栏会插入 Edit，连 find 与 get 之间 ref 都可能漂移。读回须核对 name=快速搜索、role=Edit 和文本，必要时重新 find。写入前尽量使用稳定语义定位，不能把旧 ref 当作持久 ID；本 pack 的写入仅在独立测试库验证。
+    note: 通知栏会插入 Edit，连 find 与 get 之间 ref 都可能漂移。新场景脚本为 ref 增加 --snapshot 绑定，type 增加 --verify-value，提交/清空前使用 press --target；本批真机结果见 docs/31。读回须核对 name=快速搜索、role=Edit 和文本，必要时重新 find。写入前尽量使用稳定语义定位，不能把旧 ref 当作持久 ID；本 pack 的写入仅在独立测试库验证。
   - id: hwnd_keyboard_focus
     note: 需包含 docs/25 焦点修复的 actl 版本；旧版 press --app hwnd 会误触发首个 Edit 聚焦，Ctrl+A/Backspace 不能可靠清空搜索。新版三组查询均恢复两条测试记录。
   - id: reader_text_scope

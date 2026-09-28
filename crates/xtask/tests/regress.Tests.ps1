@@ -56,6 +56,10 @@ try {
     [IO.File]::WriteAllText("$env:LOCALAPPDATA/actl/stop-requested",'test-stop')
     & "$root/fixtures/golden-task-2.ps1" -Actl $hostExe 2>$null
     if ($LASTEXITCODE -ne 77 -or -not (Test-Path "$env:LOCALAPPDATA/actl/stop-requested")) { throw 'Stop flag was ignored or cleared' }
+    & "$root/fixtures/input-target.ps1" -Actl $hostExe
+    if ($LASTEXITCODE -ne 77) { throw 'Input target fixture ignored stop' }
+    $result = Get-Content "$temp/blocked/result.json" -Raw | ConvertFrom-Json
+    if ($result.calls.Count -ne 0 -or $result.passed) { throw 'Input target fixture operated despite stop' }
 } finally {
     Remove-Item Function:Get-Process
     $env:ACTL_TEST_DIR = $previousDir
@@ -65,3 +69,6 @@ Write-Output 'Regression selection, stream capture, exit classification and exis
 & "$PSScriptRoot/system-fixture.Tests.ps1"
 & "$PSScriptRoot/fixture-stream.Tests.ps1"
 & "$PSScriptRoot/browser-probe.Tests.ps1"
+& "$PSScriptRoot/office-package.Tests.ps1"
+
+& "$PSScriptRoot/input-target.Tests.ps1"

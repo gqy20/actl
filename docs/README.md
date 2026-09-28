@@ -53,3 +53,9 @@
 | [26-tencent-meeting-interactions.md](26-tencent-meeting-interactions.md) | 腾讯会议：单人开会、预定/取消、云录制播放下载与 UIA/视觉边界 |
 | [27-batch1-deep-tests.md](27-batch1-deep-tests.md) | 第一批应用深测：网易云、Zotero、VS Code、腾讯会议与夸克网盘入口 |
 | [28-meeting-quark-visual-deep.md](28-meeting-quark-visual-deep.md) | 腾讯会议时间/时长点击、夸克搜索焦点与组件分析、预览和目录导航 |
+| [29-office-deep-tests.md](29-office-deep-tests.md) | Excel 批量填表、公式重算与保存重开；Word 多段编辑、撤销重做、加粗落盘与重开核验 |
+| [30-window-infrastructure.md](30-window-infrastructure.md) | 原生窗口清单、batch 基线与观察失败协议、Office 关闭判定 |
+
+- [31 控件身份绑定与输入焦点验收](31-element-identity-input-focus.md)
+
+- [32 · 桌面交接与窗口就绪](32-desktop-handoff.md)：人工开始、输入让行、暂停恢复与显示诊断。

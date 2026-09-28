@@ -1,4 +1,6 @@
 [
+  {"id":"quark-search","script":"scenarios/quark-search.ps1","suite":"scenario","state":"manual","input":"keyboard","reason":"Requires an observed signed-in drive HWND; run explicitly with -Hwnd"},
+  {"id":"input-target","script":"fixtures/input-target.ps1","suite":"system","state":"ready","input":"keyboard","reason":"Owned Notepad: bound refs, exact focus refusal and value readback"},
   {
     "id": "flow-evaluation",
     "script": "fixtures/flow-evaluation.ps1",

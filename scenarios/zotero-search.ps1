@@ -56,7 +56,7 @@ user_pref("extensions.zotero.firstRunGuidance", false);
  foreach($query in @('Alpha','中文测试','ACTL_missing_987654')){
   $f=Invoke-FixtureCli $c @('find','--name','快速搜索','--role','Edit','--app',$c.app)
   Assert-Fixture (@($f.elements).Count -eq 1) 'Search field is not unique'
-  $null=Invoke-FixtureCli $c @('type',$f.elements[0].ref,$query,'--paste','--app',$c.app)
+  $null=Invoke-FixtureCli $c @('type',$f.elements[0].ref,$query,'--paste','--verify-value',$query,'--snapshot',$c.last_snapshot_id,'--app',$c.app)
   $expected=if($query -eq 'ACTL_missing_987654'){@()}else{@($both[0])}
   Check-Rows "query:$query" $expected
   # Tree changes can renumber refs; resolve and check identity after list changes.
@@ -65,14 +65,14 @@ user_pref("extensions.zotero.firstRunGuidance", false);
   do{
    $f=Invoke-FixtureCli $c @('find','--name','快速搜索','--role','Edit','--app',$c.app)
    Assert-Fixture (@($f.elements).Count -eq 1) 'Search field changed after snapshot'
-   $identity=Invoke-FixtureCli $c @('get',$f.elements[0].ref,'--app',$c.app)
-   $read=Invoke-FixtureCli $c @('get',$f.elements[0].ref,'--property','text','--app',$c.app)
+   $identity=Invoke-FixtureCli $c @('get',$f.elements[0].ref,'--snapshot',$c.last_snapshot_id,'--app',$c.app)
+   $read=Invoke-FixtureCli $c @('get',$f.elements[0].ref,'--property','text','--snapshot',$c.last_snapshot_id,'--app',$c.app)
    $readMatches=$identity.properties.name -eq '快速搜索' -and $identity.properties.role -eq 'Edit' -and $read.properties.PSObject.Properties['text'] -and $read.properties.text -eq $query
   }while(-not $readMatches -and [DateTime]::UtcNow -lt $deadline)
   Assert-Fixture $readMatches 'Search text readback mismatch'
   $report.checks.Add(@{name='search_text';query=$query;passed=$true})
-  $null=Invoke-FixtureCli $c @('press','ctrl+a','--app',$c.app)
-  $null=Invoke-FixtureCli $c @('press','backspace','--app',$c.app)
+  $null=Invoke-FixtureCli $c @('press','ctrl+a','--target',$f.elements[0].ref,'--snapshot',$c.last_snapshot_id,'--app',$c.app)
+  $null=Invoke-FixtureCli $c @('press','backspace','--target',$f.elements[0].ref,'--snapshot',$c.last_snapshot_id,'--app',$c.app)
   Check-Rows 'restored_two_records' $both
  }
  # Edit an owned synthetic item's publication, then verify the persisted export.
@@ -80,8 +80,8 @@ user_pref("extensions.zotero.firstRunGuidance", false);
  $fields=Invoke-FixtureCli $c @('find','--name','出版物','--role','Edit','--app',$c.app)
  $publication=@($fields.elements|Where-Object name -EQ '出版物')
  Assert-Fixture ($publication.Count -eq 1) 'Publication field is ambiguous'
- $null=Invoke-FixtureCli $c @('type',$publication[0].ref,'ACTL Journal 2026','--paste','--app',$c.app)
- $null=Invoke-FixtureCli $c @('press','tab','--app',$c.app)
+ $null=Invoke-FixtureCli $c @('type',$publication[0].ref,'ACTL Journal 2026','--paste','--verify-value','ACTL Journal 2026','--snapshot',$c.last_snapshot_id,'--app',$c.app)
+ $null=Invoke-FixtureCli $c @('press','tab','--target',$publication[0].ref,'--snapshot',$c.last_snapshot_id,'--app',$c.app)
  $null=Invoke-FixtureCli $c @('right-click','id:item-tree-main-default-row-0','--app',$c.app)
  $null=Invoke-FixtureCli $c @('click','name:导出条目','--app',$c.app)
  $null=Invoke-FixtureCli $c @('wait','--window','导出…','--timeout','10000')
@@ -102,7 +102,7 @@ user_pref("extensions.zotero.firstRunGuidance", false);
  $field=Invoke-FixtureCli $c @('find','--name','文件名:','--role','Edit','--app',$saveApp)
  Assert-Fixture (@($field.elements).Count -eq 1) 'Filename field not unique'
  $export=Join-Path $root 'export.json'
- $null=Invoke-FixtureCli $c @('set-value',$field.elements[0].ref,$export,'--app',$saveApp)
+ $null=Invoke-FixtureCli $c @('set-value',$field.elements[0].ref,$export,'--snapshot',$c.last_snapshot_id,'--app',$saveApp)
  $null=Invoke-FixtureCli $c @('click','name:保存(S)','--app',$saveApp)
  $deadline=[DateTime]::UtcNow.AddSeconds(10)
  do{

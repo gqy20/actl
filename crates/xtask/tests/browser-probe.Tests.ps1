@@ -34,11 +34,11 @@ try {
     $file=Get-ChildItem $env:ACTL_TEST_DIR -Recurse -Filter result.json|Select-Object -First 1
     $report=Get-Content $file.FullName -Raw|ConvertFrom-Json
     if($report.calls.Count -ne 0 -or $report.passed){throw 'Zotero search launched despite stop'}
-    foreach($scenario in @('cloudmusic-playback','tencent-meeting-draft')){
+    foreach($scenario in @('cloudmusic-playback','tencent-meeting-draft','excel-table','word-edit','quark-search')){
         $env:ACTL_TEST_DIR=Join-Path $testRoot $scenario
         $parameters=@{Actl=(Get-Process -Id $PID).Path}
-        if($scenario -eq 'cloudmusic-playback'){$parameters.Hwnd=1}
-        else{$parameters.ScheduleHwnd=1;$parameters.Topic='stop-test';$parameters.ExpectedDate='2026/9/28'}
+        if($scenario -in @('cloudmusic-playback','quark-search')){$parameters.Hwnd=1}
+        elseif($scenario -eq 'tencent-meeting-draft'){$parameters.ScheduleHwnd=1;$parameters.Topic='stop-test';$parameters.ExpectedDate='2026/9/28'}
         & "$root/scenarios/$scenario.ps1" @parameters
         if($LASTEXITCODE -ne 77){throw "$scenario ignored stop"}
         $file=Get-ChildItem $env:ACTL_TEST_DIR -Recurse -Filter result.json|Select-Object -First 1

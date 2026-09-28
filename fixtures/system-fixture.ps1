@@ -1,10 +1,17 @@
 # Shared system-fixture lifecycle. Dot-source only; does not launch applications.
 Set-StrictMode -Version Latest
 
+function Get-FixtureTaskId($Context, [string]$CallerTask) {
+    if ($CallerTask) { return $CallerTask }
+    if (-not $Context.ContainsKey('task_id')) { $Context.task_id = 'fixture-' + [guid]::NewGuid().ToString('N') }
+    return $Context.task_id
+}
+
 function Invoke-FixtureCli($Context, [string[]]$Arguments) {
     $prefix = Join-Path $Context.root ('step-{0:d3}' -f ($Context.calls.Count + 1))
     $info = [Diagnostics.ProcessStartInfo]::new($Context.binary)
     $info.UseShellExecute = $false
+    $info.Environment['ACTL_TASK_ID'] = Get-FixtureTaskId $Context $env:ACTL_TASK_ID
     $info.CreateNoWindow = $true
     $info.RedirectStandardOutput = $true
     $info.RedirectStandardError = $true
@@ -36,8 +43,14 @@ function Invoke-FixtureCli($Context, [string[]]$Arguments) {
         }
         $record.streams_drained = -not ($stdout.IsCanceled -or $stderr.IsCanceled)
         $envelope = [Text.Encoding]::UTF8.GetString($outBuffer.ToArray()) | ConvertFrom-Json
-        if ($process.ExitCode -ne 0 -or -not $envelope.ok) { throw "CLI $($Arguments[0]) failed; see $prefix.stdout.json" }
+        if ($process.ExitCode -ne 0 -or -not $envelope.ok) {
+            if ($envelope.PSObject.Properties['error'] -and $envelope.error.PSObject.Properties['evidence'] -and
+                $envelope.error.evidence -and $envelope.error.evidence.PSObject.Properties['stage'] -and
+                $envelope.error.evidence.stage -eq 'handoff') { $Context.uncertain = $true }
+            throw "CLI $($Arguments[0]) failed; see $prefix.stdout.json"
+        }
         $record.status = 'passed'
+        if ($envelope.PSObject.Properties['snapshot_id']) { $Context.last_snapshot_id = $envelope.snapshot_id }
         return $envelope.data
     } finally {
         $capture.Cancel()
@@ -82,13 +95,13 @@ function Close-FixtureWindow($Context) {
     if (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'actl/stop-requested')) {
         $Context.cleanup = 'retained_stop'; throw 'Cleanup deferred while emergency stop is active'
     }
-    $windows = @((Invoke-FixtureCli $Context @('list-windows')).windows)
+    $windows = @((Invoke-FixtureCli $Context @('list-windows','--native','--hwnd',[string]$Context.owned.hwnd)).windows)
     $same = @($windows | Where-Object { $_.PSObject.Properties['hwnd'] -and $_.hwnd -eq $Context.owned.hwnd })
     if (-not $same.Count) {
         $ownerProcess = Get-Process -Id $Context.owned.pid -ErrorAction SilentlyContinue
         if ($ownerProcess -and $ownerProcess.StartTime.ToUniversalTime().Ticks -eq $Context.owned.started) {
             $Context.cleanup = 'retained_not_observed'
-            throw 'Window absent from UIA but owner process is still alive; closure is unproven'
+            throw 'Window absent from native inventory but owner process is still alive; closure is unproven'
         }
         $Context.cleanup = 'already_closed'; return
     }
@@ -104,7 +117,8 @@ function Close-FixtureWindow($Context) {
         Assert-Fixture ($tabs.Count -eq 1 -and $tabs[0].name.Contains($Context.owned.marker)) 'Explorer tab ownership is unproven; window retained'
     }
     $null = Invoke-FixtureCli $Context @('close-window','--hwnd',[string]$Context.owned.hwnd)
-    $remaining = @((Invoke-FixtureCli $Context @('list-windows')).windows | Where-Object { $_.PSObject.Properties['hwnd'] -and $_.hwnd -eq $Context.owned.hwnd })
+    $Context.cleanup = 'retained_close_pending'
+    $remaining = @((Invoke-FixtureCli $Context @('list-windows','--native','--hwnd',[string]$Context.owned.hwnd)).windows | Where-Object { $_.PSObject.Properties['hwnd'] -and $_.hwnd -eq $Context.owned.hwnd })
     Assert-Fixture ($remaining.Count -eq 0) 'Owned window did not close'
     $Context.cleanup = 'closed_verified'
 }
