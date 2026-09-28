@@ -91,6 +91,9 @@ actl verify --value <target> "<期望>" --app <app> # 确认:立即断言
 容器必须唯一，根节点深度为 0；检查 truncated/truncation_reasons，不把截断解释为不存在。
 局部 ref 从 @e1 重新编号，后续命令必须传同次返回的 `--snapshot <snapshot_id>`；不要混用全窗口或其他局部快照的编号。
 容器变化后重新观察；没有唯一容器时先 find/inspect，不用扩大输出代替定位。此功能不保证降低总扫描耗时。
+验收输出削减使用仓库 `scenarios/local-observation.ps1`：传已核对的 HWND 和严格容器选择器。
+只在完整/局部观察均未截断、前后内容和身份稳定时比较；分别检查 elements 与完整 envelope 字节，
+不把字节等同 token。深树中的容器唯一性定位仍可能触及预算，失败保留错误，不能按已找到的首个候选继续。
 执行:click(--physical/--expect/--near/--no-activate) right-click double-click hover drag scroll type(--paste)
      press(--expect) key-down key-up set-value
 窗口:launch focus-window close-window resize-window wait(--element/--window/--gone/--stable/--idle) batch

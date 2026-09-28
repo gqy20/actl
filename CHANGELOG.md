@@ -19,6 +19,8 @@
 
 ### Added
 
+- **局部观察验收入口**：新增只读采样脚本，记录完整/局部快照、绑定引用读回、窗口及容器稳定性和逐调用证据；分别统计元素与完整 envelope 字节，截断、根节点孤立和观察失败不计为有效削减。真实窗口限制见 [49](docs/49-local-observation-acceptance.md)。
+
 - **容器局部观察**：`snapshot --within <严格 UIA 选择器> --app/--hwnd` 支持 depth/limit，返回范围、投影前节点数及真实截断原因。局部 ref 配合 snapshot_id 保存容器身份和预算，重放核对原容器与元素，不回退全窗口序号。减少无关输出；容器唯一性定位仍可能扫描全窗口，验收与限制见 [48](docs/48-local-snapshot.md)。
 
 - **候选目标纠正**：`preview @eN --candidate @eM --snapshot <id> --app <window>` 展示同一快照的 2–20 个候选，支持切换、明确选择和取消。选择时重新定位并核对身份/边界；返回选择结果和快照绑定，始终 executed=false，不授予桌面权限。关闭和超时不默认选择。

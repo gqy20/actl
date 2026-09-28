@@ -82,3 +82,4 @@ Write-Output 'Regression selection, stream capture, exit classification and exis
 
 & "$PSScriptRoot/input-target.Tests.ps1"
 & "$PSScriptRoot/phase2-readonly.Tests.ps1"
+& "$PSScriptRoot/local-observation.Tests.ps1"

@@ -3,6 +3,56 @@ use super::*;
 use serde_json::{Value, json};
 
 #[test]
+#[ignore = "interactive desktop; ACTL_PREVIEW_CLI and pwsh required"]
+fn local_observation_sampler_records_owned_window_without_input() {
+    let binary = std::env::var("ACTL_PREVIEW_CLI").unwrap();
+    let foreground = unsafe { GetForegroundWindow() };
+    let host = OwnedHost::with_choices(true);
+    let hwnd = HWND(host.hwnd as *mut _);
+    let repo = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let dir = repo.join(format!(
+        "target/local-observation-owned-{}",
+        std::process::id()
+    ));
+    let out = std::process::Command::new("pwsh")
+        .args(["-NoProfile", "-File"])
+        .arg(repo.join("scenarios/local-observation.ps1"))
+        .args([
+            "-Actl",
+            &binary,
+            "-Hwnd",
+            &host.hwnd.to_string(),
+            "-Within",
+            r#"uia:{"match":{"id":"11"}}"#,
+            "-OutputDirectory",
+        ])
+        .arg(&dir)
+        .output()
+        .unwrap();
+    std::fs::write(dir.join("runner.stderr.log"), &out.stderr).unwrap();
+    let report: Value = serde_json::from_slice(&std::fs::read(dir.join("report.json")).unwrap())
+        .unwrap_or_else(|_| {
+            // PowerShell UTF-8 output may include a BOM on older hosts.
+            let text = std::fs::read_to_string(dir.join("report.json")).unwrap();
+            serde_json::from_str(text.trim_start_matches('\u{feff}')).unwrap()
+        });
+    drop(host);
+    let closed = !unsafe { IsWindow(Some(hwnd)) }.as_bool();
+    let foreground_preserved = unsafe { GetForegroundWindow() } == foreground;
+    std::fs::write(
+        dir.join("cleanup.json"),
+        json!({"closed":closed,"foreground_preserved":foreground_preserved}).to_string(),
+    )
+    .unwrap();
+    assert!(out.status.success(), "{report}");
+    assert_eq!(report["status"], "measured");
+    assert_eq!(report["replays"].as_array().unwrap().len(), 1);
+    assert_eq!(report["measurement"]["local_nodes"], 1);
+    assert!(report["measurement"]["full_nodes"].as_u64().unwrap() > 1);
+    assert!(closed && foreground_preserved);
+}
+
+#[test]
 #[ignore = "interactive desktop; ACTL_PREVIEW_CLI must point to built CLI"]
 fn release_cli_local_snapshot_binds_refs_and_rejects_changed_scope() {
     let binary = std::env::var("ACTL_PREVIEW_CLI").unwrap();
