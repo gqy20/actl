@@ -89,3 +89,27 @@ Remove-Item Env:ACTL_PREVIEW_CLI
 
 目标是自有原生 STATIC 窗口，结论不外推到 Office、浏览器或其他 provider 的重建行为。
 后续仍需实际鼠标关闭、多屏缩放、并发预览、真实应用控件重建以及显示端急停联测。
+
+## 第三批：明确候选切换与选择
+
+用户授权推进“可见的目标选择与纠正”。首批在已有预览上增加可重复的 `--candidate`，使用同一快照的 2–20 个不同 @eN；未提供 candidate 时保留单目标协议。
+
+调用方先通过 snapshot/find 缩小范围，再展示候选；不自动收集或截断歧义列表。界面显示应用、候选序号/名称、边框、动作说明和“上一个 / 下一个 / 选择此目标”。取消、关闭或累计超时不产生选择；不模拟目标点击、滚动或授权。
+
+初始化绑定各候选身份和边界；展示中持续检查当前候选，切换后复验即将展示的候选。确认时重新解析 snapshot ref 并比较身份/边界，返回 selection 与原 snapshot_id，要求后续动作重新核验。没有引入持久化选择会话或 flow 步骤；不属于可视化流程编辑器。
+
+协议、示例和错误见 [06](06-design-blueprint.md)。CLI 契约覆盖候选数量、重复 ref、非 ref、缺失快照；golden 约束选择结果仍为 executed=false，关闭/超时返回空选择。
+原生测试通过 release CLI 对自有两按钮窗口采样并选择，逐项记录于 `target/preview-choice/`；投递按钮消息的测试不代替真实鼠标点击验收。
+
+首次完整门禁 `target/preview-choice-gate.log` 在原有缺失 PID 契约测试返回 INTERNAL；独立复跑 `target/preview-choice-gate-recheck.log` 通过。错误断言补充完整 envelope，未改变预期错误码；原失败的原生错误详情未被旧断言保存，因此不推定具体原因。第二轮 `target/preview-choice-gate-final.log` 通过，但不覆盖随后窗口焦点修复。
+
+第一轮原生回归 `target/preview-choice-live.log` 17/17 通过。首次 computer-use 点击验收 `target/preview-choice-mouse.log` 失败：窗口可截图，但输入报告“window is not a usable app window”，最终 expired、selected=false。候选窗口继承了单目标的 NOACTIVATE；`target/preview-choice-focus-before.log` 保存独立焦点策略复现失败。修复后允许用户主动聚焦候选对话框，初次显示仍不抢焦点，底层目标窗口不被主动激活；单目标预览保留 NOACTIVATE。同步使用按 DPI 设置的 Segoe UI 字体。
+焦点策略复测 `target/preview-choice-focus-after.log` 通过，后续完整门禁和鼠标复测另记，不覆盖前述失败轮次。
+
+最终门禁 `target/preview-choice-gate-complete.log` 通过，Rust 303 项通过、24 项忽略（含需要桌面的用例）。computer-use 第二轮 `target/preview-choice-mouse-final.log` 仍未完成点击：窗口截图中按钮与文字可读，但点击报告“window is not a usable app window”，最后返回 expired/selected=false；实际鼠标验收继续保留待办。NOACTIVATE 已被独立测试确认并修复，但不能据此断言它是上述工具错误的唯一原因。两轮失败均保留，不以按钮消息测试替代。
+
+最终二进制见 `target/preview-choice-complete-hashes.json`：release CLI SHA-256 D9211E9D0D425C703DDF1C2C5A42E74174335A0FEA246346B5187F359130C522；显示端 32EF5F89028A62E98ECA4F9E9AB1DF017CC170A6938FB79ACA115BFD34C54204；原生测试程序 D6EEA348C46CDA1158225E3E1214D5DE1BC4B32E4633009CF646CA63033D84F0。
+
+最终原生整轮 `target/preview-choice-live-complete.log` 为 18/18 通过，覆盖原 12 项、5 项候选 CLI 场景及候选窗口焦点策略。逐调用证据保留 snapshot/result/退出码、前台保持及窗口清理；选择场景确认返回 Option B 对应 ref 和身份，移动则 STALE_REF，停止则 ABORTED，关闭和超时为空选择。目标均为自有原生窗口，未外推为真实应用验收。
+
+2026-09-29 02:24:59 本机成对更新 `C:\Users\gqy17\.cargo\bin\actl.exe`、`actl-signal.exe`，安装哈希与以上 release 相同。正常替换 66204 → 临时 51688 → 安装版 65836；显示端协议 7、ready=true、responsive=true、stop_requested=false，执行状态前后相同。备份、状态及哈希在 `target/preview-choice-install/`，未自动恢复流程或授予权限。测试窗口已清理，保留安装版显示端。

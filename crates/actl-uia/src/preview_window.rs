@@ -12,6 +12,13 @@ use windows::{
 pub(crate) struct Window {
     frame: HWND,
     notice: HWND,
+    font: HFONT,
+}
+
+pub(crate) enum Choice {
+    Previous,
+    Next,
+    Select,
 }
 
 impl Window {
@@ -73,11 +80,31 @@ impl Window {
         let empty = Self {
             frame: HWND::default(),
             notice: HWND::default(),
+            font: HFONT::default(),
         };
         empty.check_target(owner, bounds)
     }
 
     pub fn open(bounds: [i32; 4], caption: &str, message: &str) -> Result<Self, CtlError> {
+        Self::open_with(bounds, caption, message, None)
+    }
+
+    pub fn open_choice(
+        bounds: [i32; 4],
+        caption: &str,
+        message: &str,
+        index: usize,
+        count: usize,
+    ) -> Result<Self, CtlError> {
+        Self::open_with(bounds, caption, message, Some((index, count)))
+    }
+
+    fn open_with(
+        bounds: [i32; 4],
+        caption: &str,
+        message: &str,
+        selection: Option<(usize, usize)>,
+    ) -> Result<Self, CtlError> {
         unsafe {
             let instance = GetModuleHandleW(None).map_err(crate::internal)?;
             let class = w!("actl_target_preview");
@@ -92,6 +119,7 @@ impl Window {
             let mut window = Self {
                 frame: HWND::default(),
                 notice: HWND::default(),
+                font: HFONT::default(),
             };
             let [l, t, r, b] = bounds;
             window.frame = CreateWindowExW(
@@ -149,8 +177,21 @@ impl Window {
                 &mut dy,
             );
             let scale = |v: i32| ((i64::from(v) * i64::from(dx)) / 96).clamp(1, 16000) as i32;
+            let mut font = LOGFONTW {
+                lfHeight: -scale(16),
+                lfWeight: 400,
+                ..Default::default()
+            };
+            for (dest, value) in font.lfFaceName.iter_mut().zip("Segoe UI".encode_utf16()) {
+                *dest = value;
+            }
+            window.font = CreateFontIndirectW(&font);
+            if window.font.is_invalid() {
+                return Err(CtlError::internal("preview font creation failed"));
+            }
             let width = scale(600).min(work.right - work.left);
-            let height = scale(120).min(work.bottom - work.top);
+            let height =
+                scale(if selection.is_some() { 200 } else { 120 }).min(work.bottom - work.top);
             let x = l.clamp(work.left, work.right - width);
             let y = if b.saturating_add(height + 8) <= work.bottom {
                 b + 8
@@ -159,7 +200,12 @@ impl Window {
             };
             let title: Vec<u16> = caption.encode_utf16().chain(Some(0)).collect();
             window.notice = CreateWindowExW(
-                WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
+                WS_EX_TOPMOST
+                    | if selection.is_some() {
+                        WS_EX_APPWINDOW
+                    } else {
+                        WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW
+                    },
                 class,
                 PCWSTR(title.as_ptr()),
                 WS_POPUP | WS_CAPTION | WS_SYSMENU,
@@ -174,12 +220,16 @@ impl Window {
             )
             .map_err(crate::internal)?;
             // A native STATIC child wraps the action description; it accepts no input.
-            let text: Vec<u16> =
-                format!("{message}\n仅预览，不会执行操作。点击右上角关闭，或等待自动结束。")
-                    .encode_utf16()
-                    .chain(Some(0))
-                    .collect();
-            CreateWindowExW(
+            let instruction = if selection.is_some() {
+                "切换并确认目标；仅返回选择，不会执行操作。关闭或超时表示未选择。"
+            } else {
+                "仅预览，不会执行操作。点击右上角关闭，或等待自动结束。"
+            };
+            let text: Vec<u16> = format!("{message}\n{instruction}")
+                .encode_utf16()
+                .chain(Some(0))
+                .collect();
+            let text_control = CreateWindowExW(
                 WINDOW_EX_STYLE::default(),
                 w!("STATIC"),
                 PCWSTR(text.as_ptr()),
@@ -187,13 +237,56 @@ impl Window {
                 scale(12),
                 scale(8),
                 (width - scale(24)).max(1),
-                (height - scale(38)).max(1),
+                (height - scale(if selection.is_some() { 98 } else { 38 })).max(1),
                 Some(window.notice),
                 None,
                 Some(instance.into()),
                 None,
             )
             .map_err(crate::internal)?;
+            SendMessageW(
+                text_control,
+                WM_SETFONT,
+                Some(WPARAM(window.font.0 as usize)),
+                Some(LPARAM(1)),
+            );
+            if let Some((index, count)) = selection {
+                for (id, label, x, enabled) in [
+                    (1, "上一个", 12, index > 0),
+                    (2, "下一个", 152, index + 1 < count),
+                    (3, "选择此目标", 342, true),
+                ] {
+                    let label: Vec<u16> = label.encode_utf16().chain(Some(0)).collect();
+                    let button = CreateWindowExW(
+                        WINDOW_EX_STYLE::default(),
+                        w!("BUTTON"),
+                        PCWSTR(label.as_ptr()),
+                        WS_CHILD
+                            | WS_VISIBLE
+                            | WS_TABSTOP
+                            | if enabled {
+                                WINDOW_STYLE(0)
+                            } else {
+                                WS_DISABLED
+                            },
+                        scale(x),
+                        height - scale(76),
+                        scale(130),
+                        scale(36),
+                        Some(window.notice),
+                        Some(HMENU(id as *mut _)),
+                        Some(instance.into()),
+                        None,
+                    )
+                    .map_err(crate::internal)?;
+                    SendMessageW(
+                        button,
+                        WM_SETFONT,
+                        Some(WPARAM(window.font.0 as usize)),
+                        Some(LPARAM(1)),
+                    );
+                }
+            }
             let _ = ShowWindow(window.frame, SW_SHOWNOACTIVATE);
             let _ = ShowWindow(window.notice, SW_SHOWNOACTIVATE);
             if !UpdateWindow(window.frame).as_bool() || !UpdateWindow(window.notice).as_bool() {
@@ -221,6 +314,15 @@ impl Window {
             IsWindow(Some(self.frame)).as_bool() && IsWindow(Some(self.notice)).as_bool()
         }
     }
+
+    pub fn choice(&self) -> Option<Choice> {
+        match unsafe { SetWindowLongPtrW(self.notice, GWLP_USERDATA, 0) } {
+            1 => Some(Choice::Previous),
+            2 => Some(Choice::Next),
+            3 => Some(Choice::Select),
+            _ => None,
+        }
+    }
 }
 
 impl Drop for Window {
@@ -231,13 +333,24 @@ impl Drop for Window {
                     let _ = DestroyWindow(hwnd);
                 }
             }
+            if !self.font.is_invalid() {
+                let _ = DeleteObject(self.font.into());
+            }
         }
     }
 }
 
 unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
     match msg {
-        WM_MOUSEACTIVATE => LRESULT(MA_NOACTIVATE as isize),
+        WM_COMMAND if wp.0 >> 16 == BN_CLICKED as usize && matches!(wp.0 & 0xffff, 1..=3) => {
+            SetWindowLongPtrW(hwnd, GWLP_USERDATA, (wp.0 & 0xffff) as isize);
+            LRESULT(0)
+        }
+        WM_MOUSEACTIVATE => LRESULT(if GetDlgItem(Some(hwnd), 3).is_ok() {
+            MA_ACTIVATE
+        } else {
+            MA_NOACTIVATE
+        } as isize),
         WM_PAINT if GetWindowTextLengthW(hwnd) == 0 => {
             let mut ps = PAINTSTRUCT::default();
             let dc = BeginPaint(hwnd, &mut ps);

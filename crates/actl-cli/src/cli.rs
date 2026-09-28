@@ -168,6 +168,9 @@ pub(crate) enum Command {
         /// Snapshot identity required for @eN
         #[arg(long)]
         snapshot: Option<String>,
+        /// Additional snapshot-bound @eN candidates; repeat to enable explicit selection (2..20 total)
+        #[arg(long)]
+        candidate: Vec<String>,
         /// Intended action shown to the user (maximum 160 characters; no control characters)
         #[arg(long, default_value = "Preview only; no action will be performed")]
         message: String,
@@ -773,7 +776,7 @@ fn after_help_for(name: &str) -> Option<&'static str> {
             "Usage: actl execution-recover\nArguments: none (invocation explicitly requests recovery)\nExample:\n  actl execution-recover\nArchives raw state and invalidates old calls. No task resumes and no permission is granted.\nErrors: NOT_ACTIONABLE incompatible companion or unreadable state; PROTOCOL invalid arguments"
         }
         "preview" => {
-            "Example:\n  actl preview id:saveButton --app MyApp --message 'Save this draft' --duration 5000\n  actl preview @e3 --app MyApp --snapshot s123\nPreview only: no click, typing, clipboard change or desktop consent. Close the preview window or wait for expiry. Target movement or identity changes stop the preview. Not allowed in persisted flows.\nErrors: PROTOCOL invalid duration/message, coordinate or unbound ref | NOT_FOUND | AMBIGUOUS | STALE_REF target changed | NOT_ACTIONABLE invisible/invalid bounds or unavailable preview | ABORTED stop | INTERNAL observation/render failure"
+            "Example:\n  actl preview id:saveButton --app MyApp --message 'Save this draft' --duration 5000\n  actl preview @e3 --app MyApp --snapshot s123\n  actl preview @e3 --candidate @e7 --app MyApp --snapshot s123 --duration 30000\nPreview only: no click, typing, clipboard change or desktop consent. Repeated --candidate enables explicit selection among 2..20 distinct refs from one snapshot. Select returns a target and identity; revalidate before executing. Close or expiry returns no selection. Target movement or identity changes stop the preview. Not allowed in persisted flows.\nErrors: PROTOCOL invalid duration/message/candidates, coordinate or unbound ref | NOT_FOUND | AMBIGUOUS | STALE_REF target changed | NOT_ACTIONABLE invisible/invalid bounds or unavailable preview | ABORTED stop | INTERNAL observation/render failure"
         }
         "get" => {
             "Example:\n  actl get name:状态 --app 设置 --property value\nProperties: name role automation_id offscreen value text (text = TextPattern body; Chromium Document value is the URL).\nEmpty strings are values. Value falls back to Text only when ValuePattern is unsupported. Default reads list unsupported channels; explicit unsupported reads fail.\nErrors: PROTOCOL unknown property | NOT_FOUND no match | AMBIGUOUS multi-match | NOT_ACTIONABLE unsupported channel | STALE_REF stale provider | PERM_DENIED access denied | INTERNAL observation failed"

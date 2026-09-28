@@ -109,6 +109,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
     match command {
         Command::Preview {
             target,
+            candidate,
             app,
             snapshot,
             message,
@@ -117,6 +118,21 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             let target = actl_core::parse_target(target)?;
             actl_uia::preview::validate(&target, snapshot.as_deref(), message, *duration)?;
             let _replay = replay_guard(snapshot.as_deref(), Some(app))?;
+            if !candidate.is_empty() {
+                let targets = actl_uia::preview::validate_candidates(
+                    &target,
+                    candidate,
+                    snapshot.as_deref(),
+                )?;
+                return actl_uia::preview::choose(
+                    app,
+                    &targets,
+                    snapshot.as_deref().unwrap_or_default(),
+                    message,
+                    *duration,
+                )
+                .map(Into::into);
+            }
             actl_uia::preview::show(app, &target, message, *duration).map(Into::into)
         }
         Command::Flow(command) => flow::dispatch(command).map(Into::into),

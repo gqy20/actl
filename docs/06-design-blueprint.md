@@ -107,6 +107,13 @@ bounds 是屏幕物理像素 `[left,top,right,bottom]`。成功表示显示帧�
 中心点命中检查不证明控件全区域无遮挡。同步 COM 调用无硬超时，窗口变化与下一次采样之间存在竞态。
 显示渲染的 unsafe 限定在 actl-uia，复用现有依赖。设计与验收见 [46](46-target-preview.md)。
 
+候选纠正：`preview @e3 --candidate @e7 [--candidate @e9] --app <window> --snapshot <id> --duration 30000`。
+仅在提供 candidate 时启用，含位置参数共 2–20 个不同的 @eN，必须来自同一快照；坐标、语义选择器、重复候选、缺失 snapshot 或超限均 PROTOCOL。候选由调用方从 snapshot/find 结果筛出，不自动截断或猜测歧义结果。
+用户可切换上一个/下一个、选择此目标或关闭。所有候选先绑定身份和边界，当前候选持续核验，切回候选时复验；选择时重新解析 ref 并比较原身份/边界，失效拒绝。期间不注入输入，不滚动/激活目标、不授予执行权限；后续动作仍用返回的 ref 和 snapshot 重新核验。
+候选对话框初次显示不抢焦点，用户点击时可聚焦对话框本身；底层目标应用不因此获得主动激活。单目标预览继续保持不激活。
+选择模式成功 data 为 `{previewed:true,executed:false,exit_reason:"selected"|"expired"|"dismissed",snapshot_id,candidate_count,selected,selection,requires_revalidation:true}`。
+明确选择才有 `selected:true` 和 `selection:{index,target,window,bounds,identity}`，index 从 1 起；关闭或超时返回 `selected:false,selection:null`。时长覆盖各候选的累计展示，不随切换重置；同步 UIA 调用不保证硬超时。原单目标输出不变。
+
 #### 结构化 UIA 组合定位（2026-09）
 
 元素目标新增 `uia:<JSON>`，CLI 与 flow 的字符串参数共用同一解析器。例如：

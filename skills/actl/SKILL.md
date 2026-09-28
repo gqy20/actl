@@ -52,6 +52,7 @@ actl 是统一技能入口。收到包含多步决策或跨应用操作的任务
 ### 向用户预览目标
 
 当前源码新增 `preview <target> --app <window> --message <动作说明> --duration 5000`。
+多个合理候选需要用户纠正时，从同一 snapshot/find 结果筛出 2–20 个不同 ref，运行 `preview @e3 --candidate @e7 --snapshot <id> --app <window> --duration 30000 --message <动作说明>`。仅 selected=true 表示用户选了目标；关闭/超时不替用户默认选择。使用 selection.target 与 snapshot_id 重新核验后再执行；executed=false，选择不替代开始/继续授权。候选过多先缩小范围，不任意截断。
 先用 `actl commands` 确认所用二进制支持。它只显示目标边框和说明，用户可关闭，超时自动结束；不点击、不输入、不授予桌面权限。
 `@eN` 必须传同次观察的 `--snapshot`。目标变化时停止预览并重新观察；不要将成功预览解释为用户确认或操作完成。
 技术诊断由 agent 使用，给用户说明拟执行的业务动作，不默认展示 UIA 树。首批无候选选择，不得把歧义中的第一个目标当作用户选择。

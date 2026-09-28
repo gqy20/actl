@@ -3,6 +3,10 @@ use actl_core::{CtlError, ErrorCode, Target};
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
 
+#[path = "preview_choice.rs"]
+mod choice;
+pub use choice::{choose, validate_candidates};
+
 pub fn validate(
     target: &Target,
     snapshot: Option<&str>,

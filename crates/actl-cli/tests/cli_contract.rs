@@ -471,7 +471,7 @@ fn close_window_by_missing_pid_is_not_found() {
     let (code, stdout) = actl(&["close-window", "--pid", "3999999"]);
     assert_eq!(code, 1);
     let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
-    assert_eq!(v["error"]["code"], "NOT_FOUND");
+    assert_eq!(v["error"]["code"], "NOT_FOUND", "{v}");
 }
 
 #[test]

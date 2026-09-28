@@ -36,6 +36,7 @@ pub(crate) fn validate(command: &Command) -> Result<(), CtlError> {
     match command {
         Command::Preview {
             target,
+            candidate,
             app,
             snapshot,
             message,
@@ -47,6 +48,7 @@ pub(crate) fn validate(command: &Command) -> Result<(), CtlError> {
             }
             let target = parse_target(target)?;
             actl_uia::preview::validate(&target, snapshot.as_deref(), message, *duration)?;
+            actl_uia::preview::validate_candidates(&target, candidate, snapshot.as_deref())?;
         }
         Command::Click { target, near, .. }
         | Command::Get { target, near, .. }

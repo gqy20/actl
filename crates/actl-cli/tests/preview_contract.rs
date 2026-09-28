@@ -53,6 +53,7 @@ fn preview_help_and_invalid_options_are_offline() {
         "--app",
         "--message",
         "--duration",
+        "--candidate",
         "Example:",
         "Errors:",
     ] {
@@ -82,4 +83,58 @@ fn preview_help_and_invalid_options_are_offline() {
         let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
         assert_eq!(v["error"]["code"], "PROTOCOL");
     }
+}
+
+#[test]
+fn candidate_selection_requires_distinct_refs_from_one_snapshot() {
+    for args in [
+        vec!["preview", "@e1", "--candidate", "@e2", "--app", "unused"],
+        vec![
+            "preview",
+            "@e1",
+            "--candidate",
+            "@e1",
+            "--snapshot",
+            "s123",
+            "--app",
+            "unused",
+        ],
+        vec![
+            "preview",
+            "id:a",
+            "--candidate",
+            "@e2",
+            "--snapshot",
+            "s123",
+            "--app",
+            "unused",
+        ],
+        vec![
+            "preview",
+            "@e1",
+            "--candidate",
+            "xy:1,2",
+            "--snapshot",
+            "s123",
+            "--app",
+            "unused",
+        ],
+    ] {
+        let out = support::IsolatedCommand::new()
+            .command
+            .args(args)
+            .output()
+            .unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        assert_eq!(v["error"]["code"], "PROTOCOL", "{v}");
+    }
+    let mut cmd = support::IsolatedCommand::new();
+    cmd.command
+        .args(["preview", "@e1", "--snapshot", "s123", "--app", "unused"]);
+    for index in 2..=21 {
+        cmd.command.args(["--candidate", &format!("@e{index}")]);
+    }
+    let out = cmd.command.output().unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["error"]["code"], "PROTOCOL", "{v}");
 }

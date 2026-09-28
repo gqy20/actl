@@ -25,7 +25,7 @@ unsafe extern "system" fn collect(hwnd: HWND, data: LPARAM) -> windows::core::BO
     windows::core::BOOL(1)
 }
 
-fn previews(pid: u32) -> Vec<HWND> {
+pub(super) fn previews(pid: u32) -> Vec<HWND> {
     let mut windows = Vec::<HWND>::new();
     unsafe {
         EnumWindows(

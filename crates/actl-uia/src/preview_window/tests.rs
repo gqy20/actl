@@ -7,6 +7,9 @@ struct OwnedHost {
 }
 impl OwnedHost {
     fn start() -> Self {
+        Self::with_choices(false)
+    }
+    fn with_choices(choices: bool) -> Self {
         let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let signal = stop.clone();
         let (tx, rx) = std::sync::mpsc::channel();
@@ -27,6 +30,25 @@ impl OwnedHost {
                 None,
             )
             .unwrap();
+            if choices {
+                for (id, x, label) in [(10, 20, w!("Option A")), (11, 210, w!("Option B"))] {
+                    CreateWindowExW(
+                        WINDOW_EX_STYLE(0),
+                        w!("BUTTON"),
+                        label,
+                        WS_CHILD | WS_VISIBLE,
+                        x,
+                        40,
+                        140,
+                        50,
+                        Some(hwnd),
+                        Some(HMENU(id as *mut _)),
+                        None,
+                        None,
+                    )
+                    .unwrap();
+                }
+            }
             let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
             tx.send(hwnd.0 as usize).unwrap();
             while !signal.load(std::sync::atomic::Ordering::Relaxed) {
@@ -155,3 +177,4 @@ fn native_preview_preserves_foreground_and_closes_owned_windows() {
 }
 
 mod lifecycle;
+mod selection;
