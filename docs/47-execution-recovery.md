@@ -59,3 +59,30 @@ Windows 10.0.26200.0 交互桌面上，`target/stop-generation-live.log` 为 12/
 
 真实用户点击开始/继续、详情跨进程授权、快捷键急停与系统重启的完整交互链仍需联测；不以纯逻辑授权测试或上述原生观察测试代替。
 未承诺中断在途 COM，也未完成多显示器、真实应用 provider 重建或其他 Phase 2 发布门槛。
+
+## 后续：提示生命周期与状态一致性
+
+发现并复现两个问题：
+
+- 显示端原先只在收到 CLI 请求时更新代次；旧调用不再轮询时，停止、修复或状态损坏后的交接窗口仍会留下。
+- execution-status 分别读取代次、停止标记及记录，并发停止/修复时可能返回 state=stopped 但 stop=null。
+
+修复后，显示端每次定时刷新均核验代次，关闭过期提示并撤销旧活动绑定；读取失败同样收回提示。历史停止下当前代次的新提示仍保留。详情继续也通过同一代次切换方法清理旧请求。
+execution-status 在一次文件锁内取得完整状态，输出字段和错误契约不变。
+
+复现日志：`target/handoff-lifecycle-before.log` 为 3 项失败、1 项通过；`target/execution-snapshot-before.log` 保存 stopped/stop=null 的实际失败输出。
+针对性修复验证见 `target/handoff-lifecycle-after.log` 与 `target/execution-snapshot-after.log`。前者使用自有隐藏 Win32 交接窗口，核对请求和 HWND 销毁；未注册授权快捷键、未注入输入、未点击开始/继续，也不操作用户状态目录。
+
+本批独立门禁 `target/recovery-followup-gate.log` 通过：301 项通过、17 项忽略。此后候选预览的追加改动另行记录最终门禁。
+
+### 隔离桌面按钮联测（2026-09-29 01:59–02:03）
+
+使用 computer-use 观察并点击隔离显示端的真实“紧急停止 / 修复运行状态 / 关闭详情”按钮。状态目录为 `E:\explore\computer_cli\target\recovery-followup-live`，运行脚本保存在 `target/recovery-followup-live.ps1`，环境 Windows 10.0.26200.0。
+原显示端 PID 47260、安装路径确认后，通过正常替换握手暂时退出；未终止进程，未自动点击开始/继续。
+
+- 运行中的真实 CLI wait（PID 43232）被“紧急停止”取消，返回 ABORTED / execution_generation_changed，证据 `wait.json`。
+- 停止记录 source=details_button、PID 52720，代次 s18d98df31b516ee80；替换显示端 PID 40916 → 61132 后原记录和代次不变，显示端 ready。证据 `restarted-execution.json`、`restarted-display.json`。
+- 点击“修复运行状态”后 ready/stop=null，代次变更为 s18d98e1875cb05803；stop-history 同时保留原停止记录和代次。已结束 wait 仍为 ABORTED，没有授权或启动旧任务。
+- 详情窗口和测试显示端已正常关闭；当时新二进制成对安装，哈希核对后恢复用户显示端 PID 66204，ready=true/stop_requested=false。用户 stop-generation、stop-requested 与测试前基线相同（均不存在），`baseline.json`、`restored-*.json` 保存核对证据。
+
+被测 release CLI SHA-256：99F9BD505B85EA6DA19EBA83E006DC3ADA3DB1102BC6B180BF77649D3E9A6BB0；显示端：0454EA006B62DF1C69D0EB81A24554ED6B2F77A5A465E432D12E89C68A193638。完整路径、哈希与旧安装备份均在上述证据目录。此轮不覆盖后续候选预览改动；不把正常替换当成意外崩溃、用户关闭或系统重启验收。

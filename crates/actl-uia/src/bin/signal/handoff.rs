@@ -49,14 +49,18 @@ struct Service {
 thread_local! { static SERVICE: RefCell<Service> = RefCell::new(Service::default()); }
 
 impl Service {
+    fn invalidate(&mut self) {
+        self.consent.revoke();
+        self.active = None;
+        self.request = None;
+        self.generation = None;
+        unsafe {
+            close_panel(self);
+        }
+    }
     fn observe_generation(&mut self, generation: &str) {
         if self.generation.as_deref() != Some(generation) {
-            self.consent.revoke();
-            self.active = None;
-            self.request = None;
-            unsafe {
-                close_panel(self);
-            }
+            self.invalidate();
             self.generation = Some(generation.into());
         }
     }
@@ -170,13 +174,8 @@ unsafe extern "system" fn mouse(code: i32, wp: WPARAM, lp: LPARAM) -> LRESULT {
     CallNextHookEx(None, code, wp, lp)
 }
 
-fn read_request(pid: u32) -> Option<Request> {
-    let data = std::fs::read(
-        SignalPaths::default()
-            .dir
-            .join(format!("handoff-{pid}.json")),
-    )
-    .ok()?;
+fn read_request(paths: &SignalPaths, pid: u32) -> Option<Request> {
+    let data = std::fs::read(paths.dir.join(format!("handoff-{pid}.json"))).ok()?;
     if data.len() > 8192 {
         return None;
     }
@@ -194,7 +193,7 @@ pub fn message(msg: u32, pid: u32) -> usize {
         let mut s = cell.borrow_mut();
         let paths = SignalPaths::default();
         let Ok(generation) = paths.execution_generation() else {
-            s.consent.revoke();
+            s.invalidate();
             return CANCELLED;
         };
         s.observe_generation(&generation);
@@ -216,7 +215,7 @@ pub fn message(msg: u32, pid: u32) -> usize {
                 YIELDED
             };
         }
-        let Some(r) = read_request(pid) else {
+        let Some(r) = read_request(&paths, pid) else {
             return YIELDED;
         };
         if r.generation != generation {
@@ -252,13 +251,23 @@ unsafe fn close_panel(s: &mut Service) {
     }
 }
 pub unsafe fn tick() {
+    tick_with(&SignalPaths::default(), super::input_watch::healthy());
+}
+unsafe fn tick_with(paths: &SignalPaths, healthy: bool) {
     SERVICE.with(|cell| {
         let mut s = cell.borrow_mut();
-        if SignalPaths::default().stop_requested() || !super::input_watch::healthy() {
+        // The caller may have exited or stopped polling. Retire its visible prompt
+        // independently, including repairs that leave no stop-requested marker.
+        let Ok(generation) = paths.execution_generation() else {
+            s.invalidate();
+            return;
+        };
+        s.observe_generation(&generation);
+        if paths.stop_requested() || !healthy {
             s.consent.revoke();
         }
         if let Some((pid, request)) = &s.request
-            && read_request(*pid).is_none_or(|r| r.call != request.call)
+            && read_request(paths, *pid).is_none_or(|r| r.call != request.call)
         {
             s.request = None;
             close_panel(&mut s);
@@ -548,7 +557,8 @@ unsafe fn decide(_hwnd: HWND, start: bool) {
     SERVICE.with(|cell| {
         let mut s = cell.borrow_mut();
         if let Some((pid, r)) = s.request.take() {
-            let fresh = read_request(pid).is_some_and(|now| now.call == r.call);
+            let fresh =
+                read_request(&SignalPaths::default(), pid).is_some_and(|now| now.call == r.call);
             if start
                 && fresh
                 && WATCH_RUNNING.load(Ordering::SeqCst)
@@ -653,7 +663,7 @@ pub fn allow_flow(task: &str, generation: &str) -> bool {
     }
     SERVICE.with(|cell| {
         let mut s = cell.borrow_mut();
-        s.generation = Some(generation.into());
+        s.observe_generation(generation);
         s.consent.allow(task, activity(), unix_ms());
     });
     true
@@ -661,6 +671,10 @@ pub fn allow_flow(task: &str, generation: &str) -> bool {
 pub fn revoke() {
     SERVICE.with(|cell| cell.borrow_mut().consent.revoke());
 }
+
+#[cfg(test)]
+#[path = "handoff_lifecycle_tests.rs"]
+mod lifecycle_tests;
 
 #[cfg(test)]
 mod pause_tests {

@@ -41,10 +41,16 @@ fn cancelled() -> CtlError {
 }
 impl SignalPaths {
     pub fn execution_status(&self) -> serde_json::Value {
-        match self.execution_generation() {
-            Ok(generation) => {
-                serde_json::json!({"state":if self.stop_requested(){"stopped"}else{"ready"},
-                "generation":generation,"stop":self.stop_record(),"new_task_requires_consent":true,"old_calls_resume":false})
+        let snapshot = (|| -> Result<_, CtlError> {
+            let _lock = self.control_lock()?;
+            let generation = self.read_generation()?;
+            let stop = self.read_stop(&generation)?;
+            Ok((generation, stop))
+        })();
+        match snapshot {
+            Ok((generation, stop)) => {
+                serde_json::json!({"state":if stop.is_some(){"stopped"}else{"ready"},
+                "generation":generation,"stop":stop,"new_task_requires_consent":true,"old_calls_resume":false})
             }
             Err(e) => {
                 serde_json::json!({"state":"repair_required","error":e.evidence,"new_task_requires_consent":true,"old_calls_resume":false})

@@ -85,3 +85,41 @@ fn repair_refuses_directory_state_and_does_not_remove_it() {
     assert!(p.stop_file().is_dir());
     std::fs::remove_dir_all(p.dir).unwrap();
 }
+
+#[test]
+fn status_is_one_consistent_snapshot_during_concurrent_stop_and_recovery() {
+    let p = paths();
+    p.execution_generation().unwrap();
+    let writer = SignalPaths::at(p.dir.clone());
+    let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
+    let start = barrier.clone();
+    let thread = std::thread::spawn(move || {
+        start.wait();
+        for _ in 0..100 {
+            writer.request_stop().unwrap();
+            writer.recover_execution().unwrap();
+        }
+    });
+    barrier.wait();
+    let mut inconsistent = None;
+    for _ in 0..1000 {
+        let status = p.execution_status();
+        let valid = match status["state"].as_str() {
+            Some("ready") => status["stop"].is_null(),
+            Some("stopped") => {
+                status["stop"].is_object() && status["stop"]["generation"] == status["generation"]
+            }
+            _ => false,
+        };
+        if !valid {
+            inconsistent = Some(status);
+            break;
+        }
+    }
+    thread.join().unwrap();
+    std::fs::remove_dir_all(p.dir).unwrap();
+    assert!(
+        inconsistent.is_none(),
+        "mixed execution snapshot: {inconsistent:?}"
+    );
+}
