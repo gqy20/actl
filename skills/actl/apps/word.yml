@@ -1,3 +1,4 @@
+# 2026-09-29 静态维护：修改过的路线标为 manual，待新版真机复验；verified_date 保留历史日期。
 # actl 应用档案 pack(pack_format: 1)—— 路线知识来源:docs/14 与 docs/29-office-deep-tests.md
 pack_format: 1
 name: word
@@ -8,6 +9,8 @@ app_version: "16.0.20326.20158"
 verified_date: 2026-09-28
 verified_env: "Windows 10.0.26200.0 zh-CN；独立合成 DOCX，兼容性模式"
 quirks:
+  - id: current_execution_contract
+    note: window 必须唯一并对应已授权文档；有多个 Word 窗口时现场确认 HWND。正文粘贴/选择使用 --target 断言当前焦点，拒绝时先观察，不用试输文本抢焦点。anchor 只接受重新核对的唯一语义选择器；保存后核对磁盘与正文，不用标题证明落盘。
   - id: protected_view
     note: 不可信位置文件同样走受保护视图;解法同 Excel
     unblock: ["click", "name:启用编辑", "--app", "{window}"]
@@ -23,11 +26,12 @@ routes:
       - ["get", "role:Document", "--app", "{window}", "--property", "text"]
   - id: body_append
     description: 正文写入(paste 通道;追加落在焦点处,先 click 定位插入点)
-    status: verified
+    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
+    status: manual
     steps:
       - ["set-clipboard", "{text}"]
       - ["click", "{anchor}", "--app", "{window}"]
-      - ["paste", "--app", "{window}"]
+      - ["press", "ctrl+v", "--target", "role:Document", "--app", "{window}"]
   - id: save_inplace
     description: 原地保存(ctrl+s 不弹窗)
     status: verified
@@ -35,21 +39,23 @@ routes:
       - ["press", "ctrl+s", "--app", "{window}"]
   - id: replace_paragraphs
     description: 正文焦点已确认后，全选替换为多段文本
-    status: verified
+    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
+    status: manual
     steps:
-      - ["press", "ctrl+a", "--app", "{window}"]
+      - ["press", "ctrl+a", "--app", "{window}", "--target", "role:Document"]
       - ["set-clipboard", "{text}"]
-      - ["paste", "--app", "{window}"]
+      - ["press", "ctrl+v", "--target", "role:Document", "--app", "{window}"]
       - ["press", "ctrl+s", "--app", "{window}"]
       - ["get", "role:Document", "--property", "text", "--app", "{window}"]
     verify: TextPattern 与 word/document.xml 按段落拼接的全文均精确匹配；只对明确授权替换的文档使用
   - id: append_at_end
     description: 正文焦点已确认后 Ctrl+End 定位文末，再粘贴追加段落
-    status: verified
+    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
+    status: manual
     steps:
-      - ["press", "ctrl+end", "--app", "{window}"]
+      - ["press", "ctrl+end", "--app", "{window}", "--target", "role:Document"]
       - ["set-clipboard", "{text}"]
-      - ["paste", "--app", "{window}"]
+      - ["press", "ctrl+v", "--target", "role:Document", "--app", "{window}"]
       - ["press", "ctrl+s", "--app", "{window}"]
       - ["get", "role:Document", "--property", "text", "--app", "{window}"]
     verify: 原文完整且追加文本位于末尾；不是仅检查 contains
@@ -66,10 +72,11 @@ routes:
     verify: 撤销后等于原文，重做后等于原文加追加段落；两次都核对磁盘文件
   - id: bold_selection
     description: 正文全选后切换加粗；已验证从未加粗切换为加粗
-    status: verified
+    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
+    status: manual
     steps:
-      - ["press", "ctrl+a", "--app", "{window}"]
-      - ["press", "ctrl+b", "--app", "{window}"]
+      - ["press", "ctrl+a", "--app", "{window}", "--target", "role:Document"]
+      - ["press", "ctrl+b", "--app", "{window}", "--target", "role:Document"]
       - ["press", "ctrl+s", "--app", "{window}"]
     verify: 全文未变化且每个含文字的 w:r 带有效 w:b；Ctrl+B 是切换，不可无条件重复
 verify: scenarios/word-edit.ps1 用独立 DOCX；每次操作按 TextPattern 和磁盘 XML 双重全文断言，保存重开后再次读回

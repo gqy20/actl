@@ -1,3 +1,4 @@
+# 2026-09-29 静态维护：修改过的路线标为 manual，待新版真机复验；verified_date 保留历史日期。
 # 来源：docs/21-workflow-evaluation.md；docs/22-adaptation-test-infrastructure.md 输入方式对照。
 pack_format: 1
 name: calculator
@@ -8,10 +9,12 @@ app_version: "11.2607.0.0"
 verified_date: 2026-09-27
 verified_env: Windows 10.0.26200.0 zh-cn
 quirks:
+  - id: current_execution_contract
+    note: 按标题出现歧义或 provider 错误时保留原错误，重新观察并绑定已确认 HWND；不要把窗口清单失败当作计算器未启动。算式输入仅在标准模式及获准清空的实例运行，结果仍从 CalculatorResults 的 Name 通道核验；历史性能数字不代表新版指标。
   - id: minimized_result_unavailable
     note: 2026-09-28 恢复护栏验收时，原生窗口确认计算器已最小化，精确 HWND 下 CalculatorResults 返回 NOT_FOUND。resume_check 因条件不满足阻止后续 run；不将该结果视为计算器进程退出，也不自动抢焦点。局部证据见 docs/39-flow-observation-recovery.md。
   - id: flow_title_lookup_stale
-    note: 2026-09-28 输出绑定真机验收中，按窗口标题恢复 verify 遇到 STALE_REF（children）；同现场重新观察并限定 HWND 后 get/verify 与流程恢复通过。根因未定，不能吞掉错误或将其视为目标消失。精确句柄只用于当次已核实窗口，不硬编码到公共流程。证据见 docs/38-flow-output-bindings.md。
+    note: 2026-09-28 输出绑定真机验收中，按窗口标题恢复 verify 遇到 STALE_REF（children）；同现场重新观察并限定 HWND 后 get/verify 与流程恢复通过。桌面根整批枚举竞态已复现并修复，显示端扰动下的元素级瞬态 NOT_FOUND 仍待局部观察验收；原失败记录保留，不能吞掉错误或将其视为目标消失。精确句柄只用于当次已核实窗口，不硬编码到公共流程。证据见 docs/38-flow-output-bindings.md。
   - id: packaged_activation
     note: 直接执行包内 CalculatorApp.exe 可返回 PID 但不出现窗口；fixture 使用 AppsFolder 激活。list-windows 会同时列出宿主、标题栏和应用窗口，按包内程序路径、新 HWND 和进程启动时间确认测试实例。
   - id: result_name_channel

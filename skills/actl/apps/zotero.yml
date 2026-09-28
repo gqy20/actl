@@ -1,3 +1,4 @@
+# 2026-09-29 静态维护：修改过的路线标为 manual，待新版真机复验；verified_date 保留历史日期。
 # 来源: docs/24-application-adaptation-round1.md；docs/25-deep-edit-search-tests.md；独立测试库。
 pack_format: 1
 name: zotero
@@ -8,6 +9,8 @@ app_version: "10.0.3"
 verified_date: 2026-09-28
 verified_env: Windows 10.0.26200.0 zh-cn
 quirks:
+  - id: current_execution_contract
+    note: 每次 find 后将选定元素的完整 ref 与同次 snapshot_id 成对保存；第二次搜索定位使用 fresh_search_ref/fresh_search_snapshot_id。publication/filename 使用各自前缀；set-value 后读回必须等于新路径。窗口枚举失败立即停止，不把失败当作没有窗口。
   - id: export_dialog_ids
     note: docs/27 真机验证元数据编辑后导出 CSL JSON；文件菜单用 id:fileMenu。导出另存为是独立进程的系统对话框，按新 HWND、owner_title、class 核对；数字 ID 1001/1 与工具栏/文件行重复，文件名用 find 限定 Edit，保存用 name:保存(S)。
   - id: search_value_unavailable
@@ -26,18 +29,20 @@ routes:
       - ["snapshot", "--app", "{window}"]
   - id: edit_publication_test_item
     description: 独立测试库中选中已核对的合成条目，find 出版物/Edit 后必须再按 name 精确等于出版物过滤，排除我的出版物
-    status: verified
+    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
+    status: manual
     verify: Tab 提交后通过 UI 导出 CSL JSON，核对唯一条目的 title、container-title 和 author；不把旧 ref 读回作为落库证据。完整脚本 scenarios/zotero-search.ps1。
     steps:
       - ["find", "--name", "出版物", "--role", "Edit", "--app", "{window}"]
-      - ["type", "{publication_ref}", "{publication}", "--paste", "--app", "{window}"]
-      - ["press", "tab", "--app", "{window}"]
+      - ["type", "{publication_ref}", "{publication}", "--paste", "--app", "{window}", "--snapshot", "{publication_snapshot_id}", "--verify-value", "{publication}"]
+      - ["press", "tab", "--app", "{window}", "--target", "{publication_ref}", "--snapshot", "{publication_snapshot_id}"]
       - ["right-click", "{owned_item_selector}", "--app", "{window}"]
       - ["click", "name:导出条目", "--app", "{window}"]
       - ["list-windows"]
   - id: export_csl_json
     description: 导出格式窗口选择 CSL JSON，再在独立系统保存窗口填写唯一新路径；HWND 均重新观察获取
-    status: verified
+    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
+    status: manual
     verify: 等待文件完整并解析为 JSON，核对条目数量和关键字段，不以保存按钮 ok 判成功。
     steps:
       - ["click", "id:format-menu", "--app", "hwnd:{format_hwnd}"]
@@ -45,7 +50,8 @@ routes:
       - ["click", "name:OK", "--app", "hwnd:{format_hwnd}"]
       - ["list-windows"]
       - ["find", "--name", "文件名:", "--role", "Edit", "--app", "hwnd:{save_hwnd}"]
-      - ["set-value", "{filename_ref}", "{new_export_path}", "--app", "hwnd:{save_hwnd}"]
+      - ["set-value", "{filename_ref}", "{new_export_path}", "--app", "hwnd:{save_hwnd}", "--snapshot", "{filename_snapshot_id}"]
+      - ["get", "{filename_ref}", "--property", "value", "--snapshot", "{filename_snapshot_id}", "--app", "hwnd:{save_hwnd}"]
       - ["click", "name:保存(S)", "--app", "hwnd:{save_hwnd}"]
   - id: locate_search
     description: 定位中文界面的快速搜索框，仅查找
@@ -55,14 +61,15 @@ routes:
       - ["find", "--name", "快速搜索", "--role", "Edit", "--app", "{window}"]
   - id: search_test_library
     description: 独立测试库中搜索；从刚执行的 find 取唯一 search_ref，初始搜索须为空
-    status: verified
+    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
+    status: manual
     verify: 搜索后核对条目 TreeItem 集合，再重新 find 并核对搜索框名称、角色与 text；清空后原始条目集合必须恢复。完整脚本 scenarios/zotero-search.ps1
     steps:
       - ["find", "--name", "快速搜索", "--role", "Edit", "--app", "{window}"]
-      - ["type", "{search_ref}", "{query}", "--paste", "--app", "{window}"]
+      - ["type", "{search_ref}", "{query}", "--paste", "--app", "{window}", "--snapshot", "{search_snapshot_id}", "--verify-value", "{query}"]
       - ["snapshot", "--app", "{window}"]
       - ["find", "--name", "快速搜索", "--role", "Edit", "--app", "{window}"]
-      - ["get", "{search_ref}", "--app", "{window}"]
-      - ["press", "ctrl+a", "--app", "{window}"]
-      - ["press", "backspace", "--app", "{window}"]
+      - ["get", "{fresh_search_ref}", "--property", "text", "--app", "{window}", "--snapshot", "{fresh_search_snapshot_id}"]
+      - ["press", "ctrl+a", "--app", "{window}", "--target", "{fresh_search_ref}", "--snapshot", "{fresh_search_snapshot_id}"]
+      - ["press", "backspace", "--app", "{window}", "--target", "{fresh_search_ref}", "--snapshot", "{fresh_search_snapshot_id}"]
       - ["snapshot", "--app", "{window}"]

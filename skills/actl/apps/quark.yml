@@ -1,3 +1,4 @@
+# 2026-09-29 静态维护：修改过的路线标为 manual，待新版真机复验；verified_date 保留历史日期。
 # 来源: docs/27-batch1-deep-tests.md、docs/28-meeting-quark-visual-deep.md；输入身份与焦点更新见 docs/31。
 pack_format: 1
 name: quark
@@ -8,6 +9,8 @@ app_version: "7.2.2.1003"
 verified_date: 2026-09-28
 verified_env: Windows 10.0.26200.0 zh-cn; existing signed-in profile
 quirks:
+  - id: current_execution_contract
+    note: search_drive 已使用快照绑定；同次 find 的完整 ref 与 snapshot_id 必须配对。文件菜单的 menu_ref/menu_snapshot_id 来自打开菜单后的 find；file_selector 使用当场核对唯一的语义选择器，不把旧 ref 传给不支持快照绑定的双击/右键。窗口或观察错误时保留现场。
   - id: invoke_without_navigation
     note: 浏览器工具栏夸克网盘 Button 的 Invoke 返回成功但未进入网盘；新标签页左侧可见网盘入口通过截图定位及显式 physical 点击走通。不可只凭 ok 或标题验收。
   - id: duplicate_names
@@ -68,10 +71,11 @@ routes:
     verify: 详情核对文件名/大小/目录；打开文件位置核对面包屑与选中文件。不得将菜单出现算作文件操作完成。
     steps:
       - ["find", "--name", "{file_name}", "--role", "DataItem", "--app", "{window}"]
+      - ["snapshot", "--app", "{window}"]
       - ["right-click", "{file_selector}", "--app", "{window}"]
       - ["snapshot", "--app", "{window}"]
       - ["find", "--name", "{menu_name}", "--role", "MenuItem", "--app", "{window}"]
-      - ["click", "{menu_ref}", "--app", "{window}"]
+      - ["click", "{menu_ref}", "--app", "{window}", "--snapshot", "{menu_snapshot_id}"]
       - ["list-windows"]
       - ["screenshot", "--app", "hwnd:{result_hwnd}"]
   - id: preview_text

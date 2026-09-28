@@ -1,3 +1,4 @@
+# 2026-09-29 静态维护：修改过的路线标为 manual，待新版真机复验；verified_date 保留历史日期。
 # 来源: docs/26-tencent-meeting-interactions.md；单人开会、预定/取消、云录制播放/下载真机闭环。
 pack_format: 1
 name: tencent_meeting
@@ -8,6 +9,8 @@ app_version: "3.46.1.409"
 verified_date: 2026-09-28
 verified_env: Windows 10.0.26200.0 zh-cn
 quirks:
+  - id: current_execution_contract
+    note: 确认框的 cancel_ref/cancel_snapshot_id 来自该确认框最新 snapshot，核对名称、角色和本任务会议。日期编辑只在已确认日期框焦点下继续。视觉坐标每次由当前截图确定，click 保留 --physical；多窗口按 HWND/PID/进程实例核对，窗口枚举错误不证明会议已经结束。
   - id: homepage_controls_missing
     note: 首页、会中工具栏、录制详情缺少可用 UIA 控件。先 snapshot，再按当前截图和窗口 rect 定位，hover 后截图核对，再显式 physical 点击。坐标占位符必须由当前画面确定，不可复用战记坐标。
   - id: separate_popups
@@ -28,7 +31,7 @@ routes:
   - id: start_quick_meeting
     description: 确认入会麦克风/摄像头关闭、非个人会议号后，点击快速会议；设置检查及恢复见 docs/26
     status: verified
-    verify: 重新枚举同 PID 的会中 HWND，截图确认成员 1、解除静音、开启视频；结束时确认会议 HWND 消失。
+    verify: 重新枚举会中 HWND 并核对 PID、进程实例与本任务会议身份，截图确认成员 1、解除静音、开启视频；结束后核对回到首页及本任务会议结束。仅 HWND 或 UIA 消失不能证明结束，枚举失败保留未知状态。
     steps:
       - ["focus-window", "--hwnd", "{hwnd}"]
       - ["hover", "xy:{quick_x},{quick_y}", "--app", "{window}"]
@@ -48,13 +51,14 @@ routes:
       - ["screenshot", "--app", "hwnd:{schedule_hwnd}"]
   - id: change_schedule_date
     description: 已观察的预定草稿内替换完整日期，日期使用 yyyy/M/d；脚本可选 SetDate 参数，不自动提交
-    status: verified
+    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
+    status: manual
     verify: Tab 后日期精确读回；提交前还必须检查其他预定字段。
     steps:
       - ["type", "name:开始日期", "{date}", "--paste", "--app", "hwnd:{schedule_hwnd}"]
-      - ["press", "ctrl+a", "--app", "hwnd:{schedule_hwnd}"]
-      - ["paste", "--app", "hwnd:{schedule_hwnd}"]
-      - ["press", "tab", "--app", "hwnd:{schedule_hwnd}"]
+      - ["press", "ctrl+a", "--app", "hwnd:{schedule_hwnd}", "--target", "name:开始日期"]
+      - ["press", "ctrl+v", "--target", "name:开始日期", "--app", "hwnd:{schedule_hwnd}"]
+      - ["press", "tab", "--app", "hwnd:{schedule_hwnd}", "--target", "name:开始日期"]
       - ["verify", "--value", "name:开始日期", "{date}", "--app", "hwnd:{schedule_hwnd}"]
   - id: choose_time_visual
     description: sky 已验证时间下拉滚动后选择04:30，及选择1小时；以下 actl 迁移待复验。弹窗选项按当前截图确定，必要时滚动后重截图
@@ -79,14 +83,15 @@ routes:
       - ["screenshot", "--app", "{window}"]
   - id: cancel_test_schedule
     description: 仅清理本任务唯一测试预定；核对主题后视觉打开对应卡片更多菜单，再用 UIA 取消
-    status: verified
+    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
+    status: manual
     verify: 确认框中的取消按钮重新 snapshot 定位；确认后首页测试主题消失，原有会议保留。
     steps:
       - ["snapshot", "--app", "hwnd:{menu_hwnd}"]
       - ["click", "name:取消会议", "--app", "hwnd:{menu_hwnd}"]
       - ["list-windows"]
       - ["snapshot", "--app", "hwnd:{confirm_hwnd}"]
-      - ["click", "{confirmed_cancel_button}", "--app", "hwnd:{confirm_hwnd}"]
+      - ["click", "{cancel_ref}", "--app", "hwnd:{confirm_hwnd}", "--snapshot", "{cancel_snapshot_id}"]
       - ["screenshot", "--app", "{window}"]
   - id: view_recording
     description: 视觉进入录制列表，按标题、日期和时长识别指定条目后打开；详情中视觉点击播放

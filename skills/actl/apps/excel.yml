@@ -1,3 +1,4 @@
+# 2026-09-29 静态维护：修改过的路线标为 manual，待新版真机复验；verified_date 保留历史日期。
 # actl 应用档案 pack(pack_format: 1)—— agent 消费的数据(核心 CLI 保持原子,不读此文件)
 # 路线知识来源:docs/14 与 docs/29-office-deep-tests.md；后者附可重复场景脚本
 pack_format: 1
@@ -9,6 +10,8 @@ app_version: "16.0.20326.20158"
 verified_date: 2026-09-28
 verified_env: "Windows 10.0.26200.0 zh-CN；真实 Office 用户配置；独立合成 XLSX"
 quirks:
+  - id: current_execution_contract
+    note: 名称框 id:1001 输入前确认名称框唯一且已选择旧地址；Enter 只在名称框聚焦时执行。跳转后现场观察并核对目标单元格/编辑面，cell_input_selector 是其唯一语义选择器（不是 ref），须确认实际键盘焦点。粘贴与单元格提交使用该目标；焦点不同则停止，不退回仅按窗口放行。
   - id: protected_view
     note: 不可信位置(TEMP/下载)文件以受保护视图打开——UIA 读写正常但编辑被静默拒绝
     unblock: ["click", "name:启用编辑", "--app", "{window}"]
@@ -23,19 +26,21 @@ quirks:
 routes:
   - id: cell_write        # 变量 {cell} {value} {window} 由调用方替换
     description: 写入单元格(剪贴板直灌 + 名称框导航 + paste)
-    status: verified
+    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
+    status: manual
     steps:
       - ["set-clipboard", "{value}"]
       - ["type", "id:1001", "{cell}", "--app", "{window}"]
-      - ["press", "enter", "--app", "{window}"]
-      - ["paste", "--app", "{window}"]
-      - ["press", "enter", "--app", "{window}"]
+      - ["press", "enter", "--app", "{window}", "--target", "id:1001"]
+      - ["press", "ctrl+v", "--target", "{cell_input_selector}", "--app", "{window}"]
+      - ["press", "enter", "--app", "{window}", "--target", "{cell_input_selector}"]
   - id: cell_read
     description: 读单元格(名称框往返 + ctrl+c + 剪贴板读回)
-    status: verified
+    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
+    status: manual
     steps:
       - ["type", "id:1001", "{cell}", "--app", "{window}"]
-      - ["press", "enter", "--app", "{window}"]
+      - ["press", "enter", "--app", "{window}", "--target", "id:1001"]
       - ["press", "ctrl+c", "--app", "{window}"]
       - ["get-clipboard"]
   - id: table_extract
@@ -45,21 +50,23 @@ routes:
       - ["extract", "role:DataGrid", "--app", "{window}"]
   - id: tsv_formulas
     description: 名称框选择起点，批量粘贴 TSV（含中文、数字与公式），保存并核验 XLSX
-    status: verified
+    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
+    status: manual
     steps:
       - ["type", "id:1001", "{cell}", "--app", "{window}"]
-      - ["press", "enter", "--app", "{window}"]
+      - ["press", "enter", "--app", "{window}", "--target", "id:1001"]
       - ["set-clipboard", "{tsv}"]
-      - ["paste", "--app", "{window}"]
+      - ["press", "ctrl+v", "--target", "{cell_input_selector}", "--app", "{window}"]
       - ["press", "esc", "--app", "{window}"]
       - ["press", "ctrl+s", "--app", "{window}"]
     verify: 解包 XLSX 核对各单元格值、f 公式及 v 计算结果；不以名称框或窗口标题证明写入成功
   - id: range_copy
     description: 按区域复制数据（Tab 分列、CRLF 分行），读取剪贴板并退出复制状态
-    status: verified
+    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
+    status: manual
     steps:
       - ["type", "id:1001", "{range}", "--app", "{window}"]
-      - ["press", "enter", "--app", "{window}"]
+      - ["press", "enter", "--app", "{window}", "--target", "id:1001"]
       - ["press", "ctrl+c", "--app", "{window}"]
       - ["get-clipboard"]
       - ["press", "esc", "--app", "{window}"]

@@ -1,3 +1,4 @@
+# 2026-09-29 静态维护：修改过的路线标为 manual，待新版真机复验；verified_date 保留历史日期。
 # 来源: docs/24-application-adaptation-round1.md；docs/25-deep-edit-search-tests.md；docs/27-batch1-deep-tests.md。
 pack_format: 1
 name: vscode
@@ -8,6 +9,8 @@ app_version: "1.139.0"
 verified_date: 2026-09-28
 verified_env: Windows 10.0.26200.0 zh-cn; independent user-data-dir; extensions disabled; force-renderer-accessibility
 quirks:
+  - id: current_execution_contract
+    note: command_input、command、input、find、replace、editor 的 ref/snapshot_id 分别来自各自 find，禁止互用；set-value 后精确比对 value。编辑器 type 是插入，不用 --verify-value 将整篇内容误当插入片段；保存仍按磁盘全文验收。输入后控件变化则重新观察，不重放写入。
   - id: multiple_edit_surfaces
     note: 文件编辑器与 Chat Input 都是 Edit。必须按文件名加角色定位，再取唯一 ref，不能对裸 role:Edit 输入。
   - id: insertion_not_replacement
@@ -17,27 +20,31 @@ quirks:
 routes:
   - id: navigate_by_command
     description: 中文界面 F1 命令面板搜索转到行或转到文件，逐步取唯一 ref；Ctrl+G 本轮未生效
-    status: verified
+    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
+    status: manual
     verify: 行号输入后在第二行插入标记并核验磁盘；文件路径输入后读取目标编辑器 TextPattern。scenarios/vscode-edit.ps1 共 15 项通过。
     steps:
       - ["press", "f1", "--app", "{window}"]
       - ["find", "--name", "键入要运行的命令的名称。", "--role", "Edit", "--app", "{window}"]
-      - ["type", "{command_input_ref}", "{command_query}", "--paste", "--app", "{window}"]
+      - ["type", "{command_input_ref}", "{command_query}", "--paste", "--app", "{window}", "--snapshot", "{command_input_snapshot_id}"]
       - ["find", "--name", "{command_prefix}", "--role", "ListItem", "--app", "{window}"]
-      - ["click", "{command_ref}", "--app", "{window}"]
+      - ["click", "{command_ref}", "--app", "{window}", "--snapshot", "{command_snapshot_id}"]
       - ["find", "--name", "{input_name}", "--role", "Edit", "--app", "{window}"]
-      - ["type", "{input_ref}", "{line_or_owned_path}", "--paste", "--app", "{window}"]
-      - ["press", "enter", "--app", "{window}"]
+      - ["type", "{input_ref}", "{line_or_owned_path}", "--paste", "--app", "{window}", "--snapshot", "{input_snapshot_id}"]
+      - ["press", "enter", "--app", "{window}", "--target", "{input_ref}", "--snapshot", "{input_snapshot_id}"]
   - id: replace_owned_text
     description: 仅在归属明确的测试文件中替换；Ctrl+F 后 Esc 未能可靠返回待替换选区，改用显式替换面板
-    status: verified
+    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
+    status: manual
     verify: 保存后磁盘全文精确等于预期；本轮验证数字替换。两个 ref 分别在各自写入前重新定位。
     steps:
       - ["press", "ctrl+h", "--app", "{window}"]
       - ["find", "--name", "查找", "--role", "Edit", "--app", "{window}"]
-      - ["set-value", "{find_ref}", "{search}", "--app", "{window}"]
+      - ["set-value", "{find_ref}", "{search}", "--app", "{window}", "--snapshot", "{find_snapshot_id}"]
+      - ["get", "{find_ref}", "--property", "value", "--snapshot", "{find_snapshot_id}", "--app", "{window}"]
       - ["find", "--name", "替换", "--role", "Edit", "--app", "{window}"]
-      - ["set-value", "{replace_ref}", "{replacement}", "--app", "{window}"]
+      - ["set-value", "{replace_ref}", "{replacement}", "--app", "{window}", "--snapshot", "{replace_snapshot_id}"]
+      - ["get", "{replace_ref}", "--property", "value", "--snapshot", "{replace_snapshot_id}", "--app", "{window}"]
       - ["click", "name:全部替换 (Ctrl+Alt+Enter)", "--app", "{window}"]
       - ["click", "name:关闭 (Escape)", "--app", "{window}"]
       - ["press", "ctrl+s", "--app", "{window}"]
@@ -48,10 +55,11 @@ routes:
       - ["snapshot", "--app", "{window}"]
   - id: edit_owned_file
     description: 仅用于已确认归属的临时文本文件；将 find 的唯一 ref 填入 editor_ref，并确认插入位置
-    status: verified
+    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
+    status: manual
     verify: Ctrl+S 后从磁盘读取临时文件，与预期全文精确比较（仅规范化换行）；失败保留证据
     steps:
       - ["find", "--name", "{file_name}", "--role", "Edit", "--app", "{window}"]
-      - ["get", "{editor_ref}", "--property", "text", "--app", "{window}"]
-      - ["type", "{editor_ref}", "{text}", "--paste", "--app", "{window}"]
+      - ["get", "{editor_ref}", "--property", "text", "--app", "{window}", "--snapshot", "{editor_snapshot_id}"]
+      - ["type", "{editor_ref}", "{text}", "--paste", "--app", "{window}", "--snapshot", "{editor_snapshot_id}"]
       - ["press", "ctrl+s", "--app", "{window}"]

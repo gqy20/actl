@@ -1,3 +1,4 @@
+# 2026-09-29 静态维护：修改过的路线标为 manual，待新版真机复验；verified_date 保留历史日期。
 # actl 应用档案 pack(pack_format: 1)—— 浏览器(Chromium 系,以 Edge 为准)
 # 知识来源:docs/16-browser-scenarios.md(2026-09-27 真机实测:投影四档数字、
 # settle 活体证据、小红书闭环,Edge + Chrome 双浏览器)+ edge-content-view.sh
@@ -12,110 +13,133 @@ app_version: "Edge 1xx / Chrome 1xx(Chromium 系)"
 verified_date: 2026-09-27
 verified_env: Win11 zh-cn(Edge + Chrome 双实证,docs/16)
 quirks:
+  - id: current_execution_contract
+    note: 导航、弹层及标签切换后重新观察；document_selector 为当前页面唯一的语义选择器，不固定 Document#2。document_ref/document_snapshot_id 来自同次 find，link_ref/link_snapshot_id 从 Hyperlink 候选核对目标后取得；address_selector 是现场识别的地址栏唯一语义选择器，Ctrl+L/Ctrl+T 后先确认该输入框焦点。不得自动重放结果不明的点击。
   - id: isolated_probe_documents
     note: docs/24 实测 Edge 154.0.4258.37、Chrome 153.0.8010.53。独立 profile 也可能出现同步提示 Document；本地测试页按唯一标题加 Document 角色查找，再使用返回的 ref，不硬编码 RootWebArea 或序号。
   - id: tab_strip_ownership
     note: 关闭测试窗口前只计算测试标签所在 Tab 容器的直接 TabItem 子节点。Chrome 翻译弹层也有语言 TabItem，不应计入网页标签；真实额外网页标签仍拒绝清理。
   - id: content_view_projection
-    note: 树形观察一律 snapshot --view content --skeleton——Document(网页正文)子树
-          保留、工具栏 chrome 整枝丢弃;纯 --skeleton 对浏览器只削 ~36%(工具栏按钮
-          是交互主体),--view content 是主削减通道。读正文更省的通道是
-          get role:Document --property text(线性文本,无 chrome 噪声)
+    note: >-
+      树形观察一律 snapshot --view content --skeleton——Document(网页正文)子树
+      保留、工具栏 chrome 整枝丢弃;纯 --skeleton 对浏览器只削 ~36%(工具栏按钮
+      是交互主体),--view content 是主削减通道。读正文更省的通道是
+      get role:Document --property text(线性文本,无 chrome 噪声)
   - id: document_value_is_url
-    note: Chromium Document 的 Value=URL(会掩盖正文)——正文只能走
-          get --property text(TextPattern 专用通道);URL 读回用地址栏 Edit 的 value
+    note: >-
+      Chromium Document 的 Value=URL(会掩盖正文)——正文只能走
+      get --property text(TextPattern 专用通道);URL 读回用地址栏 Edit 的 value
   - id: settle_stable
-    note: 滚动/导航后的加载判定用 wait --element role:Document --stable
-          (样本连续两次不变即就绪);不要 sleep 固定时长
+    note: >-
+      滚动/导航后的加载判定用 wait --element role:Document --stable
+      (样本连续两次不变即就绪);不要 sleep 固定时长
   - id: keyboard_scroll
-    note: 页面滚动优先键盘:press pgdn/space/end(需先确保焦点在页面——导航后默认
-          即是);UIA Scroll pattern 命中与否视页面容器实现,不命中走键盘
+    note: >-
+      页面滚动优先键盘:press pgdn/space/end(需先确保焦点在页面——导航后默认
+      即是);UIA Scroll pattern 命中与否视页面容器实现,不命中走键盘
   - id: address_bar_navigation
-    note: 导航 = press ctrl+l(聚焦地址栏并全选)→ set-clipboard + paste(粘贴到当前
-          选中,不经元素定位——页面含输入框时 role:Edit 会 AMBIGUOUS;中文 IME 下
-          剪贴板也是唯一可靠文本通道)→ press enter → wait --stable
+    note: >-
+      导航 = press ctrl+l(聚焦地址栏并全选)→ set-clipboard + paste(粘贴到当前
+      选中,不经元素定位——页面含输入框时 role:Edit 会 AMBIGUOUS;中文 IME 下
+      剪贴板也是唯一可靠文本通道)→ press enter → wait --stable
   - id: on_demand_a11y
-    note: Chromium a11y 树按需构建——首次 snapshot 可能只含部分内容或偏慢,
-          重拍一次即完整;冷启动后第一拍不要急着下"内容为空"的结论
+    note: >-
+      Chromium a11y 树按需构建——首次 snapshot 可能只含部分内容或偏慢,
+      重拍一次即完整;冷启动后第一拍不要急着下"内容为空"的结论
   - id: lazy_virtualized
-    note: 无限滚动 feed 的 DOM 会回收(旧内容卸载、新内容滚动驱动物化)——
-          累积采集须 agent 侧去重(按标题/链接),单次快照只见当前视口段
+    note: >-
+      无限滚动 feed 的 DOM 会回收(旧内容卸载、新内容滚动驱动物化)——
+      累积采集须 agent 侧去重(按标题/链接),单次快照只见当前视口段
   - id: tabs
-    note: 标签操作走键盘:ctrl+t 新标签 / ctrl+w 关标签 / ctrl+tab 切换;
-          标签条在 UIA 树可见(TabItem),切标签后须重拍快照(ref 已漂移)
+    note: >-
+      标签操作走键盘:ctrl+t 新标签 / ctrl+w 关标签 / ctrl+tab 切换;
+      标签条在 UIA 树可见(TabItem),切标签后须重拍快照(ref 已漂移)
   - id: real_session_lane
-    note: 工具分工铁律——全新上下文的 web 任务(抓取/批量表单/headless)让给
-          playwright/browser-use;actl 的领地是"用户真实登录态的浏览器会话"
-          (Chrome 136 起默认 profile 禁 CDP,Playwright 接管不了,UIA 是唯一
-          非视觉通道)与浏览器内外联动(下载→文件对话框→桌面应用)
+    note: >-
+      工具分工铁律——全新上下文的 web 任务(抓取/批量表单/headless)让给
+      playwright/browser-use;actl 的领地是"用户真实登录态的浏览器会话"
+      (Chrome 136 起默认 profile 禁 CDP,Playwright 接管不了,UIA 是唯一
+      非视觉通道)与浏览器内外联动(下载→文件对话框→桌面应用)
   - id: multi_document_pages
-    note: 多数真实站点有多个 Document(iframe):xiaohongshu.com 实测 2 个
-          RootWebArea(主文档+登录墙 iframe),id:RootWebArea 一律 AMBIGUOUS;
-          feed 正主 = role:Document#2(#1/#3/#4 空壳)。通用法:find --role
-          document 枚举 → 逐个量 text 长度找非空;settle 同样须带序数
-          (locate 失败被当作未解析,samples 冻结会超时)。Chrome 同构实证
-          (2026-09-27:同样 2×RootWebArea、feed 同为 #2、组合投影 72% 与
-          Edge 71% 对齐)——Chromium 系一致性,同源套用成立
+    note: >-
+      多数真实站点有多个 Document(iframe):xiaohongshu.com 实测 2 个
+      RootWebArea(主文档+登录墙 iframe),id:RootWebArea 一律 AMBIGUOUS;
+      feed 正主 = role:Document#2(#1/#3/#4 空壳)。通用法:find --role
+      document 枚举 → 逐个量 text 长度找非空;序数仅为当时观察结果，不能跨导航复用；settle 使用当前唯一语义选择器，观察错误直接传播。Chrome 历史实证
+      (2026-09-27:同样 2×RootWebArea、feed 同为 #2、组合投影 72% 与
+      Edge 71% 对齐)——Chromium 系一致性,同源套用成立
   - id: modal_vs_page
-    note: 两种详情形态决定锚点策略:xhs 笔记是弹层(窗口标题不变,--app 全程
-          稳,esc 返回);bilibili 视频是整页跳转/同窗新标签(标题随页面变,
-          点击后 --app 即失效)——跳转后重读 list-windows 换新标题锚,或预记
-          hwnd 供 snapshot/close-window 用;换锚 grep 要排除"点击前的旧标题",
-          不能排除站点名(B 站视频标题就含"哔哩哔哩")
+    note: >-
+      两种详情形态决定锚点策略:xhs 笔记是弹层(窗口标题不变,--app 全程
+      稳,esc 返回);bilibili 视频是整页跳转/同窗新标签(标题随页面变,
+      点击后 --app 即失效)——跳转后重读 list-windows 换新标题锚,或预记
+      hwnd 供 snapshot/close-window 用;换锚 grep 要排除"点击前的旧标题",
+      不能排除站点名(B 站视频标题就含"哔哩哔哩")
   - id: card_name_ambiguous
-    note: feed 卡片标题被多元素共享(Image alt + Hyperlink 同名)——裸
-          click name:<标题> 会 AMBIGUOUS(实测 4 命中);先 find --name 拿
-          Hyperlink 的 @eN 再 ref 精点(evidence.candidates 可直接挑)
+    note: >-
+      feed 卡片标题被多元素共享(Image alt + Hyperlink 同名)——裸
+      click name:<标题> 会 AMBIGUOUS(实测 4 命中);先 find --name 拿
+      Hyperlink 的 @eN 再 ref 精点(evidence.candidates 可直接挑)
   - id: text_reads_beyond_viewport
-    note: text 通道(TextPattern)读的是整个文档范围而非视口——评论区
-          未滚到也能读到(xhs 实测:视觉上评论在折叠线下,文本里已有 85 个
-          "回复")。滚动后文本不变 ≠ 没内容,可能本来就读全了
+    note: >-
+      text 通道(TextPattern)读的是整个文档范围而非视口——评论区
+      未滚到也能读到(xhs 实测:视觉上评论在折叠线下,文本里已有 85 个
+      "回复")。滚动后文本不变 ≠ 没内容,可能本来就读全了
   - id: promo_card_trap
-    note: 推荐流混活动入口卡(bilibili 的 VCT 电竞/AI 萌宠企划,实测两连踩,
-          落地页无评论区无视频)——确定性选卡走搜索结果页(结果卡即真内容;
-          keyword 用 ASCII,bash 内联中文会 GBK 污染)
+    note: >-
+      推荐流混活动入口卡(bilibili 的 VCT 电竞/AI 萌宠企划,实测两连踩,
+      落地页无评论区无视频)——确定性选卡走搜索结果页(结果卡即真内容;
+      keyword 用 ASCII,bash 内联中文会 GBK 污染)
   - id: shared_desktop_drift
-    note: 用户在场/自动连播都会改窗口标题(实测:复验尾段窗口被用户接管,
-          标题三变)——锚点漂移先查 list-windows 实况,勿盲重试
+    note: >-
+      用户在场/自动连播都会改窗口标题(实测:复验尾段窗口被用户接管,
+      标题三变)——锚点漂移先查 list-windows 实况,勿盲重试
   - id: douyin_screen_reader_toggle
-    note: 抖音默认 a11y 半盲(视频文案/作者/推荐列表视觉可见但不在树里,
-          text 通道只有导航+页脚)——钥匙是 Button "开启读屏标签"(抖音检测
-          UIA 客户端后暴露,默认关;find --name 读屏 拿 ref 点开)。开启后
-          内容层全进树(实测 +294 行:标题/作者@/时长/播放量/推荐列表)
+    note: >-
+      抖音默认 a11y 半盲(视频文案/作者/推荐列表视觉可见但不在树里,
+      text 通道只有导航+页脚)——钥匙是 Button "开启读屏标签"(抖音检测
+      UIA 客户端后暴露,默认关;find --name 读屏 拿 ref 点开)。开启后
+      内容层全进树(实测 +294 行:标题/作者@/时长/播放量/推荐列表)
   - id: douyin_interaction_blind
-    note: 抖音互动层(推荐卡片链接/评论图标/点赞按钮)在树里无 name、
-          不可交互(有 name 的 Text/Image 不分配 ref)——评论栏展开走视觉兜底:
-          screenshot --app → 多模态读评论图标坐标 → click xy:<x>,<y> --app
-          抖音 --physical(窗口边界守卫;2026-09-27 坐标寻址已落地)。
-          /explore 已 404;首页是单视频沉浸流,评论栏默认收起
+    note: >-
+      抖音互动层(推荐卡片链接/评论图标/点赞按钮)在树里无 name、
+      不可交互(有 name 的 Text/Image 不分配 ref)——评论栏展开走视觉兜底:
+      screenshot --app → 多模态读评论图标坐标 → click xy:<x>,<y> --app
+      抖音 --physical(窗口边界守卫;2026-09-27 坐标寻址已落地)。
+      /explore 已 404;首页是单视频沉浸流,评论栏默认收起
   - id: extension_surfaces
-    note: 扩展操作面(实测 2026-09-27):工具栏按钮 name 在树里("猫抓
-          \n可以访问此网站"形态)但 **UIA Invoke 报 INTERNAL——必须
-          click --physical**;弹层是独立 Document(文档数 +1),内容走
-          **树形通道**(snapshot --view content --skeleton 的 name;弹层
-          text 通道为空,与普通页面相反);press esc 直达并关闭弹层;
-          观察命令期间弹层存活。战略路线:猫抓(嗅探列表→"复制"按钮
-          name 就绪)、沉浸式翻译(触发→text 读译文)。凭据类扩展
-          (Cookie-Editor)不碰——白名单归上层 agent 策略
+    note: >-
+      扩展操作面(实测 2026-09-27):工具栏按钮 name 在树里("猫抓
+      \n可以访问此网站"形态)但 **UIA Invoke 报 INTERNAL——必须
+      click --physical**;弹层是独立 Document(文档数 +1),内容走
+      **树形通道**(snapshot --view content --skeleton 的 name;弹层
+      text 通道为空,与普通页面相反);press esc 直达并关闭弹层;
+      观察命令期间弹层存活。战略路线:猫抓(嗅探列表→"复制"按钮
+      name 就绪)、沉浸式翻译(触发→text 读译文)。凭据类扩展
+      (Cookie-Editor)不碰——白名单归上层 agent 策略
   - id: webui_weak_a11y
-    note: Chrome 内置页面(WebUI)视觉完全渲染但 a11y 弱暴露(extensions
-          管理页实测:text 空、toggle 无 ref、仅零星 Text)——开关切换走
-          视觉兜底坐标点击(click xy: --physical,2026-09-27 已落地)或键盘
-          Tab 导航;扩展的独立标签页不受影响
+    note: >-
+      Chrome 内置页面(WebUI)视觉完全渲染但 a11y 弱暴露(extensions
+      管理页实测:text 空、toggle 无 ref、仅零星 Text)——开关切换走
+      视觉兜底坐标点击(click xy: --physical,2026-09-27 已落地)或键盘
+      Tab 导航;扩展的独立标签页不受影响
   - id: risk_control_pacing
-    note: 平台风控是现实——注入虽是人类级信号(SendInput/剪贴板,无 CDP 指纹),
-          但机器速率的连续"滚动-读取"循环可能触发行为检测;采集类任务控制
-          节奏,重要账号操作前确认
+    note: >-
+      平台风控是现实——注入虽是人类级信号(SendInput/剪贴板,无 CDP 指纹),
+      但机器速率的连续"滚动-读取"循环可能触发行为检测;采集类任务控制
+      节奏,重要账号操作前确认
   - id: github_single_rootwebarea
-    note: 主文档识别因站而异(2026-09-28 GitHub releases 页实测:窗口内 6 个
-          role:Document,但 id:RootWebArea 唯一且 name=页面名,可直接精确定位;
-          与 xhs 的 2×RootWebArea AMBIGUOUS 相反)。页面级文本契约先 find
-          枚举确认结构,再决定用 id:RootWebArea 还是序数
+    note: >-
+      主文档识别因站而异(2026-09-28 GitHub releases 页实测:窗口内 6 个
+      role:Document,但 id:RootWebArea 唯一且 name=页面名,可直接精确定位;
+      与 xhs 的 2×RootWebArea AMBIGUOUS 相反)。页面级文本契约先 find
+      枚举确认结构,再决定用 id:RootWebArea 还是序数
 routes:
   - id: window_title_read
     description: 读浏览器窗口标题(=当前标签页页面名+浏览器后缀;标签切换标题随变)
     status: verified
-    verify: 标题含页面名与 "- Google Chrome" 后缀;多窗口时 AMBIGUOUS 拒绝。
+    verify: >-
+      标题含页面名与 "- Google Chrome" 后缀;多窗口时 AMBIGUOUS 拒绝。
       2026-09-28 Chrome 真机验证(release-review-draft 流程读段,窗口根
       uia 组合定位与标题输出绑定)
     steps:
@@ -126,11 +150,12 @@ routes:
     steps:
       - ["get", "role:Document", "--property", "text", "--app", "{window}"]
   - id: read_page_multidoc
-    description: 多文档页读正文(先枚举再按非空定位;序数因站而异,xhs 实测 #2)
-    status: verified
+    description: 多文档页先枚举，按页面身份和内容确认正文，将其完整 ref 与同次 snapshot_id 配对读回
+    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
+    status: manual
     steps:
       - ["find", "--role", "document", "--app", "{window}"]
-      - ["get", "role:Document#2", "--property", "text", "--app", "{window}"]
+      - ["get", "{document_ref}", "--property", "text", "--snapshot", "{document_snapshot_id}", "--app", "{window}"]
   - id: read_page_tree
     description: 树形观察当前页(chrome 整枝丢弃,点链接/找控件用)
     status: verified
@@ -138,53 +163,59 @@ routes:
       - ["snapshot", "--app", "{window}", "--view", "content", "--skeleton"]
   - id: navigate
     description: 地址栏导航(URL 变量 {url};IME 安全 + settle 判定;xhs 实测全链)
-    status: verified
+    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
+    status: manual
     steps:
       - ["press", "ctrl+l", "--app", "{window}"]
       - ["set-clipboard", "{url}"]
-      - ["paste", "--app", "{window}"]
-      - ["press", "enter", "--app", "{window}"]
-      - ["wait", "--element", "role:Document#2", "--stable", "--app", "{window}"]
+      - ["press", "ctrl+v", "--target", "{address_selector}", "--app", "{window}"]
+      - ["press", "enter", "--app", "{window}", "--target", "{address_selector}"]
+      - ["wait", "--element", "{document_selector}", "--stable", "--app", "{window}"]
   - id: scroll_more
-    description: 下滚一屏并等加载完成(无限滚动采集的循环原语;xhs 实测两轮)
-    status: verified
+    description: 下滚一屏并等当前正文稳定；先确认焦点在页面，document_selector 来自当前观察
+    # 原路线曾有真机证据；定位已修订，尚未复验。
+    status: manual
     steps:
       - ["press", "pgdn", "--app", "{window}"]
-      - ["wait", "--element", "role:Document#2", "--stable", "--app", "{window}", "--timeout", "8000"]
-      - ["get", "role:Document#2", "--property", "text", "--app", "{window}"]
+      - ["wait", "--element", "{document_selector}", "--stable", "--app", "{window}", "--timeout", "8000"]
+      - ["get", "{document_selector}", "--property", "text", "--app", "{window}"]
   - id: open_item
-    description: 点开卡片/链接(标题子串变量 {text};先 find 拿 Hyperlink 的 ref
+    description: >-
+      点开卡片/链接(标题子串变量 {text};先 find 拿 Hyperlink 的 ref
       再精点防 AMBIGUOUS;xhs 实测:弹层打开 esc 返回,B 站整页跳转换新锚)
-    status: verified
+    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
+    status: manual
     steps:
-      - ["find", "--name", "{text}", "--app", "{window}"]
-      - ["click", "name:{text}", "--app", "{window}"]
-      - ["wait", "--element", "role:Document#2", "--stable", "--app", "{window}", "--timeout", "8000"]
+      - ["find", "--name", "{text}", "--app", "{window}", "--role", "Hyperlink"]
+      - ["click", "{link_ref}", "--app", "{window}", "--snapshot", "{link_snapshot_id}"]
+      - ["wait", "--element", "{document_selector}", "--stable", "--app", "{window}", "--timeout", "8000"]
   - id: read_note_comments
-    description: 点开笔记后读评论(text 通道直达,无需滚到评论区;xhs 实测
+    description: >-
+      点开笔记后读评论(text 通道直达,无需滚到评论区;xhs 实测
       标题/正文/评论一次读全)
-    status: verified
+    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
+    status: manual
     steps:
-      - ["find", "--name", "{text}", "--app", "{window}"]
-      - ["get", "role:Document#2", "--property", "text", "--app", "{window}"]
+      - ["find", "--role", "Document", "--app", "{window}"]
+      - ["get", "{document_selector}", "--property", "text", "--app", "{window}"]
       - ["press", "esc", "--app", "{window}"]
-      - ["wait", "--element", "role:Document#2", "--stable", "--app", "{window}"]
+      - ["wait", "--element", "{document_selector}", "--stable", "--app", "{window}"]
   - id: site_search
     description: 站内搜索框输入(关键词变量 {query};搜索框定位形态各站不一)
     status: unverified
     steps:
-      - ["find", "--role", "search", "--app", "{window}"]
-      - ["click", "role:search", "--app", "{window}"]
+      - ["find", "--role", "Edit", "--name", "{search_name}", "--app", "{window}"]
+      - ["click", "{search_ref}", "--app", "{window}", "--snapshot", "{search_snapshot_id}"]
       - ["set-clipboard", "{query}"]
-      - ["paste", "--app", "{window}"]
-      - ["press", "enter", "--app", "{window}"]
-      - ["wait", "--element", "role:Document#2", "--stable", "--app", "{window}"]
+      - ["press", "ctrl+v", "--app", "{window}", "--target", "{search_ref}", "--snapshot", "{search_snapshot_id}"]
+      - ["press", "enter", "--app", "{window}", "--target", "{search_ref}", "--snapshot", "{search_snapshot_id}"]
+      - ["wait", "--element", "{document_selector}", "--stable", "--app", "{window}"]
   - id: new_tab_and_go
     description: 新标签页打开 URL(不扰动现有标签)
     status: unverified
     steps:
       - ["press", "ctrl+t", "--app", "{window}"]
       - ["set-clipboard", "{url}"]
-      - ["paste", "--app", "{window}"]
-      - ["press", "enter", "--app", "{window}"]
-      - ["wait", "--element", "role:Document#2", "--stable", "--app", "{window}"]
+      - ["press", "ctrl+v", "--target", "{address_selector}", "--app", "{window}"]
+      - ["press", "enter", "--app", "{window}", "--target", "{address_selector}"]
+      - ["wait", "--element", "{document_selector}", "--stable", "--app", "{window}"]
