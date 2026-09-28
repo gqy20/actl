@@ -18,6 +18,7 @@ $result = Invoke-FixtureCli $context @('-NoProfile','-File',$script)
 Assert-Fixture ($timer.ElapsedMilliseconds -lt 5000) 'CLI capture waited for descendant pipe EOF'
 Assert-Fixture (@($result).Count -eq 1 -and $result.test -eq 42) 'Envelope polluted or lost'
 Assert-Fixture ((Get-Content $context.calls[0].stderr -Raw).Contains('diagnostic')) 'Diagnostic lost'
+Assert-Fixture (($context.calls[0].elapsed_ms - $context.calls[0].process_elapsed_ms) -ge 500) 'Process latency includes descendant stream timeout'
 Write-Output 'Descendant pipe capture passed'
 . "$PSScriptRoot/../regress-lib.ps1"
 $timer.Restart()

@@ -28,7 +28,7 @@ fn main() -> ExitCode {
                  cargo xtask setup   install git hooks + activate pinned toolchain (run once after clone)\n  \
                  cargo xtask gate    quality gate: file-lines + fmt --check + clippy -D warnings + tests (= pre-push = CI)\n  \
                  cargo xtask fmt     format all code
-                 cargo xtask regress [--list | --suite flow|system|scenario | --case ID] (PowerShell 7)
+                 cargo xtask regress [--list | --suite flow|system|scenario | --case ID] [--unattended] (PowerShell 7)
   \n                 cargo xtask lint-packs [dir] validate app packs against the CLI schema\n                 \
                  (default skills/actl/apps; pass a dir to lint out-of-repo private packs)"
             );
@@ -197,6 +197,7 @@ fn regress() -> ExitCode {
     for arg in args {
         command.arg(match arg.as_str() {
             "--list" => "-List".to_string(),
+            "--unattended" => "-Unattended".to_string(),
             "--suite" => "-Suite".to_string(),
             "--case" => "-Case".to_string(),
             _ => arg,

@@ -3,6 +3,7 @@
   {"id":"input-target","script":"fixtures/input-target.ps1","suite":"system","state":"ready","input":"keyboard","reason":"Owned Notepad: bound refs, exact focus refusal and value readback"},
   {
     "id": "flow-evaluation",
+    "unattended": true,
     "script": "fixtures/flow-evaluation.ps1",
     "suite": "flow",
     "state": "ready",

@@ -44,6 +44,20 @@ def digest(path):
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
+def error_details(error):
+    details = {"code": error.code if isinstance(error, ProbeError) else "INTERNAL",
+               "message": str(error), "evidence": error.evidence if isinstance(error, ProbeError) else {}}
+    causes, seen = [], {id(error)}
+    cause = error.__cause__
+    while cause is not None and id(cause) not in seen and len(causes) < 4:
+        seen.add(id(cause))
+        causes.append({"type": type(cause).__name__, "message": str(cause)[:4096]})
+        cause = cause.__cause__
+    if causes:
+        details["causes"] = causes
+    return details
+
+
 def run(browser_executable, output):
     output.mkdir(parents=True, exist_ok=False)
     report = {"version": 1, "passed": False, "checks": [], "cleanup": "not_started",
@@ -157,8 +171,7 @@ def run(browser_executable, output):
         expect_error("transport_loss_rejected", lambda: adapter.read("css", "#receipt"), {"INTERNAL", "NOT_ACTIONABLE", "NOT_FOUND"})
         report["passed"] = True
     except Exception as error:
-        report["error"] = {"code": error.code if isinstance(error, ProbeError) else "INTERNAL",
-                           "message": str(error), "evidence": error.evidence if isinstance(error, ProbeError) else {}}
+        report["error"] = error_details(error)
     finally:
         # Failure/uncertainty/stop preserves the browser. Never terminate/kill it or
         # automatically clear stop. A retained profile path is recorded for review.

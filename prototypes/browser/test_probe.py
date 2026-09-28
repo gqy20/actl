@@ -5,10 +5,18 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from probe import run
+from probe import run, error_details
+from adapter import ProbeError
 
 
 class RunnerTests(unittest.TestCase):
+    def test_wrapped_error_keeps_root_cause(self):
+        error = ProbeError("INTERNAL", "write uncertain", uncertain=True)
+        error.__cause__ = TimeoutError("iframe actionability timed out")
+        details = error_details(error)
+        self.assertEqual(details["causes"][0]["type"], "TimeoutError")
+        self.assertIn("actionability", details["causes"][0]["message"])
+
     def test_stop_precedes_dependency_and_process_start(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

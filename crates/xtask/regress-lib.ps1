@@ -25,6 +25,12 @@ function Get-CaseStatus([int]$Code) {
     return 'failed'
 }
 
+# Explicit opt-in: absence of keyboard injection does not imply absence of consent.
+function Test-UnattendedCase($Case) {
+    return ($Case.state -eq 'ready' -and $Case.input -eq 'none' -and
+        $null -ne $Case.PSObject.Properties['unattended'] -and $Case.unattended -is [bool] -and $Case.unattended)
+}
+
 # Stream both channels to separate files. No shell string expansion, no pipe-buffer deadlock.
 function Invoke-RegressionProcess([string]$Program, [string[]]$Arguments, [string]$Directory, [string]$LogPrefix, [hashtable]$Environment) {
     $info = [Diagnostics.ProcessStartInfo]::new($Program)

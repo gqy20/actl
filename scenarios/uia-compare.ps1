@@ -13,7 +13,7 @@ $root=[IO.Path]::GetFullPath($OutputDirectory)
 if (Test-Path -LiteralPath $root) { throw 'PROTOCOL: output directory must be new' }
 $null=New-Item -ItemType Directory -Path $root
 $context=@{root=$root;calls=[Collections.Generic.List[object]]::new();timeout_ms=$TimeoutMs}
-$report=@{version=1;collection_status='failed';calls=$context.calls;os=[Environment]::OSVersion.VersionString;cleanup='no_target_resources_created';comparison='not_evaluated';views=@{actl='raw/full';winapp='control';winapp_depth=$Depth};limitations=@('Sequential observations are not atomic','Matching role/id/name is only a candidate correspondence','Raw/control hierarchy and depth differ; counts do not imply defects','actl snapshot currently has legacy best-effort property/tree reads')}
+$report=@{version=1;collection_status='failed';calls=$context.calls;os=[Environment]::OSVersion.VersionString;cleanup='no_target_resources_created';comparison='not_evaluated';views=@{actl='raw/full';winapp='control';winapp_depth=$Depth};limitations=@('Sequential observations are not atomic','Matching role/id/name is only a candidate correspondence','Raw/control hierarchy and depth differ; counts do not imply defects','Failed property/tree reads are errors; neither client provides an atomic observation')}
 $exitCode=1
 function Assert-StopClear {
     if (-not $env:LOCALAPPDATA) { throw 'INTERNAL: LOCALAPPDATA unavailable' }
@@ -29,7 +29,7 @@ function Get-Identity {
     $windows=@($native.data.windows)
     if ($windows.Count -ne 1 -or $windows[0].hwnd -ne $Hwnd) { throw 'STALE_REF: exact HWND is no longer observable' }
     $window=$windows[0]
-    if ($window.minimized -or ($window.PSObject.Properties['visible'] -and -not $window.visible)) { throw 'NOT_ACTIONABLE: target is minimized or hidden; observation will not restore it' }
+    if (($window.PSObject.Properties['minimized'] -and $window.minimized) -or ($window.PSObject.Properties['visible'] -and -not $window.visible)) { throw 'NOT_ACTIONABLE: target is minimized or hidden; observation will not restore it' }
     $process=Get-Process -Id $window.pid -ErrorAction Stop
     return @{hwnd=$Hwnd;pid=$window.pid;process_started=$process.StartTime.ToUniversalTime().ToString('o');class=$window.class;window=$window;process_path=$process.Path}
 }

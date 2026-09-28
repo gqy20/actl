@@ -25,7 +25,7 @@ function Invoke-FixtureCli($Context, [string[]]$Arguments) {
     $capture = [Threading.CancellationTokenSource]::new()
     $stdout = $process.StandardOutput.BaseStream.CopyToAsync($outBuffer,$capture.Token)
     $stderr = $process.StandardError.BaseStream.CopyToAsync($errBuffer,$capture.Token)
-    $record = @{command=$Arguments[0];status='failed';exit_code=$null;elapsed_ms=0;streams_drained=$false;stdout="$prefix.stdout.json";stderr="$prefix.stderr.log"}
+    $record = @{command=$Arguments[0];status='failed';exit_code=$null;elapsed_ms=0;process_elapsed_ms=$null;streams_drained=$false;stdout="$prefix.stdout.json";stderr="$prefix.stderr.log"}
     try {
         if (-not $process.WaitForExit(30000)) {
             $Context.uncertain = $true
@@ -33,6 +33,7 @@ function Invoke-FixtureCli($Context, [string[]]$Arguments) {
             $process.WaitForExit()
             throw 'CLI timeout; effect unknown, no automatic replay or cleanup'
         }
+        $record.process_elapsed_ms = $timer.ElapsedMilliseconds
         # A GUI descendant can retain a pipe after the CLI exits. Require a complete
         # JSON envelope, but do not wait for that GUI to close before reading it.
         $capture.CancelAfter(1000)
@@ -43,6 +44,9 @@ function Invoke-FixtureCli($Context, [string[]]$Arguments) {
         }
         $record.streams_drained = -not ($stdout.IsCanceled -or $stderr.IsCanceled)
         $envelope = [Text.Encoding]::UTF8.GetString($outBuffer.ToArray()) | ConvertFrom-Json
+        if ($null -eq $envelope -or $null -eq $envelope.PSObject.Properties['ok']) {
+            throw "CLI $($Arguments[0]) returned no valid envelope; see $prefix.stdout.json and stderr"
+        }
         if ($process.ExitCode -ne 0 -or -not $envelope.ok) {
             if ($envelope.PSObject.Properties['error'] -and $envelope.error.PSObject.Properties['evidence'] -and
                 $envelope.error.evidence -and $envelope.error.evidence.PSObject.Properties['stage'] -and

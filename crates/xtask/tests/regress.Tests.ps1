@@ -15,6 +15,15 @@ foreach ($name in @('golden-task-1','win32-table-extract','virtualized-list')) {
     if ($entry -match 'close_all_by_title|rm -rf') { throw "$name still uses broad cleanup" }
 }
 . "$root/crates/xtask/regress-lib.ps1"
+foreach ($sample in @(
+    @{state='ready';input='none'},
+    @{state='ready';input='keyboard';unattended=$true},
+    @{state='manual';input='none';unattended=$true},
+    @{state='ready';input='none';unattended='true'}
+)) {
+    if (Test-UnattendedCase ([pscustomobject]$sample)) { throw 'Unaudited or interactive fixture was allowed unattended' }
+}
+if (-not (Test-UnattendedCase ([pscustomobject]@{state='ready';input='none';unattended=$true}))) { throw 'Audited read-only fixture was rejected' }
 $all = @(Get-RegressionCases $root 'all' '')
 if ($all.Count -lt 9) { throw 'Missing regression inventory' }
 if (@(Get-RegressionCases $root 'flow' '').Count -ne 1) { throw 'Suite selection failed' }
@@ -72,3 +81,4 @@ Write-Output 'Regression selection, stream capture, exit classification and exis
 & "$PSScriptRoot/office-package.Tests.ps1"
 
 & "$PSScriptRoot/input-target.Tests.ps1"
+& "$PSScriptRoot/phase2-readonly.Tests.ps1"

@@ -17,6 +17,7 @@
 
 ### Added
 
+- **无人值守验收入口**：`cargo xtask regress --unattended` 仅运行明确登记的无输入用例，其余保留 skipped，并通过 complete 区分局部运行与全量验收。新增只读性能/观察采样脚本，保存环境、二进制哈希、逐调用输出、100 次新进程耗时和稳定观察下的字节削减率；不把字节数宣称为 tokenizer token 数。浏览器原型失败报告保留有界异常原因链。验收与遗留项见 [44](docs/44-phase2-acceptance.md)。
 
 - **首条业务流程 YAML**：交付 `skills/actl/workflows/release-review-draft.yml`——读取已打开的 actl Releases 页(Chrome)，在 Word 新文档生成核对草稿并以静态文件名另存为。演练输出绑定（标题跨应用进入草稿）、时效声明、检查点授权边界、恢复后源稳定性核验（resume_check 绑定）与写后业务核验；全静态锚点、零逐次输入。协议预检、读段真机（检查点前零派发）与时效拒绝路径（过期不派发动作）已验证；写段联测待用户授权执行，不宣称业务闭环。浏览器 pack 新增窗口标题读取路线与 GitHub 页主文档定位知识，索引与限制见 [43](docs/43-release-review-draft.md)。
 
