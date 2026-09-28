@@ -54,12 +54,33 @@ pub(crate) fn snapshot_cmd(
     hwnd: Option<&str>,
     skeleton: bool,
     view: Option<crate::cli::ViewMode>,
+    within: Option<&str>,
+    depth: Option<u32>,
+    limit: Option<usize>,
 ) -> Result<CommandOutput, CtlError> {
     use actl_core::Projection;
-    let cap = match (app, hwnd) {
-        (_, Some(h)) => actl_uia::capture_hwnd(actl_uia::parse_hwnd(h)?)?,
-        (a, None) => actl_uia::capture(a)?,
+    let (cap, scope) = if let Some(within) = within {
+        let window = hwnd
+            .map(|h| format!("hwnd:{h}"))
+            .or_else(|| app.map(str::to_owned))
+            .ok_or_else(|| CtlError::protocol("snapshot --within requires --app or --hwnd"))?;
+        let (cap, scope) = actl_uia::scoped_snapshot::capture(
+            &window,
+            within,
+            depth.unwrap_or(actl_uia::MAX_DEPTH),
+            limit.unwrap_or(actl_uia::MAX_ELEMENTS),
+        )?;
+        (cap, Some(scope))
+    } else {
+        (
+            match (app, hwnd) {
+                (_, Some(h)) => actl_uia::capture_hwnd(actl_uia::parse_hwnd(h)?)?,
+                (a, None) => actl_uia::capture(a)?,
+            },
+            None,
+        )
     };
+    let observed_nodes = cap.nodes.len();
     if matches!(view, Some(crate::cli::ViewMode::Content))
         && !cap.nodes.iter().any(|node| node.role == "Document")
     {
@@ -79,11 +100,12 @@ pub(crate) fn snapshot_cmd(
         None => Projection::Full,
     };
     let out = builder.finish(projection)?;
-    actl_uia::persist_snapshot(
+    actl_uia::persist_snapshot_scoped(
         &out.snapshot_id,
         &cap.window.title,
         &cap.window_runtime_id,
         &cap.element_identities,
+        scope.as_ref(),
     )?;
     let mut data = json!({
         "window": {
@@ -99,6 +121,11 @@ pub(crate) fn snapshot_cmd(
     });
     if matches!(view, Some(crate::cli::ViewMode::Content)) {
         data["view"] = json!("content");
+    }
+    if let Some(scope) = scope {
+        data["scope"] = scope;
+        data["observed_nodes"] = json!(observed_nodes);
+        data["ref_scope"] = json!("container");
     }
     Ok(CommandOutput {
         data,

@@ -44,6 +44,8 @@ mod window_ready;
 pub use window_ready::wait_window_ready;
 
 pub mod input;
+pub mod scoped_snapshot;
+pub use window::persist_snapshot_scoped;
 pub mod kbd;
 pub mod mouse;
 pub use capture::{ShotResult, screenshot_element, screenshot_rect, screenshot_window};

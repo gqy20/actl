@@ -92,6 +92,25 @@ state/run 响应的步骤可带 outputs，显式保存的业务数据不受 erro
 
 ### 3.2 分层模型:哪些统一,哪些适配
 
+#### 容器局部快照（2026-09-29）
+
+`snapshot --app <window> --within 'uia:{"match":{"id":"panel"}}' [--depth 3] [--limit 100]`。
+也可用 `--hwnd` 绑定窗口；不允许隐式使用前台窗口。within 必须是唯一匹配的严格 UIA 选择器，
+不接受 ref、坐标或模糊选择器。depth 为 0–40（默认 40），limit 为 1–5000（默认 5000），
+二者只能与 within 一起使用。容器本身计为深度 0 和一个节点；支持继续叠加 skeleton/content 投影。
+
+局部输出增加 `ref_scope:"container"`、投影前的 `observed_nodes` 和 `scope`：
+`{version:1,selector,identity,depth,limit}`，identity 包含 RuntimeId/PID/角色/名称/AutomationId。
+`truncated` 和 `truncation_reasons` 如实标记深度/数量截断；观察失败保留错误，不伪装为空结果。
+定位容器仍需要全窗口唯一性核验，其预算超限会拒绝，局部参数不放宽此规则。
+
+局部 ref 从 `@e1` 重新编号，必须携带本次返回的 `--snapshot <snapshot_id>` 使用，不能与全窗口 ref 混用。
+持久化记录保存容器和预算；重放时按原范围重新观察，核对窗口、容器和具体元素身份。
+容器缺失、歧义、变化或记录无效返回 STALE_REF，不回退到全窗口序号；其他 provider 错误保留。
+截断快照只允许核验已记录元素，不能据此证明未出现的元素不存在。
+未绑定 snapshot 的旧式 ref 仍是全窗口序号语义，无法携带局部范围，应使用绑定方式。
+此能力减少输出内容，不承诺降低总扫描耗时；输出字节数不能等同 tokenizer token 数。
+
 #### 独立目标预览（2026-09-29）
 
 `preview <target> --app <window> [--snapshot <id>] [--message <text>] [--duration <ms>]`。

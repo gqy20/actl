@@ -85,7 +85,12 @@ actl verify --value <target> "<期望>" --app <app> # 确认:立即断言
 
 ## 命令速查
 
-感知:snapshot(--skeleton/--view content) find(--name/--role/--id 或 --target uia:JSON) get list-windows status commands
+感知:snapshot(--skeleton/--view content/--within uia:JSON --depth N --limit N) find(--name/--role/--id 或 --target uia:JSON) get list-windows status commands
+
+已知容器时，使用 `snapshot --app <window> --within 'uia:{"match":{"id":"panel"}}' --depth 3 --limit 100` 减少无关输出。
+容器必须唯一，根节点深度为 0；检查 truncated/truncation_reasons，不把截断解释为不存在。
+局部 ref 从 @e1 重新编号，后续命令必须传同次返回的 `--snapshot <snapshot_id>`；不要混用全窗口或其他局部快照的编号。
+容器变化后重新观察；没有唯一容器时先 find/inspect，不用扩大输出代替定位。此功能不保证降低总扫描耗时。
 执行:click(--physical/--expect/--near/--no-activate) right-click double-click hover drag scroll type(--paste)
      press(--expect) key-down key-up set-value
 窗口:launch focus-window close-window resize-window wait(--element/--window/--gone/--stable/--idle) batch

@@ -82,6 +82,20 @@ impl Drop for ReplayGuard {
     }
 }
 
+pub(crate) fn scoped_ref(
+    auto: &UIAutomation,
+    root: &UIElement,
+    n: u32,
+) -> Result<Option<UIElement>, CtlError> {
+    REPLAY.with(|r| {
+        let record = r.borrow();
+        let Some(scope) = record.as_ref().and_then(|v| v.get("scope")) else {
+            return Ok(None);
+        };
+        crate::scoped_snapshot::replay(auto, root, scope, n).map(Some)
+    })
+}
+
 pub(crate) fn check_ref(root: &UIElement, element: &UIElement, n: u32) -> Result<(), CtlError> {
     REPLAY.with(|r| {
         let record = r.borrow();

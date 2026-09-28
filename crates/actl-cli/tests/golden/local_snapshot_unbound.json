@@ -1,0 +1,1 @@
+{"version":"1","ok":false,"command":"snapshot","error":{"code":"PROTOCOL","message":"snapshot --within requires --app or --hwnd","hint":"fix the command arguments (see `actl <cmd> -h`)"}}

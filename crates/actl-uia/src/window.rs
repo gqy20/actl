@@ -121,13 +121,26 @@ pub fn persist_snapshot(
     window_runtime_id: &[i32],
     elements: &[serde_json::Value],
 ) -> Result<(), CtlError> {
+    persist_snapshot_scoped(id, window_title, window_runtime_id, elements, None)
+}
+
+pub fn persist_snapshot_scoped(
+    id: &str,
+    window_title: &str,
+    window_runtime_id: &[i32],
+    elements: &[serde_json::Value],
+    scope: Option<&serde_json::Value>,
+) -> Result<(), CtlError> {
     let dir = snapshot_dir().ok_or_else(|| crate::internal("snapshot directory unavailable"))?;
-    let record = serde_json::json!({
+    let mut record = serde_json::json!({
         "snapshot_id": id,
         "window_title": window_title,
         "window_runtime_id": window_runtime_id,
         "elements": elements,
     });
+    if let Some(scope) = scope {
+        record["scope"] = scope.clone();
+    }
     std::fs::write(
         dir.join(format!("{id}.json")),
         serde_json::to_vec(&record).map_err(crate::internal)?,
@@ -401,6 +414,14 @@ fn walk(
     identities: &mut Vec<serde_json::Value>,
 ) -> Result<Vec<&'static str>, CtlError> {
     let observed = crate::observation::tree(elem)?;
+    append_observed(observed, nodes, identities)
+}
+
+pub(crate) fn append_observed(
+    observed: crate::observation::Observed<UIElement>,
+    nodes: &mut Vec<UiNode>,
+    identities: &mut Vec<serde_json::Value>,
+) -> Result<Vec<&'static str>, CtlError> {
     for entry in observed.entries {
         let element = entry.element;
         let node = UiNode {

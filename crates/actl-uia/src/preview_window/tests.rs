@@ -177,4 +177,5 @@ fn native_preview_preserves_foreground_and_closes_owned_windows() {
 }
 
 mod lifecycle;
+mod local_snapshot;
 mod selection;

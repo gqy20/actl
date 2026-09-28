@@ -34,6 +34,35 @@ pub(crate) fn validate(command: &Command) -> Result<(), CtlError> {
         check(target, None)?;
     }
     match command {
+        Command::Snapshot {
+            within: None,
+            depth,
+            limit,
+            ..
+        } if depth.is_some() || limit.is_some() => {
+            return Err(CtlError::protocol(
+                "snapshot --depth/--limit require --within",
+            ));
+        }
+        Command::Snapshot {
+            within: Some(within),
+            app,
+            hwnd,
+            depth,
+            limit,
+            ..
+        } => {
+            if app.as_deref().is_none_or(|s| s.trim().is_empty()) && hwnd.is_none() {
+                return Err(CtlError::protocol(
+                    "snapshot --within requires --app or --hwnd",
+                ));
+            }
+            actl_uia::scoped_snapshot::validate(
+                within,
+                depth.unwrap_or(actl_uia::MAX_DEPTH),
+                limit.unwrap_or(actl_uia::MAX_ELEMENTS),
+            )?;
+        }
         Command::Preview {
             target,
             candidate,

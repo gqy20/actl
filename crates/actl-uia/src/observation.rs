@@ -71,6 +71,14 @@ fn collect<T: Clone>(
 }
 
 pub(crate) fn tree(root: &UIElement) -> Result<Observed<UIElement>, CtlError> {
+    tree_bounded(root, crate::window::MAX_DEPTH, crate::window::MAX_ELEMENTS)
+}
+
+pub(crate) fn tree_bounded(
+    root: &UIElement,
+    depth: u32,
+    limit: usize,
+) -> Result<Observed<UIElement>, CtlError> {
     let auto = UIAutomation::new().map_err(crate::internal)?;
     let condition = auto.create_true_condition().map_err(crate::internal)?;
     let cache = auto.create_cache_request().map_err(crate::internal)?;
@@ -80,16 +88,11 @@ pub(crate) fn tree(root: &UIElement) -> Result<Observed<UIElement>, CtlError> {
     cache
         .set_tree_scope(TreeScope::Element)
         .map_err(crate::internal)?;
-    collect(
-        root.clone(),
-        crate::window::MAX_DEPTH,
-        crate::window::MAX_ELEMENTS,
-        |element| {
-            element
-                .find_all_build_cache(TreeScope::Children, &condition, &cache)
-                .map_err(|e| crate::read_channel::failure("children", e))
-        },
-    )
+    collect(root.clone(), depth, limit, |element| {
+        element
+            .find_all_build_cache(TreeScope::Children, &condition, &cache)
+            .map_err(|e| crate::read_channel::failure("children", e))
+    })
 }
 
 pub(crate) fn children(root: &UIElement) -> Result<Vec<UIElement>, CtlError> {

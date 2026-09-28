@@ -1,0 +1,22 @@
+{
+  "version": "1",
+  "ok": true,
+  "command": "snapshot",
+  "snapshot_id": "s-test",
+  "data": {
+    "window": {"title": "ACTL isolated preview target", "class": "Static", "pid": 1},
+    "elements": [{"automation_id": "11", "depth": 0, "name": "Option B", "ref": "@e1", "role": "Button"}],
+    "observed_nodes": 1,
+    "ref_scope": "container",
+    "scope": {
+      "depth": 0,
+      "limit": 1,
+      "selector": "uia:{\"match\":{\"id\":\"11\"}}",
+      "version": 1,
+      "identity": {"automation_id": "11", "name": "Option B", "pid": 1, "role": "Button", "runtime_id": [42, 1]}
+    },
+    "truncated": false,
+    "truncation_reasons": [],
+    "wake_ms": 0
+  }
+}

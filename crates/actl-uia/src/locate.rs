@@ -72,6 +72,10 @@ pub fn locate(app: Option<&str>, target: &Target, near: Option<&str>) -> Result<
 
     // @eN:计数重放,不参与 fallback(ref 漂移 = STALE_REF,模糊化反而危险)
     if let Target::Ref(n) = target {
+        if let Some(hit) = crate::identity::scoped_ref(&auto, &root, *n)? {
+            crate::identity::check_ref(&root, &hit, *n)?;
+            return located_from(hit, window_title, "scoped-ref-replay");
+        }
         let mut counter = 0u32;
         let _t = actl_core::trace::scope("locate.ref-replay");
         return match collect_until_ref(&walker, &root, 0, *n, &mut counter)? {

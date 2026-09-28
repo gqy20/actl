@@ -15,7 +15,7 @@
   写段联测待用户授权执行，未验收前保留本待办，见 [43](43-release-review-draft.md)。
   原始标题 fixture 的 STALE_REF 已复现并修复（桌面根整批枚举被无关窗口竞态毒化，有界重试收口，见 [38](38-flow-output-bindings.md)）；
   遗留显示端创建叠加扰动下的元素级瞬态 NOT_FOUND 观察项，随局部观察条目核对。
-  下一批补容器局部观察、虚拟化覆盖和任务相关变化核对，并用通用场景矩阵与外部 UIA 对照验收；
+  继续验收容器局部观察在真实软件中的输出削减和失效行为（见 [48](48-local-snapshot.md)），补虚拟化覆盖和任务相关变化核对，并用通用场景矩阵与外部 UIA 对照验收；
   夸克 upload_file 路线（选择框绑定、上传完成核验）作为独立场景待办推进。
   音乐分享仅作候选业务场景，不能将目录创建或离线测试记为发送流程已实现。
 
@@ -62,7 +62,7 @@
 
 ### P1 · 应用场景与输入可靠性
 
-- [ ] 基于 [UIA 读取与对照采样](37-uia-observation.md)，补齐系统输入框空值、控件重建、深度/数量截断、表格读取失败和 provider 故障的真机验收；窗口清单迁移后的本机只读结果见 [44](44-phase2-acceptance.md)，真实故障现场仍待验证。Raw/Control View 对齐、局部观察及 Pattern 能力诊断另行实现。
+- [ ] 基于 [UIA 读取与对照采样](37-uia-observation.md)，补齐系统输入框空值、控件重建、深度/数量截断、表格读取失败和 provider 故障的真机验收；窗口清单迁移后的本机只读结果见 [44](44-phase2-acceptance.md)，真实故障现场仍待验证。Raw/Control View 对齐及 Pattern 能力诊断另行实现；局部观察的真实软件覆盖仍待验收（见 [48](48-local-snapshot.md)）。
 
 - [ ] 按 [winapp 对照诊断](36-winapp-uia-diagnostics.md) 完成同窗口、同状态的双客户端只读采样：
   先用系统应用验证树视图/深度/属性/焦点差异，再检查 Blender、Photoshop、Minecraft 可用环境。
