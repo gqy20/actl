@@ -55,3 +55,37 @@
 
 剩余验收：实际鼠标点击关闭、真实目标移动/重建时失效、急停触发、不同 DPI/多屏、遮挡变化和并发预览。
 候选切换与用户纠正、坐标预览未实现。全部应用 YAML 真机复验及 Phase 2 发布门槛仍按 ROADMAP 保留。
+
+## 第二批：失效与退出回归
+
+将原生预览测试拆到 `crates/actl-uia/src/preview_window/tests.rs`，新增 `tests/lifecycle.rs`。
+后者通过真实 release CLI 与自有 Win32 测试窗口，等待该 CLI PID 的两扇预览窗口可见后再改变目标。
+测试分别覆盖移动、改名、隐藏、销毁、同名同位置重建、中心点遮挡、停止和关闭消息退出。
+每例核对前台窗口、CLI 输出、该 PID 的预览窗口清理及自有目标/遮挡窗口清理，原始输出保存在 `target/preview-lifecycle/`。
+
+停止用例使用子进程专用 LOCALAPPDATA；只写该目录内的停止标记，并断言退出后仍保留。
+运行前检查真实桌面停止状态，不读取或清除用户停止标记内容。此用例验证预览对停止状态的响应，不替代显示端急停按钮端到端验收。
+关闭用例向自有预览的说明窗口投递 WM_CLOSE，验证 JSON 为 `dismissed` 且 `executed=false`，仍不代表实际鼠标关闭通过。
+全部用例以 ignored 标记，普通 gate 只编译它们；需交互桌面显式运行，不加入无桌面 CI 执行轨。
+
+### 原始结果与限制
+
+- `target/preview-lifecycle-first.log`：首次 6 项通过。
+- `target/preview-lifecycle-second.log`：扩大到 8 项时，6 项通过、销毁及重建 2 项失败。二者的前台保持和清理均成功，但测试错误地限定返回 STALE_REF。
+- 失败输出显示 UIA 身份查询返回原生错误 `-2146233083`，经现有规则保留为 INTERNAL，包含 `observation_failed`、属性通道及原生错误码。协议要求保留查询错误，因此未改生产错误映射。
+- 测试修订为销毁/重建允许 STALE_REF，或带明确观察失败证据的 INTERNAL；其他错误不放行，不允许成功退出。原失败日志和 `target/preview-lifecycle-second-hashes.json` 保留。
+- 最终整轮：`target/preview-batch2-live.log` 为 11/11 通过（本批 8 项、原有 3 项）；`target/preview-batch2-gate.log` 为门禁通过。该结果属于修订后的新一轮，不覆盖前述失败轮次。
+- Windows 环境仍为 10.0.26200.0。被测 `target/validation/release/actl.exe` 的 SHA-256 为 `53BB84D00D73A53EA483931996FD1CFCB14E59797C5FD42809513DDE49F01CD8`；测试程序 `target/debug/deps/actl_uia-107b82953eeb6492.exe` 为 `DAFFC0A640E896BB8A3857A8E8F242668AF330E6BCD7768B1BE70DEA37D1D105`，绝对路径另存 `target/preview-batch2-hashes.json`。
+- 8 项逐调用记录均确认前台保持、该 CLI PID 无预览残留、自有目标/遮挡窗口已关闭；停止用例的隔离标记保留在本地证据目录。未修改生产预览行为或错误码映射。
+
+复验命令（PowerShell，使用已经构建的 release）：
+
+```powershell
+$env:PATH='C:\Users\gqy17\scoop\shims;'+$env:PATH
+$env:ACTL_PREVIEW_CLI=Join-Path $PWD 'target/validation/release/actl.exe'
+cargo test -p actl-uia preview_window::tests -- --ignored --test-threads=1
+Remove-Item Env:ACTL_PREVIEW_CLI
+```
+
+目标是自有原生 STATIC 窗口，结论不外推到 Office、浏览器或其他 provider 的重建行为。
+后续仍需实际鼠标关闭、多屏缩放、并发预览、真实应用控件重建以及显示端急停联测。
