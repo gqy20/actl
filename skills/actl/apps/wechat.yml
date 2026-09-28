@@ -10,7 +10,10 @@ app_version: "4.1.x"
 verified_date: 2026-09-27
 quirks:
   - id: physical_click_required
-    note: 会话条目 UIA Invoke 返回 ok 但不触发导航(mmui/Qt 特性,实测)——切换会话必须 click --physical
+    note: 会话条目 UIA Invoke 返回 ok 但不触发导航(mmui/Qt 特性,实测)。范式(v2)——
+          UIA 优先 + 物化验证 + 受控降级:先 click --expect element:id:chat_message_list
+          (假成功会以 ASSERTION_FAILED 暴露,evidence.cause 区分"假成功"与"目标错误"),
+          失败再 click --physical(见 open_conversation_uia_first / open_conversation_physical)
   - id: materialize_on_open
     note: 消息区元素(chat_message_list/chat_input_field)仅在会话打开后物化;wait --element id:chat_message_list 是就绪判据
   - id: rich_session_ids
@@ -45,15 +48,25 @@ quirks:
   - id: safety_no_blind_send
     note: 真实聊天应用——发送前必须读回输入框 value 并核对会话标题;严禁盲发
   - id: background_ops
-    note: 采集类长任务参考 wechat-ui-collector 两件套——LASTINPUTINFO 空闲检测 + 临时 WS_EX_NOACTIVATE 后台点击(journal 可恢复);actl 后台化属 M3 候选
+    note: 两件套已产品化(2026-09-28)——wait --idle <ms>(空闲门,人不在判定)+
+          指针族 --no-activate(WS_EX_NOACTIVATE 后台点击,不抢前台,光标送回;
+          键盘仍需前台)。采集/扫描类长任务 = wait --idle + --no-activate 点击;
+          UI 驱动段与 wechat-ui-collector 并存时按 docs/09 §6.2 共享
+          actl-input-lock 锁约定
 routes:
   - id: session_scan
     description: 会话列表概览(只读安全;条目 name 含预览与时间)
     status: verified
     steps:
       - ["snapshot", "--app", "{window}", "--skeleton"]
-  - id: open_conversation
-    description: 打开指定会话(必须物理点击;打开后消息区才物化)
+  - id: open_conversation_uia_first
+    description: 打开指定会话(UIA 优先 + 物化验证;ASSERTION_FAILED = mmui 假成功,降级 open_conversation_physical)
+    status: unverified
+    verify: --expect element:id:chat_message_list 通过即导航真实发生;失败 evidence.cause 供判定
+    steps:
+      - ["click", "id:session_item_{name}", "--app", "{window}", "--expect", "element:id:chat_message_list", "--timeout", "4000"]
+  - id: open_conversation_physical
+    description: 打开指定会话(受控物理降级:UIA 假成功实证路线;打开后消息区才物化)
     status: verified
     steps:
       - ["click", "id:session_item_{name}", "--app", "{window}", "--physical"]

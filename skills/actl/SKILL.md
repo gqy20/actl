@@ -61,12 +61,39 @@ actl verify --value <target> "<期望>" --app <app> # 确认:立即断言
 ## 命令速查
 
 感知:snapshot(--skeleton/--view content) find(--name/--role/--id/--near) get list-windows status commands
-执行:click(--physical/--expect/--near) right-click double-click hover drag scroll type(--paste)
+执行:click(--physical/--expect/--near/--no-activate) right-click double-click hover drag scroll type(--paste)
      press(--expect) key-down key-up set-value
-窗口:launch focus-window close-window resize-window wait(--element/--window/--gone/--stable) batch
+窗口:launch focus-window close-window resize-window wait(--element/--window/--gone/--stable/--idle) batch
 桌面:minimize-window restore-window desktop-prepare desktop-restore display-start display-status
 验证:verify(--exists/--value/--contains/--checked) extract(--table)
 系统:get-clipboard set-clipboard
+
+## 假成功应用的操作范式(UIA 撒谎时)
+
+部分自绘框架(mmui/Qt 系,如微信 4.x)的元素声明支持 Invoke/Select,调用返回 ok 却不产生
+任何效果——UIA"假成功"。标准循环是**UIA 优先 + 物化验证 + 受控降级**:
+
+```bash
+# 1. UIA 优先,带后置条件(不是新窗口,是"目标元素应可解析"):
+actl click id:session_item_张三 --app 微信 --expect element:id:chat_message_list
+#    通过 → 导航真实发生,继续。
+#    ASSERTION_FAILED → 假成功暴露(evidence.cause 区分"假成功"与"目标错误")
+# 2. 降级一次物理(全部门禁照走:命中检查/输入锁/信号条预告):
+actl click id:session_item_张三 --app 微信 --physical
+actl wait --element id:chat_message_list --app 微信 --timeout 4000
+```
+
+要点:`--expect element:<target>` 已存在即成立(后置条件,非"新出现");不要跳过第 1 步
+直接 --physical(每次都占物理输入);也不要在假成功被暴露后盲目重试 UIA(它是确定性谎言)。
+
+## 人在场与后台执行
+
+- `wait --idle 8000 --timeout 120000`:等全系统键鼠静默 ≥8s——长批/采集任务的**前置门**,
+  "人不在"才开工;只观测物理输入(UIA 注入对它不可见)。
+- 指针族 `--no-activate`(click --physical / right-click 等):点击落地但目标窗口**不抢前台、
+  不改 Z 序**,结束光标送回(drag 除外)。与空闲门组合 = 采集类任务两件套;键盘无此模式
+  (窗口无焦点,键会打进用户当前前台——CLI 直接拒绝)。
+- 人突然回来:注入段会被焦点护栏/输入锁拦下,或人按 Ctrl+Alt+F12 紧急停止;样条仍有动作预告。
 
 目标语法:`@eN`(重放,须 --app)· `name:<子串>` · `id:<AutomationId>` · `role:<Type>` ·
 `role:<Type>#<序数>` · `id:<AutomationId>#<序数>`(多文档页同名 id) ·
