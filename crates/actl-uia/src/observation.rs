@@ -106,6 +106,44 @@ pub(crate) fn children(root: &UIElement) -> Result<Vec<UIElement>, CtlError> {
         .map_err(|e| crate::read_channel::failure("children", e))
 }
 
+/// 桌面根整批枚举的有界瞬态重试。一次 FindAll(Children) 是全有或全无:
+/// 任何**无关**顶层窗口在创建/销毁中途,其 provider 会以
+/// UIA_E_ELEMENTNOTAVAILABLE 让整批枚举失败,进而让所有应用的标题定位
+/// 报 STALE_REF(窗口不存在时还会把 NOT_FOUND 误报成 STALE_REF;
+/// 2026-09-28 记事本开关联扰动下 9/10 复现,HWND 路径不受影响)。
+/// 仅重试 StaleRef,与 flow 层 stale_read 同参数(3 次/200ms);其他错误
+/// 立即上抛,持久失败保留错误并附尝试次数。窗口子树枚举不走此重试:
+/// 目标应用自身的控件失效是另一个故障域,由既有语义处理。
+pub(crate) fn with_transient_retry<T>(
+    mut attempt: impl FnMut() -> Result<T, CtlError>,
+) -> Result<T, CtlError> {
+    const MAX_ATTEMPTS: usize = 3;
+    const RETRY_INTERVAL_MS: u64 = 200;
+    let mut stale = None;
+    for _ in 0..MAX_ATTEMPTS {
+        actl_core::wait_control::check()?;
+        match attempt() {
+            Ok(value) => return Ok(value),
+            Err(error) if error.code == ErrorCode::StaleRef => stale = Some(error),
+            Err(error) => return Err(error),
+        }
+        std::thread::sleep(std::time::Duration::from_millis(RETRY_INTERVAL_MS));
+    }
+    let mut error = stale.expect("retry loop ran at least once");
+    if let Some(serde_json::Value::Object(map)) = error.evidence.as_mut() {
+        map.insert("attempts".into(), serde_json::json!(MAX_ATTEMPTS));
+    }
+    Err(error)
+}
+
+/// 桌面根的直接子窗口(带瞬态重试);标题定位与 uia: 作用域解析共用。
+pub(crate) fn desktop_children(auto: &UIAutomation) -> Result<Vec<UIElement>, CtlError> {
+    with_transient_retry(|| {
+        let root = auto.get_root_element().map_err(crate::internal)?;
+        children(&root)
+    })
+}
+
 pub(crate) fn parent(
     walker: &uiautomation::UITreeWalker,
     element: &UIElement,
@@ -180,5 +218,52 @@ mod tests {
             _ => Err(CtlError::new(ErrorCode::StaleRef, "rebuilt")),
         });
         assert!(matches!(result, Err(e) if e.code == ErrorCode::StaleRef));
+    }
+
+    #[test]
+    fn transient_root_staleness_is_retried_then_recovers() {
+        let calls = std::cell::Cell::new(0);
+        let result = with_transient_retry(|| {
+            calls.set(calls.get() + 1);
+            if calls.get() == 1 {
+                Err(CtlError::with_evidence(
+                    ErrorCode::StaleRef,
+                    "UIA observation failed",
+                    serde_json::json!({"reason":"observation_failed","channel":"children"}),
+                ))
+            } else {
+                Ok(vec![1u32])
+            }
+        });
+        assert_eq!(result.unwrap(), vec![1]);
+        assert_eq!(calls.get(), 2);
+    }
+    #[test]
+    fn persistent_root_staleness_keeps_error_with_attempt_count() {
+        let calls = std::cell::Cell::new(0);
+        let error = with_transient_retry(|| {
+            calls.set(calls.get() + 1);
+            Err::<(), _>(CtlError::with_evidence(
+                ErrorCode::StaleRef,
+                "UIA observation failed",
+                serde_json::json!({"reason":"observation_failed","channel":"children"}),
+            ))
+        })
+        .unwrap_err();
+        assert_eq!(error.code, ErrorCode::StaleRef);
+        assert_eq!(calls.get(), 3);
+        assert_eq!(error.evidence.unwrap()["attempts"], 3);
+    }
+    #[test]
+    fn non_stale_errors_are_not_retried() {
+        let calls = std::cell::Cell::new(0);
+        let error = with_transient_retry(|| {
+            calls.set(calls.get() + 1);
+            Err::<(), _>(CtlError::new(ErrorCode::PermDenied, "denied"))
+        })
+        .unwrap_err();
+        assert_eq!(error.code, ErrorCode::PermDenied);
+        assert_eq!(calls.get(), 1);
+        assert!(error.evidence.is_none());
     }
 }

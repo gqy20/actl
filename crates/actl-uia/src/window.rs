@@ -330,10 +330,8 @@ pub(crate) fn find_window(
     if pattern.starts_with("hwnd:") {
         return crate::scoped_locate::window(auto, Some(pattern));
     }
-    let root = auto
-        .get_root_element()
-        .map_err(|e| crate::read_channel::failure("desktop.root", e))?;
-    let hosts = crate::observation::children(&root)?;
+    // 桌面根整批枚举对无关窗口的创建/销毁竞态敏感,重试吸收瞬态(见 observation::desktop_children)
+    let hosts = crate::observation::desktop_children(auto)?;
     let mut matches = Vec::new();
     for w in &hosts {
         if native_hwnd(w).is_some_and(crate::display_support::is_display_window) {

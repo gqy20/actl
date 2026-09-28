@@ -85,3 +85,35 @@ CalculatorApp PID 64356，启动时间 18:02:02 +08:00。没有输入数字或�
 清理：保留计算器与显示端；UWP launch PID 15756 与实际窗口宿主/应用 PID 不同，
 缺少任务标记，不能仅凭新窗口差集和启动时间认定独占归属，因此未发送 close-window。
 保留正常完成、首次失败及预期过期暂停的运行记录，无活动 runner；未清除急停或修改采集时间。
+
+## 2026-09-28 STALE_REF 根因与修复
+
+原始标题 fixture 的失败已复现并归因。**根因**：`find_window`（及 `uia:` 作用域的
+标题路径）对桌面根做一次整批 `FindAll(Children)`，这是全有或全无的调用——任何
+**无关**顶层窗口处于创建/销毁中途（provider 返回 UIA_E_ELEMENTNOTAVAILABLE，
+0x80040201），整批枚举失败，所有应用的标题定位都报 STALE_REF；窗口不存在时还会
+把 NOT_FOUND 误报成 STALE_REF。HWND 路径走 `element_from_handle`，不做桌面根
+枚举，因此当日限定 HWND 的计划全部通过——同现场后续通过不能改写首次失败，
+但两者差异自此得到解释。
+
+复现：记事本开关联扰动（350ms 周期）下运行同一 fixture，修复前 9/10 循环在
+observe 步骤报 STALE_REF（channel=children，native_code=0x80040201）。脚本与
+证据在本地 `target/flow-stale-repro-20260928/`（churn.ps1、cycle.ps1、probe.ps1、
+discrim.ps1 及逐调用 JSON）。
+
+修复：`observation::with_transient_retry` 仅对桌面根枚举做有界瞬态重试
+（仅 StaleRef，3 次/200ms，与 flow 层 stale_read 同参数；其他错误立即上抛，
+持久失败保留错误并在 evidence 附 attempts）。`find_window` 与
+`scoped_locate::window` 标题路径共用 `observation::desktop_children`；后者此前
+把枚举失败误映射为 Internal，现统一为 StaleRef。窗口子树枚举不加此重试——
+目标应用自身的控件失效是另一故障域，由既有语义处理。
+
+验证：同机同日，修复后净环境 8/8 循环完整通过（run→checkpoint→resume→completed）；
+显示端重启与扰动下 36/36 直查成功（一次 13.1s DCOM 拥塞离群，trace 显示耗时
+在 locate.window 阶段）；无匹配窗口探针 30/30 返回 NOT_FOUND、0 次 STALE_REF。
+新增 3 项单测覆盖瞬态恢复、持久失败保留尝试次数、非 StaleRef 不重试。
+
+**遗留观察项**：显示端 UI 创建与外部窗口扰动同时发生的数秒窗口内，曾出现
+4/10 循环的元素级 NOT_FOUND（窗口命中但子树查询空结果，fail-closed 保留）。
+属独立的观察层瞬态现象，未随本次修复扩展范围，待按 ROADMAP 局部观察条目
+单独核对；不应把它当作目标缺席直接驱动业务动作。

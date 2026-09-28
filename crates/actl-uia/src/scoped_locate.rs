@@ -181,14 +181,9 @@ pub(crate) fn window(auto: &UIAutomation, app: Option<&str>) -> Result<UIElement
             .map_err(internal);
     }
     let pattern = app.ok_or_else(|| CtlError::internal("missing window query"))?;
-    let condition = auto.create_true_condition().map_err(internal)?;
-    let cache = raw_cache(auto, &condition)?;
-    let windows = auto
-        .get_root_element()
-        .map_err(internal)?
-        .find_all_build_cache(TreeScope::Children, &condition, &cache)
-        .map_err(internal)?;
-    let mut hits = Vec::new();
+    // 与 find_window 同源的桌面根枚举瞬态重试;此前此处把枚举失败误映射为 Internal
+    let windows = crate::observation::desktop_children(auto)?;
+    let mut matched = Vec::new();
     for element in windows {
         if let Some(hwnd) = crate::window::native_hwnd(&element)
             && crate::display_support::is_display_window(hwnd)
@@ -196,13 +191,24 @@ pub(crate) fn window(auto: &UIAutomation, app: Option<&str>) -> Result<UIElement
             continue;
         }
         if element.get_name().map_err(internal)?.contains(pattern) {
-            hits.push(Node {
+            matched.push(element);
+        }
+    }
+    // Node 的 condition/cache 只服务后续 children 遍历,命中后再构建
+    let hits: Vec<Node> = if matched.is_empty() {
+        Vec::new()
+    } else {
+        let condition = auto.create_true_condition().map_err(internal)?;
+        let cache = raw_cache(auto, &condition)?;
+        matched
+            .into_iter()
+            .map(|element| Node {
                 element,
                 condition: condition.clone(),
                 cache: cache.clone(),
-            });
-        }
-    }
+            })
+            .collect()
+    };
     Ok(unique(hits, "window")?.element)
 }
 
