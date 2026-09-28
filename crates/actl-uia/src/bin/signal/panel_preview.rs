@@ -64,35 +64,29 @@ unsafe fn export(hwnd: HWND, name: &str) {
 fn export_panel_previews() {
     unsafe {
         let previous = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+        let paths = actl_core::state::SignalPaths::at(
+            std::env::temp_dir().join(actl_core::snapshot::new_snapshot_id()),
+        );
+        let dir = paths.dir.join("flows").join("preview");
+        std::fs::create_dir_all(&dir).unwrap();
+        let plan = serde_json::json!({"name":"整理会议记录", "steps":[{"id":"read-notes", "title":"读取记录"}, {"id":"write-notes", "title":"写入纪要"}]});
+        let state = serde_json::json!({"status":"paused", "updated_ms":100, "reason":"user_paused", "steps":[{"id":"read-notes", "status":"completed", "verified":true}, {"id":"write-notes", "status":"pending"}]});
+        std::fs::write(dir.join("plan.json"), serde_json::to_vec(&plan).unwrap()).unwrap();
+        std::fs::write(dir.join("state.json"), serde_json::to_vec(&state).unwrap()).unwrap();
         let request = actl_core::handoff::Request {
             call: "preview-call".into(),
-            task: "整理本周会议记录".into(),
+            task: "preview".into(),
             target: "记事本 · 本周会议纪要.txt".into(),
             ts_ms: 0,
         };
-        let handoff = super::handoff::build_panel(Some(&request)).unwrap();
+        let handoff = super::handoff::build_panel_with(Some(&request), &paths).unwrap();
         export(handoff, "handoff");
         DestroyWindow(handoff).unwrap();
         let controls = super::controls::create_window().unwrap();
-        let details = super::paint::wide(
-            "流程 · meeting-notes\r\n已暂停\r\n\r\n当前步骤：整理会议记录\r\n暂停原因：用户请求暂停\r\n\r\n继续时先核对上一步；结果不明确不会自动重做。",
-        );
-        SetWindowTextW(
-            GetDlgItem(Some(controls), 100).unwrap(),
-            windows::core::PCWSTR(details.as_ptr()),
-        )
-        .unwrap();
-        let _ = windows::Win32::UI::Input::KeyboardAndMouse::EnableWindow(
-            GetDlgItem(Some(controls), 10).unwrap(),
-            false,
-        );
-        let _ = windows::Win32::UI::Input::KeyboardAndMouse::EnableWindow(
-            GetDlgItem(Some(controls), 13).unwrap(),
-            false,
-        );
-        super::panel::scroll(GetDlgItem(Some(controls), 100).unwrap());
+        super::controls::refresh_with(controls, &paths, Some("preview"));
         export(controls, "controls");
         DestroyWindow(controls).unwrap();
+        std::fs::remove_dir_all(paths.dir).unwrap();
         let _ = SetThreadDpiAwarenessContext(previous);
     }
 }

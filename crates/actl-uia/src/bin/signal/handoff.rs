@@ -17,6 +17,10 @@ use windows::{
     core::{PCWSTR, w},
 };
 
+thread_local! {
+    static PANEL_REQUEST: RefCell<Option<Request>> = const { RefCell::new(None) };
+    static PANEL_EXPANDED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
 static WATCH_RUNNING: AtomicBool = AtomicBool::new(false);
 static INPUT_SEQ: AtomicU64 = AtomicU64::new(0);
 
@@ -231,11 +235,21 @@ pub unsafe fn tick() {
 
 unsafe fn create_panel(request: Option<&Request>) -> windows::core::Result<HWND> {
     let hwnd = build_panel(request)?;
-    let _ = RegisterHotKey(Some(hwnd), HOTKEY_ID, MOD_CONTROL | MOD_ALT, HOTKEY_KEY);
+    if RegisterHotKey(Some(hwnd), HOTKEY_ID, MOD_CONTROL | MOD_ALT, HOTKEY_KEY).is_err()
+        && let Ok(label) = GetDlgItem(Some(hwnd), 105)
+    {
+        let _ = SetWindowTextW(label, w!("请点击按钮确认"));
+    }
     let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
     Ok(hwnd)
 }
 pub(super) unsafe fn build_panel(request: Option<&Request>) -> windows::core::Result<HWND> {
+    build_panel_with(request, &SignalPaths::default())
+}
+pub(super) unsafe fn build_panel_with(
+    request: Option<&Request>,
+    paths: &SignalPaths,
+) -> windows::core::Result<HWND> {
     let module = GetModuleHandleW(None)?;
     let class = w!("actl_handoff_window");
     let wc = WNDCLASSW {
@@ -269,29 +283,50 @@ pub(super) unsafe fn build_panel(request: Option<&Request>) -> windows::core::Re
         Some(module.into()),
         None,
     )?;
-    let context = format!(
-        "当前目标\r\n{}\r\n\r\n任务\r\n{}",
-        request.map_or("", |r| r.target.as_str()),
-        request.map_or("", |r| r.task.as_str())
-    );
+    PANEL_REQUEST.with(|r| *r.borrow_mut() = request.cloned());
+    PANEL_EXPANDED.with(|v| v.set(false));
+    let plan = request.and_then(|r| super::ui_text::plan(paths, &r.task));
+    let title = if plan.is_some() {
+        super::ui_text::task_title(plan.as_ref())
+    } else {
+        "桌面操作".into()
+    };
+    let state = request.and_then(|r| super::flow_ui::read(paths, &r.task));
+    let continuing = state
+        .as_ref()
+        .and_then(|s| s["steps"].as_array())
+        .is_some_and(|steps| {
+            steps
+                .iter()
+                .any(|s| s["attempts"].as_u64().unwrap_or(0) > 0 || s["status"] == "completed")
+        });
+    let context = format!("目标：{}", request.map_or("待确认", |r| r.target.as_str()));
     let children = (|| -> windows::core::Result<()> {
         for (id, text) in [
-            (102, "准备操作桌面"),
+            (102, title.as_str()),
             (15, "关闭"),
-            (103, "请确认后开始；你随时可以接管"),
+            (103, "等待你确认"),
             (10, context.as_str()),
             (
                 104,
-                "任务可能切换窗口、使用键鼠和剪贴板。\r\n开始后请暂时放开键鼠；再次操作会让任务停下。",
+                "可能切换窗口、使用键鼠和剪贴板。\r\n确认后请暂勿操作；操作键鼠会请求暂停。",
             ),
-            (105, "快捷键  Ctrl+Alt+Y"),
-            (2, "稍后"),
-            (1, "开始 / 继续"),
+            (105, "Ctrl+Alt+Y"),
+            (14, "详细信息"),
+            (
+                2,
+                if continuing {
+                    "暂不继续"
+                } else {
+                    "暂不开始"
+                },
+            ),
+            (1, if continuing { "继续" } else { "开始" }),
         ] {
             let label = super::paint::wide(text);
             CreateWindowExW(
                 WINDOW_EX_STYLE(0),
-                if matches!(id, 1 | 2 | 15) {
+                if matches!(id, 1 | 2 | 14 | 15) {
                     w!("BUTTON")
                 } else if id == 10 {
                     w!("EDIT")
@@ -301,13 +336,15 @@ pub(super) unsafe fn build_panel(request: Option<&Request>) -> windows::core::Re
                 PCWSTR(label.as_ptr()),
                 WS_CHILD
                     | WS_VISIBLE
-                    | if matches!(id, 1 | 2 | 15) {
+                    | if matches!(id, 1 | 2 | 14 | 15) {
                         WS_TABSTOP | WINDOW_STYLE(BS_OWNERDRAW as u32)
                     } else if id == 10 {
                         WS_VSCROLL
                             | WINDOW_STYLE(
                                 ES_MULTILINE as u32 | ES_READONLY as u32 | ES_AUTOVSCROLL as u32,
                             )
+                    } else if matches!(id, 102 | 103) {
+                        WINDOW_STYLE(0x4000) // SS_ENDELLIPSIS
                     } else {
                         WINDOW_STYLE(0)
                     },
@@ -332,22 +369,28 @@ pub(super) unsafe fn build_panel(request: Option<&Request>) -> windows::core::Re
 }
 unsafe fn layout(hwnd: HWND, dpi: u32) {
     let px = |n| super::paint::pixels(n, dpi);
+    let compact = if PANEL_EXPANDED.with(|v| v.get()) {
+        0
+    } else {
+        60
+    };
     let _ = SetWindowPos(
         hwnd,
         None,
         0,
         0,
         px(540),
-        px(410),
+        px(410 - compact),
         SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
     );
     for (id, x, y, width, height) in [
         (102, 24, 22, 428, 32),
         (15, 476, 22, 40, 32),
         (103, 24, 62, 492, 22),
-        (10, 24, 104, 492, 138),
+        (10, 24, 104, 492, 138 - compact),
         (104, 24, 260, 492, 48),
-        (105, 24, 354, 210, 24),
+        (105, 368, 314, 148, 24),
+        (14, 24, 346, 148, 40),
         (2, 252, 346, 104, 40),
         (1, 368, 346, 148, 40),
     ] {
@@ -356,20 +399,20 @@ unsafe fn layout(hwnd: HWND, dpi: u32) {
                 child,
                 None,
                 px(x),
-                px(y),
+                px(if y >= 260 { y - compact } else { y }),
                 px(width),
                 px(height),
                 SWP_NOZORDER | SWP_NOACTIVATE,
             );
         }
     }
-    super::panel::fonts(hwnd, dpi, &[102, 103, 10, 104, 105, 2, 1, 15]);
+    super::panel::fonts(hwnd, dpi, &[102, 103, 10, 104, 105, 2, 1, 14, 15]);
     if let Ok(edit) = GetDlgItem(Some(hwnd), 10) {
         let rect = RECT {
             left: px(14),
             top: px(10),
             right: px(464),
-            bottom: px(128),
+            bottom: px(128 - compact),
         };
         SendMessageW(
             edit,
@@ -403,6 +446,41 @@ unsafe extern "system" fn panel_proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARA
         WM_DESTROY => {
             let _ = UnregisterHotKey(Some(hwnd), HOTKEY_ID);
             super::panel::release(hwnd);
+            PANEL_REQUEST.with(|r| r.borrow_mut().take());
+            LRESULT(0)
+        }
+        WM_COMMAND if wp.0 >> 16 == BN_CLICKED as usize && wp.0 & 0xffff == 14 => {
+            let expanded = PANEL_EXPANDED.with(|v| {
+                v.set(!v.get());
+                v.get()
+            });
+            let text = PANEL_REQUEST.with(|r| {
+                r.borrow().as_ref().map(|r| {
+                    if expanded {
+                        format!("目标：{}\r\n\r\n任务编号：{}", r.target, r.task)
+                    } else {
+                        format!("目标：{}", r.target)
+                    }
+                })
+            });
+            if let Some(text) = text
+                && let Ok(edit) = GetDlgItem(Some(hwnd), 10)
+            {
+                let wide = super::paint::wide(&text);
+                let _ = SetWindowTextW(edit, PCWSTR(wide.as_ptr()));
+                super::panel::scroll(edit);
+            }
+            if let Ok(button) = GetDlgItem(Some(hwnd), 14) {
+                let _ = SetWindowTextW(
+                    button,
+                    if expanded {
+                        w!("收起详情")
+                    } else {
+                        w!("详细信息")
+                    },
+                );
+            }
+            layout(hwnd, GetDpiForWindow(hwnd));
             LRESULT(0)
         }
         WM_COMMAND if wp.0 >> 16 != BN_CLICKED as usize || !matches!(wp.0 & 0xffff, 1 | 2 | 15) => {
@@ -481,7 +559,7 @@ mod tests {
             let mut rect = RECT::default();
             GetWindowRect(parent, &mut rect).unwrap();
             assert_eq!(rect.right - rect.left, 810);
-            assert_eq!(rect.bottom - rect.top, 615);
+            assert_eq!(rect.bottom - rect.top, 525);
             let font = SendMessageW(child, WM_GETFONT, None, None);
             let mut info = LOGFONTW::default();
             assert!(

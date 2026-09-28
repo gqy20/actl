@@ -299,7 +299,7 @@ pub fn view(states: &[SessionState], now: u64, stop_ms: Option<u64>, busy: Optio
                     "precondition_failed" => "检查目标是否已就绪",
                     "action_failed" => "检查操作结果后继续",
                     "verification_failed" => "先核对结果，继续仅重新检查",
-                    "stop_requested" => "允许后续操作后再继续",
+                    "stop_requested" => "先解除急停，再继续任务",
                     _ => "核对结果后再决定是否重试",
                 }
                 .into(),

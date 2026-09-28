@@ -28,6 +28,8 @@ mod perimeter;
 mod popup;
 #[path = "signal/shell.rs"]
 mod shell;
+#[path = "signal/ui_text.rs"]
+mod ui_text;
 fn main() {
     let result = unsafe {
         if std::env::args().any(|arg| arg == "--controls") {

@@ -158,7 +158,7 @@ unsafe fn tick(hwnd: HWND) {
             .join("pause-requested")
             .exists()
     {
-        v.label = "正在暂停流程".into();
+        v.label = "正在暂停".into();
         v.details.push_str("\n等待当前操作结束");
     }
     if stop.is_none() {
@@ -166,8 +166,7 @@ unsafe fn tick(hwnd: HWND) {
     }
     if DRAG_STOP.load(Ordering::Relaxed) {
         v.label = "移动状态条 · 已请求暂停".into();
-        v.details
-            .push_str("\n移动状态条会请求停止；可在菜单允许后续操作");
+        v.details.push_str("\n移动后已请求暂停；继续时请重新确认");
     }
     let request_message = super::flow_ui::message();
     if !request_message.is_empty() {
@@ -392,35 +391,27 @@ unsafe fn details(_hwnd: HWND) {
 
 unsafe fn menu(hwnd: HWND) {
     let mut lines = vec![
-        "停止操作".into(),
-        "解除急停（任务需另行继续）".into(),
-        "详情".into(),
+        "紧急停止".into(),
+        "解除急停".into(),
+        "任务详情".into(),
         if IsWindowVisible(hwnd).as_bool() {
             "隐藏".into()
         } else {
             "显示".into()
         },
-        "关闭显示条".into(),
-        "流程控制".into(),
+        "关闭".into(),
     ];
     let paths = SignalPaths::default();
     let action = super::flow_ui::discover(&paths).and_then(|id| {
         let state = super::flow_ui::read(&paths, &id)?;
         match state["status"].as_str()? {
             "running" => Some((id, false)),
-            "paused" | "needs_review" | "stopped" | "failed" => Some((id, true)),
+            "paused" | "needs_review" => Some((id, true)),
             _ => None,
         }
     });
     if let Some((_, resume)) = &action {
-        lines.push(
-            if *resume {
-                "继续流程"
-            } else {
-                "暂停流程"
-            }
-            .into(),
-        );
+        lines.push(if *resume { "继续" } else { "暂停" }.into());
     }
     if let Ok(mut stored) = MENU_FLOW.lock() {
         *stored = action;
@@ -456,8 +447,7 @@ unsafe fn menu_action(hwnd: HWND, cmd: usize) {
             publish_lease(&SignalPaths::default(), "closed");
             let _ = DestroyWindow(hwnd);
         }
-        6 => details(hwnd),
-        7 => {
+        6 => {
             let action = MENU_FLOW.lock().ok().and_then(|a| a.clone());
             if let Some((id, resume)) = action {
                 let result = flow_action(&id, resume);
@@ -524,6 +514,11 @@ unsafe fn primary(hwnd: HWND, control: model::Control) {
 }
 
 pub(super) fn flow_action(id: &str, resume: bool) -> Result<(), String> {
+    if resume {
+        let paths = SignalPaths::default();
+        let state = super::flow_ui::read(&paths, id);
+        super::flow_ui::resume_guard(state.as_ref(), paths.stop_requested(), unix_ms())?;
+    }
     super::flow_ui::request(id, resume)
 }
 

@@ -187,18 +187,11 @@ pub fn details(paths: &SignalPaths, id: &str) -> String {
     let status = state["status"].as_str().unwrap_or("");
     let mut text = format!("流程 · {id}\n{}", status_name(status));
     if let Some(reason) = state["reason"].as_str() {
-        let reason = match reason {
-            "checkpoint" | "start_paused" => "等待确认后继续",
-            "pause_requested" | "user_paused" => "用户请求暂停",
-            "human_takeover_or_grant_expired" => "已让行，检测到人工操作或授权过期",
-            "handoff_pending" | "user_deferred" => "等待用户交接",
-            "stop_requested" => "用户请求停止",
-            "precondition_failed" => "前置条件未满足",
-            "action_failed" => "操作失败",
-            "verification_failed" => "结果未通过核对",
-            other => other,
-        };
-        text.push_str(&format!("\n{reason}"));
+        let reason = super::ui_text::reason(reason);
+        text.push_str(&format!(
+            "\n{reason}\n原因标识：{}",
+            state["reason"].as_str().unwrap_or("")
+        ));
     }
     if let Some(steps) = state["steps"].as_array() {
         for step in steps {
@@ -217,6 +210,27 @@ pub fn details(paths: &SignalPaths, id: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn recovery_failures_have_readable_reasons() {
+        let paths =
+            SignalPaths::at(std::env::temp_dir().join(actl_core::snapshot::new_snapshot_id()));
+        let dir = paths.dir.join("flows").join("review");
+        std::fs::create_dir_all(&dir).unwrap();
+        for (reason, expected) in [
+            ("resume_check_failed", "恢复检查未通过"),
+            ("binding_validation_failed", "步骤输入未通过检查"),
+        ] {
+            std::fs::write(
+                dir.join("state.json"),
+                serde_json::to_vec(&serde_json::json!({"status":"paused", "reason":reason}))
+                    .unwrap(),
+            )
+            .unwrap();
+            let text = details(&paths, "review");
+            assert!(text.contains(expected), "{text}");
+        }
+        std::fs::remove_dir_all(paths.dir).unwrap();
+    }
     #[test]
     fn executor_failure_is_not_reported_as_success() {
         assert!(
@@ -254,6 +268,24 @@ pub fn continue_ready(state: &serde_json::Value, now: u64) -> bool {
             .as_u64()
             .is_some_and(|t| now >= t && now - t >= 800)
 }
+/// Every native entry re-reads persisted state before dispatch; this never grants consent.
+pub fn resume_guard(
+    state: Option<&serde_json::Value>,
+    stopped: bool,
+    now: u64,
+) -> Result<(), String> {
+    if stopped {
+        return Err("请先解除急停，任务不会自动继续".into());
+    }
+    let state = state.ok_or("任务状态未确认，请稍后查看")?;
+    if !matches!(state["status"].as_str(), Some("paused" | "needs_review")) {
+        return Err("当前任务不可继续，请查看详细信息".into());
+    }
+    if !continue_ready(state, now) {
+        return Err("正在确认暂停状态，请稍候".into());
+    }
+    Ok(())
+}
 #[cfg(test)]
 mod continue_tests {
     use super::*;
@@ -266,6 +298,18 @@ mod continue_tests {
         for status in ["running", "completed", "stopped", "failed"] {
             s["status"] = status.into();
             assert!(!continue_ready(&s, 1000));
+        }
+    }
+    #[test]
+    fn every_entry_rejects_unknown_stopped_and_unsettled_resume() {
+        let state = serde_json::json!({"status":"paused", "updated_ms":100});
+        assert!(resume_guard(Some(&state), false, 900).is_ok());
+        assert!(resume_guard(Some(&state), true, 900).is_err());
+        assert!(resume_guard(Some(&state), false, 899).is_err());
+        assert!(resume_guard(None, false, 900).is_err());
+        for status in ["running", "failed", "completed", "stopped"] {
+            let state = serde_json::json!({"status":status, "updated_ms":100});
+            assert!(resume_guard(Some(&state), false, 1000).is_err());
         }
     }
 }
