@@ -184,6 +184,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             snapshot,
             physical,
             with,
+            no_activate,
             expect,
             timeout,
         } => click(
@@ -193,6 +194,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             snapshot.as_deref(),
             *physical,
             with.as_slice(),
+            *no_activate,
             expect.as_deref(),
             *timeout,
         ),
@@ -259,39 +261,69 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             near.as_deref(),
             snapshot.as_deref(),
         ),
-        Command::RightClick { target, app, near } => pointer_cmd(
+        Command::RightClick {
+            target,
+            app,
+            near,
+            no_activate,
+        } => pointer_cmd(
             "right-click",
             target,
             app.as_deref(),
             near.as_deref(),
+            *no_activate,
             PointerKind::Right,
         ),
-        Command::DoubleClick { target, app, near } => pointer_cmd(
+        Command::DoubleClick {
+            target,
+            app,
+            near,
+            no_activate,
+        } => pointer_cmd(
             "double-click",
             target,
             app.as_deref(),
             near.as_deref(),
+            *no_activate,
             PointerKind::Double,
         ),
-        Command::MiddleClick { target, app, near } => pointer_cmd(
+        Command::MiddleClick {
+            target,
+            app,
+            near,
+            no_activate,
+        } => pointer_cmd(
             "middle-click",
             target,
             app.as_deref(),
             near.as_deref(),
+            *no_activate,
             PointerKind::Middle,
         ),
-        Command::TripleClick { target, app, near } => pointer_cmd(
+        Command::TripleClick {
+            target,
+            app,
+            near,
+            no_activate,
+        } => pointer_cmd(
             "triple-click",
             target,
             app.as_deref(),
             near.as_deref(),
+            *no_activate,
             PointerKind::Triple,
         ),
-        Command::Hover { target, app, near } => pointer_cmd(
+        Command::Hover {
+            target,
+            app,
+            near,
+            no_activate,
+        } => pointer_cmd(
             "hover",
             target,
             app.as_deref(),
             near.as_deref(),
+            *no_activate,
             PointerKind::Hover,
         ),
         Command::Drag {
@@ -376,6 +408,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             element,
             window,
             gone,
+            idle,
             property,
             contains,
             stable,
@@ -385,6 +418,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             element.as_deref(),
             window.as_deref(),
             gone.as_deref(),
+            *idle,
             property.as_deref(),
             *contains,
             *stable,

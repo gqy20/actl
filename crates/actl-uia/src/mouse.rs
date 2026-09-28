@@ -115,6 +115,15 @@ pub fn move_to(x: i32, y: i32) -> Result<(), CtlError> {
     send_all(&[mouse_event(abs(MOUSEEVENTF_MOVE), nx, ny, 0)])
 }
 
+/// 当前光标物理坐标(屏幕系;--no-activate 动作后送回原位用)。
+pub fn cursor_pos() -> Option<(i32, i32)> {
+    use windows::Win32::Foundation::POINT;
+    use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
+    let mut pt = POINT::default();
+    // SAFETY: 出参写入门,无前置条件。
+    unsafe { GetCursorPos(&mut pt) }.ok().map(|_| (pt.x, pt.y))
+}
+
 /// 物理拖拽:按住左键从 (x1,y1) 移到 (x2,y2) 再松开。
 /// 拖拽期间目标可能移动/中途取消;失败时尽力补发 LEFTUP 释放按键(doc 09 §6)。
 pub fn drag_to(x1: i32, y1: i32, x2: i32, y2: i32) -> Result<(), CtlError> {

@@ -86,6 +86,7 @@ extract @ref [--table]              # 结构化提取(表格→JSON 数组),@ref
 ```
 click @e3 [--expect P]     right-click / double-click
 click xy:1420,856 --app X --physical   # 坐标寻址(视觉兜底的手;§7 守卫)
+click @e3 --physical --no-activate     # 抑制激活的物理点击(见 §7.8;指针族通用)
 type @e5 "text"            set-value @e5 "v"    # UIA Value pattern 优先
 press ctrl+s               key-down shift / key-up shift  # 状态保持键必须成对
 paste --app Excel                                 # ctrl+v 到当前选中(无元素落点;pack 路线原语)
@@ -115,6 +116,10 @@ wait --element @e3 --stable                        # settle 等待:观测样本(
                                                      # 滚动/导航后的加载判定,evidence 带
                                                      # samples/changes;与 --property 互斥
 wait --window "保存" | --gone @e3                        # 等窗口出现 | 等元素消失
+wait --idle 8000 [--timeout 120000]              # 等系统空闲:全系统键鼠无输入 ≥N ms
+                                                  # (GetLastInputInfo;"人不在"门——长批任务的
+                                                  # 前置闸。与 --element/--window/--gone 互斥;
+                                                  # 只观测物理输入,UIA 语义注入对它不可见)
 verify --exists @e3 / --value @e3 "x" / --checked @e8 / --order ...
 batch --json '<commands>'   # 单进程内顺序执行,共享 snapshot;每步结果与耗时进 steps[]
                              # (i/cmd/ok/duration_ms,失败步附 error),首错即停时
@@ -163,7 +168,7 @@ L2  actl commands     机器 schema:全命令+参数的 JSON(agent 自发现入�
 |---|---|
 | `type` vs `set-value` | 键盘路径(触发输入事件)vs Value pattern 直写(快、不触发事件);各有不可替代场景,不合并;失败时错误 hint 互相指引(`NOT_ACTIONABLE` → "try set-value") |
 | `wait` vs `verify` | 数学上 verify ≈ wait --timeout 0,但认知分工不同:**耐心等待** vs **立即断言**;保留两个动词,断言失败统一 `ASSERTION_FAILED` |
-| `--expect P` | 执行成功后的隐式 `wait P`(默认 2s 轮询),失败 `ASSERTION_FAILED`——"执行+验证"内联但不吞决策 |
+| `--expect P` | 执行成功后的隐式断言(默认 2s,失败 `ASSERTION_FAILED`)——"执行+验证"内联但不吞决策。P 文法 v2:`window:<substr>`(须**新窗口**出现,基线排除既有同名)| `element:<target>`(动作后目标元素**可解析**的后置条件,复用 wait 元素文法;已存在即成立——与 window: 的"新出现"刻意不对称:mmui 类应用 UIA 假成功的验证点是物化,失败 evidence 附 cause 区分"假成功"与"目标错误") |
 | `snapshot` vs `find` | **全局认知**(不知道界面有什么)vs **定向查找**(知道要什么,省 token) |
 | `scroll` vs `press pgdn` | 容器内滚动(UIA Scroll pattern)vs 焦点键滚动 |
 | `select` vs `set-value` | 离散选项 vs 文本值(combo box 用 select) |
@@ -508,3 +513,23 @@ wait --window 的标题出现轮询改用原生可见顶层窗口枚举，避免
 UIA 写操作也按桌面操作显示，不能仅因无物理键鼠就声称可并发操作。
 
 继续入口要求暂停状态至少稳定 800ms，避免移鼠标去暂停时触发让行、紧接着的点击却反向恢复；时钟回退时不放行。
+
+### 后台物理点击 `--no-activate`（2026-09-28）
+
+指针族物理动作（click --physical / right-click / double-click / middle-click / triple-click / hover，
+含 xy: 坐标寻址）可加 `--no-activate`：注入前给目标窗口根 HWND 临时置 `WS_EX_NOACTIVATE`，
+点击按坐标正常落地（命中/边界守卫照走），但**不激活、不抢前台、不改 Z 序**；结束后只清
+自己置的那一位（期间其他 exstyle 位的合法变更不被吞掉），并把光标送回原位（drag 除外——落点有语义）。
+`input_effects.activation` 上报 `suppressed|normal`。
+
+适用边界与安全设计：
+
+- **键盘不适用（fail-closed）**：窗口无焦点时 type/press 会打进用户当前前台——press/type 无此旗标，
+  传入即参数错误。后台化只覆盖指针；占键盘的操作仍需前台 + 信号条预告。
+- **置位失败 → PERM_DENIED**（UIPI 拒绝提权窗口）：承诺不激活就不静默破坏承诺；提示去掉旗标重跑。
+- **崩溃残留兜底（WAL journal）**：置位前先落盘 `%LOCALAPPDATA%\actl\no-activate-journal.json`
+  （hwnd/pid/进程启动时刻）；任何物理路径入口（输入执行锁获取处）扫描 journal，**pid 已死或启动
+  时刻不符（pid 复用）→ 清位 + 删条目**（清位前复核窗口仍归属该 pid，防句柄复用误伤）；pid 活着
+  （他处会话可能动作段内）→ 不动。恢复方向永远是"清位"——让窗口回到正常行为，是安全方向。
+- 与 `wait --idle` 组合即"人不在时干活"的两件套（docs/09 §6.2）；扫描/采集类长任务的会话切换
+  不再打断用户当前窗口。

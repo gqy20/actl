@@ -12,10 +12,10 @@ use windows::Win32::Foundation::{
 use windows::Win32::System::Threading::{CreateMutexExW, ReleaseMutex, WaitForSingleObject};
 use windows::core::w;
 
-/// 会话内命名互斥体"actl-input-lock"(不加 Global\ 前缀:只协调同会话的 actl 实例;
-/// 名字同步内联在 CreateMutexExW 调用里——w! 宏只吃字面量)。
-/// 等锁上限:等太久说明另一个实例在做长动作段,放弃比排队更诚实。
-pub const LOCK_TIMEOUT_MS: u32 = 3000;
+// 会话内命名互斥体"actl-input-lock"(不加 Global\ 前缀:只协调同会话的 actl 实例;
+// 名字同步内联在 CreateMutexExW 调用里——w! 宏只吃字面量)。
+// 等锁上限走 timing().lock_wait_ms(actl-core 时序单源;等太久说明另一个
+// 实例在做长动作段,放弃比排队更诚实)。
 
 /// 持锁 RAII 守卫:Drop 时释放互斥体并关句柄,任何返回路径都不泄漏占用。
 pub struct InputLock(HANDLE);
@@ -56,6 +56,9 @@ impl InputLock {
                         "stop requested while waiting for input lock",
                     ));
                 }
+                // 持锁即独占物理路径:顺手清理 --no-activate 样式 journal 里
+                // 崩溃实例的残留条目(死进程清位;文件不存在时零开销)。
+                crate::bg_style::recover_stale(paths);
                 Ok(lock)
             } else if waited == WAIT_TIMEOUT {
                 let _ = CloseHandle(handle);

@@ -93,6 +93,7 @@ pub fn pointer_physical(
     target: &Target,
     near: Option<&str>,
     action: PointerAction,
+    no_activate: bool,
 ) -> Result<(Located, (i32, i32), bool), CtlError> {
     use windows::Win32::Foundation::POINT;
     use windows::Win32::UI::WindowsAndMessaging::{GA_ROOT, GetAncestor, WindowFromPoint};
@@ -132,7 +133,10 @@ pub fn pointer_physical(
     let walker = auto.create_tree_walker().map_err(internal)?;
     // 目标窗口 HWND:①从元素沿父链爬到第一个带句柄的元素;②部分 provider
     // 不暴露 NativeWindowHandle(实测记事本),按窗口标题兜底重解析
-    let target_title = {
+    // 目标窗口标题 + 根 HWND:①从元素沿父链爬到第一个带句柄的元素;②部分
+    // provider 不暴露 NativeWindowHandle(实测记事本),按窗口标题兜底重解析。
+    // hwnd 供 --no-activate 的样式守护使用(取 GA_ROOT 根)。
+    let (target_title, target_hwnd) = {
         let mut root = loc.element.clone();
         while native_hwnd(&root).is_none() {
             match walker.get_parent(&root) {
@@ -142,17 +146,18 @@ pub fn pointer_physical(
         }
         let title = native_hwnd(&root).and_then(window_title_of);
         match title {
-            Some(t) => t,
-            None => find_window(&auto, &walker, &loc.window_title)
-                .ok()
-                .and_then(|w| native_hwnd(&w))
-                .and_then(window_title_of)
-                .ok_or_else(|| {
+            Some(t) => (t, native_hwnd(&root)),
+            None => {
+                let w = find_window(&auto, &walker, &loc.window_title).ok();
+                let hwnd = w.as_ref().and_then(native_hwnd);
+                let title = hwnd.and_then(window_title_of).ok_or_else(|| {
                     CtlError::new(
                         ErrorCode::NotActionable,
                         "target window has no native handle for hit-checking",
                     )
-                })?,
+                })?;
+                (title, hwnd)
+            }
         }
     };
     let root_of = |hwnd: windows::Win32::Foundation::HWND| {
@@ -175,7 +180,16 @@ pub fn pointer_physical(
     }
 
     let bounds = crate::feedback::target(&loc.element, &loc.window_title).bounds;
-    inject_pointer_at(px, py, action.to_spec(), &loc.window_title, || {
+    // --no-activate 的样式目标:命中检查用的窗口根(样式必须挂在根上才拦得住激活)
+    let bg_hwnd = no_activate
+        .then(|| {
+            target_hwnd
+                .map(|h| unsafe { GetAncestor(h, GA_ROOT) })
+                .filter(|r| !r.0.is_null())
+                .map(|r| r.0 as isize)
+        })
+        .flatten();
+    inject_pointer_at(px, py, action.to_spec(), &loc.window_title, bg_hwnd, || {
         crate::feedback::check_stop()?;
         let hit = unsafe { WindowFromPoint(POINT { x: px, y: py }) };
         if root_of(hit).and_then(window_title_of).as_deref() != Some(target_title.as_str())
@@ -193,12 +207,14 @@ pub fn pointer_physical(
 
 /// 物理注入公共尾段:输入占用锁 → 修饰键空置检查 → 一批 SendInput。
 /// 元素路径(pointer_physical)与坐标路径(pointer_at_physical)共用,
-/// 锁与护栏语义不分叉。
+/// 锁与护栏语义不分叉。`bg_hwnd = Some(根 HWND)` 时启用 --no-activate:
+/// 置 `WS_EX_NOACTIVATE` 后注入,结束恢复(bg_style journal 兜底崩溃残留)。
 fn inject_pointer_at(
     px: i32,
     py: i32,
     spec: PointerSpec,
     window: &str,
+    bg_hwnd: Option<isize>,
     validate: impl Fn() -> Result<(), CtlError>,
 ) -> Result<(), CtlError> {
     let _lock = input::InputLock::acquire(timing().lock_wait_ms)?;
@@ -227,6 +243,17 @@ fn inject_pointer_at(
     validate()?;
     kbd::wait_modifiers_clear()?;
     validate()?;
+    // --no-activate:两道复核全过后才置位(最小化暴露窗口)。守护声明于
+    // InputLock 之后 → Drop 先于锁释放,恢复发生在持锁段内。注入会把光标
+    // 移到点击点,非 drag 动作完成后送回原位(用户桌面整洁;恢复失败
+    // 不影响已完成的动作)。
+    let _bg = bg_hwnd
+        .map(|h| {
+            crate::bg_style::NoActivateGuard::enter(h, &actl_core::state::SignalPaths::default())
+        })
+        .transpose()?;
+    let saved_cursor = bg_hwnd.is_some().then(mouse::cursor_pos).flatten();
+    let is_drag = matches!(spec, PointerSpec::Drag { .. });
     action.executing();
     match spec {
         PointerSpec::Click {
@@ -247,6 +274,11 @@ fn inject_pointer_at(
         PointerSpec::Wheel { notches } => mouse::wheel_at(px, py, notches)?,
     }
     action.delivered();
+    // --no-activate 的收尾:把光标送回用户原位(drag 的落点有语义,不送回;
+    // 送回失败不影响已完成的动作,静默)。
+    if let (Some((sx, sy)), false) = (saved_cursor, is_drag) {
+        let _ = mouse::move_to(sx, sy);
+    }
     Ok(())
 }
 
@@ -269,6 +301,7 @@ pub fn pointer_at_physical(
     x: i32,
     y: i32,
     action: PointerAction,
+    no_activate: bool,
 ) -> Result<CoordOutcome, CtlError> {
     use windows::Win32::Foundation::POINT;
     use windows::Win32::Foundation::RECT;
@@ -339,7 +372,14 @@ pub fn pointer_at_physical(
     }
     let mut before = RECT::default();
     unsafe { GetWindowRect(hwnd, &mut before) }.map_err(internal)?;
-    inject_pointer_at(x, y, action.to_spec(), &title, || {
+    // --no-activate 的样式目标:坐标守卫的窗口根
+    let bg_hwnd = no_activate
+        .then(|| {
+            let root = unsafe { GetAncestor(hwnd, GA_ROOT) };
+            (!root.0.is_null()).then_some(root.0 as isize)
+        })
+        .flatten();
+    inject_pointer_at(x, y, action.to_spec(), &title, bg_hwnd, || {
         crate::feedback::check_stop()?;
         let mut current = RECT::default();
         unsafe { GetWindowRect(hwnd, &mut current) }.map_err(internal)?;
@@ -391,7 +431,7 @@ pub fn click_physical(
     target: &Target,
     near: Option<&str>,
 ) -> Result<(Located, (i32, i32), bool), CtlError> {
-    pointer_physical(app, target, near, PointerAction::LeftClick)
+    pointer_physical(app, target, near, PointerAction::LeftClick, false)
 }
 
 /// 拖拽:from/to 各自定位取 clickable point,from 侧命中检查后一批注入。
@@ -403,7 +443,7 @@ pub fn drag_physical(
     to_near: Option<&str>,
 ) -> Result<(Located, (i32, i32), bool), CtlError> {
     let (_, (fx, fy), from_scrolled) =
-        pointer_physical(app, from, from_near, PointerAction::Hover)?;
+        pointer_physical(app, from, from_near, PointerAction::Hover, false)?;
     let to_loc = locate(app, to, to_near)?;
     let to_scrolled = ensure_visible(&to_loc.element);
     let Some(dest) = to_loc.element.get_clickable_point().ok().flatten() else {
@@ -424,6 +464,7 @@ pub fn drag_physical(
         fy,
         PointerSpec::Drag { to: point },
         &source.window_title,
+        None,
         || {
             use windows::Win32::Foundation::POINT;
             use windows::Win32::UI::WindowsAndMessaging::{GA_ROOT, GetAncestor, WindowFromPoint};
@@ -499,6 +540,6 @@ pub fn scroll_element(
         }
     }
     // 物理兜底:滚轮打在元素 clickable point 上
-    let _ = pointer_physical(app, target, near, PointerAction::Wheel { notches })?;
+    let _ = pointer_physical(app, target, near, PointerAction::Wheel { notches }, false)?;
     Ok((loc, "physical-wheel"))
 }

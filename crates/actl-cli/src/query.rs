@@ -4,6 +4,7 @@
 
 use std::time::Instant;
 
+use actl_core::timing;
 use actl_core::{CtlError, SnapshotBuilder};
 use clap::{CommandFactory, Parser};
 use serde_json::{Value, json};
@@ -265,50 +266,60 @@ pub(crate) fn wait_cmd(
     element: Option<&str>,
     window: Option<&str>,
     gone: Option<&str>,
+    idle: Option<u64>,
     property: Option<&str>,
     contains: bool,
     stable: bool,
     app: Option<&str>,
     timeout: Option<u64>,
 ) -> Result<CommandOutput, CtlError> {
-    let timeout = timeout.unwrap_or(5000);
+    let timeout = timeout.unwrap_or(timing::WAIT_MS);
     let started = Instant::now();
-    let what = match (element, window, gone) {
-        (Some(t), _, _) => {
-            let target = actl_core::parse_target(t)?;
-            if stable {
-                // settle 谓词:内容稳定等待(滚动/导航加载判定;与 --property
-                // 的"到达期望值"分工——stable 回答"什么时候停",不回答"是什么")
-                let out = actl_uia::wait_stable(app, &target, timeout)?;
-                json!({
-                    "element": target.describe(),
-                    "stable": true,
-                    "samples": out.samples,
-                    "changes": out.changes,
-                    "last_len": out.last_len,
-                })
-            } else if let Some(raw) = property {
-                // --property:谓词等待(隐含存在性;元素未解析继续等)
-                let mut pred = actl_uia::WaitPredicate::parse(raw)?;
-                pred.contains = contains;
-                let actual = actl_uia::wait_property(app, &target, &pred, timeout)?;
-                json!({ "element": target.describe(), "predicate": pred.describe(), "actual": actual })
-            } else {
-                actl_uia::wait_element(app, &target, timeout)?;
-                json!({ "element": target.describe() })
+    let what = if let Some(threshold) = idle {
+        // --idle:系统空闲门(GetLastInputInfo;人不在的判定,与元素/窗口
+        // 无关——长批任务的前置闸,"输入占用协调"的人类侧补集)。
+        let observed = actl_uia::wait_idle(threshold as u32, timeout)?;
+        json!({ "idle": true, "threshold_ms": threshold, "idle_ms": observed })
+    } else {
+        match (element, window, gone) {
+            (Some(t), _, _) => {
+                let target = actl_core::parse_target(t)?;
+                if stable {
+                    // settle 谓词:内容稳定等待(滚动/导航加载判定;与 --property
+                    // 的"到达期望值"分工——stable 回答"什么时候停",不回答"是什么")
+                    let out = actl_uia::wait_stable(app, &target, timeout)?;
+                    json!({
+                        "element": target.describe(),
+                        "stable": true,
+                        "samples": out.samples,
+                        "changes": out.changes,
+                        "last_len": out.last_len,
+                    })
+                } else if let Some(raw) = property {
+                    // --property:谓词等待(隐含存在性;元素未解析继续等)
+                    let mut pred = actl_uia::WaitPredicate::parse(raw)?;
+                    pred.contains = contains;
+                    let actual = actl_uia::wait_property(app, &target, &pred, timeout)?;
+                    json!({ "element": target.describe(), "predicate": pred.describe(), "actual": actual })
+                } else {
+                    actl_uia::wait_element(app, &target, timeout)?;
+                    json!({ "element": target.describe() })
+                }
             }
-        }
-        (None, Some(w), _) => {
-            let title = actl_uia::wait_window(w, timeout)?;
-            json!({ "window": title })
-        }
-        (None, None, Some(g)) => {
-            let target = actl_core::parse_target(g)?;
-            actl_uia::wait_gone(app, &target, timeout)?;
-            json!({ "gone": target.describe() })
-        }
-        (None, None, None) => {
-            return Err(CtlError::protocol("wait needs --element/--window/--gone"));
+            (None, Some(w), _) => {
+                let title = actl_uia::wait_window(w, timeout)?;
+                json!({ "window": title })
+            }
+            (None, None, Some(g)) => {
+                let target = actl_core::parse_target(g)?;
+                actl_uia::wait_gone(app, &target, timeout)?;
+                json!({ "gone": target.describe() })
+            }
+            (None, None, None) => {
+                return Err(CtlError::protocol(
+                    "wait needs --element/--window/--gone/--idle",
+                ));
+            }
         }
     };
     Ok(json!({

@@ -14,6 +14,7 @@
 #![allow(unsafe_code)] // 豁免点(AGENTS.md §5.5):COM/SendInput/Win32 直调集中于本 crate
 
 mod action;
+mod bg_style;
 #[allow(unsafe_op_in_unsafe_fn)] // GDI/WIC 直调集中在该模块
 mod capture;
 pub mod desktop;
@@ -22,6 +23,7 @@ pub mod display_support;
 mod feedback;
 mod handoff;
 mod identity;
+mod idle;
 mod input_verify;
 mod locate;
 pub use identity::ReplayGuard;
@@ -42,6 +44,7 @@ pub use action::{
     InputResult, TypeOutcome, click, paste, press_half, press_half_with_direction, press_keys,
     press_keys_targeted, select_option, set_value, toggle_element, type_text,
 };
+pub use idle::{idle_ms, wait_idle};
 pub use locate::{
     Located, StableOutcome, WaitPredicate, WaitProp, locate, wait_element, wait_gone,
     wait_property, wait_stable,

@@ -3,6 +3,7 @@
 //! (focus/close/resize)与 launch。协议护栏(replay_guard/require_app/parse_expect)
 //! 也在此:注入前的 fail-closed 门。观察/编排类见 `query`。
 
+use actl_core::timing;
 use actl_core::{CtlError, ErrorCode};
 use serde_json::json;
 
@@ -16,17 +17,19 @@ pub(crate) fn click(
     snapshot: Option<&str>,
     physical: bool,
     with: &[String],
+    no_activate: bool,
     expect: Option<&str>,
     timeout: Option<u64>,
 ) -> Result<CommandOutput, CtlError> {
     let target = actl_core::parse_target(target_raw)?;
     let _replay = replay_guard(snapshot, app)?;
-    // --expect = 新窗口断言:动作前取 RuntimeId 基线(与 press 相同语义)
-    let expect_substr = match expect {
+    // --expect = window: 新窗口断言(动作前取 RuntimeId 基线,与 press 相同语义)
+    //          | element: 后置条件断言(无基线需求,见 Expect 注释)
+    let expect_parsed = match expect {
         Some(raw) => Some(parse_expect(raw)?),
         None => None,
     };
-    let baseline = if expect_substr.is_some() {
+    let baseline = if matches!(expect_parsed, Some(Expect::Window(_))) {
         actl_uia::window_identities()?
     } else {
         Vec::new()
@@ -53,7 +56,7 @@ pub(crate) fn click(
                 modifiers: with.to_vec(),
             }
         };
-        let out = actl_uia::pointer_at_physical(app, x, y, action)?;
+        let out = actl_uia::pointer_at_physical(app, x, y, action, no_activate)?;
         json!({
             "action": "click",
             "target": target.describe(),
@@ -62,7 +65,7 @@ pub(crate) fn click(
             "modifiers": with,
             "point": [x, y],
             "guard": "window-bounds",
-            "input_effects": { "keyboard": if with.is_empty() { "none" } else { "injected" }, "clipboard": "untouched", "pointer": "move_and_click" },
+            "input_effects": { "keyboard": if with.is_empty() { "none" } else { "injected" }, "clipboard": "untouched", "pointer": "move_and_click", "activation": if no_activate { "suppressed" } else { "normal" } },
             "window": out.window_title,
         })
     } else if physical {
@@ -73,7 +76,8 @@ pub(crate) fn click(
                 modifiers: with.to_vec(),
             }
         };
-        let (loc, (px, py), scrolled) = actl_uia::pointer_physical(app, &target, near, action)?;
+        let (loc, (px, py), scrolled) =
+            actl_uia::pointer_physical(app, &target, near, action, no_activate)?;
         json!({
             "action": "click",
             "target": target.describe(),
@@ -82,7 +86,7 @@ pub(crate) fn click(
             "modifiers": with,
             "point": [px, py],
             "scrolled_into_view": scrolled,
-            "input_effects": { "keyboard": if with.is_empty() { "none" } else { "injected" }, "clipboard": "untouched", "pointer": "move_and_click" },
+            "input_effects": { "keyboard": if with.is_empty() { "none" } else { "injected" }, "clipboard": "untouched", "pointer": "move_and_click", "activation": if no_activate { "suppressed" } else { "normal" } },
             "resolved": { "role": loc.role, "name": loc.name, "automation_id": loc.automation_id },
             "window": loc.window_title,
         })
@@ -104,8 +108,19 @@ pub(crate) fn click(
     };
 
     // 06 §4:--expect = 执行后隐式 wait(默认 2s),失败 ASSERTION_FAILED
-    if let Some(substr) = expect_substr {
-        actl_uia::wait_new_window(&substr, timeout.unwrap_or(2000), &baseline)?;
+    if let Some(parsed) = expect_parsed {
+        match parsed {
+            Expect::Window(substr) => {
+                actl_uia::wait_new_window(
+                    &substr,
+                    timeout.unwrap_or(timing::EXPECT_MS),
+                    &baseline,
+                )?;
+            }
+            Expect::Element(target) => {
+                expect_element(app, &target, timeout.unwrap_or(timing::EXPECT_MS))?;
+            }
+        }
     }
     Ok(data.into())
 }
@@ -168,13 +183,14 @@ pub(crate) fn press(
     let _replay = replay_guard(snapshot, Some(app))?;
     let target = target_raw.map(actl_core::parse_target).transpose()?;
     let spec = actl_core::parse_key_expr(keys)?;
-    // --expect = "本动作导致新窗口":注入前先取窗口基线,断言时排除既有同名窗口
-    // (存在性检查会被预先打开的同名窗口恒真欺骗,doc 09 §2)
-    let expect_substr = match expect {
+    // --expect = window: "本动作导致新窗口"(注入前先取窗口基线,断言时排除
+    // 既有同名窗口——存在性检查会被预先打开的同名窗口恒真欺骗,doc 09 §2)
+    //          | element: 后置条件断言(见 Expect 注释)
+    let expect_parsed = match expect {
         Some(raw) => Some(parse_expect(raw)?),
         None => None,
     };
-    let baseline = if expect_substr.is_some() {
+    let baseline = if matches!(expect_parsed, Some(Expect::Window(_))) {
         actl_uia::window_identities()?
     } else {
         Vec::new()
@@ -182,18 +198,30 @@ pub(crate) fn press(
     // 键盘作用于全局焦点:裸 SendInput 会打进当下前台(实测坑)。
     // press_keys 内部在 --app 时先置前台并稳定窗(--app 语义,focus+delay 在 uia 层)。
     let focused = actl_uia::press_keys_targeted(&spec, Some(app), target.as_ref())?;
-    let mut expect_window = None;
-    if let Some(substr) = expect_substr {
+    let mut expect_out = None;
+    if let Some(parsed) = expect_parsed {
         // 06 §4:--expect = 执行后隐式 wait(默认 2s),失败 ASSERTION_FAILED
-        actl_uia::wait_new_window(&substr, timeout.unwrap_or(2000), &baseline)?;
-        expect_window = Some(substr);
+        match parsed {
+            Expect::Window(substr) => {
+                actl_uia::wait_new_window(
+                    &substr,
+                    timeout.unwrap_or(timing::EXPECT_MS),
+                    &baseline,
+                )?;
+                expect_out = Some(format!("window:{substr}"));
+            }
+            Expect::Element(t) => {
+                expect_element(Some(app), &t, timeout.unwrap_or(timing::EXPECT_MS))?;
+                expect_out = Some(format!("element:{}", t.describe()));
+            }
+        }
     }
     Ok(json!({
         "action": "press",
         "keys": keys,
         "focused": focused,
         "focus_verified": target.is_some(),
-        "expect": expect_window,
+        "expect": expect_out,
         "input_effects": {
             "keyboard": "injected",
             "clipboard": "untouched",
@@ -247,16 +275,51 @@ pub(crate) fn set_value_cmd(
     .into())
 }
 
-/// --expect 谓词 v1:仅 `window:<substr>`。
-fn parse_expect(raw: &str) -> Result<String, CtlError> {
-    raw.strip_prefix("window:")
-        .filter(|s| !s.is_empty())
-        .map(String::from)
-        .ok_or_else(|| {
-            CtlError::protocol(format!(
-                "invalid --expect {raw:?}: only window:<substr> is supported"
-            ))
-        })
+/// --expect 谓词 v2:`window:<substr>` | `element:<target>`。
+/// - window: = 本动作导致**新窗口**出现(基线排除既有同名,防存在性恒真);
+/// - element: = 动作后该元素**可解析**的后置条件(复用 wait 元素文法,
+///   隐式 wait 默认 2s)。不要求"新出现"——已可解析即后置条件成立,
+///   与 window: 的"新出现"语义刻意不对称:mmui 类应用 UIA 假成功的
+///   验证点是**物化**(切会话后消息区才出现),不是窗口变更。
+enum Expect {
+    Window(String),
+    Element(actl_core::Target),
+}
+
+fn parse_expect(raw: &str) -> Result<Expect, CtlError> {
+    if let Some(substr) = raw.strip_prefix("window:").filter(|s| !s.is_empty()) {
+        return Ok(Expect::Window(substr.into()));
+    }
+    if let Some(target_raw) = raw.strip_prefix("element:").filter(|s| !s.is_empty()) {
+        return Ok(Expect::Element(actl_core::parse_target(target_raw)?));
+    }
+    Err(CtlError::protocol(format!(
+        "invalid --expect {raw:?}: expected window:<substr> or element:<target>"
+    )))
+}
+
+/// element: 后置条件检查:失败语义是断言(ASSERTION_FAILED)而非等待超时
+/// (TIMEOUT)——底层原因随 evidence 保留,供 agent 区分"UIA 假成功
+/// (点击无效,元素从未物化)"与"目标本就错误"。
+fn expect_element(
+    app: Option<&str>,
+    target: &actl_core::Target,
+    timeout_ms: u64,
+) -> Result<(), CtlError> {
+    actl_uia::wait_element(app, target, timeout_ms).map_err(|cause| {
+        CtlError::with_evidence(
+            ErrorCode::AssertionFailed,
+            format!(
+                "expected element {} did not resolve after action (waited {timeout_ms}ms)",
+                target.describe()
+            ),
+            serde_json::json!({
+                "expect": "element",
+                "target": target.describe(),
+                "cause": { "code": cause.code, "message": cause.message },
+            }),
+        )
+    })
 }
 
 pub(crate) fn launch(
@@ -329,7 +392,7 @@ pub(crate) fn launch(
     action.delivered();
     let mut result = json!({ "pid": child.id(), "program": program, "window_ready": false });
     if let Some(pattern) = wait_window {
-        match actl_uia::wait_window_ready(pattern, timeout.unwrap_or(5000)) {
+        match actl_uia::wait_window_ready(pattern, timeout.unwrap_or(timing::WAIT_WINDOW_MS)) {
             Ok(window) => {
                 result["window_ready"] = true.into();
                 result["window"] = window;
@@ -362,6 +425,7 @@ pub(crate) fn pointer_cmd(
     target_raw: &str,
     app: Option<&str>,
     near: Option<&str>,
+    no_activate: bool,
     kind: PointerKind,
 ) -> Result<CommandOutput, CtlError> {
     let target = actl_core::parse_target(target_raw)?;
@@ -384,26 +448,27 @@ pub(crate) fn pointer_cmd(
                 target.describe()
             ))
         })?;
-        let out = actl_uia::pointer_at_physical(app, x, y, action)?;
+        let out = actl_uia::pointer_at_physical(app, x, y, action, no_activate)?;
         return Ok(json!({
             "action": name,
             "target": target.describe(),
             "resolved_by": "coord",
             "point": [x, y],
             "guard": "window-bounds",
-            "input_effects": { "keyboard": "none", "clipboard": "untouched", "pointer": effects },
+            "input_effects": { "keyboard": "none", "clipboard": "untouched", "pointer": effects, "activation": if no_activate { "suppressed" } else { "normal" } },
             "window": out.window_title,
         })
         .into());
     }
-    let (loc, (px, py), scrolled) = actl_uia::pointer_physical(app, &target, near, action)?;
+    let (loc, (px, py), scrolled) =
+        actl_uia::pointer_physical(app, &target, near, action, no_activate)?;
     Ok(json!({
         "action": name,
         "target": target.describe(),
         "resolved_by": loc.resolved_by,
         "point": [px, py],
         "scrolled_into_view": scrolled,
-        "input_effects": { "keyboard": "none", "clipboard": "untouched", "pointer": effects },
+        "input_effects": { "keyboard": "none", "clipboard": "untouched", "pointer": effects, "activation": if no_activate { "suppressed" } else { "normal" } },
         "resolved": { "role": loc.role, "name": loc.name },
         "window": loc.window_title,
     })

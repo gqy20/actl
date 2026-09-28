@@ -35,6 +35,9 @@
   避免前置步骤已经生效后才发现配置错误；增加发布版跨进程暂停与异常退出评估脚本。
 
 ### Added
+- **`--no-activate` 后台物理点击（指针族）**：click --physical 与 right-click/double-click/middle-click/triple-click/hover（含 xy:）可抑制激活——目标窗口根临时置 `WS_EX_NOACTIVATE`，点击落地但不抢前台/不改 Z 序，结束清位并把光标送回原位（drag 除外）。置位失败 PERM_DENIED（提权窗口）；崩溃残留由 WAL journal（`no-activate-journal.json`，记录 hwnd/pid/进程启动时刻）+ 物理路径入口扫描兜底，死进程条目安全清位、活进程不动。键盘命令无此旗标（fail-closed：无焦点注入=打进错误窗口）。与 `wait --idle` 组合即采集类任务的"人不在时干活"两件套（docs/09 §6.2）。
+- **`--expect element:<target>`（click/press）**：后置条件断言——动作后目标元素须可解析（隐式 wait 默认 2s，复用 wait 元素文法；已存在即成立）。与既有 `window:<substr>`（须新窗口）刻意不对称：mmui 类应用 UIA 返回成功却不生效（如微信 4.x 会话切换），验证点是元素**物化**而非窗口变更。失败 `ASSERTION_FAILED`（非 TIMEOUT），evidence 附 cause 区分"UIA 假成功"与"目标错误"，供 agent/受控物理降级判定。
+- `wait --idle <ms>`：系统空闲门——等待全系统键鼠无输入达到阈值（GetLastInputInfo，只读 tick 无隐私面）。长批/采集任务的"人不在"前置闸，与 `--element/--window/--gone` 互斥；成功上报 `idle_ms/threshold_ms`，人在场超时为 TIMEOUT（附最近活动毫秒数）。只观测物理输入，UIA 注入不可见（自动化并发仍由输入执行锁协调，见 docs/09 §6.2）。
 - **应用回归与资源归属**：新增 Excel/Word 合成文档编辑、保存重开及文件终验场景，补充夸克搜索与记事本焦点验证入口；Zotero 搜索同步输入目标断言。统一 fixture 的任务标识、人工让行保留现场与原生窗口关闭核对，离线回归覆盖停止状态和用户标签保留。场景证据及待验收边界见 docs/29–32。
 - `press --target <selector> [--snapshot <id>]`：断言现有输入焦点，不猜测或切换输入框。
 - `type --verify-value <expected>`：输入后在同一控件上有界读回完整值；失败保留已送达信息，不重放写入。

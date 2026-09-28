@@ -174,6 +174,12 @@ pub(crate) enum Command {
         /// Hold these modifier(s) atomically during a --physical click (ctrl = multi-select, shift = range)
         #[arg(long, requires = "physical", value_delimiter = ',')]
         with: Vec<String>,
+        /// Suppress activation: temporarily set WS_EX_NOACTIVATE on the target
+        /// window root — the click lands by coordinates but does not bring the
+        /// window to the foreground or steal focus (pointer-only; keyboard
+        /// commands refuse it fail-closed); cursor is returned afterwards
+        #[arg(long, requires = "physical")]
+        no_activate: bool,
         /// Post-condition: window:<substr> must NEWLY appear after the click
         #[arg(long)]
         expect: Option<String>,
@@ -311,6 +317,10 @@ pub(crate) enum Command {
         /// Disambiguate multi-matches by picking the one nearest to this anchor
         #[arg(long)]
         near: Option<String>,
+        /// Suppress activation: click lands but the window does not come to the
+        /// foreground (WS_EX_NOACTIVATE guard; cursor returned afterwards)
+        #[arg(long)]
+        no_activate: bool,
     },
     /// Double-click an element (physical)
     DoubleClick {
@@ -322,6 +332,10 @@ pub(crate) enum Command {
         /// Disambiguate multi-matches by picking the one nearest to this anchor
         #[arg(long)]
         near: Option<String>,
+        /// Suppress activation: click lands but the window does not come to the
+        /// foreground (WS_EX_NOACTIVATE guard; cursor returned afterwards)
+        #[arg(long)]
+        no_activate: bool,
     },
     /// Middle-click an element (browser: link in new tab; taskbar: new instance)
     MiddleClick {
@@ -333,6 +347,10 @@ pub(crate) enum Command {
         /// Disambiguate multi-matches by picking the one nearest to this anchor
         #[arg(long)]
         near: Option<String>,
+        /// Suppress activation: click lands but the window does not come to the
+        /// foreground (WS_EX_NOACTIVATE guard; cursor returned afterwards)
+        #[arg(long)]
+        no_activate: bool,
     },
     /// Triple-click an element (editors: paragraph-level selection)
     TripleClick {
@@ -344,6 +362,10 @@ pub(crate) enum Command {
         /// Disambiguate multi-matches by picking the one nearest to this anchor
         #[arg(long)]
         near: Option<String>,
+        /// Suppress activation: click lands but the window does not come to the
+        /// foreground (WS_EX_NOACTIVATE guard; cursor returned afterwards)
+        #[arg(long)]
+        no_activate: bool,
     },
     /// Move the pointer onto an element (hover; physical)
     Hover {
@@ -355,6 +377,10 @@ pub(crate) enum Command {
         /// Disambiguate multi-matches by picking the one nearest to this anchor
         #[arg(long)]
         near: Option<String>,
+        /// Suppress activation: pointer lands but the window does not come to
+        /// the foreground (WS_EX_NOACTIVATE guard; cursor returned afterwards)
+        #[arg(long)]
+        no_activate: bool,
     },
     /// Drag from one element onto another (physical, left button held)
     Drag {
@@ -545,6 +571,15 @@ pub(crate) enum Command {
         /// Wait until this element target NO LONGER resolves
         #[arg(long)]
         gone: Option<String>,
+        /// Wait until the system has been idle (no keyboard/mouse input
+        /// anywhere) for this many milliseconds — the "user is away" gate
+        /// before long batches; observes physical input only, not UIA injection
+        #[arg(
+            long,
+            value_parser = clap::value_parser!(u64).range(1..=86_400_000),
+            conflicts_with_all = ["element", "window", "gone"]
+        )]
+        idle: Option<u64>,
         /// Wait until --element satisfies a property predicate:
         /// value=<expected> | name=<substr> | text=<expected> | checked=on|off (requires --element)
         #[arg(long, requires = "element")]
@@ -701,7 +736,7 @@ fn after_help_for(name: &str) -> Option<&'static str> {
             "Example:\n  actl snapshot --app Notepad --skeleton\n  actl snapshot --app Edge --view content --skeleton\n--skeleton keeps interactive elements + collapsed ancestors (token saver).\n--view content keeps only Document (web/document body) subtrees, drops app chrome;\ncombines with --skeleton (folding inside the document) — the browser/editor token saver.\nErrors: NOT_FOUND no window matches --app, or no Document region for --view content"
         }
         "click" => {
-            "Example:\n  actl click @e3 --app Notepad --snapshot s1a2b\n  actl click name:item --app Explorer --physical --with ctrl\n(multi-select)\nErrors: NOT_FOUND no match | AMBIGUOUS multi-match (candidates returned) | STALE_REF stale @eN (re-snapshot) | NOT_ACTIONABLE no pattern, occluded, or xy: point outside window bounds | PERM_DENIED foreground guard (--physical) | PROTOCOL xy: without --physical/--app"
+            "Example:\n  actl click @e3 --app Notepad --snapshot s1a2b\n  actl click name:item --app Explorer --physical --with ctrl\n(multi-select)\n  actl click id:session_item_x --app 微信 --physical --no-activate\n  actl click id:session_item_x --app 微信 --expect element:id:chat_message_list\n--expect window:<substr> = a NEW window must appear; element:<target> = postcondition:\nthe element must resolve afterwards (implicit wait, default 2s) — the materialization\ncheck for apps whose UIA actions report success without effect.\n--no-activate (--physical only): the click lands but the window does not come to the\nforeground or steal focus (WS_EX_NOACTIVATE guard; cursor returned afterwards).\nErrors: NOT_FOUND no match | AMBIGUOUS multi-match (candidates returned) | STALE_REF stale @eN (re-snapshot) | NOT_ACTIONABLE no pattern, occluded, or xy: point outside window bounds | PERM_DENIED foreground guard (--physical) or no-activate style rejected (elevated window) | ASSERTION_FAILED --expect unmet | PROTOCOL xy: without --physical/--app, bad --expect, or --no-activate without --physical"
         }
         "get" => {
             "Example:\n  actl get name:状态 --app 设置 --property value\nProperties: name role automation_id offscreen value text (text = TextPattern body; Chromium Document value is the URL).\nErrors: PROTOCOL unknown property | NOT_FOUND no match | AMBIGUOUS multi-match"
@@ -733,7 +768,7 @@ file-manager rename, selected items. Deliberately does NOT focus an element
 Errors: PROTOCOL --app required | PERM_DENIED foreground guard | NOT_FOUND window"
         }
         "press" => {
-            "Example:\n  actl press ctrl+s --app Notepad --expect window:另存为\n--target <selector>: assert this element already has keyboard focus, without refocusing. --snapshot binds a target ref to its captured identity.\n--expect = a NEW window must appear (pre-existing same-title does not count).\nErrors: PROTOCOL --app required or bad key expr | NOT_ACTIONABLE foreground guard aborted | ASSERTION_FAILED --expect window never appeared | NOT_ACTIONABLE target focus mismatch | STALE_REF snapshot identity changed"
+            "Example:\n  actl press ctrl+s --app Notepad --expect window:另存为\n--target <selector>: assert this element already has keyboard focus, without refocusing. --snapshot binds a target ref to its captured identity.\n--expect window:<substr> = a NEW window must appear (pre-existing same-title does not count);\nelement:<target> = postcondition: the element must resolve afterwards (implicit wait, default 2s).\nErrors: PROTOCOL --app required or bad key expr/--expect | NOT_ACTIONABLE foreground guard aborted | ASSERTION_FAILED --expect never met | NOT_ACTIONABLE target focus mismatch | STALE_REF snapshot identity changed"
         }
         "set-value" => {
             "Example:\n  actl set-value id:1001 'report.txt' --app 另存为\nUIValue direct write, no keyboard (vs type).\nErrors: NOT_FOUND / AMBIGUOUS target | NOT_ACTIONABLE no Value pattern (try type)"
@@ -745,7 +780,7 @@ Errors: PROTOCOL --app required | PERM_DENIED foreground guard | NOT_FOUND windo
             "Example:\n  actl toggle name:自动保存 --app 设置\nReturns the resulting state (On/Off). vs click: no click side effects.\nErrors: NOT_FOUND / AMBIGUOUS target | NOT_ACTIONABLE no Toggle pattern"
         }
         "right-click" => {
-            "Example:\n  actl right-click name:file.txt --app 项目\nPhysical action (naming = authorization): opens context menus.\nErrors: NOT_FOUND / AMBIGUOUS | NOT_ACTIONABLE no clickable point or occluded"
+            "Example:\n  actl right-click name:file.txt --app 项目\nPhysical action (naming = authorization): opens context menus.\n--no-activate: the click lands but the window does not come to the foreground\n(WS_EX_NOACTIVATE guard on the window root; cursor returned afterwards).\nErrors: NOT_FOUND / AMBIGUOUS | NOT_ACTIONABLE no clickable point or occluded | PERM_DENIED cannot set the no-activate style (elevated window)"
         }
         "double-click" => {
             "Example:\n  actl double-click name:file.txt --app 项目\nErrors: NOT_FOUND / AMBIGUOUS | NOT_ACTIONABLE no clickable point or occluded"
@@ -805,7 +840,7 @@ Errors: NOT_FOUND / AMBIGUOUS | NOT_ACTIONABLE no clickable point or occluded"
             "Example:\n  actl set-clipboard 'text to place'\nReplaces current clipboard content (that is the semantics).\nErrors: NOT_ACTIONABLE clipboard held by another process"
         }
         "wait" => {
-            "Example:\n  actl wait --element name:完成 --property value=OK --timeout 8000 --app 应用\n  actl wait --element role:Document --stable --app Edge\nPredicates: value=<expected> | name=<substr> | text=<expected> | checked=on|off; --contains for substring; existence implied.\n--stable waits until the element's observed sample (text > value > name) stops changing\nacross consecutive polls — settle detection after scroll/navigation.\nErrors: TIMEOUT predicate unmet, element absent, or content still changing | PROTOCOL bad predicate | ASSERTION_FAILED (--window)"
+            "Example:\n  actl wait --element name:完成 --property value=OK --timeout 8000 --app 应用\n  actl wait --element role:Document --stable --app Edge\n  actl wait --idle 8000 --timeout 120000\nPredicates: value=<expected> | name=<substr> | text=<expected> | checked=on|off; --contains for substring; existence implied.\n--stable waits until the element's observed sample (text > value > name) stops changing\nacross consecutive polls — settle detection after scroll/navigation.\n--idle waits until no keyboard/mouse input system-wide for N ms — the \"console is free\"\ngate before long batches; observes physical input only (UIA-injected input stays invisible).\nErrors: TIMEOUT predicate unmet, element absent, content still changing, or user still active | PROTOCOL bad predicate/flags | ASSERTION_FAILED (--window)"
         }
         "batch" => {
             "Example:\n  actl batch --json '[\"focus-window Notepad\",\"press ctrl+s --app Notepad\"]'\nStops on first error; steps[] carries per-step ok/duration. windows_created is the native HWND difference, not proof of task ownership. A final inventory failure preserves steps and reports window_observation_error instead of windows_created. steps may carry blocked_by for an unexpected foreground window.\nErrors: PROTOCOL bad JSON/nesting | INTERNAL initial native enumeration failed (no steps run) | the first failing step's code is propagated"

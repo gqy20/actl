@@ -271,6 +271,94 @@ fn wait_property_predicate_validated_at_protocol_level() {
 }
 
 #[test]
+fn wait_idle_contract() {
+    // 阈值 1ms:任意会话(含零输入的 CI)立即判定空闲;idle_ms/waited_ms
+    // 是易变值,mask 后与 golden 比对形态。真人连续键入贯穿整个超时窗才会
+    // 令其抖动(fixture 干扰面,记录于此)。
+    let (code, stdout) = actl(&["wait", "--idle", "1", "--timeout", "5000"]);
+    assert_eq!(code, 0, "{stdout}");
+    let mut v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
+    v.as_object_mut().unwrap().remove("duration_ms");
+    v["data"]["waited"]["idle_ms"] = serde_json::json!("<idle>");
+    v["data"]["waited_ms"] = serde_json::json!("<waited>");
+    assert_eq!(
+        v,
+        serde_json::from_str::<serde_json::Value>(include_str!("golden/wait_idle.json")).unwrap()
+    );
+    // 模式互斥与取值域:纯参数错误,无桌面依赖
+    for args in [
+        vec!["wait", "--idle", "1", "--element", "name:x"],
+        vec!["wait", "--idle", "1", "--window", "x"],
+        vec!["wait", "--idle", "1", "--gone", "name:x"],
+        vec!["wait", "--idle", "0"],
+    ] {
+        let (code, _) = actl(&args);
+        assert_eq!(code, 2, "protocol-level rejection: {args:?}");
+    }
+    // 裸 wait 的模式缺失提示须列出新谓词
+    let (code, stdout) = actl(&["wait"]);
+    assert_eq!(code, 2);
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
+    assert_eq!(v["error"]["code"], "PROTOCOL");
+    assert!(v["error"]["message"].as_str().unwrap().contains("--idle"));
+}
+
+#[test]
+fn expect_predicate_v2_validated_at_protocol_level() {
+    // --expect v2 语法:window:<substr> | element:<target>(复用 target 文法)。
+    // 全部解析级拒绝,离线可测,不触桌面。
+    for bad in [
+        "window:",      // 空窗口子串 → 列出两种文法
+        "element:",     // 空元素目标 → 列出两种文法
+        "plain-substr", // 无前缀(v1 起即拒绝,非静默升级)
+        "value=1",      // 形近 wait 谓词,非 --expect 文法
+    ] {
+        let (code, stdout) = actl(&["click", "name:whatever", "--expect", bad]);
+        assert_eq!(code, 2, "bad --expect {bad:?}");
+        let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
+        assert_eq!(v["error"]["code"], "PROTOCOL");
+        let msg = v["error"]["message"].as_str().expect("message");
+        assert!(
+            msg.contains("window:<substr>") && msg.contains("element:<target>"),
+            "error lists both forms: {msg}"
+        );
+        let (code, _) = actl(&["press", "enter", "--app", "x", "--expect", bad]);
+        assert_eq!(code, 2, "press rejects bad --expect {bad:?}");
+    }
+    // element:<坏目标> 走 parse_target 自己的报错(更精确的文法提示)
+    for bad in ["element:role:", "element:@e0"] {
+        let (code, _) = actl(&["click", "name:whatever", "--expect", bad]);
+        assert_eq!(code, 2, "bad element target {bad:?}");
+    }
+}
+
+#[test]
+fn no_activate_flag_gated_at_protocol_level() {
+    // --no-activate 是指针族专用:click 必须显式 --physical(clap requires,
+    // 错误走 stderr 不走 envelope——只断言退出码);键盘命令(press/type)
+    // 没有该旗标 → 未知参数同拒。全部离线可测。
+    let (code, _) = actl(&["click", "name:whatever", "--no-activate"]);
+    assert_eq!(code, 2, "--no-activate requires --physical");
+    let (code, _) = actl(&["press", "enter", "--app", "x", "--no-activate"]);
+    assert_eq!(
+        code, 2,
+        "keyboard commands refuse --no-activate (no focus = wrong window)"
+    );
+    let (code, _) = actl(&["type", "name:whatever", "hi", "--app", "x", "--no-activate"]);
+    assert_eq!(code, 2, "type refuses --no-activate");
+    // 指针族(命名即物理授权)拥有该旗标:--help 是元命令例外(人类文本),
+    // 列出 --no-activate 即解析层存在的证据,免真实桌面查找拖慢套件
+    for cmd in ["right-click", "double-click", "hover"] {
+        let (code, stdout) = actl(&[cmd, "--help"]);
+        assert_eq!(code, 0, "{cmd} --help");
+        assert!(
+            stdout.contains("--no-activate"),
+            "{cmd} help lists --no-activate"
+        );
+    }
+}
+
+#[test]
 fn id_ordinal_and_hwnd_anchor_validated_at_protocol_level() {
     // id:#N 与 role:#N 同纪律(#0/非数字 → PROTOCOL);hwnd: 锚的非法句柄同拒
     let (code, _) = actl(&["get", "id:Foo#0", "--property", "name"]);
