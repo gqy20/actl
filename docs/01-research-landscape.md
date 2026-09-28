@@ -6,6 +6,12 @@
 
 日期:2026-09-26 · 结论已按 ≥1000 GitHub stars 的可信度门槛筛选
 
+**2026-09-28 补充纠正**：本次发现微软 [winappCli](https://github.com/microsoft/winappCli)
+已有 `winapp ui` 命令组，支持 UIA 树、属性、焦点查询与 JSON 输出；本机 v0.7.0
+资源管理器只读冒烟已通过。当日 1,281 Star。下文“只有两个”“Windows 唯一选项”
+及“同类项目全是 Rust”等保留为历史判断，不再代表当前结论。
+现行使用和优化依据见 [36 · winapp UIA 对照诊断](36-winapp-uia-diagnostics.md)。
+
 ## 1. 需求定义(三轮澄清的最终版)
 
 我们要的东西同时满足以下条件,缺一不可:

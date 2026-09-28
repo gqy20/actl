@@ -3,10 +3,10 @@
 
 use actl_core::target::Target;
 use actl_core::{CtlError, ErrorCode};
-use uiautomation::types::ControlType;
+
 use uiautomation::{UIAutomation, UIElement, UITreeWalker};
 
-use crate::window::{MAX_DEPTH, ensure_window_responsive, find_window, top_level_of_focused};
+use crate::window::{ensure_window_responsive, find_window, top_level_of_focused};
 use crate::{internal, timing};
 
 /// 定位结果:命中元素 + 所在窗口。
@@ -21,7 +21,7 @@ pub struct Located {
     pub(crate) element: UIElement,
 }
 
-/// 在目标窗口内按 Target 定位元素(遍历可提前退出,优于全量 capture)。
+/// 在目标窗口内按 Target 定位元素；遍历须完整，不能用截断结果证明唯一性。
 /// `Ref(n)` 数不到 = 树已变化 → STALE_REF;语义选择器无命中 → NOT_FOUND(06 §4)。
 pub fn locate(app: Option<&str>, target: &Target, near: Option<&str>) -> Result<Located, CtlError> {
     if matches!(target, Target::Uia(_)) && near.is_some() {
@@ -61,7 +61,9 @@ pub fn locate(app: Option<&str>, target: &Target, near: Option<&str>) -> Result<
             }
         }
     };
-    let window_title = root.get_name().unwrap_or_default();
+    let window_title = root
+        .get_name()
+        .map_err(|e| crate::read_channel::failure("window.name", e))?;
     // 激活感知:挂起目标先唤醒(有界),避免 DFS 里逐调用 stall
     let _wake_ms = {
         let _t = actl_core::trace::scope("locate.wake");
@@ -72,10 +74,10 @@ pub fn locate(app: Option<&str>, target: &Target, near: Option<&str>) -> Result<
     if let Target::Ref(n) = target {
         let mut counter = 0u32;
         let _t = actl_core::trace::scope("locate.ref-replay");
-        return match collect_until_ref(&walker, &root, 0, *n, &mut counter) {
+        return match collect_until_ref(&walker, &root, 0, *n, &mut counter)? {
             Some(hit) => {
                 crate::identity::check_ref(&root, &hit, *n)?;
-                Ok(located_from(hit, window_title, "ref-replay"))
+                located_from(hit, window_title, "ref-replay")
             }
             None => Err(CtlError::new(
                 ErrorCode::StaleRef,
@@ -96,17 +98,17 @@ pub fn locate(app: Option<&str>, target: &Target, near: Option<&str>) -> Result<
     if let Target::Id(_) = target {
         let hits = {
             let _t = actl_core::trace::scope("locate.fastpath");
-            fast_exact_ids(&auto, &root, target)
+            fast_exact_ids(&auto, &root, target)?
         };
         match hits {
             Some(hits) if hits.len() == 1 => {
-                return Ok(located_from(hits[0].clone(), window_title, "primary"));
+                return located_from(hits[0].clone(), window_title, "primary");
             }
             Some(hits) if hits.is_empty() => {
                 // L1 确定空手(id: 无 fuzzy 层),直落 L4 虚拟化容器
                 let _t = actl_core::trace::scope("locate.l4");
-                if let Some(hit) = locate_virtualized(&walker, &root, target) {
-                    return Ok(located_from(hit, window_title, "item-container"));
+                if let Some(hit) = locate_virtualized(&walker, &root, target)? {
+                    return located_from(hit, window_title, "item-container");
                 }
                 return Err(CtlError::new(
                     ErrorCode::NotFound,
@@ -121,14 +123,14 @@ pub fn locate(app: Option<&str>, target: &Target, near: Option<&str>) -> Result<
     }
     {
         let _t = actl_core::trace::scope("locate.dfs");
-        collect_matches(&walker, &root, 0, target, false, &mut counter, &mut matches);
+        collect_matches(&walker, &root, 0, target, false, &mut counter, &mut matches)?;
     }
 
     // L2 名称模糊(仅 name: 目标且 L1 空手时):大小写/空白不敏感
     if matches.is_empty() {
         if let Target::Name(_) = target {
             let mut fuzzy = Vec::new();
-            collect_matches(&walker, &root, 0, target, true, &mut counter, &mut fuzzy);
+            collect_matches(&walker, &root, 0, target, true, &mut counter, &mut fuzzy)?;
             if !fuzzy.is_empty() {
                 fuzzy.sort_by_key(|c: &Candidate| c.ref_no);
                 return select(
@@ -146,10 +148,10 @@ pub fn locate(app: Option<&str>, target: &Target, near: Option<&str>) -> Result<
         // walker 遍历恒 0 命中;ItemContainerPattern::FindItemByProperty 精确命中)
         let l4 = {
             let _t = actl_core::trace::scope("locate.l4");
-            locate_virtualized(&walker, &root, target)
+            locate_virtualized(&walker, &root, target)?
         };
         if let Some(hit) = l4 {
-            return Ok(located_from(hit, window_title, "item-container"));
+            return located_from(hit, window_title, "item-container");
         }
         return Err(CtlError::new(
             ErrorCode::NotFound,
@@ -185,7 +187,7 @@ fn select(
     // L3 序数直选
     if let Target::RoleAt(_, n) | Target::IdAt(_, n) = target {
         return match matches.get((*n as usize).saturating_sub(1)) {
-            Some(c) => Ok(located_from(
+            Some(c) => located_from(
                 c.element.clone(),
                 window_title,
                 if matches!(target, Target::IdAt(..)) {
@@ -193,7 +195,7 @@ fn select(
                 } else {
                     "role-ordinal"
                 },
-            )),
+            ),
             None => Err(CtlError::new(
                 ErrorCode::NotFound,
                 format!(
@@ -205,11 +207,7 @@ fn select(
         };
     }
     if matches.len() == 1 {
-        return Ok(located_from(
-            matches[0].element.clone(),
-            window_title,
-            level,
-        ));
+        return located_from(matches[0].element.clone(), window_title, level);
     }
     // 多命中 + 锚点:取与锚点矩形中心距最近者
     if let Some(anchor_pat) = near {
@@ -226,7 +224,7 @@ fn select(
             false,
             &mut counter,
             &mut anchors,
-        );
+        )?;
         if anchors.len() != 1 {
             return Err(CtlError::new(
                 ErrorCode::NotFound,
@@ -236,11 +234,19 @@ fn select(
                 ),
             ));
         }
-        if let Ok(ar) = anchors[0].element.get_bounding_rectangle() {
+        {
+            let ar = anchors[0]
+                .element
+                .get_bounding_rectangle()
+                .map_err(|e| crate::read_channel::failure("anchor.bounds", e))?;
             let (ax, ay) = center(&ar);
             let mut best: Option<(f64, usize)> = None;
             for (i, c) in matches.iter().enumerate() {
-                if let Ok(r) = c.element.get_bounding_rectangle() {
+                {
+                    let r = c
+                        .element
+                        .get_bounding_rectangle()
+                        .map_err(|e| crate::read_channel::failure("candidate.bounds", e))?;
                     let (cx, cy) = center(&r);
                     let dx = (cx - ax) as f64;
                     let dy = (cy - ay) as f64;
@@ -251,11 +257,7 @@ fn select(
                 }
             }
             if let Some((_, i)) = best {
-                return Ok(located_from(
-                    matches[i].element.clone(),
-                    window_title,
-                    "anchor",
-                ));
+                return located_from(matches[i].element.clone(), window_title, "anchor");
             }
         }
     }
@@ -290,20 +292,26 @@ fn center(r: &uiautomation::types::Rect) -> (i32, i32) {
     )
 }
 
-fn located_from(elem: UIElement, window_title: String, resolved_by: &'static str) -> Located {
-    Located {
+fn located_from(
+    elem: UIElement,
+    window_title: String,
+    resolved_by: &'static str,
+) -> Result<Located, CtlError> {
+    Ok(Located {
         window_title,
-        role: format!(
-            "{:?}",
-            elem.get_control_type().unwrap_or(ControlType::Custom)
+        role: strict_role(&elem)?,
+        name: Some(
+            elem.get_name()
+                .map_err(|e| crate::read_channel::failure("name", e))?,
         ),
-        name: elem.get_name().ok().filter(|n| !n.is_empty()),
-        automation_id: elem.get_automation_id().ok().filter(|a| !a.is_empty()),
+        automation_id: Some(
+            elem.get_automation_id()
+                .map_err(|e| crate::read_channel::failure("automation_id", e))?,
+        ),
         resolved_by,
         element: elem,
-    }
+    })
 }
-
 /// 定位链候选(ref 与 snapshot 同源编号,可直接重放)
 struct Candidate {
     element: UIElement,
@@ -313,154 +321,101 @@ struct Candidate {
     automation_id: Option<String>,
 }
 
-/// @eN 重放的提前退出收集(语义同旧 locate_walk 的 Ref 分支)
+/// @eN 在完整观察的树中重放；观察失败与 ref 消失分开。
 fn collect_until_ref(
-    walker: &UITreeWalker,
+    _walker: &UITreeWalker,
     elem: &UIElement,
-    depth: u32,
+    _depth: u32,
     want: u32,
     counter: &mut u32,
-) -> Option<UIElement> {
-    if depth > MAX_DEPTH {
-        return None;
-    }
-    let role = role_of(elem);
-    if actl_core::is_interactive_role(&role) {
-        *counter += 1;
-        if *counter == want {
-            return Some(elem.clone());
+) -> Result<Option<UIElement>, CtlError> {
+    for entry in crate::observation::tree(elem)?.require_complete()? {
+        let role = strict_role(&entry.element)?;
+        if actl_core::is_interactive_role(&role) {
+            *counter += 1;
+            if *counter == want {
+                return Ok(Some(entry.element));
+            }
         }
     }
-    let mut child = walker.get_first_child(elem).ok();
-    while let Some(c) = child {
-        if let Some(hit) = collect_until_ref(walker, &c, depth + 1, want, counter) {
-            return Some(hit);
-        }
-        child = walker.get_next_sibling(&c).ok();
-    }
-    None
+    Ok(None)
 }
 
-/// 全量收集语义匹配(不做提前退出——AMBIGUOUS 判定与候选上报需要全集)。
-/// fuzzy=true 时 name 走 L2 模糊匹配(core::fuzzy_contains)。
-/// 性能:属性惰性读——非命中元素只读定位所需属性(每元素 2 次 COM 往返,
-/// 替代旧的无差别三连读;命中元素读全量供候选上报)。
+fn strict_role(elem: &UIElement) -> Result<String, CtlError> {
+    elem.get_control_type()
+        .map(|v| format!("{v:?}"))
+        .map_err(|e| crate::read_channel::failure("control_type", e))
+}
+
 fn collect_matches(
-    walker: &UITreeWalker,
+    _walker: &UITreeWalker,
     elem: &UIElement,
-    depth: u32,
+    _depth: u32,
     target: &Target,
     fuzzy: bool,
     counter: &mut u32,
     out: &mut Vec<Candidate>,
-) {
-    if depth > MAX_DEPTH {
-        return;
-    }
-    let role = role_of(elem);
-    let ref_no = if actl_core::is_interactive_role(&role) {
-        *counter += 1;
-        *counter
-    } else {
-        0 // 非交互匹配仍可作候选上报,但不可 ref 重放
-    };
-    // 惰性属性读:按目标类型先读匹配所需的那一个属性
-    let (name, id) = match target {
-        Target::Name(s) => {
-            let name = elem.get_name().ok().filter(|n| !n.is_empty());
-            let hit = match (&name, fuzzy) {
-                (Some(n), true) => actl_core::target::fuzzy_contains(n, s),
-                (Some(n), false) => n.contains(s.as_str()),
-                (None, _) => false,
-            };
-            if hit {
-                (
-                    name,
-                    elem.get_automation_id().ok().filter(|a| !a.is_empty()),
-                )
-            } else {
-                return dfs_children(walker, elem, depth, target, fuzzy, counter, out);
-            }
+) -> Result<(), CtlError> {
+    *counter = 0;
+    for entry in crate::observation::tree(elem)?.require_complete()? {
+        let element = entry.element;
+        let role = strict_role(&element)?;
+        let ref_no = if actl_core::is_interactive_role(&role) {
+            *counter += 1;
+            *counter
+        } else {
+            0
+        };
+        let name = element
+            .get_name()
+            .map_err(|e| crate::read_channel::failure("name", e))?;
+        let id = element
+            .get_automation_id()
+            .map_err(|e| crate::read_channel::failure("automation_id", e))?;
+        let hit = match target {
+            Target::Name(s) if fuzzy => actl_core::target::fuzzy_contains(&name, s),
+            Target::Name(s) => name.contains(s.as_str()),
+            Target::Id(s) | Target::IdAt(s, _) => id == *s,
+            Target::Role(s) | Target::RoleAt(s, _) => role == *s,
+            _ => false,
+        };
+        if hit {
+            out.push(Candidate {
+                element,
+                ref_no,
+                role,
+                name: Some(name),
+                automation_id: Some(id),
+            });
         }
-        Target::Id(s) | Target::IdAt(s, _) => {
-            let id = elem.get_automation_id().ok().filter(|a| !a.is_empty());
-            if id.as_deref() != Some(s.as_str()) {
-                return dfs_children(walker, elem, depth, target, fuzzy, counter, out);
-            }
-            (elem.get_name().ok().filter(|n| !n.is_empty()), id)
-        }
-        Target::Role(s) | Target::RoleAt(s, _) => {
-            if role != *s {
-                return dfs_children(walker, elem, depth, target, fuzzy, counter, out);
-            }
-            (
-                elem.get_name().ok().filter(|n| !n.is_empty()),
-                elem.get_automation_id().ok().filter(|a| !a.is_empty()),
-            )
-        }
-        Target::Ref(_) | Target::Coord(..) | Target::Uia(_) => (None, None),
-    };
-    let hit = match target {
-        Target::Ref(_) | Target::Coord(..) | Target::Uia(_) => false,
-        Target::Name(s) => match (&name, fuzzy) {
-            (Some(n), true) => actl_core::target::fuzzy_contains(n, s),
-            (Some(n), false) => n.contains(s.as_str()),
-            (None, _) => false,
-        },
-        Target::Id(s) | Target::IdAt(s, _) => id.as_deref() == Some(s.as_str()),
-        Target::Role(s) | Target::RoleAt(s, _) => role == *s,
-    };
-    if hit {
-        out.push(Candidate {
-            element: elem.clone(),
-            ref_no,
-            role: role.clone(),
-            name: name.clone(),
-            automation_id: id.clone(),
-        });
     }
-    dfs_children(walker, elem, depth, target, fuzzy, counter, out);
+    Ok(())
 }
-
-fn dfs_children(
-    walker: &UITreeWalker,
-    elem: &UIElement,
-    depth: u32,
-    target: &Target,
-    fuzzy: bool,
-    counter: &mut u32,
-    out: &mut Vec<Candidate>,
-) {
-    let mut child = walker.get_first_child(elem).ok();
-    while let Some(c) = child {
-        collect_matches(walker, &c, depth + 1, target, fuzzy, counter, out);
-        child = walker.get_next_sibling(&c).ok();
-    }
-}
-
-pub(crate) fn role_of(elem: &UIElement) -> String {
-    format!(
-        "{:?}",
-        elem.get_control_type().unwrap_or(ControlType::Custom)
-    )
-}
-
 /// id: 目标的 provider 侧精确匹配(UIA FindAll + AutomationId 属性条件,
 /// TreeScope::Subtree 与 DFS 全遍历同覆盖含根自身)。
-/// None = 条件创建/查询失败,调用方回退全遍历(正确性优先)。
+/// 条件创建/查询失败直接传播，不能触发静默回退。
 fn fast_exact_ids(
     auto: &UIAutomation,
     root: &UIElement,
     target: &Target,
-) -> Option<Vec<UIElement>> {
+) -> Result<Option<Vec<UIElement>>, CtlError> {
     use uiautomation::types::{TreeScope, UIProperty};
     use uiautomation::variants::Variant;
 
-    let Target::Id(s) = target else { return None };
+    let Target::Id(s) = target else {
+        return Ok(None);
+    };
     let cond = auto
         .create_property_condition(UIProperty::AutomationId, Variant::from(s.clone()), None)
-        .ok()?;
-    root.find_all(TreeScope::Subtree, &cond).ok()
+        .map_err(|e| crate::read_channel::failure("id.condition", e))?;
+    let cache = auto.create_cache_request().map_err(internal)?;
+    cache
+        .set_tree_filter(auto.create_true_condition().map_err(internal)?)
+        .map_err(internal)?;
+    cache.set_tree_scope(TreeScope::Element).map_err(internal)?;
+    root.find_all_build_cache(TreeScope::Subtree, &cond, &cache)
+        .map(Some)
+        .map_err(|e| crate::read_channel::failure("id.query", e))
 }
 
 // ─── L4 虚拟化容器兜底(M2 观察层强化,spike 2026-09-26 证真) ───────────────
@@ -492,72 +447,89 @@ fn container_query_for(
 /// 经 `UIElement::as_ref()` 取原生 IUIAutomationElement 直调 GetCurrentPattern
 /// + FindItemByProperty(None, ...);类型与 crate 同源(均 windows 0.62)。
 fn locate_virtualized(
-    walker: &UITreeWalker,
+    _walker: &UITreeWalker,
     root: &UIElement,
     target: &Target,
-) -> Option<UIElement> {
-    use uiautomation::variants::Variant;
-    use windows::Win32::UI::Accessibility::{
-        IUIAutomationItemContainerPattern, UIA_ItemContainerPatternId,
+) -> Result<Option<UIElement>, CtlError> {
+    use uiautomation::{types::UIProperty, variants::Variant};
+    use windows::{
+        Win32::UI::Accessibility::{
+            IUIAutomationElement, IUIAutomationItemContainerPattern, UIA_ItemContainerPatternId,
+        },
+        core::Interface,
     };
-
-    let (prop, value) = container_query_for(target)?;
-    let mut containers = Vec::new();
-    collect_containers(walker, root, 0, &mut containers);
+    let Some((prop, value)) = container_query_for(target) else {
+        return Ok(None);
+    };
     let value = Variant::from(value);
-    for c in &containers {
-        let pattern: Option<IUIAutomationItemContainerPattern> = (|| unsafe {
-            use windows::core::Interface;
-            let raw = c.as_ref();
-            raw.GetCurrentPattern(UIA_ItemContainerPatternId)
-                .ok()?
-                .cast()
+    let entries = crate::observation::tree(root)?.require_complete()?;
+    let mut hit = None;
+    for entry in entries {
+        let c = entry.element;
+        if !crate::read_channel::available(
+            &c,
+            UIProperty::IsItemContainerPatternAvailable,
+            "item-container",
+        )? {
+            continue;
+        }
+        // Raw ABI preserves S_OK + null (observed absence), unlike a non-null interface wrapper.
+        // The returned non-null COM reference is adopted exactly once; no null UIElement is made.
+        unsafe {
+            let pattern: IUIAutomationItemContainerPattern = c
+                .as_ref()
+                .GetCurrentPattern(UIA_ItemContainerPatternId)
+                .and_then(|p| p.cast())
+                .map_err(|e| crate::read_channel::failure("item-container.pattern", e.into()))?;
+            let mut raw = std::ptr::null_mut();
+            (pattern.vtable().FindItemByProperty)(
+                pattern.as_raw(),
+                std::ptr::null_mut(),
+                prop,
+                std::mem::transmute_copy(value.as_ref()),
+                &mut raw,
+            )
+            .ok()
+            .map_err(|e| crate::read_channel::failure("item-container.query", e.into()))?;
+            if !raw.is_null() {
+                let element = UIElement::from(IUIAutomationElement::from_raw(raw));
+                let mut second = std::ptr::null_mut();
+                (pattern.vtable().FindItemByProperty)(
+                    pattern.as_raw(),
+                    element.as_ref().as_raw(),
+                    prop,
+                    std::mem::transmute_copy(value.as_ref()),
+                    &mut second,
+                )
                 .ok()
-        })();
-        let Some(pattern) = pattern else { continue };
-        // 无命中:provider 返回 null 元素(crate 包装为 Err)→ 试下一个容器
-        if let Ok(elem) = unsafe { pattern.FindItemByProperty(None, prop, value.as_ref()) } {
-            return Some(UIElement::from(elem));
+                .map_err(|e| crate::read_channel::failure("item-container.next", e.into()))?;
+                if !second.is_null() {
+                    // Adopt and release the extra returned reference before rejecting ambiguity.
+                    let _second = IUIAutomationElement::from_raw(second);
+                    return Err(CtlError::new(
+                        ErrorCode::Ambiguous,
+                        "multiple virtualized items matched",
+                    ));
+                }
+                if hit.is_some() {
+                    return Err(CtlError::new(
+                        ErrorCode::Ambiguous,
+                        "multiple virtualized containers matched",
+                    ));
+                }
+                hit = Some(element);
+            }
         }
     }
-    None
+    Ok(hit)
 }
-
-/// DFS 收集实现 ItemContainerPattern 的元素(容器数上限防失控 UI)。
-fn collect_containers(
-    walker: &UITreeWalker,
-    elem: &UIElement,
-    depth: u32,
-    out: &mut Vec<UIElement>,
-) {
-    use uiautomation::patterns::UIItemContainerPattern;
-    if depth > MAX_DEPTH || out.len() >= 32 {
-        return;
-    }
-    if elem.get_pattern::<UIItemContainerPattern>().is_ok() {
-        out.push(elem.clone());
-    }
-    let mut child = walker.get_first_child(elem).ok();
-    while let Some(c) = child {
-        collect_containers(walker, &c, depth + 1, out);
-        child = walker.get_next_sibling(&c).ok();
-    }
-}
-
-/// wait 族轮询的定位语义:普通失败(NOT_FOUND 等)= 继续等(元素可能晚到);
+/// wait 族轮询的定位语义:仅 NOT_FOUND 表示缺席；其他观察错误立即传播。
 /// **AMBIGUOUS = 确定性多命中,等待不可能收敛 → 立即失败**(候选 evidence
 /// 已随错误携带,无需等满超时;2026-09-27 抖音多文档页实测:samples 冻结
 /// 在 1 的误导性 TIMEOUT 根因)。
 fn poll(app: Option<&str>, target: &Target) -> Result<Option<Located>, CtlError> {
     actl_core::wait_control::check()?;
-    if matches!(target, Target::Uia(_)) {
-        return crate::scoped_locate::observed(locate(app, target, None));
-    }
-    match locate(app, target, None) {
-        Ok(loc) => Ok(Some(loc)),
-        Err(e) if e.code == ErrorCode::Ambiguous => Err(e),
-        Err(_) => Ok(None),
-    }
+    crate::scoped_locate::observed(locate(app, target, None))
 }
 
 /// wait --element:轮询定位直到目标可解析(TIMEOUT 语义;与 --expect 的
@@ -640,7 +612,7 @@ pub fn wait_property(
     let mut last: Option<String> = None;
     loop {
         if let Some(loc) = poll(app, target)? {
-            let actual = predicate.read(&loc.element);
+            let actual = predicate.read(&loc.element)?;
             if predicate.satisfied(actual.as_deref()) {
                 return Ok(actual.unwrap_or_default());
             }
@@ -686,7 +658,7 @@ pub fn wait_stable(
     let mut changes = 0usize;
     loop {
         if let Some(loc) = poll(app, target)? {
-            let sample = stability_sample(&loc.element);
+            let sample = stability_sample(&loc.element)?;
             samples += 1;
             stable = match &last {
                 Some(prev) if prev == &sample => stable + 1,
@@ -727,17 +699,15 @@ pub fn wait_stable(
 
 /// 稳定性采样:text > value > name(富文本正文只有 TextPattern 可读;
 /// value 通道兜底纯控件,name 最后)。
-fn stability_sample(elem: &UIElement) -> String {
-    use uiautomation::patterns::UITextPattern;
-    if let Some(t) = elem
-        .get_pattern::<UITextPattern>()
-        .ok()
-        .and_then(|t| t.get_document_range().ok())
-        .and_then(|r| r.get_text(-1).ok())
-    {
-        return t;
+fn stability_sample(elem: &UIElement) -> Result<String, CtlError> {
+    if let Some(text) = crate::read::read_text(elem)? {
+        return Ok(text);
     }
-    crate::read::read_value(elem).unwrap_or_else(|| elem.get_name().unwrap_or_default())
+    if let Some(value) = crate::read::read_value(elem)? {
+        return Ok(value);
+    }
+    elem.get_name()
+        .map_err(|e| crate::read_channel::failure("name", e))
 }
 
 /// wait/verify 共用的属性谓词(解析与判定分离,便于单测)。
@@ -802,17 +772,23 @@ impl WaitPredicate {
     }
 
     /// 读元素当前值(Checked 读 Toggle 状态,Value 走双通道,Name 读 UIA Name)
-    pub fn read(&self, elem: &uiautomation::UIElement) -> Option<String> {
-        match self.prop {
-            WaitProp::Value => crate::read::read_value(elem),
-            WaitProp::Text => crate::read::read_text(elem),
-            WaitProp::Name => elem.get_name().ok().filter(|n| !n.is_empty()),
-            WaitProp::Checked => elem
-                .get_pattern::<uiautomation::patterns::UITogglePattern>()
-                .ok()
-                .and_then(|t| t.get_toggle_state().ok())
-                .map(|s| if s.to_string() == "On" { "on" } else { "off" }.to_string()),
-        }
+    pub fn read(&self, elem: &uiautomation::UIElement) -> Result<Option<String>, CtlError> {
+        let (value, channel) = match self.prop {
+            WaitProp::Value => (crate::read::read_value(elem)?, "value-or-text-pattern"),
+            WaitProp::Text => (crate::read::read_text(elem)?, "text-pattern"),
+            WaitProp::Name => (
+                Some(
+                    elem.get_name()
+                        .map_err(|e| crate::read_channel::failure("name", e))?,
+                ),
+                "name",
+            ),
+            WaitProp::Checked => (
+                crate::read_channel::toggle(elem)?.map(|v| v.to_lowercase()),
+                "toggle-pattern",
+            ),
+        };
+        Ok(Some(crate::read_channel::require(value, channel)?))
     }
 
     /// 判定(读不到值 = 未满足,fail-closed)

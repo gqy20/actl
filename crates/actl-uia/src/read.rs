@@ -3,17 +3,14 @@
 
 use actl_core::target::Target;
 use actl_core::{CtlError, ErrorCode};
-use uiautomation::patterns::UIValuePattern;
-use uiautomation::{UIAutomation, UIElement, UITreeWalker};
+use uiautomation::UIElement;
 use windows::Win32::Foundation::HGLOBAL;
 use windows::Win32::System::DataExchange::{
     CloseClipboard, EmptyClipboard, GetClipboardData, OpenClipboard, SetClipboardData,
 };
 use windows::Win32::System::Memory::{GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalUnlock};
 
-use crate::internal;
-use crate::locate::{Located, locate, role_of};
-use crate::window::MAX_ELEMENTS;
+use crate::locate::{Located, locate};
 
 /// get:读取元素属性;`property` 白名单,缺省返回基本全集。
 /// 属性白名单。`value` = ValuePattern 直读;`text` = TextPattern 文档正文
@@ -33,10 +30,11 @@ pub struct PropertyInfo {
     pub automation_id: Option<String>,
     pub offscreen: Option<bool>,
     pub value: Option<String>,
-    /// value 的读取通道:value-pattern | text-pattern(value 为空时的兜底)
+    /// value 的读取通道；仅 ValuePattern 不支持时回退 TextPattern。
     pub value_via: Option<&'static str>,
     /// TextPattern 文档正文(--property text 专用)
     pub text: Option<String>,
+    pub unsupported: Vec<&'static str>,
 }
 
 pub fn read_property(
@@ -54,79 +52,84 @@ pub fn read_property(
     }
     let loc = locate(app, target, near)?;
     let want = |p: &str| property.map(|sel| sel == p).unwrap_or(true);
-    let mut value_via = None;
-    let value = want("value")
-        .then(|| {
-            let (v, via) = read_value_via(&loc.element);
-            value_via = via;
-            v
-        })
-        .flatten();
-    // text = TextPattern 文档正文专用通道(Chromium Document 的 Value=URL,
-    // 正文只能走这里)
-    let text = want("text")
-        .then(|| {
-            use uiautomation::patterns::UITextPattern;
-            loc.element
-                .get_pattern::<UITextPattern>()
-                .ok()
-                .and_then(|t| t.get_document_range().ok())
-                .and_then(|r| r.get_text(-1).ok())
-                .filter(|t| !t.is_empty())
-        })
-        .flatten();
+    let (value, value_via) = if want("value") {
+        read_value_via(&loc.element)?
+    } else {
+        (None, None)
+    };
+    let text = if want("text") {
+        read_text(&loc.element)?
+    } else {
+        None
+    };
+    let mut unsupported = Vec::new();
+    if want("value") && value.is_none() {
+        unsupported.push("value");
+    }
+    if want("text") && text.is_none() {
+        unsupported.push("text");
+    }
+    if property == Some("value") {
+        crate::read_channel::require(value.as_ref(), "value-or-text-pattern")?;
+    }
+    if property == Some("text") {
+        crate::read_channel::require(text.as_ref(), "text-pattern")?;
+    }
     Ok(PropertyInfo {
-        name: want("name").then_some(loc.name.clone()).flatten(),
+        name: if want("name") {
+            Some(
+                loc.element
+                    .get_name()
+                    .map_err(|e| crate::read_channel::failure("name", e))?,
+            )
+        } else {
+            None
+        },
         role: if want("role") {
-            loc.role.clone()
+            format!(
+                "{:?}",
+                loc.element
+                    .get_control_type()
+                    .map_err(|e| crate::read_channel::failure("role", e))?
+            )
         } else {
             String::new()
         },
-        automation_id: want("automation_id")
-            .then_some(loc.automation_id.clone())
-            .flatten(),
-        offscreen: want("offscreen")
-            .then(|| loc.element.is_offscreen().ok())
-            .flatten(),
+        automation_id: if want("automation_id") {
+            Some(
+                loc.element
+                    .get_automation_id()
+                    .map_err(|e| crate::read_channel::failure("automation_id", e))?,
+            )
+        } else {
+            None
+        },
+        offscreen: if want("offscreen") {
+            Some(
+                loc.element
+                    .is_offscreen()
+                    .map_err(|e| crate::read_channel::failure("offscreen", e))?,
+            )
+        } else {
+            None
+        },
         value,
         value_via,
         text,
+        unsupported,
     })
 }
 
-/// 元素文本读取双通道:ValuePattern 直读 → TextPattern 文档范围兜底。
-/// 富文本(浏览器页面/Word 文档)不暴露 Value pattern,TextPattern 是唯一通道;
-/// 返回值附带来源标记(get 的 via 上报,与 type --paste 同风格)。
-fn read_value_via(elem: &UIElement) -> (Option<String>, Option<&'static str>) {
-    use uiautomation::patterns::UITextPattern;
-
-    if let Some(v) = elem
-        .get_pattern::<UIValuePattern>()
-        .ok()
-        .and_then(|p| p.get_value().ok())
-        .filter(|v| !v.is_empty())
-    {
-        return (Some(v), Some("value-pattern"));
-    }
-    let text = elem
-        .get_pattern::<UITextPattern>()
-        .ok()
-        .and_then(|t| t.get_document_range().ok())
-        .and_then(|r| r.get_text(-1).ok())
-        .filter(|t| !t.is_empty());
-    (text.clone(), text.is_some().then_some("text-pattern"))
+fn read_value_via(elem: &UIElement) -> Result<(Option<String>, Option<&'static str>), CtlError> {
+    crate::read_channel::choose(crate::read_channel::value(elem), || read_text(elem))
 }
 
-pub(crate) fn read_value(elem: &UIElement) -> Option<String> {
-    read_value_via(elem).0
+pub(crate) fn read_value(elem: &UIElement) -> Result<Option<String>, CtlError> {
+    Ok(read_value_via(elem)?.0)
 }
 
-pub(crate) fn read_text(elem: &UIElement) -> Option<String> {
-    use uiautomation::patterns::UITextPattern;
-    elem.get_pattern::<UITextPattern>()
-        .ok()
-        .and_then(|p| p.get_document_range().ok())
-        .and_then(|r| r.get_text(-1).ok())
+pub(crate) fn read_text(elem: &UIElement) -> Result<Option<String>, CtlError> {
+    crate::read_channel::text(elem)
 }
 
 /// verify:立即断言(与 wait 的"耐心等待"分工,06 §3.6)。
@@ -157,8 +160,6 @@ pub fn verify(
     near: Option<&str>,
     kind: VerifyKind,
 ) -> Result<VerifyOutcome, CtlError> {
-    use uiautomation::patterns::UITogglePattern;
-
     let fail = |what: &str, actual: Option<String>| {
         CtlError::with_evidence(
             ErrorCode::AssertionFailed,
@@ -183,17 +184,25 @@ pub fn verify(
         } => {
             let loc = locate(app, target, near)?;
             let (actual, channel) = match property.as_str() {
-                "name" => (loc.element.get_name().ok(), Some("name")),
-                "text" => (read_text(&loc.element), Some("text-pattern")),
+                "name" => (
+                    Some(
+                        loc.element
+                            .get_name()
+                            .map_err(|e| crate::read_channel::failure("name", e))?,
+                    ),
+                    Some("name"),
+                ),
+                "text" => (read_text(&loc.element)?, Some("text-pattern")),
                 "value" => (
-                    loc.element
-                        .get_pattern::<UIValuePattern>()
-                        .ok()
-                        .and_then(|p| p.get_value().ok()),
+                    crate::read_channel::value(&loc.element)?,
                     Some("value-pattern"),
                 ),
-                _ => read_value_via(&loc.element),
+                _ => read_value_via(&loc.element)?,
             };
+            crate::read_channel::require(
+                actual.as_ref(),
+                channel.unwrap_or("value-or-text-pattern"),
+            )?;
             let ok = match (&actual, contains) {
                 (Some(a), true) => a.contains(&expected),
                 (Some(a), false) => a == &expected,
@@ -225,12 +234,8 @@ pub fn verify(
         }
         VerifyKind::Checked => {
             let loc = locate(app, target, near)?;
-            let state = loc
-                .element
-                .get_pattern::<UITogglePattern>()
-                .ok()
-                .and_then(|t| t.get_toggle_state().ok())
-                .map(|s| format!("{s:?}"));
+            let state = crate::read_channel::toggle(&loc.element)?;
+            crate::read_channel::require(state.as_ref(), "toggle-pattern")?;
             if state.as_deref() != Some("On") {
                 return Err(fail("checked", state));
             }
@@ -242,108 +247,6 @@ pub fn verify(
             })
         }
     }
-}
-
-/// extract --table:GridPattern 直读优先(带 row/col 语义,虚拟化行可达),
-/// 树扁平化兜底(容器 → 行(DataItem/ListItem)→ 单元格(Text/Edit 值))。
-/// 返回 (行数据, 来源标记);来源随结果上报,agent 可判断结构可信度。
-pub fn extract_table(
-    app: Option<&str>,
-    target: &Target,
-) -> Result<(Vec<Vec<String>>, &'static str), CtlError> {
-    use uiautomation::patterns::UIGridPattern;
-
-    let loc = locate(app, target, None)?;
-    // 直读路径:GridPattern.GetItemAt(row, col)——provider 侧行列寻址;
-    // 单元格值优先 Value pattern,退 Name。pattern 宣称支持但读不全
-    // → 如实走兜底路径,不输出半张表
-    if let Ok(grid) = loc.element.get_pattern::<UIGridPattern>() {
-        let rows = grid.get_row_count().unwrap_or(0);
-        let cols = grid.get_column_count().unwrap_or(0);
-        if rows > 0 && cols > 0 && (rows * cols) as usize <= MAX_ELEMENTS {
-            let mut table = Vec::with_capacity(rows as usize);
-            let mut ok = true;
-            for r in 0..rows {
-                let mut row = Vec::with_capacity(cols as usize);
-                for c in 0..cols {
-                    match grid.get_item(r, c) {
-                        Ok(cell) => row.push(
-                            read_value(&cell)
-                                .unwrap_or_else(|| cell.get_name().unwrap_or_default()),
-                        ),
-                        Err(_) => {
-                            ok = false;
-                            break;
-                        }
-                    }
-                }
-                if !ok {
-                    break;
-                }
-                table.push(row);
-            }
-            if ok && !table.is_empty() {
-                return Ok((table, "grid-pattern"));
-            }
-        }
-    }
-
-    let auto = UIAutomation::new().map_err(internal)?;
-    let walker = auto.create_tree_walker().map_err(internal)?;
-
-    fn rows_under(walker: &UITreeWalker, elem: &UIElement, depth: u32, out: &mut Vec<UIElement>) {
-        if depth > crate::window::MAX_DEPTH {
-            return;
-        }
-        let mut child = walker.get_first_child(elem).ok();
-        while let Some(c) = child {
-            let role = role_of(&c);
-            if role == "DataItem" || role == "ListItem" {
-                out.push(c.clone());
-            } else {
-                rows_under(walker, &c, depth + 1, out);
-            }
-            child = walker.get_next_sibling(&c).ok();
-        }
-    }
-    fn cells_under(walker: &UITreeWalker, elem: &UIElement, depth: u32, out: &mut Vec<String>) {
-        if depth > crate::window::MAX_DEPTH {
-            return;
-        }
-        let role = role_of(elem);
-        if (role == "Text" || role == "Edit")
-            && let Some(n) = elem.get_name().ok().filter(|n| !n.is_empty())
-        {
-            out.push(n);
-        }
-        let mut child = walker.get_first_child(elem).ok();
-        while let Some(c) = child {
-            cells_under(walker, &c, depth + 1, out);
-            child = walker.get_next_sibling(&c).ok();
-        }
-    }
-
-    let mut row_elems = Vec::new();
-    rows_under(&walker, &loc.element, 0, &mut row_elems);
-    if row_elems.is_empty() {
-        return Err(CtlError::new(
-            ErrorCode::NotActionable,
-            format!(
-                "{} ({}) contains no DataItem/ListItem rows",
-                target.describe(),
-                loc.role
-            ),
-        ));
-    }
-    let mut table = Vec::new();
-    for r in &row_elems {
-        let mut cells = Vec::new();
-        cells_under(&walker, r, 0, &mut cells);
-        if !cells.is_empty() {
-            table.push(cells);
-        }
-    }
-    Ok((table, "tree-flatten"))
 }
 
 // ─── 剪贴板(CF_UNICODETEXT;剪贴板是共享状态,doc 09 §6.2 提醒并发) ──────

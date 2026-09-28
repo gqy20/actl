@@ -70,6 +70,17 @@ actl verify --value <target> "<期望>" --app <app> # 确认:立即断言
 验证:verify(--exists/--value/--contains/--checked) extract(--table)
 系统:get-clipboard set-clipboard
 
+## 外部 UIA 对照诊断
+
+控件缺失、定位歧义、值或焦点矛盾时，可复用本机 `winapp ui` 做有界只读对照。
+先查 `winapp --version` 和子命令 `--help`；用 `list-windows -a <进程> --json`
+核对唯一目标，再 `inspect -w <本次 HWND> --depth 5 --json`，按需 get-property/get-value/get-focused。
+同一现场比较树视图、深度、过滤、角色、ID、父容器和读取通道；winapp 使用 Control View，
+不能仅凭节点数量断言 actl 漏项。保留退出码、stderr 和原始 JSON，失败不转成空树。
+winapp 的 slug 不作为 actl ref 使用；回到 actl 后重新观察并绑定 snapshot。
+不通过外部工具绕过急停、让行、权限或焦点护栏；截图/录制可能改变窗口状态，不按纯查询处理。
+安装、实测边界和优化流程见 [winapp 诊断专题](../../docs/36-winapp-uia-diagnostics.md)。
+
 ## 假成功应用的操作范式(UIA 撒谎时)
 
 部分自绘框架(mmui/Qt 系,如微信 4.x)的元素声明支持 Invoke/Select,调用返回 ok 却不产生

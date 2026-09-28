@@ -15,7 +15,7 @@
 
 1. agent 要操作 Windows 桌面应用时,主流方案是"截图→VLM 猜坐标"(慢、贵、不可靠)或 MCP server 形态(重、占上下文);
 2. Quicker/AutoHotkey 证明了底层确定性操作的可行性,但它们面向人类,无 AI-native 接口;
-3. 调研结论([02](02-gap-analysis.md)):该品类在 Windows 上是**定义清晰、范围收敛的工程空位**——协议蓝本(agent-desktop,Apache-2.0)与平台参照(terminator,MIT)都存在,无人焊接。
+3. Windows 已有 `winapp ui` 等 UIA CLI；本项目聚焦原子命令契约、目标身份、结果核验和人工交接的可靠性，并通过同类工具对照发现缺口。2026-09-28 的补充调研与本机证据见 [36](36-winapp-uia-diagnostics.md)，早期“工程空位”的判断不再作为产品依据。
 
 ### 1.3 目标与非目标
 

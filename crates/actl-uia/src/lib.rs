@@ -1,8 +1,8 @@
 //! actl-uia —— Windows UIA 后端。
 //!
 //! 全仓库唯一接触 COM 的 crate(AGENTS.md §5.5)。
-//! 已知限制(spike #4,docs/spike-findings.md):walker 在"无子/无兄弟"时返回 Err,
-//! 与真错误不可区分——当前以 `.ok()` 视为尽头;HRESULT 分类列入 M1 遗留。
+//! snapshot/定位/表格通过 fallible RawView 枚举区分空树与观察失败。
+//! 其他窗口清单等旧 walker 路径仍待迁移，不宣称全部观察入口已严格化。
 //! 性能注记(spike #3):本版逐属性跨进程读取,release 下金任务实测,超 500ms 再上 cache request。
 //!
 //! 模块划分(按命令域,单文件行数门禁见 xtask gate):
@@ -28,9 +28,13 @@ mod input_verify;
 mod locate;
 pub use identity::ReplayGuard;
 mod native_windows;
+mod observation;
 mod pointer;
 mod read;
+mod read_channel;
 mod scoped_locate;
+mod table;
+pub use table::{TableResult, extract_table};
 mod window;
 mod window_ready;
 pub use window_ready::wait_window_ready;
@@ -55,8 +59,8 @@ pub use pointer::{
     pointer_physical, scroll_element,
 };
 pub use read::{
-    PROPS, PropertyInfo, VerifyKind, VerifyOutcome, extract_table, get_clipboard_text,
-    read_property, set_clipboard_text, verify,
+    PROPS, PropertyInfo, VerifyKind, VerifyOutcome, get_clipboard_text, read_property,
+    set_clipboard_text, verify,
 };
 pub use window::{
     CaptureResult, MAX_DEPTH, MAX_ELEMENTS, WindowEntry, WindowInfo, WindowRef, capture,

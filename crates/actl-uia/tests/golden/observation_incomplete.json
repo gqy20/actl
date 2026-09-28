@@ -1,0 +1,1 @@
+{"version":"1","ok":false,"command":"find","error":{"code":"NOT_ACTIONABLE","message":"observation is incomplete; narrow the target scope","hint":"scroll or focus the element first; for value writes consider `set-value`","evidence":{"reason":"observation_incomplete","causes":["node_limit"]}},"duration_ms":0}

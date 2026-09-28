@@ -4,6 +4,24 @@
 
 ## 1. 定位
 
+### UIA 读取状态修订（2026-09-28）
+
+- `get` 保留成功读取的空字符串；`value` 仅在 ValuePattern 明确不支持时回退 TextPattern，读取失败不回退。
+- 默认 `get` 的 data 增加 `unsupported` 属性名数组（如 `["value","text"]`），表示已确认不支持的读取通道；空数组表示本次没有不支持项。其他读取错误使命令失败，不能输出看似完整的成功结果。
+- 显式 `get --property value|text`、verify 和属性等待遇到不支持通道返回 NOT_ACTIONABLE，evidence.reason=`pattern_unsupported`；value 的 get/自动等待允许上述双通道，而 `verify --property value` 严格读取 ValuePattern。
+- UIA 元素失效映射 STALE_REF，访问拒绝映射 PERM_DENIED，其余 provider/属性读取错误映射 INTERNAL；evidence 带 channel、native_code（原生错误存在时）。观察失败不能等同空值、断言不满足或稳定。
+- `wait --stable` 只在明确不支持时按 Text → Value → Name 取样；`type --verify-value` 复用读取状态并在错误中保留 delivered/value_verified/retry，禁止重放输入。
+- 本轮未扩展等待谓词的空期望语法；snapshot/定位/整表提取的后续修订如下，证据见 [37](37-uia-observation.md)。
+
+#### 观察完整性修订
+
+- snapshot、旧语义定位与表格树回退使用显式 RawView 的可失败枚举；子级为空与枚举错误分开。必要属性读取失败按 channel/native_code 报错，成功空名称与 ID 保留为空字符串。
+- snapshot 增加 `truncation_reasons` 数组，完整时为 `[]`；节点/深度预算实际省略内容时分别记录 `node_limit` / `depth_limit`，并设 `truncated=true`。恰好达到上限但无未观察节点不算截断。属性或枚举失败整次报错，本轮不提供携带属性错误的部分树。
+- 过滤式 find、旧语义定位/ref 重放和表格树提取拒绝不完整范围，返回 NOT_ACTIONABLE，evidence 为 `{reason:"observation_incomplete",causes:[...]}`。content 投影在截断范围内未见 Document 时也不能声称 NOT_FOUND。成功采样仍不是原子快照，控件可能在调用之间变化。
+- 所有元素等待仅将 NOT_FOUND 解释为缺席；STALE_REF、权限、provider 错误及超限立即传播。虚拟化查询区分成功空结果与原生失败，多个匹配拒绝为 AMBIGUOUS。
+- extract 仅在 GridPattern availability 明确为 false 时回退树提取，输出 `fallback_reason:"grid_pattern_unsupported"`；Grid 直读时为 null。Grid 属性、单元格失败不回退；合法空表和空单元格保留。负行列数报 INTERNAL；超限或前后行列数变化报 NOT_ACTIONABLE（causes 为 `table_limit` / `table_changed`）。树回退只反映已物化 Text/Edit 单元格，不保证与逻辑表格的列结构一致。
+- 预算约束的是遍历节点/深度与表格规模；单个同步 COM 调用仍可能阻塞，本轮不宣称硬超时或全局观察原子性。窗口清单等其他旧 walker 路径仍待单独迁移。
+
 实验说明：`prototypes/browser` 独立验证 CDP 会话、CSS/XPath、iframe 和写后核验。
 它没有新增 actl 命令、目标语法或 YAML 字段，报告文件不属于本协议；范围与验收见 [34](34-browser-connection-prototype.md)。
 

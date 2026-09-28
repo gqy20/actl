@@ -1,0 +1,1 @@
+{"version":"1","ok":true,"command":"extract","data":{"action":"extract","target":"id:table","source":"tree-flatten","fallback_reason":"grid_pattern_unsupported","rows":1,"table":[["","second"]]},"duration_ms":0}

@@ -60,6 +60,11 @@ pub(crate) fn snapshot_cmd(
         (_, Some(h)) => actl_uia::capture_hwnd(actl_uia::parse_hwnd(h)?)?,
         (a, None) => actl_uia::capture(a)?,
     };
+    if matches!(view, Some(crate::cli::ViewMode::Content))
+        && !cap.nodes.iter().any(|node| node.role == "Document")
+    {
+        cap.require_complete()?;
+    }
     let mut builder = SnapshotBuilder::new(actl_uia::MAX_ELEMENTS + 1);
     for node in cap.nodes {
         if !builder.push(node) {
@@ -87,9 +92,10 @@ pub(crate) fn snapshot_cmd(
             "pid": cap.window.pid,
         },
         "truncated": cap.truncated || out.truncated,
+        "truncation_reasons": cap.truncation_reasons,
         // 激活感知:目标曾挂起并被唤醒时如实上报等待量(0/未挂起时省略)
         "wake_ms": cap.wake_ms,
-        "elements": serde_json::to_value(&out.elements).expect("elements serialize"),
+        "elements": serde_json::to_value(&out.elements).map_err(|e| CtlError::internal(e.to_string()))?,
     });
     if matches!(view, Some(crate::cli::ViewMode::Content)) {
         data["view"] = json!("content");
@@ -110,6 +116,10 @@ pub(crate) fn get(
     let target = actl_core::parse_target(target_raw)?;
     let _replay = replay_guard(snapshot, app)?;
     let info = actl_uia::read_property(app, &target, property, near)?;
+    Ok(property_data(&target.describe(), info).into())
+}
+
+fn property_data(target: &str, info: actl_uia::PropertyInfo) -> Value {
     let mut props = serde_json::Map::new();
     if let Some(v) = &info.name {
         props.insert("name".into(), json!(v));
@@ -132,7 +142,7 @@ pub(crate) fn get(
     if let Some(v) = &info.text {
         props.insert("text".into(), json!(v));
     }
-    Ok(json!({ "target": target.describe(), "properties": props }).into())
+    json!({ "target": target, "properties": props, "unsupported": info.unsupported })
 }
 
 /// find:条件查元素,复用 snapshot 的 ref 编号(同一 DFS,同一编号空间,
@@ -162,6 +172,7 @@ pub(crate) fn find_cmd(
         ));
     }
     let cap = actl_uia::capture(app)?;
+    cap.require_complete()?;
     let mut builder = SnapshotBuilder::new(actl_uia::MAX_ELEMENTS + 1);
     for node in cap.nodes {
         if !builder.push(node) {
@@ -169,9 +180,7 @@ pub(crate) fn find_cmd(
         }
     }
     // find 定向查找不做投影:命中集本就窄,投影反而可能滤掉候选
-    let out = builder
-        .finish(actl_core::Projection::Full)
-        .expect("full projection cannot fail");
+    let out = builder.finish(actl_core::Projection::Full)?;
     actl_uia::persist_snapshot(
         &out.snapshot_id,
         &cap.window.title,
@@ -206,8 +215,16 @@ pub(crate) fn find_cmd(
             .map(|n| format!("name:{n}"))
             .or_else(|| id.map(|i| format!("id:{i}")))
         && let Ok(target) = actl_core::parse_target(&raw_target)
-        && let Ok(loc) = actl_uia::locate(app, &target, None)
+        && let Some(loc) = match actl_uia::locate(app, &target, None) {
+            Ok(loc) => Some(loc),
+            Err(e) if e.code == actl_core::ErrorCode::NotFound => None,
+            Err(e) => return Err(e),
+        }
         && loc.resolved_by == "item-container"
+        && role_want
+            .as_ref()
+            .is_none_or(|r| loc.role.to_lowercase().contains(r))
+        && id.is_none_or(|i| loc.automation_id.as_deref() == Some(i))
     {
         virtual_hit = Some((
             actl_core::snapshot::ElementOut {
@@ -614,15 +631,19 @@ pub(crate) fn verify_cmd(
 
 pub(crate) fn extract_cmd(target_raw: &str, app: Option<&str>) -> Result<CommandOutput, CtlError> {
     let target = actl_core::parse_target(target_raw)?;
-    let (rows, source) = actl_uia::extract_table(app, &target)?;
-    Ok(json!({
+    let table = actl_uia::extract_table(app, &target)?;
+    Ok(table_data(&target.describe(), table).into())
+}
+
+fn table_data(target: &str, table: actl_uia::TableResult) -> Value {
+    json!({
         "action": "extract",
-        "target": target.describe(),
-        "source": source,
-        "rows": rows.len(),
-        "table": rows,
+        "target": target,
+        "source": table.source,
+        "fallback_reason": table.fallback_reason,
+        "rows": table.rows.len(),
+        "table": table.rows,
     })
-    .into())
 }
 
 #[cfg(test)]
@@ -657,5 +678,44 @@ mod window_baseline_tests {
         .unwrap();
         assert_eq!(data, golden);
         assert!(data.get("windows_created").is_none());
+    }
+}
+#[cfg(test)]
+mod property_contract_tests {
+    use super::*;
+    #[test]
+    fn table_fallback_preserves_empty_cells_and_explains_source() {
+        let data = table_data(
+            "id:table",
+            actl_uia::TableResult {
+                rows: vec![vec![String::new(), "second".into()]],
+                source: "tree-flatten",
+                fallback_reason: Some("grid_pattern_unsupported"),
+            },
+        );
+        let envelope = actl_core::Envelope::success("extract", Some(data), 0);
+        let expected: Value =
+            serde_json::from_str(include_str!("../tests/golden/table_fallback.json")).unwrap();
+        assert_eq!(serde_json::to_value(envelope).unwrap(), expected);
+    }
+    #[test]
+    fn empty_value_and_unsupported_text_are_distinct_in_envelope() {
+        let data = property_data(
+            "id:input",
+            actl_uia::PropertyInfo {
+                name: None,
+                role: String::new(),
+                automation_id: None,
+                offscreen: None,
+                value: Some(String::new()),
+                value_via: Some("value-pattern"),
+                text: None,
+                unsupported: vec!["text"],
+            },
+        );
+        let envelope = actl_core::Envelope::success("get", Some(data), 0);
+        let expected: Value =
+            serde_json::from_str(include_str!("../tests/golden/get_empty_value.json")).unwrap();
+        assert_eq!(serde_json::to_value(envelope).unwrap(), expected);
     }
 }

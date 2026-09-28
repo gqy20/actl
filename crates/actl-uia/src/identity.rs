@@ -20,6 +20,27 @@ pub(crate) fn identity(element: &UIElement) -> Value {
     })
 }
 
+pub(crate) fn observed_identity(element: &UIElement) -> Result<Value, CtlError> {
+    use crate::read_channel::failure;
+    let runtime_id = element
+        .get_runtime_id()
+        .map_err(|e| failure("identity.runtime_id", e))?;
+    let pid = element
+        .get_process_id()
+        .map_err(|e| failure("identity.pid", e))?;
+    if runtime_id.is_empty() || pid == 0 {
+        return Err(CtlError::internal(
+            "observed element has no usable runtime identity",
+        ));
+    }
+    Ok(json!({
+        "runtime_id":runtime_id, "pid":pid,
+        "role":format!("{:?}", element.get_control_type().map_err(|e| failure("identity.role", e))?),
+        "automation_id":element.get_automation_id().map_err(|e| failure("identity.automation_id", e))?,
+        "name":element.get_name().map_err(|e| failure("identity.name", e))?,
+    }))
+}
+
 pub(crate) fn same_instance(expected: &Value, current: &Value) -> bool {
     expected["runtime_id"]
         .as_array()

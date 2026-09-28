@@ -1,0 +1,1 @@
+{"version":"1","ok":true,"command":"get","data":{"target":"id:input","properties":{"value":"","value_via":"value-pattern"},"unsupported":["text"]},"duration_ms":0}

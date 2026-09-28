@@ -26,8 +26,19 @@ pub struct CaptureResult {
     pub nodes: Vec<UiNode>,
     pub element_identities: Vec<serde_json::Value>,
     pub truncated: bool,
+    pub truncation_reasons: Vec<&'static str>,
     /// 激活感知等待的毫秒数(0 = 目标本就在响应;>0 = 目标曾挂起,已唤醒)
     pub wake_ms: u32,
+}
+
+impl CaptureResult {
+    pub fn require_complete(&self) -> Result<(), CtlError> {
+        if self.truncated {
+            Err(crate::observation::incomplete(&self.truncation_reasons))
+        } else {
+            Ok(())
+        }
+    }
 }
 
 /// 捕获一个顶层窗口的 UIA 子树。
@@ -45,19 +56,27 @@ pub fn capture(app: Option<&str>) -> Result<CaptureResult, CtlError> {
     };
 
     let window = WindowInfo {
-        title: target.get_name().unwrap_or_default(),
-        class: target.get_classname().unwrap_or_default(),
-        pid: target.get_process_id().unwrap_or_default(),
+        title: target
+            .get_name()
+            .map_err(|e| crate::read_channel::failure("window.name", e))?,
+        class: target
+            .get_classname()
+            .map_err(|e| crate::read_channel::failure("window.class", e))?,
+        pid: target
+            .get_process_id()
+            .map_err(|e| crate::read_channel::failure("window.pid", e))?,
     };
     let wake_ms = {
         let _t = actl_core::trace::scope("capture.wake");
         ensure_window_responsive(&target)
     };
-    let window_runtime_id = target.get_runtime_id().unwrap_or_default();
+    let window_runtime_id = target
+        .get_runtime_id()
+        .map_err(|e| crate::read_channel::failure("window.runtime_id", e))?;
 
     let mut nodes = Vec::new();
     let mut element_identities = Vec::new();
-    {
+    let truncation_reasons = {
         let _t = actl_core::trace::scope("capture.walk");
         walk(
             &walker,
@@ -66,15 +85,16 @@ pub fn capture(app: Option<&str>) -> Result<CaptureResult, CtlError> {
             None,
             &mut nodes,
             &mut element_identities,
-        );
-    }
-    let truncated = nodes.len() >= MAX_ELEMENTS;
+        )?
+    };
+    let truncated = !truncation_reasons.is_empty();
     Ok(CaptureResult {
         window,
         window_runtime_id,
         nodes,
         element_identities,
         truncated,
+        truncation_reasons,
         wake_ms,
     })
 }
@@ -304,59 +324,73 @@ const WINUI_AUX_CLASSES: [&str; 2] = ["ApplicationFrameWindow", "ApplicationFram
 /// 几十次跨进程 COM 往返,放热路径实测把命令耗时从 ~40ms 拖到 ~2s。
 pub(crate) fn find_window(
     auto: &UIAutomation,
-    walker: &UITreeWalker,
+    _walker: &UITreeWalker,
     pattern: &str,
 ) -> Result<UIElement, CtlError> {
-    // `hwnd:<n>`(十进制/0x 十六进制):按原生句柄锚定窗口——SPA 整页跳转/
-    // 导航会改标题(标题不是窗口身份),HWND 是;所有 --app 消费方自动生效
-    if let Some(raw) = pattern.strip_prefix("hwnd:") {
-        let hwnd = parse_hwnd(raw)?;
-        crate::display_support::reject_display(hwnd)?;
-        return auto
-            .element_from_handle(uiautomation::types::Handle::from(hwnd))
-            .map_err(|_| {
-                CtlError::new(
-                    ErrorCode::NotFound,
-                    format!("no window at hwnd {hwnd:#x} (--app anchor)"),
-                )
-            });
+    if pattern.starts_with("hwnd:") {
+        return crate::scoped_locate::window(auto, Some(pattern));
     }
-    let mut matches: Vec<UIElement> = root_children(auto, walker)
-        .into_iter()
-        .filter(|w| name_matches(w, pattern))
-        .collect();
-    if matches.is_empty() {
-        // owned dialog 兜底:只对有子 Window 的宿主扫
-        for host in root_children(auto, walker) {
-            matches.extend(
-                owned_dialogs_of(walker, &host)
-                    .into_iter()
-                    .filter(|w| name_matches(w, pattern)),
-            );
+    let root = auto
+        .get_root_element()
+        .map_err(|e| crate::read_channel::failure("desktop.root", e))?;
+    let hosts = crate::observation::children(&root)?;
+    let mut matches = Vec::new();
+    for w in &hosts {
+        if native_hwnd(w).is_some_and(crate::display_support::is_display_window) {
+            continue;
+        }
+        if w.get_name()
+            .map_err(|e| crate::read_channel::failure("window.name", e))?
+            .contains(pattern)
+        {
+            matches.push(w.clone());
         }
     }
+    if matches.is_empty() {
+        for host in hosts {
+            if native_hwnd(&host).is_some_and(crate::display_support::is_display_window) {
+                continue;
+            }
+            for w in crate::observation::children(&host)? {
+                if w.get_control_type()
+                    .map_err(|e| crate::read_channel::failure("window.role", e))?
+                    == ControlType::Window
+                    && w.get_name()
+                        .map_err(|e| crate::read_channel::failure("window.name", e))?
+                        .contains(pattern)
+                {
+                    matches.push(w);
+                }
+            }
+        }
+    }
+    // Required classification failures must not remove an ambiguity candidate.
+    let classes: Vec<String> = matches
+        .iter()
+        .map(|w| {
+            w.get_classname()
+                .map_err(|e| crate::read_channel::failure("window.class", e))
+        })
+        .collect::<Result<_, _>>()?;
     // 折叠 WinUI 辅助 HWND:存在非辅助窗口时,辅助件不参与解析
-    let has_primary = matches.iter().any(|w| {
-        let cls = w.get_classname().unwrap_or_default();
-        !WINUI_AUX_CLASSES.contains(&cls.as_str())
-    });
-    let pool: Vec<UIElement> = if has_primary {
-        matches
-            .into_iter()
-            .filter(|w| {
-                let cls = w.get_classname().unwrap_or_default();
-                !WINUI_AUX_CLASSES.contains(&cls.as_str())
-            })
-            .collect()
-    } else {
-        matches
-    };
+    let has_primary = classes
+        .iter()
+        .any(|cls| !WINUI_AUX_CLASSES.contains(&cls.as_str()));
+    let pool: Vec<UIElement> = matches
+        .into_iter()
+        .zip(classes)
+        .filter(|(_, cls)| !has_primary || !WINUI_AUX_CLASSES.contains(&cls.as_str()))
+        .map(|(element, _)| element)
+        .collect();
     match pool.len() {
         0 => Err(CtlError::new(
             ErrorCode::NotFound,
             format!("no top-level window title contains {pattern:?}"),
         )),
-        1 => Ok(pool.into_iter().next().expect("len == 1")),
+        1 => pool
+            .into_iter()
+            .next()
+            .ok_or_else(|| CtlError::internal("window candidate missing")),
         n => {
             let titles: Vec<String> = pool
                 .iter()
@@ -379,51 +413,54 @@ pub(crate) fn top_level_of_focused(
     walker: &UITreeWalker,
 ) -> Result<UIElement, CtlError> {
     let mut cur = auto.get_focused_element().map_err(internal)?;
-    loop {
-        match walker.get_parent(&cur) {
-            Ok(p) => cur = p,
-            Err(_) => return Ok(cur), // 到达根(尽头 Err 语义,见 crate 注释)
+    for _ in 0..=MAX_DEPTH {
+        actl_core::wait_control::check()?;
+        match crate::observation::parent(walker, &cur)? {
+            Some(p) => cur = p,
+            None => return Ok(cur),
         }
     }
+    Err(crate::observation::incomplete(&["depth_limit"]))
 }
 
 fn walk(
-    walker: &UITreeWalker,
+    _walker: &UITreeWalker,
     elem: &UIElement,
-    depth: u32,
-    parent: Option<usize>,
+    _depth: u32,
+    _parent: Option<usize>,
     nodes: &mut Vec<UiNode>,
     identities: &mut Vec<serde_json::Value>,
-) {
-    if nodes.len() >= MAX_ELEMENTS || depth > MAX_DEPTH {
-        return;
+) -> Result<Vec<&'static str>, CtlError> {
+    let observed = crate::observation::tree(elem)?;
+    for entry in observed.entries {
+        let element = entry.element;
+        let node = UiNode {
+            depth: entry.depth,
+            role: format!(
+                "{:?}",
+                element
+                    .get_control_type()
+                    .map_err(|e| crate::read_channel::failure("control_type", e))?
+            ),
+            name: Some(
+                element
+                    .get_name()
+                    .map_err(|e| crate::read_channel::failure("name", e))?,
+            ),
+            automation_id: Some(
+                element
+                    .get_automation_id()
+                    .map_err(|e| crate::read_channel::failure("automation_id", e))?,
+            ),
+            parent: entry.parent,
+        };
+        if actl_core::is_interactive_role(&node.role) {
+            identities.push(crate::identity::observed_identity(&element)?);
+        }
+        nodes.push(node);
     }
-    let node = to_node(elem, depth, parent);
-    if actl_core::is_interactive_role(&node.role) {
-        identities.push(crate::identity::identity(elem));
-    }
-    nodes.push(node);
-    let idx = nodes.len() - 1;
-    let mut child = walker.get_first_child(elem).ok();
-    while let Some(c) = child {
-        walk(walker, &c, depth + 1, Some(idx), nodes, identities);
-        child = walker.get_next_sibling(&c).ok();
-    }
+    Ok(observed.reasons)
 }
-
-fn to_node(elem: &UIElement, depth: u32, parent: Option<usize>) -> UiNode {
-    UiNode {
-        depth,
-        role: format!(
-            "{:?}",
-            elem.get_control_type().unwrap_or(ControlType::Custom)
-        ),
-        name: elem.get_name().ok().filter(|n| !n.is_empty()),
-        automation_id: elem.get_automation_id().ok().filter(|a| !a.is_empty()),
-        parent,
-    }
-}
-
 /// 等待标题包含 `substr` 的顶层窗口出现(--expect 的执行体,06 §4:默认 2s 轮询)。
 pub fn wait_window(substr: &str, timeout_ms: u64) -> Result<String, CtlError> {
     let deadline = std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
@@ -892,15 +929,23 @@ pub fn capture_hwnd(hwnd_raw: isize) -> Result<CaptureResult, CtlError> {
     let walker = auto.create_tree_walker().map_err(internal)?;
     let target = resolve_window(WindowRef::Hwnd(hwnd_raw))?;
     let window = WindowInfo {
-        title: target.get_name().unwrap_or_default(),
-        class: target.get_classname().unwrap_or_default(),
-        pid: target.get_process_id().unwrap_or_default(),
+        title: target
+            .get_name()
+            .map_err(|e| crate::read_channel::failure("window.name", e))?,
+        class: target
+            .get_classname()
+            .map_err(|e| crate::read_channel::failure("window.class", e))?,
+        pid: target
+            .get_process_id()
+            .map_err(|e| crate::read_channel::failure("window.pid", e))?,
     };
     let wake_ms = ensure_window_responsive(&target);
-    let window_runtime_id = target.get_runtime_id().unwrap_or_default();
+    let window_runtime_id = target
+        .get_runtime_id()
+        .map_err(|e| crate::read_channel::failure("window.runtime_id", e))?;
     let mut nodes = Vec::new();
     let mut element_identities = Vec::new();
-    {
+    let truncation_reasons = {
         let _t = actl_core::trace::scope("capture.walk");
         walk(
             &walker,
@@ -909,15 +954,16 @@ pub fn capture_hwnd(hwnd_raw: isize) -> Result<CaptureResult, CtlError> {
             None,
             &mut nodes,
             &mut element_identities,
-        );
-    }
-    let truncated = nodes.len() >= MAX_ELEMENTS;
+        )?
+    };
+    let truncated = !truncation_reasons.is_empty();
     Ok(CaptureResult {
         window,
         window_runtime_id,
         nodes,
         element_identities,
         truncated,
+        truncation_reasons,
         wake_ms,
     })
 }

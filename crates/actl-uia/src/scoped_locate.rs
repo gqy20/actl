@@ -379,6 +379,7 @@ mod tests {
             ErrorCode::Protocol,
             ErrorCode::Aborted,
             ErrorCode::PermDenied,
+            ErrorCode::StaleRef,
         ] {
             assert_eq!(
                 observed::<()>(Err(CtlError::new(code, "unknown")))
