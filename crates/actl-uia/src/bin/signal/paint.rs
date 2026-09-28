@@ -7,7 +7,9 @@ use windows::Win32::Graphics::{
 };
 use windows::Win32::System::Com::*;
 use windows::Win32::UI::{HiDpi::GetDpiForWindow, WindowsAndMessaging::*};
-use windows::core::{Result, w};
+use windows::core::{BOOL, Interface, PCWSTR, Result, w};
+
+use std::sync::OnceLock;
 
 pub const WIDTH: i32 = 280;
 pub const HEIGHT: i32 = 34;
@@ -16,6 +18,145 @@ pub fn pixels(value: i32, dpi: u32) -> i32 {
 }
 pub fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(Some(0)).collect()
+}
+
+/// 主字体 Source Code Pro Medium,内嵌随二进制分发(205KB,OFL 1.1,见
+/// assets/fonts/OFL.txt):目标机器常未注册该字体,DWrite 又看不见 GDI 的
+/// FR_PRIVATE 注册,故走 IDWriteFactory5 内存字体管线自建 FontCollection。
+static SCP_TTF: &[u8] = include_bytes!("../../../assets/fonts/SourceCodePro-Medium.ttf");
+static TEXT_FORMATS: OnceLock<(Option<IDWriteTextFormat>, Option<IDWriteTextFormat>)> =
+    OnceLock::new();
+
+/// (拉丁主字体, 中文伴随字体) 两个 TextFormat,进程内首用构建、此后复用。
+unsafe fn text_formats(
+    write: &IDWriteFactory,
+) -> Result<(&'static IDWriteTextFormat, &'static IDWriteTextFormat)> {
+    let (latin, cjk) = TEXT_FORMATS.get_or_init(|| {
+        let latin = latin_format(write).ok();
+        let cjk = cjk_format(write).ok();
+        (latin, cjk)
+    });
+    match (latin, cjk) {
+        (Some(latin), Some(cjk)) => Ok((latin, cjk)),
+        _ => Err(E_FAIL.into()),
+    }
+}
+
+unsafe fn embedded_collection(write: &IDWriteFactory) -> Option<IDWriteFontCollection> {
+    // 内存字体管线横跨两个接口:loader 在 Factory5,FontSetBuilder/集合在 Factory3。
+    let loader = write
+        .cast::<IDWriteFactory5>()
+        .and_then(|factory| factory.CreateInMemoryFontFileLoader())
+        .ok()?;
+    let file = loader
+        .CreateInMemoryFontFileReference(write, SCP_TTF.as_ptr().cast(), SCP_TTF.len() as u32, None)
+        .ok()?;
+    let factory3 = write.cast::<IDWriteFactory3>().ok()?;
+    let set = factory3
+        .CreateFontSetBuilder()
+        .and_then(|builder| builder.cast::<IDWriteFontSetBuilder1>())
+        .and_then(|builder| builder.AddFontFile(&file).map(|()| builder))
+        .and_then(|builder| builder.CreateFontSet())
+        .ok()?;
+    factory3
+        .CreateFontCollectionFromFontSet(&set)
+        .ok()?
+        .cast::<IDWriteFontCollection>()
+        .ok()
+}
+
+/// 拉丁主字体:内嵌 Source Code Pro Medium(容器族名以 FindFamilyName 实测为准,
+/// 静态字重文件两种命名都试);内嵌管线失败或 CI 等无字体环境逐级回落系统字体。
+unsafe fn latin_format(write: &IDWriteFactory) -> Result<IDWriteTextFormat> {
+    if let Some(embedded) = embedded_collection(write) {
+        for family in [w!("Source Code Pro"), w!("Source Code Pro Medium")] {
+            if family_present(&embedded, family) {
+                return text_format(write, family, Some(&embedded));
+            }
+        }
+    }
+    if let Some(system) = system_collection(write) {
+        for family in [w!("Consolas"), w!("Segoe UI")] {
+            if family_present(&system, family) {
+                return text_format(write, family, Some(&system));
+            }
+        }
+    }
+    text_format(write, w!("Segoe UI"), None)
+}
+
+/// 中文伴随字体:思源黑体 Medium——与 Source Code Pro 同出 Adobe Source 家族,
+/// 字重命名对齐(Medium↔Medium);本机实测 Source Code Pro 无 CJK 字形,
+/// 中文必须由伴随字体承接,未安装机器回落 Noto Sans CJK/微软雅黑。
+unsafe fn cjk_format(write: &IDWriteFactory) -> Result<IDWriteTextFormat> {
+    if let Some(system) = system_collection(write) {
+        for family in [
+            w!("Source Han Sans SC"),
+            w!("Noto Sans CJK SC"),
+            w!("Microsoft YaHei UI"),
+            w!("Microsoft YaHei"),
+        ] {
+            if family_present(&system, family) {
+                return text_format(write, family, Some(&system));
+            }
+        }
+    }
+    text_format(write, w!("Segoe UI"), None)
+}
+
+unsafe fn system_collection(write: &IDWriteFactory) -> Option<IDWriteFontCollection> {
+    let mut collection = None;
+    let _ = write.GetSystemFontCollection(&mut collection, false);
+    collection
+}
+
+unsafe fn family_present(collection: &IDWriteFontCollection, family: PCWSTR) -> bool {
+    let mut index = u32::MAX;
+    let mut exists = BOOL::default();
+    collection
+        .FindFamilyName(family, &mut index, &mut exists)
+        .is_ok()
+        && exists.as_bool()
+}
+
+unsafe fn text_format(
+    write: &IDWriteFactory,
+    family: PCWSTR,
+    collection: Option<&IDWriteFontCollection>,
+) -> Result<IDWriteTextFormat> {
+    let format = write.CreateTextFormat(
+        family,
+        collection,
+        DWRITE_FONT_WEIGHT_MEDIUM,
+        DWRITE_FONT_STYLE_NORMAL,
+        DWRITE_FONT_STRETCH_NORMAL,
+        16.,
+        w!("zh-CN"),
+    )?;
+    format.SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP)?;
+    format.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER)?;
+    let ellipsis = write.CreateEllipsisTrimmingSign(&format)?;
+    format.SetTrimming(
+        &DWRITE_TRIMMING {
+            granularity: DWRITE_TRIMMING_GRANULARITY_CHARACTER,
+            ..Default::default()
+        },
+        &ellipsis,
+    )?;
+    Ok(format)
+}
+
+/// 含 CJK 字符的串整体走伴随字体,纯拉丁/数字走主字体。
+/// 按串二选一而非依赖系统自动回落:DWrite 默认回落会命中宋体/雅黑,
+/// 结果不可控;Source Code Pro 内嵌拉丁与思源中文的混排由调用方按串切分。
+fn has_cjk(text: &str) -> bool {
+    text.chars().any(|c| {
+        matches!(
+            c as u32,
+            0x2E80..=0x9FFF | 0xAC00..=0xD7AF | 0xF900..=0xFAFF | 0xFF00..=0xFFEF
+                | 0x20000..=0x2FA1F
+        )
+    })
 }
 fn color(rgb: u32) -> D2D1_COLOR_F {
     D2D1_COLOR_F {
@@ -78,25 +219,7 @@ unsafe fn raster(view: &View, hovered: bool, dpi: u32) -> Result<Vec<u8>> {
     )?;
     let brush = target.CreateSolidColorBrush(&color(0x27292B), None)?;
     let write: IDWriteFactory = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED)?;
-    let format = write.CreateTextFormat(
-        w!("Segoe UI"),
-        None,
-        DWRITE_FONT_WEIGHT_NORMAL,
-        DWRITE_FONT_STYLE_NORMAL,
-        DWRITE_FONT_STRETCH_NORMAL,
-        16.,
-        w!("zh-CN"),
-    )?;
-    format.SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP)?;
-    format.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER)?;
-    let ellipsis = write.CreateEllipsisTrimmingSign(&format)?;
-    format.SetTrimming(
-        &DWRITE_TRIMMING {
-            granularity: DWRITE_TRIMMING_GRANULARITY_CHARACTER,
-            ..Default::default()
-        },
-        &ellipsis,
-    )?;
+    let (latin, cjk) = text_formats(&write)?;
     target.SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
     // Grayscale text avoids ClearType color fringes on a per-pixel alpha surface.
     target.SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
@@ -136,9 +259,10 @@ unsafe fn raster(view: &View, hovered: bool, dpi: u32) -> Result<Vec<u8>> {
         240.
     };
     brush.SetColor(&color(0xE8EBED));
+    let text_format = if has_cjk(label) { cjk } else { latin };
     target.DrawText(
         &label.encode_utf16().collect::<Vec<_>>(),
-        &format,
+        text_format,
         &rect(31., 0., text_right - 31., 34.),
         &brush,
         D2D1_DRAW_TEXT_OPTIONS_CLIP,
@@ -347,25 +471,7 @@ unsafe fn render_popup(
     )?;
     let brush = target.CreateSolidColorBrush(&color(0x27292B), None)?;
     let write: IDWriteFactory = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED)?;
-    let format = write.CreateTextFormat(
-        w!("Segoe UI"),
-        None,
-        DWRITE_FONT_WEIGHT_NORMAL,
-        DWRITE_FONT_STYLE_NORMAL,
-        DWRITE_FONT_STRETCH_NORMAL,
-        16.,
-        w!("zh-CN"),
-    )?;
-    format.SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP)?;
-    format.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER)?;
-    let ellipsis = write.CreateEllipsisTrimmingSign(&format)?;
-    format.SetTrimming(
-        &DWRITE_TRIMMING {
-            granularity: DWRITE_TRIMMING_GRANULARITY_CHARACTER,
-            ..Default::default()
-        },
-        &ellipsis,
-    )?;
+    let (latin, cjk) = text_formats(&write)?;
     target.SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
     target.SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
     target.BeginDraw();
@@ -385,9 +491,10 @@ unsafe fn render_popup(
             target.FillRoundedRectangle(&rounded(4., y, width as f32 - 8., 28., 5.), &brush);
         }
         brush.SetColor(&color(if menu || i == 0 { 0xE8EBED } else { 0xB4BAC0 }));
+        let text_format = if has_cjk(line) { cjk } else { latin };
         target.DrawText(
             &line.encode_utf16().collect::<Vec<_>>(),
-            &format,
+            text_format,
             &rect(12., y, width as f32 - 24., 28.),
             &brush,
             D2D1_DRAW_TEXT_OPTIONS_CLIP,

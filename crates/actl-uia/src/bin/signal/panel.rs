@@ -7,7 +7,7 @@ use windows::{
         Graphics::Gdi::*,
         UI::{Controls::*, HiDpi::GetDpiForWindow, WindowsAndMessaging::*},
     },
-    core::{BOOL, w},
+    core::{BOOL, PCWSTR, w},
 };
 
 const BACKGROUND: u32 = 0x222426;
@@ -37,6 +37,70 @@ pub unsafe fn release(hwnd: HWND) {
         drop(Box::from_raw(old as *mut Fonts));
     }
 }
+/// GDI 无法在单次绘制里混排两种字体:原生对话框以中文文案为主,整套使用思源黑体
+/// (拉丁/数字由其内置 Source 风格拉丁字形承接);Source Code Pro 只用于 D2D
+/// 覆盖层(paint.rs)。GDI 对不存在的族名会静默替换成宋体,故每档给候选链并用
+/// GetTextFaceW 校验实际解析结果(英文名或本地化名命中即采用),失败换下一个。
+/// 思源黑体 Bold 在本机注册表有登记但 GDI 实测解析失败(回落宋体),标题链
+/// 备 Heavy/Medium 兜底;修复安装后自动优选 Bold。
+const BODY_FACES: &[(PCWSTR, PCWSTR)] = &[
+    (w!("Source Han Sans SC Medium"), w!("思源黑体 Medium")),
+    (w!("Microsoft YaHei UI"), w!("Microsoft YaHei UI")),
+    (w!("Segoe UI"), w!("Segoe UI")),
+];
+const TITLE_FACES: &[(PCWSTR, PCWSTR)] = &[
+    (w!("Source Han Sans SC Bold"), w!("思源黑体 Bold")),
+    (w!("Source Han Sans SC Heavy"), w!("思源黑体 Heavy")),
+    (w!("Source Han Sans SC Medium"), w!("思源黑体 Medium")),
+    (w!("Segoe UI"), w!("Segoe UI")),
+];
+
+unsafe fn create_face(height: i32, face: PCWSTR) -> HFONT {
+    CreateFontW(
+        height,
+        0,
+        0,
+        0,
+        400,
+        0,
+        0,
+        0,
+        DEFAULT_CHARSET,
+        OUT_DEFAULT_PRECIS,
+        CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY,
+        0,
+        face,
+    )
+}
+
+unsafe fn face_resolves(font: HFONT, expected: &(PCWSTR, PCWSTR)) -> bool {
+    let dc = GetDC(None);
+    let old = SelectObject(dc, font.into());
+    let mut buf = [0u16; 64];
+    let len = GetTextFaceW(dc, Some(&mut buf)).max(0) as usize;
+    let _ = SelectObject(dc, old);
+    let _ = ReleaseDC(None, dc);
+    let actual = String::from_utf16_lossy(&buf[..len]);
+    [expected.0, expected.1].iter().any(|name| {
+        let name = String::from_utf16_lossy(name.as_wide());
+        let name = name.trim_end_matches('\0');
+        actual == *name || actual.eq_ignore_ascii_case(name)
+    })
+}
+
+unsafe fn face_font(size: i32, dpi: u32, candidates: &[(PCWSTR, PCWSTR)]) -> HFONT {
+    let height = -paint::pixels(size, dpi);
+    for expected in candidates {
+        let font = create_face(height, expected.0);
+        if face_resolves(font, expected) {
+            return font;
+        }
+        let _ = DeleteObject(font.into());
+    }
+    create_face(height, w!("Segoe UI"))
+}
+
 pub unsafe fn fonts(hwnd: HWND, dpi: u32, ids: &[i32]) {
     let dark = BOOL(1);
     let _ = windows::Win32::Graphics::Dwm::DwmSetWindowAttribute(
@@ -45,28 +109,10 @@ pub unsafe fn fonts(hwnd: HWND, dpi: u32, ids: &[i32]) {
         (&dark as *const BOOL).cast(),
         std::mem::size_of::<BOOL>() as u32,
     );
-    let make = |size, weight| {
-        CreateFontW(
-            -paint::pixels(size, dpi),
-            0,
-            0,
-            0,
-            weight,
-            0,
-            0,
-            0,
-            DEFAULT_CHARSET,
-            OUT_DEFAULT_PRECIS,
-            CLIP_DEFAULT_PRECIS,
-            CLEARTYPE_QUALITY,
-            0,
-            w!("Segoe UI"),
-        )
-    };
     let fonts = Box::new(Fonts {
-        body: make(16, 400),
-        title: make(22, 600),
-        caption: make(14, 400),
+        body: face_font(16, dpi, BODY_FACES),
+        title: face_font(22, dpi, TITLE_FACES),
+        caption: face_font(14, dpi, BODY_FACES),
     });
     for &id in ids {
         if let Ok(child) = GetDlgItem(Some(hwnd), id) {
