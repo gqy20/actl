@@ -162,6 +162,12 @@ Edge/Chrome 双验证,xhs/bili/douyin 登录态深度闭环实测;场景结论�
 
 ## 参与开发
 
+无人值守时可运行 `cargo xtask regress --unattended`：仅执行明确登记的无输入用例，
+其余写入报告为 skipped；`complete` 只表示所选用例全部通过，退出成功不代表整套 Phase 2 验收通过。
+只读性能与观察采样使用 `pwsh -NoProfile -File scenarios/phase2-readonly.ps1`；
+指定本次观察到的 HWND 可追加快照对照，不启动或关闭应用。人工验收及遗留见
+[Phase 2 验收记录](https://github.com/gqy20/actl/blob/main/docs/44-phase2-acceptance.md)。
+
 Rust workspace,trunk-based(`main` 始终绿)。克隆后 `make setup` 一步配好 git hooks
 与锁定工具链,提交前 `make gate` 过门禁;协作规范(Conventional Commits、测试纪律、
 门禁单点等)见 [AGENTS.md](AGENTS.md),人与 AI 共用。

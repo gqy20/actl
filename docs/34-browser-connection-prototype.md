@@ -35,7 +35,17 @@ UIA 已提交为 `67ad72e`。浏览器原型位于 [prototypes/browser](../proto
 
 ## 尚待验收
 
+以下为初次受阻时的历史待办；2026-09-28 后续隔离会话结果见文末，正式 CLI/YAML 边界仍未实现。
+
 真实 CDP 会话绑定、跨源 iframe 点击核验、同 URL 标签页隔离、客户端断开重连和浏览器退出导致的断连均未通过真机验收。
 依照 AGENTS.md，已有急停仅能按用户对本次停止的明确授权解除；本轮保留停止状态。后续验收须另建输出目录，保留本轮受阻记录。
 
 `cargo xtask gate` 不包含该可选 Python 实验的测试，需单独执行上述 unittest。正式接入前仍需解决导航竞态、持久化 uncertain、人工接管和异步后置条件；不能据此宣称复杂浏览器 YAML 流程已经可用。
+
+## Phase 2 无人值守复验（2026-09-28）
+
+- 首轮 `target/phase2-20260928/browser-live/report.json`：精确会话绑定通过，iframe 写后核验失败并保留 uncertain，原报告不改写。随后只读检查目标 iframe 与主页面均为 `untouched`，没有重放点击；记录 `browser-recheck.json`。核对进程路径、PID、隔离 profile 和页面任务标记后正常关闭，单独清理记录为 `browser-cleanup-confirmed.json`。
+- 新一轮独立会话 `target/phase2-20260928/browser-live-2/report.json`：精确 target、跨源 iframe 一次写后核验、XPath、同 URL 干扰页不变、客户端断开、显式重连只读核验和浏览器进程关闭导致的断连全部通过；`cleanup=owned_browser_exited`。
+- 环境为 Windows、本项目 uv 锁定的 Playwright 1.54.0、Python 3.13.6、已安装 Chromium 1208。浏览器与源码哈希、逐调用证据在报告中。未安装新浏览器、未访问用户现有浏览器会话。
+- 原型报告新增最多四层、每层最多 4096 字符的异常原因链；离线测试 12 项通过。首轮失败发生时未记录底层异常，根因不能根据第二轮成功推断。
+- 上述结果仅覆盖隔离的 headless 本地测试页面，仍不证明人工交接、导航竞态、持久化恢复或正式 YAML 接入。

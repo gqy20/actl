@@ -106,6 +106,10 @@ CI(GitHub Actions,`windows-latest`):`cargo xtask gate`(file-lines 单文件行�
 
 ## 8. 与既有文档的关系
 
+Phase 2 输入监听冗余使用既有 windows 依赖的 Raw Input 注册、消息窗口和计时器，
+unsafe 限定在 actl-uia 的显示程序模块。原生资源由专用线程创建并释放，接收活动但不记录输入内容。
+历史清理限频使用标准库文件锁；没有新增直接依赖、async 或外部常驻服务。验收见 [44](44-phase2-acceptance.md)。
+
 - 选型**论证**(语言对比、冷启动数据、为什么不是 C#):[04-tech-decision.md](04-tech-decision.md)
 - 命令面与协议**内容**: [06-design-blueprint.md](06-design-blueprint.md)
 - 工期与行数:[05-implementation-estimate.md](05-implementation-estimate.md)
