@@ -5,6 +5,8 @@
 mod controls;
 #[path = "signal/flow_ui.rs"]
 mod flow_ui;
+#[path = "signal/frame.rs"]
+mod frame;
 #[path = "signal/handoff.rs"]
 mod handoff;
 #[path = "signal/icon.rs"]
@@ -15,6 +17,11 @@ mod model;
 mod overlay;
 #[path = "signal/paint.rs"]
 mod paint;
+#[path = "signal/panel.rs"]
+mod panel;
+#[cfg(test)]
+#[path = "signal/panel_preview.rs"]
+mod panel_preview;
 #[path = "signal/perimeter.rs"]
 mod perimeter;
 #[path = "signal/popup.rs"]

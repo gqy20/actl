@@ -19,34 +19,21 @@ use windows::{
 };
 
 const CONTROLS: &[(i32, &str, i32, i32, i32, i32)] = &[
-    (100, "正在读取流程状态", 16, 16, 388, 220),
-    (101, "", 16, 240, 388, 24),
-    (10, "暂停流程", 16, 272, 120, 32),
-    (11, "继续流程", 148, 272, 120, 32),
-    (12, "停止操作", 280, 272, 120, 32),
-    (13, "允许后续操作", 16, 312, 180, 32),
-    (14, "关闭", 280, 312, 120, 32),
+    (102, "任务详情", 24, 20, 400, 32),
+    (16, "最小化", 448, 20, 40, 32),
+    (15, "关闭", 496, 20, 40, 32),
+    (103, "查看当前进度，或暂停和继续流程", 24, 58, 512, 22),
+    (100, "正在读取流程状态", 24, 96, 512, 160),
+    (101, "", 24, 272, 512, 44),
+    (10, "暂停流程", 24, 328, 148, 40),
+    (11, "继续流程", 184, 328, 188, 40),
+    (14, "关闭", 388, 328, 148, 40),
+    (104, "紧急停止  ·  Ctrl+Alt+F12", 24, 386, 512, 22),
+    (12, "停止操作", 24, 420, 148, 40),
+    (13, "允许后续操作", 184, 420, 188, 40),
 ];
-
 unsafe fn layout(hwnd: HWND, dpi: u32) {
     let px = |n| paint::pixels(n, dpi);
-    let font = CreateFontW(
-        -px(16),
-        0,
-        0,
-        0,
-        400,
-        0,
-        0,
-        0,
-        DEFAULT_CHARSET,
-        OUT_DEFAULT_PRECIS,
-        CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY,
-        0,
-        w!("Segoe UI"),
-    );
-    let old = SetWindowLongPtrW(hwnd, GWLP_USERDATA, font.0 as isize);
     for &(id, _, x, y, width, height) in CONTROLS {
         if let Ok(child) = GetDlgItem(Some(hwnd), id) {
             let _ = SetWindowPos(
@@ -58,16 +45,23 @@ unsafe fn layout(hwnd: HWND, dpi: u32) {
                 px(height),
                 SWP_NOZORDER | SWP_NOACTIVATE,
             );
-            SendMessageW(
-                child,
-                WM_SETFONT,
-                Some(WPARAM(font.0 as usize)),
-                Some(LPARAM(1)),
-            );
         }
     }
-    if old != 0 {
-        let _ = DeleteObject(HGDIOBJ(old as *mut _));
+    super::panel::fonts(hwnd, dpi, &CONTROLS.iter().map(|c| c.0).collect::<Vec<_>>());
+    if let Ok(edit) = GetDlgItem(Some(hwnd), 100) {
+        let rect = RECT {
+            left: px(14),
+            top: px(12),
+            right: px(484),
+            bottom: px(148),
+        };
+        SendMessageW(
+            edit,
+            windows::Win32::UI::Controls::EM_SETRECT,
+            None,
+            Some(LPARAM((&rect as *const RECT) as isize)),
+        );
+        super::panel::scroll(edit);
     }
 }
 
@@ -121,6 +115,7 @@ unsafe fn set_text(hwnd: HWND, id: i32, text: &str) {
                 Some(LPARAM(first.0 - current.0)),
             );
             SendMessageW(child, WM_SETREDRAW, Some(WPARAM(1)), None);
+            super::panel::scroll(child);
             let _ = InvalidateRect(Some(child), None, true);
         }
     }
@@ -238,6 +233,9 @@ unsafe fn refresh(hwnd: HWND) {
     let _ = EnableWindow(GetDlgItem(Some(hwnd), 13).unwrap_or_default(), stopped);
 }
 unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
+    if let Some(result) = super::panel::message(hwnd, msg, wp, lp) {
+        return result;
+    }
     match msg {
         WM_DPICHANGED => {
             let rect = &*(lp.0 as *const RECT);
@@ -261,6 +259,10 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
             if wp.0 >> 16 != BN_CLICKED as usize {
                 return LRESULT(0);
             }
+            if wp.0 & 0xffff == 16 {
+                let _ = ShowWindow(hwnd, SW_MINIMIZE);
+                return LRESULT(0);
+            }
             flow_ui::clear_message();
             set_text(hwnd, 101, "");
             let result = match wp.0 & 0xffff {
@@ -275,7 +277,7 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
                     SignalPaths::default().clear_stop();
                     Ok(())
                 }
-                2 | 14 => {
+                2 | 14 | 15 => {
                     let _ = DestroyWindow(hwnd);
                     return LRESULT(0);
                 }
@@ -296,30 +298,22 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
             LRESULT(0)
         }
         WM_DESTROY => {
-            let font = SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
-            if font != 0 {
-                let _ = DeleteObject(HGDIOBJ(font as *mut _));
-            }
+            super::panel::release(hwnd);
             PostQuitMessage(0);
             LRESULT(0)
         }
         _ => DefWindowProcW(hwnd, msg, wp, lp),
     }
 }
-pub unsafe fn run() -> windows::core::Result<()> {
-    let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+pub(super) unsafe fn create_window() -> windows::core::Result<HWND> {
     let instance = GetModuleHandleW(None)?;
     let class = w!("actl_signal_controls");
-    if let Ok(existing) = FindWindowW(class, None) {
-        let _ = ShowWindow(existing, SW_RESTORE);
-        let _ = SetForegroundWindow(existing);
-        return Ok(());
-    }
     RegisterClassW(&WNDCLASSW {
         lpfnWndProc: Some(proc),
         hInstance: instance.into(),
         hCursor: LoadCursorW(None, IDC_ARROW)?,
-        hbrBackground: HBRUSH((COLOR_WINDOW.0 + 1) as *mut _),
+        style: CS_DROPSHADOW,
+        hbrBackground: HBRUSH::default(),
         lpszClassName: class,
         ..Default::default()
     });
@@ -327,7 +321,7 @@ pub unsafe fn run() -> windows::core::Result<()> {
         WS_EX_APPWINDOW | WS_EX_CONTROLPARENT,
         class,
         w!("actl · 流程控制"),
-        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
+        WS_POPUP | WS_SYSMENU | WS_MINIMIZEBOX,
         CW_USEDEFAULT,
         CW_USEDEFAULT,
         420,
@@ -341,24 +335,33 @@ pub unsafe fn run() -> windows::core::Result<()> {
     let mut bounds = RECT {
         left: 0,
         top: 0,
-        right: paint::pixels(420, dpi),
-        bottom: paint::pixels(360, dpi),
+        right: paint::pixels(560, dpi),
+        bottom: paint::pixels(478, dpi),
     };
     let _ = AdjustWindowRectExForDpi(
         &mut bounds,
-        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
+        WS_POPUP | WS_SYSMENU | WS_MINIMIZEBOX,
         false,
         WS_EX_APPWINDOW | WS_EX_CONTROLPARENT,
         dpi,
     );
+    let mut work = RECT::default();
+    SystemParametersInfoW(
+        SPI_GETWORKAREA,
+        0,
+        Some((&mut work as *mut RECT).cast()),
+        SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
+    )?;
+    let width = bounds.right - bounds.left;
+    let height = bounds.bottom - bounds.top;
     let _ = SetWindowPos(
         hwnd,
         None,
-        0,
-        0,
-        bounds.right - bounds.left,
-        bounds.bottom - bounds.top,
-        SWP_NOMOVE | SWP_NOZORDER,
+        work.left + ((work.right - work.left - width) / 2).max(0),
+        work.top + ((work.bottom - work.top - height) / 2).max(0),
+        width,
+        height,
+        SWP_NOZORDER | SWP_NOACTIVATE,
     );
     for &(id, label, _, _, _, _) in CONTROLS {
         let button = id < 100;
@@ -376,7 +379,7 @@ pub unsafe fn run() -> windows::core::Result<()> {
             WS_CHILD
                 | WS_VISIBLE
                 | if button {
-                    WS_TABSTOP
+                    WS_TABSTOP | WINDOW_STYLE(BS_OWNERDRAW as u32)
                 } else if id == 100 {
                     WS_TABSTOP
                         | WS_VSCROLL
@@ -397,6 +400,17 @@ pub unsafe fn run() -> windows::core::Result<()> {
         )?;
     }
     layout(hwnd, dpi);
+    Ok(hwnd)
+}
+pub unsafe fn run() -> windows::core::Result<()> {
+    let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    let class = w!("actl_signal_controls");
+    if let Ok(existing) = FindWindowW(class, None) {
+        let _ = ShowWindow(existing, SW_RESTORE);
+        let _ = SetForegroundWindow(existing);
+        return Ok(());
+    }
+    let hwnd = create_window()?;
     refresh(hwnd);
     let _ = ShowWindow(hwnd, SW_SHOW);
     // StartupInfo may request a hidden helper; this explicit user window must be visible.
@@ -469,8 +483,8 @@ mod tests {
                 let bounds = RECT {
                     left: 0,
                     top: 0,
-                    right: paint::pixels(420, dpi),
-                    bottom: paint::pixels(360, dpi),
+                    right: paint::pixels(560, dpi),
+                    bottom: paint::pixels(478, dpi),
                 };
                 proc(
                     parent,
@@ -480,8 +494,8 @@ mod tests {
                 );
                 let mut rect = RECT::default();
                 GetWindowRect(child, &mut rect).unwrap();
-                assert_eq!(rect.right - rect.left, paint::pixels(120, dpi));
-                assert_eq!(rect.bottom - rect.top, paint::pixels(32, dpi));
+                assert_eq!(rect.right - rect.left, paint::pixels(148, dpi));
+                assert_eq!(rect.bottom - rect.top, paint::pixels(40, dpi));
                 let font = SendMessageW(child, WM_GETFONT, None, None);
                 let mut info = LOGFONTW::default();
                 assert_ne!(
@@ -494,9 +508,8 @@ mod tests {
                 );
                 assert_eq!(info.lfHeight, -paint::pixels(16, dpi));
             }
-            let font = SetWindowLongPtrW(parent, GWLP_USERDATA, 0);
+            super::super::panel::release(parent);
             DestroyWindow(parent).unwrap();
-            let _ = DeleteObject(HGDIOBJ(font as *mut _));
             let _ = SetThreadDpiAwarenessContext(previous);
         }
     }

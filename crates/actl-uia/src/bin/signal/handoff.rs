@@ -230,13 +230,20 @@ pub unsafe fn tick() {
 }
 
 unsafe fn create_panel(request: Option<&Request>) -> windows::core::Result<HWND> {
+    let hwnd = build_panel(request)?;
+    let _ = RegisterHotKey(Some(hwnd), HOTKEY_ID, MOD_CONTROL | MOD_ALT, HOTKEY_KEY);
+    let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+    Ok(hwnd)
+}
+pub(super) unsafe fn build_panel(request: Option<&Request>) -> windows::core::Result<HWND> {
     let module = GetModuleHandleW(None)?;
     let class = w!("actl_handoff_window");
     let wc = WNDCLASSW {
         lpfnWndProc: Some(panel_proc),
         hInstance: module.into(),
         hCursor: LoadCursorW(None, IDC_ARROW)?,
-        hbrBackground: windows::Win32::Graphics::Gdi::HBRUSH(6usize as *mut _),
+        style: CS_DROPSHADOW,
+        hbrBackground: HBRUSH::default(),
         lpszClassName: class,
         ..Default::default()
     };
@@ -252,7 +259,7 @@ unsafe fn create_panel(request: Option<&Request>) -> windows::core::Result<HWND>
         WS_EX_TOPMOST | WS_EX_APPWINDOW | WS_EX_NOACTIVATE,
         class,
         w!("actl · 等待交接"),
-        WS_POPUP | WS_BORDER,
+        WS_POPUP,
         work.left + 24,
         work.top + 70,
         470,
@@ -262,37 +269,52 @@ unsafe fn create_panel(request: Option<&Request>) -> windows::core::Result<HWND>
         Some(module.into()),
         None,
     )?;
-    let label = format!(
-        "准备开始 / 继续桌面操作\n任务：{}\n当前目标：{}\n任务可能切换窗口、使用键鼠和剪贴板。\n点击开始或按 Ctrl+Alt+Y；之后请暂时放开键鼠，继续操作会让任务停下。",
-        request.map_or("", |r| r.task.as_str()),
-        request.map_or("", |r| r.target.as_str())
+    let context = format!(
+        "当前目标\r\n{}\r\n\r\n任务\r\n{}",
+        request.map_or("", |r| r.target.as_str()),
+        request.map_or("", |r| r.task.as_str())
     );
-    let label: Vec<u16> = label.encode_utf16().chain(Some(0)).collect();
     let children = (|| -> windows::core::Result<()> {
-        CreateWindowExW(
-            WINDOW_EX_STYLE(0),
-            w!("STATIC"),
-            PCWSTR(label.as_ptr()),
-            WS_CHILD | WS_VISIBLE,
-            16,
-            14,
-            438,
-            145,
-            Some(hwnd),
-            Some(HMENU(10usize as *mut _)),
-            Some(module.into()),
-            None,
-        )?;
-        for (id, text, x) in [(1, w!("开始 / 继续  Ctrl+Alt+Y"), 16), (2, w!("稍后"), 190)] {
+        for (id, text) in [
+            (102, "准备操作桌面"),
+            (15, "关闭"),
+            (103, "请确认后开始；你随时可以接管"),
+            (10, context.as_str()),
+            (
+                104,
+                "任务可能切换窗口、使用键鼠和剪贴板。\r\n开始后请暂时放开键鼠；再次操作会让任务停下。",
+            ),
+            (105, "快捷键  Ctrl+Alt+Y"),
+            (2, "稍后"),
+            (1, "开始 / 继续"),
+        ] {
+            let label = super::paint::wide(text);
             CreateWindowExW(
                 WINDOW_EX_STYLE(0),
-                w!("BUTTON"),
-                text,
-                WS_CHILD | WS_VISIBLE | WS_TABSTOP,
-                x,
-                174,
-                155,
-                36,
+                if matches!(id, 1 | 2 | 15) {
+                    w!("BUTTON")
+                } else if id == 10 {
+                    w!("EDIT")
+                } else {
+                    w!("STATIC")
+                },
+                PCWSTR(label.as_ptr()),
+                WS_CHILD
+                    | WS_VISIBLE
+                    | if matches!(id, 1 | 2 | 15) {
+                        WS_TABSTOP | WINDOW_STYLE(BS_OWNERDRAW as u32)
+                    } else if id == 10 {
+                        WS_VSCROLL
+                            | WINDOW_STYLE(
+                                ES_MULTILINE as u32 | ES_READONLY as u32 | ES_AUTOVSCROLL as u32,
+                            )
+                    } else {
+                        WINDOW_STYLE(0)
+                    },
+                0,
+                0,
+                0,
+                0,
                 Some(hwnd),
                 Some(HMENU(id as *mut _)),
                 Some(module.into()),
@@ -306,43 +328,28 @@ unsafe fn create_panel(request: Option<&Request>) -> windows::core::Result<HWND>
         return Err(e);
     }
     layout(hwnd, GetDpiForWindow(hwnd));
-    // 快捷键注册尽力而为:被占用则按钮仍可用,不因热键冲突拒绝交接
-    let _ = RegisterHotKey(Some(hwnd), HOTKEY_ID, MOD_CONTROL | MOD_ALT, HOTKEY_KEY);
-    let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
     Ok(hwnd)
 }
 unsafe fn layout(hwnd: HWND, dpi: u32) {
     let px = |n| super::paint::pixels(n, dpi);
-    let font = CreateFontW(
-        -px(16),
-        0,
-        0,
-        0,
-        400,
-        0,
-        0,
-        0,
-        DEFAULT_CHARSET,
-        OUT_DEFAULT_PRECIS,
-        CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY,
-        0,
-        w!("Segoe UI"),
-    );
-    let old = SetWindowLongPtrW(hwnd, GWLP_USERDATA, font.0 as isize);
     let _ = SetWindowPos(
         hwnd,
         None,
         0,
         0,
         px(540),
-        px(280),
+        px(410),
         SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
     );
     for (id, x, y, width, height) in [
-        (10, 16, 14, 508, 190),
-        (1, 16, 224, 155, 40),
-        (2, 190, 224, 155, 40),
+        (102, 24, 22, 428, 32),
+        (15, 476, 22, 40, 32),
+        (103, 24, 62, 492, 22),
+        (10, 24, 104, 492, 138),
+        (104, 24, 260, 492, 48),
+        (105, 24, 354, 210, 24),
+        (2, 252, 346, 104, 40),
+        (1, 368, 346, 148, 40),
     ] {
         if let Ok(child) = GetDlgItem(Some(hwnd), id) {
             let _ = SetWindowPos(
@@ -354,19 +361,29 @@ unsafe fn layout(hwnd: HWND, dpi: u32) {
                 px(height),
                 SWP_NOZORDER | SWP_NOACTIVATE,
             );
-            SendMessageW(
-                child,
-                WM_SETFONT,
-                Some(WPARAM(font.0 as usize)),
-                Some(LPARAM(1)),
-            );
         }
     }
-    if old != 0 {
-        let _ = DeleteObject(HGDIOBJ(old as *mut _));
+    super::panel::fonts(hwnd, dpi, &[102, 103, 10, 104, 105, 2, 1, 15]);
+    if let Ok(edit) = GetDlgItem(Some(hwnd), 10) {
+        let rect = RECT {
+            left: px(14),
+            top: px(10),
+            right: px(464),
+            bottom: px(128),
+        };
+        SendMessageW(
+            edit,
+            windows::Win32::UI::Controls::EM_SETRECT,
+            None,
+            Some(LPARAM((&rect as *const RECT) as isize)),
+        );
+        super::panel::scroll(edit);
     }
 }
 unsafe extern "system" fn panel_proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
+    if let Some(result) = super::panel::message(hwnd, msg, wp, lp) {
+        return result;
+    }
     match msg {
         WM_MOUSEACTIVATE => LRESULT(MA_NOACTIVATE as isize),
         WM_DPICHANGED => {
@@ -385,13 +402,10 @@ unsafe extern "system" fn panel_proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARA
         }
         WM_DESTROY => {
             let _ = UnregisterHotKey(Some(hwnd), HOTKEY_ID);
-            let font = SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
-            if font != 0 {
-                let _ = DeleteObject(HGDIOBJ(font as *mut _));
-            }
+            super::panel::release(hwnd);
             LRESULT(0)
         }
-        WM_COMMAND if wp.0 >> 16 != BN_CLICKED as usize || !matches!(wp.0 & 0xffff, 1 | 2) => {
+        WM_COMMAND if wp.0 >> 16 != BN_CLICKED as usize || !matches!(wp.0 & 0xffff, 1 | 2 | 15) => {
             LRESULT(0)
         }
         WM_COMMAND | WM_CLOSE => {
@@ -467,7 +481,7 @@ mod tests {
             let mut rect = RECT::default();
             GetWindowRect(parent, &mut rect).unwrap();
             assert_eq!(rect.right - rect.left, 810);
-            assert_eq!(rect.bottom - rect.top, 420);
+            assert_eq!(rect.bottom - rect.top, 615);
             let font = SendMessageW(child, WM_GETFONT, None, None);
             let mut info = LOGFONTW::default();
             assert!(
@@ -478,9 +492,8 @@ mod tests {
                 ) > 0
             );
             assert_eq!(info.lfHeight, -24);
-            let font = SetWindowLongPtrW(parent, GWLP_USERDATA, 0);
+            super::super::panel::release(parent);
             DestroyWindow(parent).unwrap();
-            let _ = DeleteObject(HGDIOBJ(font as *mut _));
         }
     }
 }
