@@ -34,6 +34,10 @@ serde-saphyr 与标准文件锁要求的 MSRV 已同步根 Cargo.toml；实际�
 
 ## 3. 依赖清单
 
+2026-09-28 浏览器接入原型：`prototypes/browser` 使用 Python 同步 Playwright 1.54.0，
+以 uv 项目单独管理。复用本机已安装环境进行验证，不加入 Rust workspace/发布包；Rust 外部直接依赖仍为 7，
+另登记 1 个可选原型直接依赖。Python/浏览器为原型运行前提，无新增 Rust async/tokio 或常驻服务。
+
 | 用途 | crate | 版本策略 | 备注/备选 |
 |---|---|---|---|
 | UIA/COM | `windows`(微软官方) | **全 workspace 锁同一版本**(ADR-003);features: `Win32_UI_Accessibility`, `Win32_UI_WindowsAndMessaging`, `Win32_System_Com`, `Win32_System_Threading` | 唯一重度依赖 |

@@ -4,6 +4,9 @@
 
 ## 1. 定位
 
+实验说明：`prototypes/browser` 独立验证 CDP 会话、CSS/XPath、iframe 和写后核验。
+它没有新增 actl 命令、目标语法或 YAML 字段，报告文件不属于本协议；范围与验收见 [34](34-browser-connection-prototype.md)。
+
 一句话:**给 AI agent 用的 Windows 桌面原子操作 CLI——accessibility(UIA)驱动、原子命令可独立调用、输出机器友好。** 类比:Playwright 之于浏览器,本工具之于 Windows 桌面。
 
 平台范围：Windows；Linux/macOS 执行后端暂不考虑实现。MCP 计划作为独立适配服务，
