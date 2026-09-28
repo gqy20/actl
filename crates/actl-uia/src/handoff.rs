@@ -102,7 +102,7 @@ fn request(target: &str) -> Result<(), CtlError> {
             MONITOR_UNAVAILABLE => return Err(failure("input_monitor_unavailable")),
             USER_PAUSED => return Err(failure("user_paused")),
             DEFERRED => return Err(failure("user_deferred")),
-            PENDING => std::thread::sleep(Duration::from_millis(100)),
+            PENDING => std::thread::sleep(Duration::from_millis(crate::timing().handoff_poll_ms)),
             _ => return Err(failure("request_rejected")),
         }
     }

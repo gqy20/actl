@@ -84,6 +84,7 @@
   显示终态误报与设备影响呈现的后续修正见上述实现条目，游戏实现候选统一由 ROADMAP 维护。
 
 ### Changed
+- **时序/超时参数收单源（纯重构，语义不变）**：协议默认值（`--expect` 2000 / wait 族 5000 / `launch --wait-window` 5000 / 显示端握手 4s·3s）以常量收进 actl-core `timing.rs` 并加默认值锁定测试——**刻意不接 env**（协议默认值是 help 契约，覆盖通道是 `--timeout`，环境变量静默改默认会让 help 撒谎）；内部轮询（可见性/门控 25ms、就绪主轮询 50ms、可见性探测窗 1000ms、交接轮询 100ms）并入 `Timing` 结构体并获 `ACTL_*` env 覆盖（进 timing-sweep 调优体系）；删除 input.rs 与 `lock_wait_ms` 重复的死常量 `LOCK_TIMEOUT_MS`。actl-signal 伴随程序自身 UI 循环节奏不属命令路径，保持独立。
 - **路线图整理**：已完成实现归入本变更记录，ROADMAP 只维护剩余工作与验收；明确代码完成和真机验收的区别。
   MCP 定位为在被控 Windows 设备本地启动、供其他设备调用本设备的可选服务，尚未实现；
   Linux/macOS 执行后端暂不考虑实现。同步产品定位、设计蓝图与文档索引。

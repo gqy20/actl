@@ -1,4 +1,5 @@
 //! Display startup and action acknowledgement. No input can silently bypass this gate.
+use actl_core::timing;
 use actl_core::{
     CtlError, ErrorCode,
     state::{SignalPaths, unix_ms},
@@ -167,14 +168,14 @@ pub fn ensure() -> Result<actl_core::display::DisplayLease, CtlError> {
         }
     }
     let start = Instant::now();
-    while start.elapsed() < Duration::from_secs(4) {
+    while start.elapsed() < Duration::from_millis(timing::DISPLAY_READY_MS) {
         if let Some(l) = paths
             .display_lease()
             .filter(|l| l.ready(unix_ms()) && alive(l))
         {
             return Ok(l);
         }
-        std::thread::sleep(Duration::from_millis(25));
+        std::thread::sleep(Duration::from_millis(crate::timing().fast_poll_ms));
     }
     Err(CtlError::with_evidence(
         ErrorCode::NotActionable,
@@ -193,7 +194,7 @@ pub(crate) fn wait_presented(
     };
     let paths = SignalPaths::default();
     let start = Instant::now();
-    while start.elapsed() < Duration::from_secs(3) {
+    while start.elapsed() < Duration::from_millis(timing::DISPLAY_ACK_MS) {
         crate::feedback::check_stop()?;
         if paths
             .display_lease()
@@ -203,12 +204,12 @@ pub(crate) fn wait_presented(
             ACTIVE_EPOCH.with(|e| *e.borrow_mut() = Some(epoch.to_owned()));
             // Let the acknowledged preview remain readable before delivery.
             for _ in 0..12 {
-                std::thread::sleep(Duration::from_millis(25));
+                std::thread::sleep(Duration::from_millis(crate::timing().fast_poll_ms));
                 crate::feedback::check_stop()?;
             }
             return Ok(());
         }
-        std::thread::sleep(Duration::from_millis(25));
+        std::thread::sleep(Duration::from_millis(crate::timing().fast_poll_ms));
     }
     Err(unavailable(
         "display did not acknowledge this action preview; action was not delivered",

@@ -73,7 +73,9 @@ fn wait_iconic(hwnd: HWND, expected: bool) -> Result<(), CtlError> {
         if unsafe { IsIconic(hwnd).as_bool() } == expected {
             return Ok(());
         }
-        std::thread::sleep(std::time::Duration::from_millis(25));
+        std::thread::sleep(std::time::Duration::from_millis(
+            crate::timing().fast_poll_ms,
+        ));
     }
     Err(unavailable(
         "window did not reach the requested visual state",

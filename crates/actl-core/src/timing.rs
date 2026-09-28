@@ -28,7 +28,26 @@ pub struct Timing {
     /// wait --stable 的采样间隔(settle 判定:连续两次样本相等即稳定;
     /// 与 poll_ms 分开——内容加载的稳定窗需要比存在性轮询更长的间隔)
     pub settle_ms: u64,
+    /// 可见性/门控快速轮询间隔(desktop/display_gate/window_ready 探测拍)
+    pub fast_poll_ms: u64,
+    /// window_ready 主轮询间隔
+    pub ready_poll_ms: u64,
+    /// window_ready 首段可见性探测窗(等首帧可见再进主轮询)
+    pub vis_probe_ms: u64,
+    /// 桌面交接 pending 态轮询间隔
+    pub handoff_poll_ms: u64,
 }
+
+/// CLI 协议默认值(help 四要素承诺的值)。**刻意不接 env 覆盖**:
+/// 它们是协议契约的一部分,覆盖通道是命令行 `--timeout`;环境变量静默
+/// 改协议默认值会让 help 文本变成谎言(agent-desktop 的 dead env knobs
+/// 前车之鉴)。调内部旋钮用上面的 Timing 字段。
+pub const EXPECT_MS: u64 = 2000;
+pub const WAIT_MS: u64 = 5000;
+pub const WAIT_WINDOW_MS: u64 = 5000;
+/// 显示端握手窗口(display-start help 承诺"up to 4s";预告确认 3s)。
+pub const DISPLAY_READY_MS: u64 = 4000;
+pub const DISPLAY_ACK_MS: u64 = 3000;
 
 impl Default for Timing {
     fn default() -> Self {
@@ -43,6 +62,10 @@ impl Default for Timing {
             modifier_wait_ms: 1500,
             lock_wait_ms: 3000,
             settle_ms: 250,
+            fast_poll_ms: 25,
+            ready_poll_ms: 50,
+            vis_probe_ms: 1000,
+            handoff_poll_ms: 100,
         }
     }
 }
@@ -71,6 +94,10 @@ impl Timing {
                 modifier_wait_ms: env_num("ACTL_MODIFIER_WAIT_MS", d.modifier_wait_ms),
                 lock_wait_ms: env_num("ACTL_LOCK_WAIT_MS", d.lock_wait_ms),
                 settle_ms: env_num("ACTL_SETTLE_MS", d.settle_ms),
+                fast_poll_ms: env_num("ACTL_FAST_POLL_MS", d.fast_poll_ms),
+                ready_poll_ms: env_num("ACTL_READY_POLL_MS", d.ready_poll_ms),
+                vis_probe_ms: env_num("ACTL_VIS_PROBE_MS", d.vis_probe_ms),
+                handoff_poll_ms: env_num("ACTL_HANDOFF_POLL_MS", d.handoff_poll_ms),
             }
         })
     }
@@ -90,6 +117,18 @@ mod tests {
         assert_eq!(d.modifier_wait_ms, 1500);
         assert_eq!(d.focus_retries, 3);
         assert_eq!(d.settle_ms, 250); // 稳定窗 = 2×250ms
+        assert_eq!(d.fast_poll_ms, 25);
+        assert_eq!(d.ready_poll_ms, 50);
+        assert_eq!(d.vis_probe_ms, 1000);
+        assert_eq!(d.handoff_poll_ms, 100);
+    }
+
+    #[test]
+    fn protocol_defaults_are_pinned() {
+        // 协议默认值是 help 契约,锁死后随 spec 变更(硬规则 8)
+        assert_eq!(EXPECT_MS, 2000);
+        assert_eq!(WAIT_MS, 5000);
+        assert_eq!(WAIT_WINDOW_MS, 5000);
     }
 
     #[test]

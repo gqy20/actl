@@ -68,12 +68,12 @@ pub(crate) fn activate(win: &uiautomation::UIElement) -> Result<(), CtlError> {
     // SetFocus may report success while Windows refuses foreground activation.
     let _ = win.set_focus();
     let start = Instant::now();
-    while start.elapsed() < Duration::from_millis(1000) {
+    while start.elapsed() < Duration::from_millis(crate::timing().vis_probe_ms) {
         crate::feedback::check_stop()?;
         if unsafe { GetForegroundWindow() } == root && !unsafe { IsIconic(root).as_bool() } {
             return Ok(());
         }
-        std::thread::sleep(Duration::from_millis(25));
+        std::thread::sleep(Duration::from_millis(crate::timing().fast_poll_ms));
     }
     Err(failure("foreground_not_acquired"))
 }
@@ -110,6 +110,6 @@ pub fn wait_window_ready(pattern: &str, timeout_ms: u64) -> Result<serde_json::V
                 serde_json::json!({"stage":"window_discovery","reason":"window_not_found","timeout_ms":timeout_ms}),
             ));
         }
-        std::thread::sleep(Duration::from_millis(50));
+        std::thread::sleep(Duration::from_millis(crate::timing().ready_poll_ms));
     }
 }
