@@ -36,6 +36,10 @@ pub struct StepRecord {
     pub error_evidence: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub outputs: std::collections::BTreeMap<String, serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outputs_captured_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub observation_retries: Vec<crate::recovery::ObservationRetry>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -67,11 +71,13 @@ impl Run {
                     error_code: None,
                     error_evidence: None,
                     outputs: Default::default(),
+                    outputs_captured_ms: None,
+                    observation_retries: vec![],
                 })
                 .collect(),
         }
     }
-    fn save(&mut self, store: &Store, host: &mut impl Host) -> Result<(), CtlError> {
+    pub(crate) fn save(&mut self, store: &Store, host: &mut impl Host) -> Result<(), CtlError> {
         self.updated_ms = actl_core::state::unix_ms();
         store.save(self)?;
         host.publish(self);
@@ -79,6 +85,17 @@ impl Run {
     }
 }
 pub trait Host {
+    fn observation_event(
+        &mut self,
+        _phase: &str,
+        _attempt: u32,
+        _outcome: &str,
+        _error: Option<ErrorCode>,
+    ) {
+    }
+    fn now_ms(&self) -> u64 {
+        actl_core::state::unix_ms()
+    }
     fn execute(&mut self, call: &Invocation) -> Result<(), CtlError>;
     fn execute_output(&mut self, call: &Invocation) -> Result<serde_json::Value, CtlError> {
         self.execute(call).map(|()| serde_json::Value::Null)
@@ -101,6 +118,12 @@ fn boundary(run: &mut Run, store: &Store, host: &mut impl Host) -> Result<bool, 
         return Ok(false);
     }
     run.save(store, host)?;
+    if run.reason.as_deref() == Some("pause_requested") {
+        actl_core::signal_session::flow_event(
+            "flow_pause_observed",
+            serde_json::json!({"run_id":run.id,"request_id":store.pause_request_id()}),
+        );
+    }
     Ok(true)
 }
 /// Host must hold both execution locks; resumption never changes the saved plan.
@@ -113,6 +136,15 @@ pub fn execute(
 ) -> Result<(), CtlError> {
     crate::data::validate(plan)?;
     crate::data::check_saved(plan, run)?;
+    if plan.steps.iter().any(|s| {
+        s.before
+            .iter()
+            .chain(s.verify.iter())
+            .chain(s.resume_check.iter())
+            .any(|c| !host.read_only(c))
+    }) {
+        return Err(CtlError::protocol("flow checks must be read-only"));
+    }
     if plan
         .steps
         .iter()
@@ -121,6 +153,7 @@ pub fn execute(
         return Err(CtlError::protocol("outputs require a read-only producer"));
     }
     if run.status == Status::Completed {
+        host.publish(run);
         return Ok(());
     }
     if plan
@@ -145,6 +178,7 @@ pub fn execute(
             "--retry-step must name an uncertain step",
         ));
     }
+    let resuming = run.status != Status::Ready;
     run.status = Status::Running;
     run.reason = None;
     run.save(store, host)?;
@@ -153,6 +187,9 @@ pub fn execute(
             continue;
         }
         if boundary(run, store, host)? {
+            return Ok(());
+        }
+        if !crate::freshness::guard(plan, step, run, store, host)? {
             return Ok(());
         }
         let resolved = crate::data::resolve(step, run).and_then(|s| {
@@ -174,16 +211,39 @@ pub fn execute(
                 return Ok(());
             }
         };
+        if resuming
+            && let Some(check) = &step.resume_check
+            && let Err(error) =
+                crate::recovery::observe((plan, &step, i), run, store, host, "resume_check", check)
+        {
+            run.steps[i].error_code = Some(error.code);
+            run.steps[i].error_evidence = crate::failure_evidence(step.evidence, &error);
+            if boundary(run, store, host)? {
+                return Ok(());
+            }
+            run.status = Status::Paused;
+            if step.on_failure == Failure::Fail {
+                run.status = Status::Failed;
+            }
+            run.reason = Some("resume_check_failed".into());
+            run.save(store, host)?;
+            return Ok(());
+        }
+        if boundary(run, store, host)? {
+            return Ok(());
+        }
         if matches!(
             run.steps[i].status,
             StepStatus::Uncertain | StepStatus::Running | StepStatus::Verifying
         ) {
             // An interrupted write may have succeeded. Re-read its postcondition before any replay.
+            let mut replay_confirmed = false;
             if let Some(verify) = &step.verify {
                 run.steps[i].status = StepStatus::Verifying;
                 run.save(store, host)?;
-                match host.execute(verify) {
-                    Ok(()) if step.outputs.len() == run.steps[i].outputs.len() => {
+                match crate::recovery::observe((plan, &step, i), run, store, host, "verify", verify)
+                {
+                    Ok(_) if step.outputs.len() == run.steps[i].outputs.len() => {
                         run.steps[i].status = StepStatus::Completed;
                         run.steps[i].verified = true;
                         run.steps[i].error_code = None;
@@ -191,8 +251,9 @@ pub fn execute(
                         run.save(store, host)?;
                         continue;
                     }
-                    Ok(()) => {} // A read completed but its output was not durably captured; re-read.
+                    Ok(_) => {} // A read completed but its output was not durably captured; re-read.
                     Err(error) => {
+                        replay_confirmed = error.code == ErrorCode::AssertionFailed;
                         run.steps[i].error_evidence =
                             crate::failure_evidence(step.evidence, &error);
                         run.steps[i].error_code = Some(error.code);
@@ -202,11 +263,19 @@ pub fn execute(
             if boundary(run, store, host)? {
                 return Ok(());
             }
-            if !host.read_only(&step.run) && retry_step != Some(step.id.as_str()) {
+            if !host.read_only(&step.run)
+                && (retry_step != Some(step.id.as_str()) || !replay_confirmed)
+            {
                 run.steps[i].status = StepStatus::Uncertain;
                 run.status = Status::NeedsReview;
-                run.reason =
-                    Some("result_unconfirmed; inspect before authorizing --retry-step".into());
+                run.reason = Some(
+                    if replay_confirmed {
+                        "result_unconfirmed; inspect before authorizing --retry-step"
+                    } else {
+                        "result_observation_failed"
+                    }
+                    .into(),
+                );
                 run.save(store, host)?;
                 return Ok(());
             }
@@ -219,7 +288,8 @@ pub fn execute(
             return Ok(());
         }
         if let Some(before) = &step.before
-            && let Err(error) = host.execute(before)
+            && let Err(error) =
+                crate::recovery::observe((plan, &step, i), run, store, host, "before", before)
         {
             if error.code == ErrorCode::Aborted
                 && !host.stopped()
@@ -243,6 +313,10 @@ pub fn execute(
         }
         let attempts = if step.retry == Retry::ReadOnly { 3 } else { 1 };
         for attempt in 0..attempts {
+            // Preconditions and retries may take time; check again before dispatch.
+            if !crate::freshness::guard(plan, &plan.steps[i], run, store, host)? {
+                return Ok(());
+            }
             run.steps[i].status = StepStatus::Running;
             run.steps[i].attempts = run.steps[i]
                 .attempts
@@ -251,17 +325,24 @@ pub fn execute(
             run.steps[i].error_code = None;
             run.steps[i].error_evidence = None;
             run.steps[i].outputs.clear();
+            run.steps[i].outputs_captured_ms = None;
             // Write-ahead record is required: failure to persist prevents the side effect.
             run.save(store, host)?;
-            let result = host.execute_output(&step.run).and_then(|value| {
-                let outputs = crate::data::extract(&step, &value)?;
-                run.steps[i].outputs = outputs;
-                if let Err(error) = crate::data::check_saved(plan, run) {
-                    run.steps[i].outputs.clear();
-                    return Err(error);
-                }
-                Ok(())
-            });
+            let captured_ms = host.now_ms();
+            let result =
+                crate::recovery::observe((plan, &step, i), run, store, host, "run", &step.run)
+                    .and_then(|value| {
+                        let outputs = crate::data::extract(&step, &value)?;
+                        run.steps[i].outputs = outputs;
+                        run.steps[i].outputs_captured_ms =
+                            (!step.outputs.is_empty()).then_some(captured_ms);
+                        if let Err(error) = crate::data::check_saved(plan, run) {
+                            run.steps[i].outputs.clear();
+                            run.steps[i].outputs_captured_ms = None;
+                            return Err(error);
+                        }
+                        Ok(())
+                    });
             if let Err(error) = result {
                 if error.code == ErrorCode::Aborted
                     && host.read_only(&step.run)
@@ -328,8 +409,9 @@ pub fn execute(
                 return Ok(());
             }
             if let Some(verify) = &step.verify {
-                match host.execute(verify) {
-                    Ok(()) => {
+                match crate::recovery::observe((plan, &step, i), run, store, host, "verify", verify)
+                {
+                    Ok(_) => {
                         run.steps[i].status = StepStatus::Completed;
                         run.steps[i].verified = true;
                     }

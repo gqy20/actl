@@ -1,0 +1,1 @@
+{"stage":"output_freshness","reason":"expired","source_step":"read","output":"text","max_age_ms":100,"captured_ms":1000,"checked_ms":1101,"age_ms":101}

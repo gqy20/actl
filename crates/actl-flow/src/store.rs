@@ -101,14 +101,26 @@ impl Store {
         write(&self.dir.join("state.json"), state)
     }
     pub fn pause(&self) -> Result<(), CtlError> {
+        self.pause_with_request("")
+    }
+    pub fn pause_with_request(&self, request: &str) -> Result<(), CtlError> {
+        if !request.is_empty() && !actl_core::history::valid_id(request) {
+            return Err(CtlError::protocol("invalid pause request ID"));
+        }
         self.load()?;
-        let file = OpenOptions::new()
+        let mut file = OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)
             .open(self.dir.join("pause-requested"))
             .map_err(io)?;
+        file.write_all(request.as_bytes()).map_err(io)?;
         file.sync_all().map_err(io)
+    }
+    pub fn pause_request_id(&self) -> Option<String> {
+        read_text(&self.dir.join("pause-requested"))
+            .ok()
+            .filter(|s| actl_core::history::valid_id(s))
     }
     pub fn pause_requested(&self) -> bool {
         self.dir.join("pause-requested").exists()

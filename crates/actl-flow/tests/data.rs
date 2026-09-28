@@ -97,6 +97,7 @@ fn persist_resume_and_do_not_replay_completed_write() {
     assert_eq!(h.calls.iter().filter(|c| c.command == "write").count(), 1);
     let mut actual = serde_json::to_value(&run).unwrap();
     actual["updated_ms"] = json!(0);
+    actual["steps"][0]["outputs_captured_ms"] = json!(0);
     let expected: Value =
         serde_json::from_str(include_str!("golden/data_completed_v1.json")).unwrap();
     assert_eq!(actual, expected);
@@ -157,6 +158,7 @@ fn empty_string_is_valid_and_null_is_not_missing() {
         data::Output {
             pointer: "/nil".into(),
             kind: data::Kind::Null,
+            max_age_ms: None,
         },
     );
     assert!(data::extract(&step, &json!({"nil":null})).unwrap()["nil"].is_null());
@@ -233,6 +235,7 @@ fn typed_values_escaped_pointers_and_budget_are_checked() {
             data::Output {
                 pointer: pointer.into(),
                 kind,
+                max_age_ms: None,
             },
         );
     }
@@ -253,6 +256,7 @@ fn typed_values_escaped_pointers_and_budget_are_checked() {
             data::Output {
                 pointer: "".into(),
                 kind: data::Kind::String,
+                max_age_ms: None,
             },
         );
         run.steps[0].outputs.insert(key, json!("x".repeat(14000)));

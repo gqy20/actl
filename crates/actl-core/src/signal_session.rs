@@ -110,10 +110,15 @@ impl SignalSession {
             p.state.finished_ms = Some(unix_ms());
             p.state.error_code = error.map(str::to_owned);
             let elapsed = unix_ms().saturating_sub(p.state.started_ms);
-            p.event(
-                "call_finished",
-                serde_json::json!({"phase":phase,"error_code":error,"duration_ms":elapsed}),
-            );
+            let mut data =
+                serde_json::json!({"phase":phase,"error_code":error,"duration_ms":elapsed});
+            if let Some(flow) = &p.state.workflow {
+                data["workflow_status"] = serde_json::json!(flow.status);
+                data["workflow_completed"] = serde_json::json!(flow.status == "completed");
+                data["workflow_reason"] = serde_json::json!(flow.reason);
+                data["workflow_error_code"] = serde_json::json!(flow.error_code);
+            }
+            p.event("call_finished", data);
             p.publish();
         }
         CURRENT.with(|c| *c.borrow_mut() = Weak::new());
@@ -162,6 +167,15 @@ pub fn workflow(progress: crate::state::WorkflowProgress) {
         );
         p.state.workflow = Some(progress);
         p.publish();
+    }
+}
+
+/// Content-free workflow diagnostics; not an authorization channel.
+pub fn flow_event(event: &str, data: serde_json::Value) {
+    if let Some(shared) = CURRENT.with(|c| c.borrow().upgrade())
+        && let Ok(mut p) = shared.lock()
+    {
+        p.event(event, data);
     }
 }
 

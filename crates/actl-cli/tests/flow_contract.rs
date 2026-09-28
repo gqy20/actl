@@ -16,6 +16,8 @@ impl Sandbox {
     fn command(&self) -> Command {
         let mut cmd = Command::new(env!("CARGO_BIN_EXE_actl"));
         cmd.env("LOCALAPPDATA", &self.root)
+            .env_remove("ACTL_FLOW_REQUEST_SOURCE")
+            .env_remove("ACTL_FLOW_REQUEST_ID")
             .env_remove("ACTL_TASK_ID");
         cmd
     }
@@ -282,10 +284,175 @@ fn live_pause_and_process_death_are_distinguished() {
     assert_eq!(result["data"]["run"]["reason"], "pause_requested");
     assert_eq!(result["data"]["run"]["steps"][0]["status"], "pending");
     assert!(result["data"]["run"]["steps"][0]["error_code"].is_null());
+    let (_, journal) = s.invoke(&["history", "--task", "live"]);
+    let events: Vec<_> = journal["data"]["calls"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|c| c["events"].as_array().unwrap())
+        .collect();
+    let accepted = events
+        .iter()
+        .find(|e| e["event"] == "control_request" && e["data"]["stage"] == "accepted")
+        .unwrap();
+    let observed = events
+        .iter()
+        .find(|e| e["event"] == "flow_pause_observed")
+        .unwrap();
+    assert_eq!(
+        accepted["data"]["request_id"],
+        observed["data"]["request_id"]
+    );
     // Simulate a write-ahead record left by a dead process; status must report interruption.
     let mut stored: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
     stored["status"] = json!("running");
     std::fs::write(path, stored.to_string()).unwrap();
     let (_, status) = s.invoke(&["flow-status", "--id", "live"]);
     assert_eq!(status["data"]["interrupted"], true);
+}
+
+#[test]
+fn expired_output_is_reported_on_resume_without_dispatch() {
+    let s = Sandbox::new();
+    let file = s.file("version: 1\nname: Age\nsteps:\n - id: source\n   title: Source\n   run: {command: status}\n   outputs:\n     protocol: {pointer: /protocol, type: string, max_age_ms: 60000}\n - id: sink\n   title: Sink\n   pause_before: true\n   run:\n     command: wait\n     args: [--window, ACTL-NONEXISTENT-AGE, --timeout, '1']\n     bind: {'3': source.protocol}\n");
+    let (code, result) = s.invoke(&["flow-run", "--file", &file, "--id", "age"]);
+    assert_eq!(code, 0, "{result}");
+    assert!(result["data"]["run"]["steps"][0]["outputs_captured_ms"].is_u64());
+    let path = s.root.join("actl/flows/age/state.json");
+    let mut state: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    state["steps"][0]["outputs_captured_ms"] = json!(1);
+    std::fs::write(path, state.to_string()).unwrap();
+    let (_, result) = s.invoke(&["flow-resume", "--id", "age"]);
+    let run = &result["data"]["run"];
+    assert_eq!(run["reason"], "output_freshness_failed", "{result}");
+    assert_eq!(run["steps"][0]["attempts"], 1);
+    assert_eq!(run["steps"][1]["attempts"], 0);
+    assert_eq!(run["steps"][1]["error_code"], "PROTOCOL");
+    assert_eq!(run["steps"][1]["error_evidence"]["reason"], "expired");
+}
+
+#[test]
+fn recovery_checks_are_validated_and_never_allow_writes() {
+    let s = Sandbox::new();
+    for (check, expected) in [
+        (
+            "{command: verify, args: [--exists, id:result, --app, Calculator]}",
+            0,
+        ),
+        ("{command: click, args: [id:result, --app, Calculator]}", 2),
+        (
+            "{command: verify, args: [--exists, '@e1', --app, Calculator]}",
+            2,
+        ),
+        (
+            "{command: verify, args: [--exists, id:result], bind: {'0': missing.value}}",
+            2,
+        ),
+    ] {
+        let file = s.file(&format!("version: 1\nname: Guard\nsteps:\n - id: a\n   title: A\n   retry: stale_read\n   run: {{command: status}}\n   resume_check: {check}\n"));
+        let (code, result) = s.invoke(&["flow-validate", "--file", &file]);
+        assert_eq!(code, expected, "{result}");
+    }
+    let file = s.file("version: 1\nname: Write\nsteps:\n - id: a\n   title: A\n   retry: stale_read\n   run: {command: click, args: [id:result, --app, Calculator]}\n   verify: {command: verify, args: [--exists, id:result, --app, Calculator]}\n");
+    let (code, result) = s.invoke(&["flow-validate", "--file", &file]);
+    assert_eq!(code, 0, "{result}");
+}
+
+#[test]
+fn resume_journal_has_source_guard_result_and_business_outcome() {
+    for (marker, source) in [
+        (None, "cli"),
+        (Some("signal_control"), "signal_control"),
+        (Some("private-untrusted-value"), "unknown"),
+    ] {
+        let s = Sandbox::new();
+        let file = s.file("version: 1\nname: Log\nsteps:\n - id: a\n   title: A\n   pause_before: true\n   run: {command: status}\n   resume_check: {command: wait, args: [--window, ACTL-LOG-ABSENT-189235, --timeout, '1']}\n");
+        assert_eq!(
+            s.invoke(&["flow-run", "--file", &file, "--id", "logging"])
+                .0,
+            0
+        );
+        let mut cmd = s.command();
+        if let Some(value) = marker {
+            cmd.env("ACTL_FLOW_REQUEST_SOURCE", value);
+        }
+        let out = cmd
+            .args(["flow-resume", "--id", "logging"])
+            .output()
+            .unwrap();
+        assert!(out.status.success());
+        let (_, journal) = s.invoke(&["history", "--task", "logging"]);
+        let events = journal["data"]["calls"][0]["events"].as_array().unwrap();
+        let request = events
+            .iter()
+            .find(|e| e["event"] == "flow_resume_requested")
+            .unwrap();
+        assert_eq!(request["data"]["source"], source);
+        assert_eq!(request["data"]["source_verified"], false);
+        let phases: Vec<_> = events
+            .iter()
+            .filter(|e| e["event"] == "workflow_invocation")
+            .collect();
+        assert_eq!(phases.len(), 2);
+        assert_eq!(phases[0]["data"]["phase"], "resume_check");
+        assert_eq!(phases[0]["data"]["outcome"], "started");
+        assert_eq!(phases[1]["data"]["outcome"], "failed");
+        assert_eq!(phases[1]["step_id"], "a");
+        let finish = &events.last().unwrap()["data"];
+        assert_eq!(finish["phase"], "done");
+        assert_eq!(finish["workflow_status"], "paused");
+        assert_eq!(finish["workflow_completed"], false);
+        assert_eq!(finish["workflow_reason"], "resume_check_failed");
+        assert!(finish["workflow_error_code"].is_string());
+        assert!(!journal.to_string().contains("private-untrusted-value"));
+        assert!(!journal.to_string().contains("ACTL-LOG-ABSENT-189235"));
+    }
+}
+
+#[test]
+fn completed_resume_still_reports_business_completion() {
+    let s = Sandbox::new();
+    let file = s.file(SIMPLE);
+    s.invoke(&["flow-run", "--file", &file, "--id", "done"]);
+    for _ in 0..2 {
+        s.invoke(&["flow-resume", "--id", "done"]);
+        let (_, history) = s.invoke(&["history", "--task", "done"]);
+        let events = history["data"]["calls"][0]["events"].as_array().unwrap();
+        assert_eq!(events.last().unwrap()["data"]["workflow_completed"], true);
+        assert_eq!(
+            events.last().unwrap()["data"]["workflow_status"],
+            "completed"
+        );
+    }
+}
+
+#[test]
+fn pause_journal_does_not_overwrite_desktop_feedback() {
+    let s = Sandbox::new();
+    let file = s.file(SIMPLE);
+    assert_eq!(
+        s.invoke(&[
+            "flow-run",
+            "--file",
+            &file,
+            "--id",
+            "pause-meta",
+            "--paused"
+        ])
+        .0,
+        0
+    );
+    let path = s.root.join("actl/state.json");
+    let before = std::fs::read(&path).unwrap();
+    assert_eq!(s.invoke(&["flow-pause", "--id", "pause-meta"]).0, 0);
+    assert_eq!(std::fs::read(&path).unwrap(), before);
+    let request =
+        std::fs::read_to_string(s.root.join("actl/flows/pause-meta/pause-requested")).unwrap();
+    assert!(actl_core::history::valid_id(&request));
+    let (_, history) = s.invoke(&["history", "--task", "pause-meta"]);
+    let control = &history["data"]["calls"][0]["events"][1];
+    assert_eq!(control["event"], "control_request");
+    assert_eq!(control["data"]["stage"], "accepted");
+    assert_eq!(control["data"]["request_id"], request);
+    assert_eq!(control["data"]["source"], "cli");
 }

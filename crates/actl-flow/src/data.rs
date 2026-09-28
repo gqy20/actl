@@ -14,6 +14,8 @@ pub struct Output {
     pub pointer: String,
     #[serde(rename = "type")]
     pub kind: Kind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_age_ms: Option<u64>,
 }
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -47,6 +49,7 @@ pub fn validate(plan: &Plan) -> Result<(), CtlError> {
             ("run", Some(&step.run)),
             ("before", step.before.as_ref()),
             ("verify", step.verify.as_ref()),
+            ("resume_check", step.resume_check.as_ref()),
         ] {
             let Some(call) = call else { continue };
             for (index, reference) in &call.bind {
@@ -86,6 +89,9 @@ pub fn validate(plan: &Plan) -> Result<(), CtlError> {
         }
         for (name, output) in &step.outputs {
             let field = format!("steps[{i}].outputs.{name}");
+            if output.max_age_ms == Some(0) {
+                return Err(error(&step.id, &field, "max_age_ms must be positive"));
+            }
             if !actl_core::history::valid_id(name) {
                 return Err(error(&step.id, &field, "invalid output name"));
             }
@@ -131,6 +137,7 @@ pub fn resolve(step: &Step, run: &Run) -> Result<Step, CtlError> {
     for call in std::iter::once(&mut resolved.run)
         .chain(resolved.before.iter_mut())
         .chain(resolved.verify.iter_mut())
+        .chain(resolved.resume_check.iter_mut())
     {
         for (index, reference) in &call.bind {
             let (producer, name) = reference

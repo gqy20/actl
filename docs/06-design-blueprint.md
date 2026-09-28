@@ -4,12 +4,37 @@
 
 ## 1. 定位
 
+### 流程日志阶段与结果（2026-09-28）
+
+执行型 flow 的 call_finished 在已有调用 phase/error_code 之外增加 workflow_status、
+workflow_completed、workflow_reason、workflow_error_code。done 只表示调用处理完毕；
+是否完成流程以 workflow_completed 为准。没有可用流程上下文时不输出这些字段。
+workflow_invocation 逐次记录 run/before/verify/resume_check 的 started/succeeded/failed、
+attempt 和错误码，继承 call_id/run_id/step_id；不含命令参数和业务内容。
+flow_resume_requested 记录请求 run_id、retry_step 及来源 cli/signal_control/unknown，
+source_verified=false。显示端通过 ACTL_FLOW_REQUEST_SOURCE=signal_control 标记子进程；
+该信息仅供诊断，不证明用户点击或授予权限。未标记旧显示端也会归入 cli。
+
+### 流程重新观察与恢复核验（2026-09-28）
+
+新增 `retry: stale_read`：只读调用遇到 STALE_REF 最多调用三次，写调用始终单次；
+state.steps[].observation_retries 保存阶段、错误码和重试序号（最多 32 条），暂停/急停阻止后续重试。
+新增可选 `resume_check`（verify/wait）：恢复时每个未完成步骤先核对上下文，再核验 uncertain 结果。
+失败保存 resume_check_failed，保留原步骤阶段；不会自动导航、切换目标或重新授权。
+恢复写步骤的结果核验若无法观察，保存 needs_review/result_observation_failed，
+即使指定 --retry-step 也不重放；只有明确 ASSERTION_FAILED 加显式重试才可进入写步骤。
+完整约束见 [20 §9](20-yaml-workflow-protocol.md)，实现与验收矩阵见 [39](39-flow-observation-recovery.md)。
+
 ### 流程输出绑定（2026-09-28）
 
 flow v1 增加可选 outputs（只读 run 的 JSON Pointer＋显式类型）与 bind（前序步骤输出替换完整参数）。
 字段和实际 CLI 参数分别预检，输出随步骤状态持久化，恢复不重跑已完成步骤；写步骤不导出数据。
 state/run 响应的步骤可带 outputs，显式保存的业务数据不受 error evidence 脱敏策略影响。
 缺失/类型/绑定错误为 PROTOCOL；绑定解析失败保存 paused/failed、reason=binding_validation_failed，动作次数不增加。
+输出可声明正整数 `max_age_ms`；步骤保存 `outputs_captured_ms`（读取调用开始时间）。
+消费步骤入口与每次 run 调用前检查有效期，超限、缺失时间或当前时间早于采集时间时，
+保存 PROTOCOL 与 reason=output_freshness_failed，按 on_failure 暂停或失败，保留已有步骤阶段。
+诊断只包含输出名称、来源步骤和时间，默认 metadata 也保留；不自动刷新或重放已完成步骤。
 完整语法、预算、负号参数限制及恢复语义见 [20 §8](20-yaml-workflow-protocol.md#8-显式输出与完整参数绑定2026-09-28)，测试记录见 [38](38-flow-output-bindings.md)。
 
 ### UIA 读取状态修订（2026-09-28）
@@ -399,9 +424,20 @@ actl history [--task <id>] [--limit <1..100>]   # 默认 20，最近写入的调
 actl task-archive --file <report.json>          # UTF-8 JSON，最大 64 KiB
 ```
 
-history 的 data 为 `{calls:[{complete,events:[...]}],incomplete_files}`。
-complete 只表示事件可解析且有结束记录。incomplete_files 统计本次扫描到的空/损坏文件及
+history 的 data 为 `{calls:[{complete,integrity,events:[...]}],incomplete_files,logging_health}`。
+complete 要求 JSON 可解析、身份和版本一致、seq 连续且调用首尾边界有效；完整性在步骤过滤前检查。
+integrity 区分 complete、unfinished、malformed_json、empty、missing_start、invalid_identity、
+identity_or_version_mismatch、sequence_gap_or_duplicate、invalid_boundary。
+unfinished 不证明进程仍在运行或已经崩溃。incomplete_files 统计本次扫描到的空/损坏文件及
 返回的无终态调用；过期记录可能尚未清理。非法 ID/limit 返回 PROTOCOL，读取失败返回 INTERNAL。
+
+logging_health 包含 status、complete_logging_guaranteed（始终 false）、failure_count、truncated、failures。
+status 为 no_recorded_failure/degraded/unknown；未发现失败记录不保证没有丢日志。
+日志打开/追加与反馈状态写入失败尽力保存独立 log-health 标记；读取历史失败时健康结果附于错误 evidence。
+按 task 过滤，最多返回最近 100 条，默认保留 7 天/8 MiB；目录不可写时仅能报告 stderr。
+各标记包含 call_id/task_id/stage/dropped_events/error_kind/native_code/ts_ms/version/status，
+不保存错误正文或业务参数。打开失败的 dropped_events=0 表示尚未计数，不表示没有丢失。
+完整性与健康记录均不提供防篡改或事务性保证，详见 [41](41-logging-metadata.md)。
 
 任务报告示例：
 

@@ -96,6 +96,7 @@ pub fn validate(plan: &Plan) -> Result<(), CtlError> {
             ("run", Some(&step.run)),
             ("before", step.before.as_ref()),
             ("verify", step.verify.as_ref()),
+            ("resume_check", step.resume_check.as_ref()),
         ] {
             let Some(call) = call else {
                 continue;
@@ -134,11 +135,13 @@ pub fn validate(plan: &Plan) -> Result<(), CtlError> {
             }
             if field == "run"
                 && !read_only(&command)
-                && (step.verify.is_none() || step.retry != Retry::Never)
+                && (step.verify.is_none() || step.retry == Retry::ReadOnly)
             {
                 return Err(context(
                     "verify",
-                    CtlError::protocol("side effects require verify and retry=never"),
+                    CtlError::protocol(
+                        "side effects require verify; retry=read_only cannot replay writes",
+                    ),
                 ));
             }
             if call.args.iter().any(|a| {
@@ -160,6 +163,18 @@ struct Adapter<'a> {
     store: &'a Store,
 }
 impl Host for Adapter<'_> {
+    fn observation_event(
+        &mut self,
+        phase: &str,
+        attempt: u32,
+        outcome: &str,
+        error: Option<ErrorCode>,
+    ) {
+        actl_core::signal_session::flow_event(
+            "workflow_invocation",
+            json!({"phase":phase,"attempt":attempt,"outcome":outcome,"error_code":error}),
+        );
+    }
     fn execute(&mut self, call: &Invocation) -> Result<(), CtlError> {
         self.execute_output(call).map(|_| ())
     }
@@ -239,9 +254,18 @@ pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
         }
         FlowCommand::Status { id } => state(&Store::at(&root, id)?),
         FlowCommand::Pause { id } => {
-            let store = Store::at(&root, id)?;
-            store.pause()?;
-            state(&store)
+            let request = actl_core::control_log::Request::new(id, "pause");
+            request.record("requested", None);
+            let result = (|| {
+                let store = Store::at(&root, id)?;
+                store.pause_with_request(&request.request_id)?;
+                state(&store)
+            })();
+            request.record(
+                if result.is_ok() { "accepted" } else { "failed" },
+                result.as_ref().err().map(|e: &CtlError| e.code),
+            );
+            result
         }
         FlowCommand::Run { file, id, paused } => {
             let plan = actl_flow::parse(&actl_flow::store::read_text(std::path::Path::new(file))?)?;
@@ -266,6 +290,11 @@ pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
             outcome(&store, &run)
         }
         FlowCommand::Resume { id, retry_step } => {
+            let source = actl_core::control_log::source();
+            actl_core::signal_session::flow_event(
+                "flow_resume_requested",
+                json!({"run_id":id,"request_id":actl_core::control_log::request_id(),"source":source,"source_verified":false,"retry_step":retry_step}),
+            );
             let store = Store::at(&root, id)?;
             let _global = store.lock(true)?;
             let (plan, mut run) = store.load()?;

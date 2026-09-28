@@ -12,6 +12,35 @@ fn root() -> std::path::PathBuf {
 }
 
 #[test]
+fn finished_call_distinguishes_paused_workflow_from_completion() {
+    let root = root();
+    let mut session = SignalSession::start_with_task(
+        SignalPaths::at(&root),
+        "flow-resume",
+        None,
+        Some("run".into()),
+    );
+    actl_core::signal_session::workflow(serde_json::from_value(json!({"run_id":"run","step_id":"a","title":"private","status":"paused","reason":"resume_check_failed","error_code":"NOT_FOUND"})).unwrap());
+    session.finish(Phase::Done, None);
+    let result = query(&root, Some("run"), None, 20, false).unwrap();
+    let events = result["calls"][0]["events"].as_array().unwrap();
+    let data = &events.last().unwrap()["data"];
+    assert_eq!(data["workflow_status"], "paused");
+    assert_eq!(data["workflow_completed"], false);
+    assert_eq!(data["workflow_error_code"], "NOT_FOUND");
+    assert!(data["error_code"].is_null());
+    let mut normalized = data.clone();
+    normalized["duration_ms"] = json!(0);
+    assert_eq!(
+        normalized,
+        serde_json::from_str::<Value>(include_str!("golden/workflow_finished_paused_v1.json"))
+            .unwrap()
+    );
+    drop(session);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn workflow_actions_and_report_evidence_can_be_traced() {
     let root = root();
     let mut session = SignalSession::start_with_task(

@@ -1,1 +1,1 @@
-{"version":"1","ok":true,"command":"history","data":{"calls":[],"incomplete_files":0}}
+{"version":"1","ok":true,"command":"history","data":{"calls":[],"incomplete_files":0,"logging_health":{"status":"no_recorded_failure","complete_logging_guaranteed":false,"failure_count":0,"truncated":false,"failures":[]}}}

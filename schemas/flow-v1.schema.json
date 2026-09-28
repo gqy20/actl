@@ -34,7 +34,8 @@
       "required": ["pointer", "type"],
       "properties": {
         "pointer": {"type": "string", "maxLength": 1024, "pattern": "^(|/.*)$", "description": "JSON Pointer relative to the successful command data, not its envelope."},
-        "type": {"enum": ["string", "number", "boolean", "array", "object", "null"]}
+        "type": {"enum": ["string", "number", "boolean", "array", "object", "null"]},
+        "max_age_ms": {"type": "integer", "minimum": 1, "maximum": 18446744073709551615, "description": "Optional age limit from producer invocation start. Expired or unknown age blocks bound consumers; no automatic refresh."}
       }
     },
     "invocation": {
@@ -120,6 +121,10 @@
             }
           ]
         },
+        "resume_check": {
+          "description": "Read-only verify/wait guard for each unfinished step reached during a resumed run, before uncertain-result verification. Must assert current target/business context.",
+          "anyOf": [{"$ref": "#/$defs/check"}, {"type": "null"}]
+        },
         "verify": {
           "anyOf": [
             {
@@ -137,7 +142,8 @@
         "retry": {
           "enum": [
             "never",
-            "read_only"
+            "read_only",
+            "stale_read"
           ],
           "default": "never"
         },

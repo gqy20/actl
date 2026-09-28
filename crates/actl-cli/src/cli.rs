@@ -705,13 +705,13 @@ fn after_help_for(name: &str) -> Option<&'static str> {
             "Example:\n  actl flow-pause --id report-01\nRequests a boundary pause; workflow waits also check each poll. Only status=paused confirms it. In-flight COM calls and other CLI calls are not interrupted.\nErrors: PROTOCOL invalid ID/state | INTERNAL storage"
         }
         "flow-resume" => {
-            "Example:\n  actl flow-resume --id report-01\nUses the saved plan; never clears emergency stop. --retry-step explicitly permits repeating an uncertain action after verification fails.\nErrors: PROTOCOL invalid state/step | NOT_ACTIONABLE executor busy | ABORTED stop | INTERNAL storage"
+            "Example:\n  actl flow-resume --id report-01\nUses the saved plan; never clears emergency stop. Optional resume_check verifies current context before uncertain-result checks. retry=stale_read retries only read-only STALE_REF, at most three calls. --retry-step requires an explicit failed assertion; observation errors never authorize write replay.\nErrors: PROTOCOL invalid state/step | NOT_ACTIONABLE executor busy | ABORTED stop | INTERNAL storage"
         }
         "task-archive" => {
             "Example:\n  actl task-archive --file report.json\nImmutable caller report, retained 30 days; never implies verified task success.\nErrors: PROTOCOL invalid report | INTERNAL file/storage failure"
         }
         "history" => {
-            "Example:\n  actl history --task report-01 --step submit --reports --limit 20\nContent-minimal events, newest calls first. Incomplete means running, interrupted or truncated.\nErrors: PROTOCOL invalid task/limit | INTERNAL storage failure"
+            "Example:\n  actl history --task report-01 --step submit --reports --limit 20\nContent-minimal events, newest calls first. integrity validates sequence, identity and boundaries; unfinished may be running or interrupted. logging_health reports recorded journal/state failures, never guarantees complete logging. Control request IDs correlate pause/resume requests without changing desktop feedback.\nErrors: PROTOCOL invalid task/limit | INTERNAL storage failure (health evidence included)"
         }
         "display-status" => {
             "Example:\n  actl display-status\nReports native readiness, reason, lease, popup diagnostics, and sticky stop state; never starts the companion.\nErrors: INTERNAL unavailable state storage"

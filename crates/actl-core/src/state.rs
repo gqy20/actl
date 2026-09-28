@@ -139,27 +139,40 @@ impl SignalPaths {
         self.dir.join("stop-requested")
     }
 
-    /// 状态快照落盘(单文件原子替换;失败静默——状态通道绝不能影响命令本身)。
+    /// 状态快照落盘；诊断故障不改变业务结果，但写入独立健康记录。
     pub fn write_state(&self, st: &SessionState) {
-        let _ = std::fs::create_dir_all(&self.dir);
+        if let Err(error) = self.try_write_state(st) {
+            crate::log_health::failure(
+                &self.dir,
+                &st.call_id,
+                st.workflow.as_ref().map(|w| w.run_id.as_str()),
+                "state_write",
+                0,
+                &error,
+            );
+            eprintln!("[actl-state] INTERNAL: state publication failed: {error}");
+        }
+    }
+    fn try_write_state(&self, st: &SessionState) -> std::io::Result<()> {
+        std::fs::create_dir_all(&self.dir)?;
         if st.version >= 2 && !st.call_id.is_empty() {
             let dir = self.dir.join("calls");
-            let _ = std::fs::create_dir_all(&dir);
+            std::fs::create_dir_all(&dir)?;
             // Each invocation owns its file: concurrent commands cannot overwrite it.
             let file = dir.join(format!("{}.json", st.call_id));
-            Self::atomic_write(&file, st);
+            Self::atomic_write(&file, st)?;
         }
-        Self::atomic_write(&self.state_file(), st);
+        Self::atomic_write(&self.state_file(), st)
     }
 
-    fn atomic_write(file: &std::path::Path, st: &SessionState) {
+    fn atomic_write(file: &std::path::Path, st: &SessionState) -> std::io::Result<()> {
         let tmp = file.with_extension(format!("{}.{}.tmp", st.pid, st.call_id));
-        if let Ok(text) = serde_json::to_vec(st) {
-            if std::fs::write(&tmp, text).is_ok() {
-                let _ = std::fs::rename(&tmp, file);
-            }
-            let _ = std::fs::remove_file(tmp);
-        }
+        let result = (|| {
+            std::fs::write(&tmp, serde_json::to_vec(st)?)?;
+            std::fs::rename(&tmp, file)
+        })();
+        let _ = std::fs::remove_file(tmp);
+        result
     }
 
     /// Recent call snapshots, bounded retention; active calls are never evicted.

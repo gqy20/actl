@@ -9,9 +9,13 @@ steps:
       command: get
       args: ["id:CalculatorResults", "--property", "name", "--app", "计算器"]
     outputs:
-      label: {pointer: /properties/name, type: string}
+      label: {pointer: /properties/name, type: string, max_age_ms: 300000}
   - id: confirm
     title: Verify the saved label after a checkpoint
+    retry: stale_read
+    resume_check:
+      command: verify
+      args: ["--exists", "id:CalculatorResults", "--app", "计算器"]
     pause_before: true
     run:
       command: verify

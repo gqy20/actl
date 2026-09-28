@@ -1,6 +1,8 @@
 //! Optional workflow layer. No Windows dependencies, shell evaluation or asynchronous runtime.
 pub mod data;
 pub mod engine;
+pub mod freshness;
+pub mod recovery;
 mod schema;
 pub mod store;
 use actl_core::CtlError;
@@ -21,6 +23,8 @@ pub struct Step {
     pub run: Invocation,
     pub before: Option<Invocation>,
     pub verify: Option<Invocation>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resume_check: Option<Invocation>,
     #[serde(default)]
     pub pause_before: bool,
     #[serde(default)]
@@ -57,6 +61,34 @@ pub fn failure_evidence(policy: EvidencePolicy, error: &CtlError) -> Option<serd
             value[key] = v.clone();
         }
     }
+    for key in [
+        "native_code",
+        "delivered_before_error",
+        "failed_segment_size",
+    ] {
+        if let Some(v) = source.get(key).filter(|v| v.is_i64() || v.is_u64()) {
+            value[key] = v.clone();
+        }
+    }
+    if let Some(v) = source.get("action_started").filter(|v| v.is_boolean()) {
+        value["action_started"] = v.clone();
+    }
+    if source["stage"] == "handoff" {
+        value["stage"] = source["stage"].clone();
+    }
+    if source["reason"].as_str().is_some_and(|r| {
+        matches!(
+            r,
+            "observation_failed"
+                | "human_takeover_or_grant_expired"
+                | "handoff_pending"
+                | "user_deferred"
+                | "user_paused"
+                | "pattern_unsupported"
+        )
+    }) {
+        value["reason"] = source["reason"].clone();
+    }
     Some(value)
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -74,6 +106,7 @@ pub enum Retry {
     #[default]
     Never,
     ReadOnly,
+    StaleRead,
 }
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -143,6 +176,7 @@ pub fn parse(text: &str) -> Result<Plan, CtlError> {
             ("run", Some(&step.run)),
             ("before", step.before.as_ref()),
             ("verify", step.verify.as_ref()),
+            ("resume_check", step.resume_check.as_ref()),
         ] {
             let Some(call) = call else { continue };
             if call.command.is_empty() || call.command.len() > 64 {

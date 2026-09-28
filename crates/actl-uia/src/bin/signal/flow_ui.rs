@@ -86,13 +86,37 @@ pub fn request(id: &str, resume: bool) -> Result<(), String> {
         return Ok(());
     }
     let (tx, receiver) = mpsc::channel();
+    let mut request =
+        actl_core::control_log::Request::new(id, if resume { "resume" } else { "pause" });
+    request.request_id = actl_core::snapshot::new_snapshot_id();
+    request.source = "signal_control".into();
+    request.record("requested", None);
+    let child_request = request.clone();
     let run = id.to_owned();
     std::thread::Builder::new()
         .name("signal-flow-request".into())
         .spawn(move || {
-            let _ = tx.send(execute(&run, resume));
+            child_request.record("dispatching", None);
+            let result = execute(&run, resume, &child_request.request_id);
+            child_request.record(
+                if result.is_ok() {
+                    "child_returned"
+                } else {
+                    "failed"
+                },
+                result.as_ref().err().map(|message| {
+                    serde_json::from_value(serde_json::Value::String(
+                        message.split('：').next().unwrap_or("").into(),
+                    ))
+                    .unwrap_or(actl_core::ErrorCode::Internal)
+                }),
+            );
+            let _ = tx.send(result);
         })
-        .map_err(|_| "INTERNAL：无法启动操作线程")?;
+        .map_err(|_| {
+            request.record("thread_start_failed", Some(actl_core::ErrorCode::Internal));
+            "INTERNAL：无法启动操作线程"
+        })?;
     jobs.push(Job {
         id: id.into(),
         resume,
@@ -108,12 +132,14 @@ pub fn request(id: &str, resume: bool) -> Result<(), String> {
     }
     Ok(())
 }
-fn execute(id: &str, resume: bool) -> Result<(), String> {
+fn execute(id: &str, resume: bool, request_id: &str) -> Result<(), String> {
     use std::os::windows::process::CommandExt;
     let exe = std::env::current_exe()
         .map_err(|_| "INTERNAL：无法定位程序")?
         .with_file_name("actl.exe");
     let output = std::process::Command::new(exe)
+        .env("ACTL_FLOW_REQUEST_SOURCE", "signal_control")
+        .env("ACTL_FLOW_REQUEST_ID", request_id)
         .args([
             if resume { "flow-resume" } else { "flow-pause" },
             "--id",

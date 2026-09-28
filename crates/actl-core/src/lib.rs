@@ -6,10 +6,13 @@
 use serde::{Deserialize, Serialize};
 
 pub mod activity;
+pub mod control_log;
 pub mod display;
 pub mod handoff;
 pub mod history;
 pub mod keys;
+pub mod log_health;
+pub mod log_integrity;
 pub mod reports;
 pub mod selector;
 pub mod signal_session;

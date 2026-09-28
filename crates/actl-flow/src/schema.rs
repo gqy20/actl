@@ -27,6 +27,7 @@ pub fn decode(raw: Value) -> Result<super::Plan, CtlError> {
                 "run",
                 "before",
                 "verify",
+                "resume_check",
                 "pause_before",
                 "retry",
                 "on_failure",
@@ -43,7 +44,7 @@ pub fn decode(raw: Value) -> Result<super::Plan, CtlError> {
                 return Err(error(&format!("{base}.{key}"), id, "required string field"));
             }
         }
-        for key in ["run", "before", "verify"] {
+        for key in ["run", "before", "verify", "resume_check"] {
             if key != "run" && step.get(key).is_none_or(Value::is_null) {
                 continue;
             }
@@ -89,7 +90,7 @@ pub fn decode(raw: Value) -> Result<super::Plan, CtlError> {
             }
         }
         for (key, allowed) in [
-            ("retry", &["never", "read_only"][..]),
+            ("retry", &["never", "read_only", "stale_read"][..]),
             ("on_failure", &["pause", "fail"][..]),
             ("evidence", &["metadata", "full"][..]),
         ] {

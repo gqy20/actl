@@ -62,12 +62,13 @@ steps:
 必填：version=1、name、steps；每步 id/title/run，run.command 与可选 args。
 name/title 最多 256 字节；1–256 步；id 使用历史协议的 1–80 位 ASCII ID 规则且不得重复。
 输入文件和规范化计划各最多 256 KiB；每命令最多 128 参数，单参数最多 16 KiB，不含 NUL。
-可选 before/verify 只能调用 verify 或 wait；before 每次实际重放前都重新执行。
+可选 before/verify/resume_check 只能调用 verify 或 wait；before 在进入 run 阶段前执行。
 预检同时检查 wait/verify 恰好一个断言模式、断言目标语法及 wait 属性谓词，缺失或无效时在任何步骤前拒绝。
 
 retry 默认为 never；read_only 仅适用于观察命令，最多尝试 3 次，间隔 200ms。
+stale_read 仅对只读调用的 STALE_REF 做有界重新定位，规则见 §9；不会重试写调用。
 on_failure 默认 pause，可设 fail。pause_before 默认 false，首次到达该步骤时暂停，继续后不重复暂停。
-写操作（包括 launch、截图输出）必须有 verify 且 retry=never。verify 的业务充分性由流程作者负责，
+写操作（包括 launch、截图输出）必须有 verify，retry 只能是 never 或 stale_read。verify 的业务充分性由流程作者负责，
 例如“窗口存在”不能作为“提交成功”的有效证据；程序只判断给定断言是否成立。
 
 禁止 batch、嵌套 flow、管理命令、key-down/key-up；流程内不允许临时 `@eN` 或 `--snapshot`。
@@ -187,6 +188,31 @@ property/channel/comparison 和 redacted=true；full 才保存断言内容，单
 
 ## 7. 操作追溯
 
+`call_finished.phase=done` 表示命令已处理，不等于流程完成。执行型 flow 在结束事件中
+额外返回 workflow_status、workflow_completed、workflow_reason、workflow_error_code；
+暂停/待核验仍可有调用 error_code=null，同时保留流程错误码。无法读取流程上下文时字段缺省，
+不推断成功。对已完成流程再次 resume 也会发布 completed 摘要，不重做步骤。
+
+每次实际阶段调用记录 `workflow_invocation`，data 包含 phase（run/before/verify/resume_check）、
+attempt（当前阶段调用内的重查序号，从 1 开始）、outcome（started/succeeded/failed）、error_code。
+这些事件与持久化 run attempts 区别使用；没有结束事件时该调用结果未知，不补写成功。
+原 step 事件只描述当前步骤，不表示一次命令实际执行。
+
+`flow_resume_requested` 在进入恢复处理时记录 run_id、request_id、retry_step、source 和 source_verified=false。
+source 为 signal_control（显示端通过环境标记启动）、cli（无标记）或 unknown（其他标记）。
+来源为可伪造的诊断信息，不是授权；无标记也可能是旧显示端或其他脚本，不能从它证明人工点击。
+事件不记录参数、检查值、输出业务内容或未知来源标记原文。来源标记不改变交接与急停规则。
+
+暂停控制使用独立 control_request 日志，记录 requested/accepted/failed，不发布桌面反馈状态。
+显示端另外记录 requested/dispatching/child_returned/failed，通过 ACTL_FLOW_REQUEST_ID 关联子进程。
+child_returned 只表示控制子进程返回；accepted 只表示暂停请求保存成功。
+执行器在安全边界保存暂停状态后记录 flow_pause_observed，并关联暂停标记中的 request_id；
+旧的空暂停标记没有请求 ID。并发暂停以最后保存的标记为准，独立日志保留每次请求。
+
+metadata 错误证据保留类型正确的 native_code、delivered_before_error、failed_segment_size、
+action_started，以及已知 stage/reason；不保留实际值、期望值、目标或未知 reason 原文。
+这些事实用于判断送达和失败阶段，不构成自动重放授权。
+
 流程运行 ID 同时是历史 task_id。流程内事件新增顶层 run_id/step_id，call_id 标识一次 CLI 调用，
 action 事件的 data.action_id 标识该调用中的动作。因此动作身份是 `(call_id, action_id)`，不是全局数字。
 `actl history --task <run_id> --step <step_id> --reports` 可返回该步的事件、调用边界和任务报告。
@@ -207,7 +233,7 @@ steps:
       command: get
       args: ["id:amount", "--property", "value", "--app", "MyApp"]
     outputs:
-      amount: {pointer: /properties/value, type: string}
+      amount: {pointer: /properties/value, type: string, max_age_ms: 300000}
   - id: confirm
     title: Verify the captured value
     run:
@@ -225,3 +251,37 @@ steps:
 - 输出在 `steps[].outputs` 持久化，先前步骤只有 completed 才能被引用。恢复时校验已保存类型和预算；完成标记缺少声明输出会拒绝恢复。详见 [数据路径与故障测试](38-flow-output-bindings.md)。
 - 已完成读取默认复用原业务数据；不宣称数据仍然新鲜。需要当前状态时使用显式 before/verify，并重新定位控件。写操作已成功且 completed 后不会因后续绑定失败而重放。
 - 输出是显式保存的业务内容，会出现在 state.json、flow-status 与运行响应中；`evidence: metadata` 仅脱敏错误证据，不脱敏 outputs。未声明的完整响应不保存，普通 workflow 事件仍只记录状态元数据。
+
+### 输出时效
+
+- 每项输出可选 `max_age_ms`，必须是正整数（u64）；省略表示不限制业务数据年龄。
+- 有输出的步骤保存 `outputs_captured_ms`，取本次读取调用开始的 Unix 毫秒时间，包含读取耗时；重试成功后保存本次时间。恢复、后置核验和读取状态不会刷新时间。
+- 对当前步骤 run/before/verify 引用的输出，在步骤入口和每次 run 派发前检查：`当前时间 - 采集时间 <= max_age_ms` 时有效。前置条件等待或自动重试消耗时间后会再次检查。
+- 超限、采集时间缺失、当前时间早于采集时间均拒绝消费，错误码 PROTOCOL；运行 reason 为 `output_freshness_failed`，按 on_failure 暂停或失败。保留步骤原状态与 attempts，已有 uncertain 写步骤仍不可重放。
+- error_evidence 包含 stage=output_freshness、reason（expired/capture_time_missing/clock_moved_backwards）、source_step、output、max_age_ms、captured_ms、checked_ms、age_ms。只含标识与时间，metadata 策略也完整保留，无业务值。
+- 检查失败不自动重新读取来源、不修改旧计划；先核对已完成动作，再准备新的后续计划。旧状态没有采集时间且输出声明了有效期时保守拒绝；未声明有效期的旧计划保持原行为。
+- 时间使用系统墙钟，不能检测所有时钟调整，也不保证 provider 返回的内容本身是最新数据。这是派发前检查，不会中断已派发命令内部的等待/人工交接；后置核验仍执行。目标身份、接收人和业务状态须由 before/verify 及命令自身护栏另行核对。
+
+## 9. 有界重新观察与恢复检查
+
+`retry: stale_read` 可用于读或写步骤，但只对 run/before/verify/resume_check 中的只读调用生效。
+遇到 STALE_REF 最多调用三次，间隔 200ms；每次重新执行语义定位。其他错误不触发该策略。
+写 run 始终只调用一次；检查重试不导致 run 重放。原 read_only 策略仅用于只读 run，行为保持不变。
+两者是互斥枚举，不叠加重试次数。
+
+每次拟重试先保存 steps[].observation_retries：phase、error_code、retry_number。
+记录表示已安排重试，不保证下一次调用已发生；run 的 attempts 才统计已进入调用阶段的次数。
+每步累计最多 32 条，跨恢复保留，达到上限不再自动重查。记录不含业务值。
+重试前检查暂停、急停和绑定数据时效；中断或保存失败阻止下一次调用。
+
+可选 `resume_check` 与 before 一样是 verify/wait 调用，支持前序输出 bind。
+只在运行从非 ready 状态继续时，对本轮到达的每个未完成步骤执行，位置在 uncertain 结果核验之前。
+初次运行跳过，已完成步骤跳过；因此首次执行的必要条件仍放 before。
+失败保留原步骤阶段与动作次数，按 on_failure 保存 paused/failed、reason=resume_check_failed；
+急停和主动暂停优先。核验内容由作者声明，应匹配具体业务上下文，不能只检查软件窗口存在。
+
+恢复写步骤时，verify 成功表示原结果已确认，可直接完成；verify 返回观察错误或无法确定结果时，
+保存 needs_review、reason=result_observation_failed，即使 --retry-step 也不重放。
+只有 verify 明确返回 ASSERTION_FAILED 且用户指定 --retry-step 才允许进入重新执行路径，
+仍须通过 before 和现有写操作交接护栏。断言失败本身并不证明写入从未发生，作者与用户须确认重放适宜。
+已有人工接管错误继续按 handoff 处理；STALE_REF 不会推断为人工接管。

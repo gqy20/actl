@@ -41,6 +41,32 @@ fn assertion_evidence_is_redacted_unless_explicitly_enabled() {
         "metadata"
     );
 }
+
+#[test]
+fn recovery_metadata_preserves_safe_delivery_facts_only() {
+    let error = CtlError::with_evidence(
+        ErrorCode::NotActionable,
+        "private",
+        serde_json::json!({
+        "stage":"handoff","reason":"human_takeover_or_grant_expired","action_started":true,
+        "delivered_before_error":3,"failed_segment_size":2,"native_code":-1,
+        "actual":"PRIVATE","target":"PRIVATE","expected":"PRIVATE"}),
+    );
+    let value = failure_evidence(EvidencePolicy::Metadata, &error).unwrap();
+    assert_eq!(value["delivered_before_error"], 3);
+    assert_eq!(value["action_started"], true);
+    assert_eq!(value["native_code"], -1);
+    assert!(!value.to_string().contains("PRIVATE"));
+    let malformed = CtlError::with_evidence(
+        ErrorCode::Internal,
+        "private",
+        serde_json::json!({"reason":"PRIVATE","native_code":"PRIVATE","action_started":"PRIVATE"}),
+    );
+    assert_eq!(
+        failure_evidence(EvidencePolicy::Metadata, &malformed).unwrap(),
+        serde_json::json!({"redacted":true})
+    );
+}
 fn setup(plan: &Plan) -> (std::path::PathBuf, Store, Run) {
     let root = std::env::temp_dir().join(format!(
         "actl-flow-{}",

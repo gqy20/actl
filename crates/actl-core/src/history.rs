@@ -38,9 +38,19 @@ pub struct Journal {
     call: String,
     task: Option<String>,
     seq: u64,
+    root: PathBuf,
+    dropped: u64,
+    failure_error: Option<std::io::Error>,
 }
 impl Journal {
     pub fn open(root: &Path, call: &str, task: Option<String>) -> std::io::Result<Self> {
+        let result = Self::open_inner(root, call, task.clone());
+        if let Err(error) = &result {
+            crate::log_health::failure(root, call, task.as_deref(), "journal_open", 0, error);
+        }
+        result
+    }
+    fn open_inner(root: &Path, call: &str, task: Option<String>) -> std::io::Result<Self> {
         if !valid_id(call) {
             return Err(std::io::Error::other("invalid call id"));
         }
@@ -58,6 +68,9 @@ impl Journal {
             call: call.into(),
             task,
             seq: 0,
+            root: root.into(),
+            dropped: 0,
+            failure_error: None,
         })
     }
 
@@ -71,6 +84,17 @@ impl Journal {
         context: Option<&crate::state::WorkflowProgress>,
     ) {
         if self.failed {
+            self.dropped += 1;
+            if let Some(error) = &self.failure_error {
+                crate::log_health::failure(
+                    &self.root,
+                    &self.call,
+                    self.task.as_deref(),
+                    "journal_write",
+                    self.dropped,
+                    error,
+                );
+            }
             return;
         }
         self.seq += 1;
@@ -84,7 +108,10 @@ impl Journal {
             let mut line = serde_json::to_vec(&value)?;
             line.push(b'\n');
             if self.bytes + line.len() as u64 > CALL_LIMIT {
-                return Err(std::io::Error::other("per-call limit reached"));
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::FileTooLarge,
+                    "per-call limit reached",
+                ));
             }
             self.file.write_all(&line)?;
             self.file.flush()?;
@@ -93,7 +120,17 @@ impl Journal {
         })();
         if let Err(e) = result {
             self.failed = true;
+            self.dropped += 1;
+            crate::log_health::failure(
+                &self.root,
+                &self.call,
+                self.task.as_deref(),
+                "journal_write",
+                self.dropped,
+                &e,
+            );
             eprintln!("[actl-history] INTERNAL: record incomplete: {e}");
+            self.failure_error = Some(e);
         }
     }
 }
@@ -150,7 +187,8 @@ pub fn cleanup(dir: &Path, age: u64, budget: u64) -> std::io::Result<()> {
         total = total.saturating_sub(size);
     }
     if total > budget {
-        return Err(std::io::Error::other(
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::StorageFull,
             "history capacity reached; recent records protected",
         ));
     }
@@ -269,7 +307,8 @@ fn read_filtered(
         if step.is_some_and(|id| !events.iter().any(|e| e["step_id"].as_str() == Some(id))) {
             continue;
         }
-        let finished = events.last().is_some_and(|e| e["event"] == "call_finished");
+        let integrity = crate::log_integrity::check(&events, valid);
+        let finished = integrity == "complete";
         if let Some(id) = step {
             events.retain(|e| {
                 e["step_id"].as_str() == Some(id)
@@ -279,7 +318,7 @@ fn read_filtered(
         if !valid || !finished {
             incomplete += 1;
         }
-        calls.push(serde_json::json!({"complete":valid && finished,"events":events}));
+        calls.push(serde_json::json!({"complete":finished,"integrity":integrity,"events":events}));
         if calls.len() == limit {
             break;
         }
@@ -345,7 +384,12 @@ pub fn query(
             "step/report queries require a task and valid step ID",
         ));
     }
-    let mut result = read_filtered(root, task, step, limit)?;
+    let mut result = read_filtered(root, task, step, limit).map_err(|mut error| {
+        error.evidence =
+            Some(serde_json::json!({"logging_health":crate::log_health::read(root, task)}));
+        error
+    })?;
+    result["logging_health"] = crate::log_health::read(root, task);
     if reports {
         result["reports"] = crate::reports::read(root, task.unwrap_or_default(), limit)?;
     }

@@ -75,3 +75,5 @@
 - [31 控件身份绑定与输入焦点验收](31-element-identity-input-focus.md)
 
 - [32 · 桌面交接与窗口就绪](32-desktop-handoff.md)：人工开始、输入让行、暂停恢复与显示诊断。
+- [39 · 观察中断与流程恢复](39-flow-observation-recovery.md)：有界重新观察、恢复上下文核验与写操作重放限制。
+- [41 · 日志健康与控制元数据](41-logging-metadata.md)：故障可见性、请求关联、完整性与脱敏边界。
