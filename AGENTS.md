@@ -10,7 +10,7 @@
 4. **不引入 async/tokio**(ADR-001);
 5. **`actl-core` 禁止依赖 windows 相关 crate;`unsafe` 只允许出现在 `actl-uia`**(workspace 已 deny,仅该 crate 豁免并登记理由);
 6. **直接依赖总数 ≤ 8**,新增先登记 docs/TECH_STACK.md §3;
-7. **默认 UIA,物理输入必须显式 `--physical`**(ADR-007);
+7. **默认 UIA,物理鼠标兜底必须显式 `--physical`**(ADR-007);键盘按 docs/06 使用显式 `--app` 绑定与输入护栏,人工交接不替代命令参数要求;
 8. **协议/命令语义变更(spec 提交)必须同 PR 完成**:契约 golden 测试 + docs/06 + CHANGELOG,三者同步。
 
 ## 工作流
@@ -31,7 +31,7 @@
 
 ## 仓库地图(分层细节见 docs/TECH_STACK.md §2)
 
-`crates/actl-core`=协议(纯逻辑) · `crates/actl-uia`=UIA/COM(唯一 unsafe 豁免) · `crates/actl-physical`=物理兜底 · `crates/actl-cli`=入口 · `fixtures/`=集成测试 · `hooks/`=git hooks · `docs/`=全部决策文档 · `skills/actl`=agent skill 与应用档案 pack(`apps/*.yml`,契约见 skills/actl/PACKS.md,应用知识不进核心;lint-packs 已入 gate)
+`crates/actl-core`=协议(纯逻辑) · `crates/actl-uia`=UIA/COM(唯一 unsafe 豁免) · `crates/actl-physical`=物理兜底 · `crates/actl-flow`=顺序流程与恢复 · `crates/actl-cli`=入口 · `fixtures/`=系统集成测试 · `scenarios/`=真实应用场景 · `hooks/`=git hooks · `docs/`=全部决策文档 · `skills/actl`=agent skill 与应用档案 pack(`apps/*.yml`,契约见 skills/actl/PACKS.md,应用知识不进核心;lint-packs 已入 gate)
 
 ## 测试
 
@@ -39,8 +39,18 @@
 - **双轨纪律**:CI fixture 轨(系统应用,可复现)与场景实测轨(真实应用,docs/ 场景记录,不进 CI)分开;场景实测结论落 docs 并同步 pack;
 - 修 bug:**先写复现测试再修**,同 PR;
 - golden 变更只能随 `spec`/`test` 提交,禁止顺手改;
-- **GUI 应用禁 taskkill**(会话复活:记事本 TabState+云同步、计算器僵尸框架)——清理一律优雅关闭(close-window --pid/--hwnd),fixture 用 trap EXIT 保证失败也清理;
+- **GUI 应用禁 taskkill**(会话复活:记事本 TabState+云同步、计算器僵尸框架)——清理一律优雅关闭(close-window --pid/--hwnd),fixture 用 finally/trap EXIT 进入收尾判定;仅在无停止/人工接管且资源归属已核实时关闭,否则保留现场并记录原因;
+- **资源归属**:使用隔离文件/profile/数据目录;关闭前核对 HWND、PID、进程实例和任务标记。新窗口差集、标题匹配或 UIA 消失不能单独证明归属或已关闭;多标签应用只清理本任务标签。详见 [窗口基建](docs/30-window-infrastructure.md)。
+- **验收证据**:代码完成、gate 通过、真机验收分别报告;受阻不记通过,原失败记录保留,后续局部确认不能改写整轮结果。记录被测二进制路径/哈希、环境、逐调用证据及清理状态,产物留本地 target。
 - 真机回归:`cargo xtask regress`(需交互桌面;含键盘注入的 fixture 需桌面空闲)。
+
+## 桌面协作与恢复
+
+- **人工交接**:同一任务复用 ACTL_TASK_ID/flow ID;真实桌面授权只能由用户点击,不得自动点击提示或伪造授权。检测到人工输入后停止后续写入,保留现场;不循环抢焦点或重复请求交接。详见 [桌面交接](docs/32-desktop-handoff.md)。
+- **暂停与急停分离**:人工让行和主动暂停不写粘性急停;继续前核对任务身份与状态。已有急停不得随测试、重启或清理自动解除;仅按用户对该次停止的明确授权解除。疑似遗留标记先查来源与生命周期,不能一律删除。
+- **结果不确定先核验**:写入、点击、提交或启动报错不等于没有生效;检查送达信息与实际结果后决定下一步,禁止盲目重放。flow 的 uncertain 步骤先验证;单 CLI/普通脚本不宣称具备自动续跑能力。
+- **目标与焦点**:跨调用使用 ref 时,支持 `--snapshot` 的命令须绑定 snapshot_id;其他路径重新观察定位。控件重建或菜单变化后重新观察。面向输入框的键盘操作核验具体输入目标与焦点,不能只凭窗口相同放行;拒绝时诊断原因,不放宽护栏。详见 [身份与焦点](docs/31-element-identity-input-focus.md)。
+- **就绪与未知状态**:进程启动不代表窗口可操作,租约存活不代表提示可见;结合原生窗口、前台及显示诊断确认。观察失败必须保留错误/未知状态,不转为空列表或成功;恢复有界,不反复启动应用。
 
 ## AI agent 附加要求
 
@@ -48,7 +58,9 @@
 - 命令/协议语义以 docs/06-design-blueprint.md 为准,不凭记忆发明;
 - 代码与文档同 PR;范围以 docs/PRD.md §1.3 非目标清单为铁律,拿不准就问,不静默扩大;
 - 安全:不做任何规避权限/隐身执行的功能;涉及 `--physical` 的改动必须显式提示;
-- 提交信息自写、按逻辑分组,禁巨型混合提交;
+- 提交信息自写、按逻辑分组,禁巨型混合提交;工作区有其他改动时按本次授权范围暂存,共享文件按改动块核对;
+- **文档分工**:ROADMAP 只维护待办和验收;完成实现进入 CHANGELOG（未发布记 Unreleased）,未验收部分继续保留待办。docs 场景记录保存证据与限制,应用知识同步 pack,不复制进 AGENTS;
+- **平台与 MCP 范围**:执行端仅 Windows,Linux/macOS 暂不考虑实现。MCP 是计划中的独立适配服务,在被控设备本地启动供其他设备调用本设备;尚未实现,范围以 PRD/ROADMAP 为准;
 - **bash 内联中文参数会 GBK 污染**(显示层及应用层均可能)——含中文的命令序列写 UTF-8 脚本文件执行,不内联;
 - **诊断三段法**:状态类矛盾先查环境(锁屏/慢日/受保护视图/遮挡——护栏拒绝通常是对的),再看窗口实际状态(list-windows/截图),最后才怀疑代码;截图核对是最后仲裁手段;
 - 性能/耗时数字只在同环境头内比较(慢日绝对值不可跨日,timing 纪律)。
