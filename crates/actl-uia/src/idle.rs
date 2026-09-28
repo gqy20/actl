@@ -14,19 +14,29 @@ fn idle_from_ticks(now: u32, last: u32) -> u32 {
     now.wrapping_sub(last)
 }
 
+fn observed_idle(success: bool, now: u32, last: u32) -> Result<u32, CtlError> {
+    if !success {
+        return Err(CtlError::with_evidence(
+            ErrorCode::Internal,
+            "cannot observe session input activity",
+            serde_json::json!({"reason":"input_observation_failed","api":"GetLastInputInfo"}),
+        ));
+    }
+    Ok(idle_from_ticks(now, last))
+}
+
 /// 当前系统空闲毫秒数(全系统键鼠;粒度受系统 tick ~15.6ms 限制)。
-pub fn idle_ms() -> u32 {
+pub fn idle_ms() -> Result<u32, CtlError> {
     let mut info = LASTINPUTINFO {
         cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32,
         dwTime: 0,
     };
-    // SAFETY: 按 API 契约传入 cbSize 正确的出参指针。返回值不区分成败语义
-    // (极老系统才会失败),失败时 dwTime 保持 0——退化为"开机以来无输入"
-    // 的保守读数,空闲判定只多不少,不构成误报输入的路径。
-    let _ = unsafe { GetLastInputInfo(&mut info) };
+    // SAFETY: cbSize matches the output structure. Failure is unknown activity,
+    // never evidence that the user is idle.
+    let success = unsafe { GetLastInputInfo(&mut info) }.as_bool();
     // SAFETY: GetTickCount 无前置条件,纯读取系统 tick。
     let now = unsafe { GetTickCount() };
-    idle_from_ticks(now, info.dwTime)
+    observed_idle(success, now, info.dwTime)
 }
 
 /// `wait --idle`:轮询直到系统空闲 ≥ 阈值(TIMEOUT 语义)。
@@ -35,7 +45,8 @@ pub fn idle_ms() -> u32 {
 pub fn wait_idle(threshold_ms: u32, timeout_ms: u64) -> Result<u32, CtlError> {
     let deadline = std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
     loop {
-        let idle = idle_ms();
+        actl_core::wait_control::check()?;
+        let idle = idle_ms()?;
         if idle >= threshold_ms {
             return Ok(idle);
         }
@@ -54,7 +65,34 @@ pub fn wait_idle(threshold_ms: u32, timeout_ms: u64) -> Result<u32, CtlError> {
 
 #[cfg(test)]
 mod tests {
-    use super::idle_from_ticks;
+    use super::{idle_from_ticks, observed_idle};
+
+    #[test]
+    fn failed_input_observation_is_not_idle() {
+        let result = observed_idle(false, 3_600_000, 0);
+        assert!(
+            result.is_err(),
+            "failed observation must not report one hour idle"
+        );
+        let error = result.unwrap_err();
+        let expected: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/golden/idle_observation_failed.json"))
+                .unwrap();
+        assert_eq!(
+            serde_json::to_value(actl_core::ErrorEnvelope::new("wait", &error, 0)).unwrap(),
+            expected
+        );
+    }
+
+    #[test]
+    fn paused_workflow_does_not_wait_for_idle_timeout() {
+        let path = std::env::temp_dir().join(actl_core::new_snapshot_id());
+        std::fs::write(&path, b"pause").unwrap();
+        let _scope = actl_core::wait_control::Scope::enter(path.clone());
+        let error = super::wait_idle(u32::MAX, 30_000).unwrap_err();
+        std::fs::remove_file(path).unwrap();
+        assert_eq!(error.code, actl_core::ErrorCode::Aborted);
+    }
 
     #[test]
     fn idle_is_zero_right_after_input() {

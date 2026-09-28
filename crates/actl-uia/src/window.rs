@@ -262,51 +262,22 @@ pub(crate) fn native_hwnd(elem: &UIElement) -> Option<windows::Win32::Foundation
 /// 注意:不做可见性过滤——UWP 应用后台挂起时 CoreWindow 会被 cloak
 /// (IsWindowVisible=false),硬过滤会让快照只剩空壳框架、内容全失联
 /// (金任务 1 实测 0/10);同名噪声由 find_window 的 WINUI_AUX_CLASSES 折叠消化。
-pub(crate) fn top_windows(auto: &UIAutomation, walker: &UITreeWalker) -> Vec<UIElement> {
-    let mut out = Vec::new();
-    for w in root_children(auto, walker) {
-        out.push(w.clone());
-        out.extend(owned_dialogs_of(walker, &w));
-    }
-    out
-}
-
-/// root 直接子节点(顶层窗口)。快路径只走这里:不触 owned-dialog 深扫。
-fn root_children(auto: &UIAutomation, walker: &UITreeWalker) -> Vec<UIElement> {
-    let mut out = Vec::new();
-    let Ok(root) = auto.get_root_element() else {
-        return out;
-    };
-    let mut child = walker.get_first_child(&root).ok();
-    while let Some(w) = child {
-        if !native_hwnd(&w).is_some_and(crate::display_support::is_display_window) {
-            out.push(w.clone());
-        }
-        child = walker.get_next_sibling(&w).ok();
-    }
-    out
-}
-
-/// 窗口的直接子 Window(owned dialog,如挂靠宿主的"另存为")。
-fn owned_dialogs_of(walker: &UITreeWalker, host: &UIElement) -> Vec<UIElement> {
-    let mut out = Vec::new();
-    let mut sub = walker.get_first_child(host).ok();
-    while let Some(d) = sub {
-        if d.get_control_type()
+pub(crate) fn top_windows(
+    auto: &UIAutomation,
+    _walker: &UITreeWalker,
+) -> Result<Vec<UIElement>, CtlError> {
+    let roots = crate::observation::desktop_children(auto)?;
+    let roots = crate::window_observation::select(roots, |w| {
+        let hwnd = w
+            .get_native_window_handle()
+            .map_err(|e| crate::read_channel::failure("window.hwnd", e))?;
+        Ok(!crate::display_support::is_display_window(hwnd.into()))
+    })?;
+    crate::window_observation::inventory(Ok(roots), crate::observation::children, |w| {
+        w.get_control_type()
             .map(|t| t == ControlType::Window)
-            .unwrap_or(false)
-        {
-            out.push(d.clone());
-        }
-        sub = walker.get_next_sibling(&d).ok();
-    }
-    out
-}
-
-fn name_matches(elem: &UIElement, pattern: &str) -> bool {
-    elem.get_name()
-        .map(|n| n.contains(pattern))
-        .unwrap_or(false)
+            .map_err(|e| crate::read_channel::failure("window.role", e))
+    })
 }
 
 /// WinUI 同一可见窗口的辅助 HWND(标题相同;实测计算器 3 个同名"计算器":
@@ -488,10 +459,13 @@ pub fn wait_window(substr: &str, timeout_ms: u64) -> Result<String, CtlError> {
 pub fn window_identities() -> Result<Vec<Vec<i32>>, CtlError> {
     let auto = UIAutomation::new().map_err(internal)?;
     let walker = auto.create_tree_walker().map_err(internal)?;
-    Ok(top_windows(&auto, &walker)
+    top_windows(&auto, &walker)?
         .into_iter()
-        .filter_map(|w| w.get_runtime_id().ok())
-        .collect())
+        .map(|w| {
+            w.get_runtime_id()
+                .map_err(|e| crate::read_channel::failure("window.runtime_id", e))
+        })
+        .collect()
 }
 
 /// 等待一个**基线中不存在**、标题包含 `substr` 的新窗口出现。
@@ -507,17 +481,19 @@ pub fn wait_new_window(
     let walker = auto.create_tree_walker().map_err(internal)?;
     let deadline = std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
     loop {
-        if let Some(title) = top_windows(&auto, &walker)
-            .into_iter()
-            .filter(|w| name_matches(w, substr))
-            .find(|w| {
-                w.get_runtime_id()
-                    .map(|id| !baseline.contains(&id))
-                    .unwrap_or(false) // 读不到身份 → 无法证明"新",不当作命中
-            })
-            .and_then(|w| w.get_name().ok())
-        {
-            return Ok(title);
+        actl_core::wait_control::check()?;
+        for window in top_windows(&auto, &walker)? {
+            let title = window
+                .get_name()
+                .map_err(|e| crate::read_channel::failure("window.name", e))?;
+            if title.contains(substr) {
+                let id = window
+                    .get_runtime_id()
+                    .map_err(|e| crate::read_channel::failure("window.runtime_id", e))?;
+                if !baseline.contains(&id) {
+                    return Ok(title);
+                }
+            }
         }
         if std::time::Instant::now() >= deadline {
             return Err(CtlError::new(
@@ -616,14 +592,20 @@ pub fn list_windows() -> Result<Vec<WindowEntry>, CtlError> {
         z_rank.get(&key).copied()
     };
 
-    Ok(top_windows(&auto, &walker)
+    top_windows(&auto, &walker)?
         .into_iter()
-        .filter_map(|w| {
-            let title = w.get_name().ok()?;
+        .map(|w| {
+            let title = w
+                .get_name()
+                .map_err(|e| crate::read_channel::failure("window.name", e))?;
             if title.is_empty() {
-                return None;
+                return Ok(None);
             }
-            let hwnd = native_hwnd(&w);
+            let handle = w
+                .get_native_window_handle()
+                .map_err(|e| crate::read_channel::failure("window.hwnd", e))?;
+            let handle: HWND = handle.into();
+            let hwnd = (!handle.0.is_null()).then_some(handle);
             let (foreground, topmost, minimized, visible, z_order, rect, owner_title) = match hwnd {
                 Some(h) => unsafe {
                     let root = GetAncestor(h, GA_ROOT);
@@ -650,10 +632,14 @@ pub fn list_windows() -> Result<Vec<WindowEntry>, CtlError> {
                 },
                 None => (false, false, false, true, None, None, None),
             };
-            Some(WindowEntry {
+            Ok(Some(WindowEntry {
                 title,
-                class: w.get_classname().unwrap_or_default(),
-                pid: w.get_process_id().unwrap_or_default(),
+                class: w
+                    .get_classname()
+                    .map_err(|e| crate::read_channel::failure("window.class", e))?,
+                pid: w
+                    .get_process_id()
+                    .map_err(|e| crate::read_channel::failure("window.pid", e))?,
                 hwnd: hwnd.map(|h| h.0 as isize),
                 foreground,
                 topmost,
@@ -662,9 +648,10 @@ pub fn list_windows() -> Result<Vec<WindowEntry>, CtlError> {
                 z_order,
                 rect,
                 owner_title,
-            })
+            }))
         })
-        .collect())
+        .collect::<Result<Vec<_>, CtlError>>()
+        .map(|items| items.into_iter().flatten().collect())
 }
 
 /// close-window:优雅关闭标题匹配的唯一窗口(WM_CLOSE 异步投递;未保存内容
@@ -766,16 +753,20 @@ pub fn resolve_window(r: WindowRef<'_>) -> Result<UIElement, CtlError> {
     match r {
         WindowRef::Title(pattern) => find_window(&auto, &walker, pattern),
         WindowRef::Pid(pid) => {
-            let matches: Vec<UIElement> = top_windows(&auto, &walker)
-                .into_iter()
-                .filter(|w| w.get_process_id().map(|p| p == pid).unwrap_or(false))
-                .collect();
+            let matches = crate::window_observation::select(top_windows(&auto, &walker)?, |w| {
+                w.get_process_id()
+                    .map(|p| p == pid)
+                    .map_err(|e| crate::read_channel::failure("window.pid", e))
+            })?;
             match matches.len() {
                 0 => Err(CtlError::new(
                     ErrorCode::NotFound,
                     format!("no top-level window owned by pid {pid}"),
                 )),
-                1 => Ok(matches.into_iter().next().unwrap_or_else(|| unreachable!())),
+                1 => matches
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| CtlError::internal("window candidate missing")),
                 n => {
                     let titles: Vec<String> = matches
                         .iter()

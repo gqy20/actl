@@ -38,7 +38,10 @@ impl From<Value> for CommandOutput {
 fn main() {
     // clap 树注入 after_help 后再 parse(Example/Errors 进 -h;06 §3.5)
     let matches = crate::cli::build_cli().get_matches();
-    let cli = Cli::from_arg_matches(&matches).expect("clap-validated matches");
+    let cli = match Cli::from_arg_matches(&matches) {
+        Ok(cli) => cli,
+        Err(error) => error.exit(),
+    };
     let command_name = command_name(&cli.command);
     let started = Instant::now();
     // Control/query commands must not overwrite the workflow's desktop feedback.

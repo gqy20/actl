@@ -120,16 +120,19 @@ pub(crate) fn with_transient_retry<T>(
     const MAX_ATTEMPTS: usize = 3;
     const RETRY_INTERVAL_MS: u64 = 200;
     let mut stale = None;
-    for _ in 0..MAX_ATTEMPTS {
+    for index in 0..MAX_ATTEMPTS {
         actl_core::wait_control::check()?;
         match attempt() {
             Ok(value) => return Ok(value),
             Err(error) if error.code == ErrorCode::StaleRef => stale = Some(error),
             Err(error) => return Err(error),
         }
-        std::thread::sleep(std::time::Duration::from_millis(RETRY_INTERVAL_MS));
+        if index + 1 < MAX_ATTEMPTS {
+            std::thread::sleep(std::time::Duration::from_millis(RETRY_INTERVAL_MS));
+        }
     }
-    let mut error = stale.expect("retry loop ran at least once");
+    let mut error =
+        stale.ok_or_else(|| CtlError::internal("retry finished without an observation"))?;
     if let Some(serde_json::Value::Object(map)) = error.evidence.as_mut() {
         map.insert("attempts".into(), serde_json::json!(MAX_ATTEMPTS));
     }

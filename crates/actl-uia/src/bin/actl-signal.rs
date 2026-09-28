@@ -11,6 +11,8 @@ mod frame;
 mod handoff;
 #[path = "signal/icon.rs"]
 mod icon;
+#[path = "signal/input_watch.rs"]
+mod input_watch;
 #[path = "signal/model.rs"]
 mod model;
 #[path = "signal/overlay.rs"]

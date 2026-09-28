@@ -1,0 +1,1 @@
+{"version":"1","ok":false,"command":"wait","error":{"code":"INTERNAL","message":"cannot observe session input activity","hint":"retry once; if it persists, report an issue with the `evidence` payload","evidence":{"reason":"input_observation_failed","api":"GetLastInputInfo"}},"duration_ms":0}

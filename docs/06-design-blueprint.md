@@ -53,7 +53,10 @@ state/run 响应的步骤可带 outputs，显式保存的业务数据不受 erro
 - 过滤式 find、旧语义定位/ref 重放和表格树提取拒绝不完整范围，返回 NOT_ACTIONABLE，evidence 为 `{reason:"observation_incomplete",causes:[...]}`。content 投影在截断范围内未见 Document 时也不能声称 NOT_FOUND。成功采样仍不是原子快照，控件可能在调用之间变化。
 - 所有元素等待仅将 NOT_FOUND 解释为缺席；STALE_REF、权限、provider 错误及超限立即传播。虚拟化查询区分成功空结果与原生失败，多个匹配拒绝为 AMBIGUOUS。
 - extract 仅在 GridPattern availability 明确为 false 时回退树提取，输出 `fallback_reason:"grid_pattern_unsupported"`；Grid 直读时为 null。Grid 属性、单元格失败不回退；合法空表和空单元格保留。负行列数报 INTERNAL；超限或前后行列数变化报 NOT_ACTIONABLE（causes 为 `table_limit` / `table_changed`）。树回退只反映已物化 Text/Edit 单元格，不保证与逻辑表格的列结构一致。
-- 预算约束的是遍历节点/深度与表格规模；单个同步 COM 调用仍可能阻塞，本轮不宣称硬超时或全局观察原子性。窗口清单等其他旧 walker 路径仍待单独迁移。
+- 窗口清单、窗口 RuntimeId 基线、等待新窗口及按 PID 定位也使用可失败的 RawView 枚举；根、子窗口、分类及必要 name/class/pid/hwnd/runtime_id 读取失败传播原错误，不输出成功的部分清单，不用漏掉候选后的结果证明唯一性。成功空标题仍按清单约定过滤。
+- `wait --idle` 的 GetLastInputInfo 失败返回 INTERNAL，evidence 为 `{reason:"input_observation_failed",api:"GetLastInputInfo"}`，不把未知状态当空闲；每次轮询先检查 flow 暂停/停止。Rust `idle_ms` 接口相应返回 Result。
+- 输入交接增加独立 Raw Input 键鼠活动计数。注册丢失、消息泵心跳超过 1000ms 或监听线程退出返回既有 `input_monitor_unavailable`，撤销旧授权；健康恢复不恢复授权。不存储键值或坐标，不发送探针输入，不替代 `--physical` 参数或人工授权。真实设备接管验收另记。
+- 预算约束的是遍历节点/深度与表格规模；单个同步 COM 调用仍可能阻塞，不宣称硬超时或全局观察原子性。
 
 实验说明：`prototypes/browser` 独立验证 CDP 会话、CSS/XPath、iframe 和写后核验。
 它没有新增 actl 命令、目标语法或 YAML 字段，报告文件不属于本协议；范围与验收见 [34](34-browser-connection-prototype.md)。

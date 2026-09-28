@@ -24,6 +24,12 @@ thread_local! {
 static WATCH_RUNNING: AtomicBool = AtomicBool::new(false);
 static INPUT_SEQ: AtomicU64 = AtomicU64::new(0);
 
+fn activity() -> u64 {
+    INPUT_SEQ
+        .load(Ordering::SeqCst)
+        .wrapping_add(super::input_watch::ACTIVITY.load(Ordering::SeqCst))
+}
+
 /// 交接授权快捷键:Ctrl+Alt+Y(=开始/继续;Ctrl+Alt+F12 已留作紧急停止)。
 /// 与按钮等价的授权通道——免鼠标行程与落点瞄准;授权动作的余韵(键抬起/
 /// 手部后摇)由 Consent 宽限窗(GRACE_MS)统一吸收。
@@ -88,6 +94,13 @@ pub unsafe fn watch() -> windows::core::Result<Watch> {
                 }
             };
             let _hooks = hooks;
+            let _raw = match super::input_watch::RawWatch::start() {
+                Ok(raw) => raw,
+                Err(error) => {
+                    let _ = tx.send(Err(error));
+                    return;
+                }
+            };
             struct Running;
             impl Drop for Running {
                 fn drop(&mut self) {
@@ -158,12 +171,13 @@ fn read_request(pid: u32) -> Option<Request> {
 
 /// Synchronous query: callback input counters are checked at every injection boundary.
 pub fn message(msg: u32, pid: u32) -> usize {
-    if !WATCH_RUNNING.load(Ordering::SeqCst) {
+    if !WATCH_RUNNING.load(Ordering::SeqCst) || !super::input_watch::healthy() {
+        SERVICE.with(|s| s.borrow_mut().consent.revoke());
         return MONITOR_UNAVAILABLE;
     }
     SERVICE.with(|cell| {
         let mut s = cell.borrow_mut();
-        let seq = INPUT_SEQ.load(Ordering::SeqCst);
+        let seq = activity();
         if msg == CHECK_MESSAGE {
             let Some((owner, call, task)) = s.active.clone() else {
                 return YIELDED;
@@ -212,7 +226,7 @@ unsafe fn close_panel(s: &mut Service) {
 pub unsafe fn tick() {
     SERVICE.with(|cell| {
         let mut s = cell.borrow_mut();
-        if SignalPaths::default().stop_requested() {
+        if SignalPaths::default().stop_requested() || !super::input_watch::healthy() {
             s.consent.revoke();
         }
         if let Some((pid, request)) = &s.request
@@ -507,9 +521,13 @@ unsafe fn decide(_hwnd: HWND, start: bool) {
         let mut s = cell.borrow_mut();
         if let Some((pid, r)) = s.request.take() {
             let fresh = read_request(pid).is_some_and(|now| now.call == r.call);
-            if start && fresh && !SignalPaths::default().stop_requested() {
-                s.consent
-                    .allow(&r.task, INPUT_SEQ.load(Ordering::SeqCst), unix_ms());
+            if start
+                && fresh
+                && WATCH_RUNNING.load(Ordering::SeqCst)
+                && super::input_watch::healthy()
+                && !SignalPaths::default().stop_requested()
+            {
+                s.consent.allow(&r.task, activity(), unix_ms());
             } else {
                 s.deferred = Some(r.call);
             }

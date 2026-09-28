@@ -9,7 +9,13 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **[BC] Phase 2 观察失败契约**：UIA 窗口清单、身份基线、新窗口等待及 PID 定位迁移到可失败的 RawView 枚举，必要属性失败不再伪装为空值、缺席或唯一结果。`wait --idle` 系统输入查询失败返回带 evidence 的 INTERNAL，并在轮询中响应 flow 暂停/停止；Rust `idle_ms` 改为 Result。
+- **输入监听冗余**：显示端增加 Raw Input 键鼠活动计数、注册状态核验和消息泵心跳；健康未知时撤销授权并返回既有监听不可用原因，恢复健康不会自动授权。不记录键值/坐标，不发送探针输入；实际人工接管仍待验收。
+
 ### Added
+
 
 - **首条业务流程 YAML**：交付 `skills/actl/workflows/release-review-draft.yml`——读取已打开的 actl Releases 页(Chrome)，在 Word 新文档生成核对草稿并以静态文件名另存为。演练输出绑定（标题跨应用进入草稿）、时效声明、检查点授权边界、恢复后源稳定性核验（resume_check 绑定）与写后业务核验；全静态锚点、零逐次输入。协议预检、读段真机（检查点前零派发）与时效拒绝路径（过期不派发动作）已验证；写段联测待用户授权执行，不宣称业务闭环。浏览器 pack 新增窗口标题读取路线与 GitHub 页主文档定位知识，索引与限制见 [43](docs/43-release-review-draft.md)。
 

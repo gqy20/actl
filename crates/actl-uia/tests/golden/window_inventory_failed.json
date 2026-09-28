@@ -1,0 +1,1 @@
+{"version":"1","ok":false,"command":"list-windows","error":{"code":"STALE_REF","message":"UIA observation failed","hint":"run `snapshot` to refresh refs, then retry","evidence":{"reason":"observation_failed","channel":"children","native_code":-2147220991,"detail":"provider rebuilt"}},"duration_ms":0}

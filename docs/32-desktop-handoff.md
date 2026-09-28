@@ -16,7 +16,7 @@
 
 ## 人工接管
 
-显示端在独立消息线程安装 WH_KEYBOARD_LL / WH_MOUSE_LL，避免绘制和文件 IO 阻塞回调，，被动统计输入序号，不拦截输入，
+显示端在独立消息线程安装 WH_KEYBOARD_LL / WH_MOUSE_LL，避免绘制和文件 IO 阻塞回调，被动统计输入序号，不拦截输入，
 不存储按键、文本或鼠标坐标。仅忽略带本工具标记且 Windows 标记为 injected 的事件；
 其他自动化程序发出的输入也触发让行。每个注入批次前同步向显示端核验授权，
 同一输入框内的人机竞争也能触发中断。
@@ -27,9 +27,16 @@
 和 `failed_segment_size`，后者的实际送达量可能未知。
 
 用户输入与 SendInput 之间仍有竞态，已经进入系统的一个批次无法撤销；这不是全局输入锁。
-Windows 对低级 hook 有超时移除机制，目前验证安装成功、监控线程仍运行及显示端可响应，尚无独立
-hook 存活探针。它不能保证在 hook 被系统静默移除后仍检测所有人工输入；原有停止、
-前台句柄和控件焦点护栏继续生效。锁屏/其他桌面也不能作为已验收的输入检测场景。
+Windows 对低级 hook 有超时移除机制，没有直接的 hook 存活查询。现增加 Raw Input 键鼠注册作为
+独立的物理活动通道，只累计 WM_INPUT 次数；注册发生在显示程序的专用消息线程，不污染库调用方。
+每次交接核验检查两个设备类仍绑定本监听窗口，以及消息泵的 100ms 心跳未超过 1000ms。
+注册丢失、线程退出或心跳过期返回 `input_monitor_unavailable` 并撤销授权，恢复健康后仍需重新人工授权。
+不会注入假按键探测 hook，也不会循环重装 hook 或自动续跑。
+
+这降低了对单一低级 hook 的依赖，不证明所有输入都可检测：第三方合成输入仍依赖低级 hook；
+真实键鼠、远程桌面、锁屏、设备热插拔及 hook 超时现场尚待交互验收。原有停止、前台和焦点护栏继续生效。
+依据：[低级键盘 hook](https://learn.microsoft.com/en-us/windows/win32/winmsg/lowlevelkeyboardproc)、
+[Raw Input](https://learn.microsoft.com/en-us/windows/win32/inputdev/about-raw-input)。本轮证据见 [44](44-phase2-acceptance.md)。
 
 ## 软件没弹出来时
 

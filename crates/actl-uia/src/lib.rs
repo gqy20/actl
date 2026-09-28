@@ -2,7 +2,7 @@
 //!
 //! 全仓库唯一接触 COM 的 crate(AGENTS.md §5.5)。
 //! snapshot/定位/表格通过 fallible RawView 枚举区分空树与观察失败。
-//! 其他窗口清单等旧 walker 路径仍待迁移，不宣称全部观察入口已严格化。
+//! 窗口清单、身份基线和 PID 定位同样传播枚举与必要属性错误。
 //! 性能注记(spike #3):本版逐属性跨进程读取,release 下金任务实测,超 500ms 再上 cache request。
 //!
 //! 模块划分(按命令域,单文件行数门禁见 xtask gate):
@@ -36,6 +36,7 @@ mod scoped_locate;
 mod table;
 pub use table::{TableResult, extract_table};
 mod window;
+mod window_observation;
 mod window_ready;
 pub use window_ready::wait_window_ready;
 
