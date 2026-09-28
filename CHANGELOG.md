@@ -9,6 +9,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **首条业务流程 YAML**：交付 `skills/actl/workflows/release-review-draft.yml`——读取已打开的 actl Releases 页(Chrome)，在 Word 新文档生成核对草稿并以静态文件名另存为。演练输出绑定（标题跨应用进入草稿）、时效声明、检查点授权边界、恢复后源稳定性核验（resume_check 绑定）与写后业务核验；全静态锚点、零逐次输入。协议预检、读段真机（检查点前零派发）与时效拒绝路径（过期不派发动作）已验证；写段联测待用户授权执行，不宣称业务闭环。浏览器 pack 新增窗口标题读取路线与 GitHub 页主文档定位知识，索引与限制见 [43](docs/43-release-review-draft.md)。
+
 ### Fixed
 
 - **桌面根枚举瞬态毒化（原始标题 fixture STALE_REF 根因）**：标题定位（`find_window` 与 `uia:` 作用域标题路径）对桌面根做一次整批 `FindAll(Children)`，任何无关顶层窗口处于创建/销毁中途都会让整批枚举失败——所有应用的标题定位报 STALE_REF，无匹配窗口时把 NOT_FOUND 误报成 STALE_REF（350ms 周期的 `Start-Process notepad` 扰动下 9/10 复现，本机无 notepad 关联时启动退化为系统选应用对话框，顶层窗口竞态同样成立；HWND 路径不做桌面根枚举故不受影响，当日差异由此解释）。修复为仅对桌面根枚举做有界瞬态重试（仅 StaleRef、3 次/200ms，与 stale_read 同参数；持久失败保留错误并附 attempts），`uia:` 作用域此前把枚举失败误映射 Internal 一并统一为 StaleRef；窗口子树枚举与既有控件失效语义不变。净环境 fixture 8/8 完整通过、扰动与显示端重启下直查 36/36、无匹配探针 30/30 NOT_FOUND；显示端创建叠加扰动的元素级瞬态 NOT_FOUND 作为独立观察项登记，见 [38](docs/38-flow-output-bindings.md)。
