@@ -96,10 +96,13 @@ CalculatorApp PID 64356，启动时间 18:02:02 +08:00。没有输入数字或�
 枚举，因此当日限定 HWND 的计划全部通过——同现场后续通过不能改写首次失败，
 但两者差异自此得到解释。
 
-复现：记事本开关联扰动（350ms 周期）下运行同一 fixture，修复前 9/10 循环在
-observe 步骤报 STALE_REF（channel=children，native_code=0x80040201）。脚本与
-证据在本地 `target/flow-stale-repro-20260928/`（churn.ps1、cycle.ps1、probe.ps1、
-discrim.ps1 及逐调用 JSON）。
+复现：扰动脚本以 350ms 周期调用 `Start-Process notepad`；本机 `notepad` 无文件关联，
+每次启动退化为"选择应用以打开 notepad"系统对话框——顶层窗口创建/销毁竞态由此
+成立（扰动本质是顶层窗口churn，与窗口种类无关；此前写成"记事本开关联"不准确，
+已更正）。修复前 9/10 循环在 observe 步骤报 STALE_REF（channel=children，
+native_code=0x80040201）。脚本与证据在本地 `target/flow-stale-repro-20260928/`
+（churn.ps1、cycle.ps1、probe.ps1、discrim.ps1 及逐调用 JSON）。遗留的 8 个
+选应用对话框已逐一 WM_CLOSE 清理，核实 0 残留。
 
 修复：`observation::with_transient_retry` 仅对桌面根枚举做有界瞬态重试
 （仅 StaleRef，3 次/200ms，与 flow 层 stale_read 同参数；其他错误立即上抛，

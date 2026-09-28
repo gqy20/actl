@@ -11,7 +11,7 @@
 
 ### Fixed
 
-- **桌面根枚举瞬态毒化（原始标题 fixture STALE_REF 根因）**：标题定位（`find_window` 与 `uia:` 作用域标题路径）对桌面根做一次整批 `FindAll(Children)`，任何无关顶层窗口处于创建/销毁中途都会让整批枚举失败——所有应用的标题定位报 STALE_REF，无匹配窗口时把 NOT_FOUND 误报成 STALE_REF（记事本开关联扰动 9/10 复现；HWND 路径不做桌面根枚举故不受影响，当日差异由此解释）。修复为仅对桌面根枚举做有界瞬态重试（仅 StaleRef、3 次/200ms，与 stale_read 同参数；持久失败保留错误并附 attempts），`uia:` 作用域此前把枚举失败误映射 Internal 一并统一为 StaleRef；窗口子树枚举与既有控件失效语义不变。净环境 fixture 8/8 完整通过、扰动与显示端重启下直查 36/36、无匹配探针 30/30 NOT_FOUND；显示端创建叠加扰动的元素级瞬态 NOT_FOUND 作为独立观察项登记，见 [38](docs/38-flow-output-bindings.md)。
+- **桌面根枚举瞬态毒化（原始标题 fixture STALE_REF 根因）**：标题定位（`find_window` 与 `uia:` 作用域标题路径）对桌面根做一次整批 `FindAll(Children)`，任何无关顶层窗口处于创建/销毁中途都会让整批枚举失败——所有应用的标题定位报 STALE_REF，无匹配窗口时把 NOT_FOUND 误报成 STALE_REF（350ms 周期的 `Start-Process notepad` 扰动下 9/10 复现，本机无 notepad 关联时启动退化为系统选应用对话框，顶层窗口竞态同样成立；HWND 路径不做桌面根枚举故不受影响，当日差异由此解释）。修复为仅对桌面根枚举做有界瞬态重试（仅 StaleRef、3 次/200ms，与 stale_read 同参数；持久失败保留错误并附 attempts），`uia:` 作用域此前把枚举失败误映射 Internal 一并统一为 StaleRef；窗口子树枚举与既有控件失效语义不变。净环境 fixture 8/8 完整通过、扰动与显示端重启下直查 36/36、无匹配探针 30/30 NOT_FOUND；显示端创建叠加扰动的元素级瞬态 NOT_FOUND 作为独立观察项登记，见 [38](docs/38-flow-output-bindings.md)。
 - **完整发布包补齐技能**：ZIP 包含可独立安装的 `skills/actl/`，保留应用档案和流程索引，流程与归档说明收进 references；技能内只使用本地相对链接，不包含 URL；设计与验收记录留在开发仓库，不打包完整 docs。打包后核对必需文件、内容和技能内部链接，缺失即失败。安装说明明确技能须由 Agent 加载、桌面写操作需要配套显示端。此修复不修改已发布的 0.1.6 附件。
 
 ## [0.1.6] - 2026-09-28
