@@ -136,6 +136,7 @@ actl click role:Button --near id:clearButton --app 计算器    # 锚点就近
 - [浏览器场景战记](docs/16-browser-scenarios.md)——Edge/Chrome 双验证、xhs/bili/douyin 登录态深度闭环、扩展操作面、视觉兜底 xy: 端到端
 - [调研与设计全索引](docs/README.md)——竞品调研、PRD、技术选型、实测战记
 - [Agent Skill](skills/actl)——给 agent 的 actl 使用技能与应用档案
+- [业务流程目录](skills/actl/workflows/README.md)——actl 技能内部的业务 YAML 归属、索引与实现边界
 - [路线图](docs/ROADMAP.md)——阶段划分与版本口径
 
 ## 项目状态

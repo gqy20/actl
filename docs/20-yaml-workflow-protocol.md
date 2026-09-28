@@ -25,6 +25,20 @@ YAML 解析使用固定版本 serde-saphyr，关闭 include/robotics，拒绝重
 
 ## 2. 文件格式
 
+### 文件归属
+
+可复用业务流程统一放在 `skills/actl/workflows/<slug>.yml`，由 actl 的单一
+`SKILL.md` 入口引导 agent 选用；不创建独立业务 skill，不另设根目录 workflows。
+一个 YAML 表达一个完整业务目标，可跨应用。目录与登记规范见
+[流程索引](../skills/actl/workflows/README.md)。
+
+`skills/actl/apps/` 保存应用知识，`fixtures/flows/` 保存引擎测试，`scenarios/`
+保存真实应用验收脚本。引擎通过 `--file` 接收计划路径，不根据所在目录自动加载或执行。
+个人任务输入留在本地；运行状态按下文存储协议保存，不回写技能内的源 YAML。
+当前 v1 不支持自动引用 pack、参数插值或子流程调用，这项目录约定不改变协议能力。
+
+### v1 计划示例
+
 ```yaml
 version: 1
 name: 填写报表

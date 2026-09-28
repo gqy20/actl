@@ -13,6 +13,18 @@ actl 通过系统无障碍树(UIA)精确定位控件,像 Playwright 操作 DOM �
 **感知(snapshot/find)→ 决策 → 执行(click/type/press)→ 确认(verify/--expect)**。
 禁止跳过确认:ok:true 只代表命令完成,不代表任务达成。
 
+## 综合任务与业务流程
+
+actl 是统一技能入口。收到包含多步决策或跨应用操作的任务时，先查
+[workflows/README.md](workflows/README.md) 的流程索引，再按需读取 `apps/` 中的应用知识。
+可复用业务 YAML 放在 `workflows/`，不为每个业务任务新建独立 skill。
+应用档案描述软件的操作特点，流程描述完整业务目标的步骤、核验与恢复。
+
+先核对流程适用条件、必需信息、用户授权和验证状态，再按现行协议准备计划并运行
+`actl flow-validate --file <计划文件>`；校验通过不代表真实应用验收通过。
+当前没有已交付的业务流程，输出绑定、变量插值和子流程调用等仍未实现；
+目录约定不增加执行能力。个人任务值和运行状态不回写技能文件，测试计划仍放 `fixtures/flows/`。
+
 ## 任务启动与桌面整理
 
 开始桌面任务可先调用 `actl display-start`：启动同目录的 actl-signal 并等待可见画面。

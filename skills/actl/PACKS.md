@@ -7,6 +7,9 @@ pack 是"给 agent 读的应用知识"——路线(routes)+ 怪癖(quirks)+ 信�
 
 ## 定位与边界
 
+- `apps/` 是应用知识；完整业务执行计划放在同一 actl 技能的 [workflows/](workflows/README.md)。
+  两种 YAML 使用不同契约；当前引擎不自动展开 pack 路线，也不支持子流程引用。
+
 - pack 不是可盲跑的脚本:执行永远走 actl 自身护栏(`--app` fail-closed、前台核对、
   Ctrl+Alt+F12 急停)。高危路线必须自带核对步骤(见红线)。
 - pack 与 docs/ 场景战记的分工:战记是**过程证据**(怎么踩的坑、环境如何),pack 是
