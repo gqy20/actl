@@ -138,12 +138,24 @@ pub(crate) fn get(
 /// find:条件查元素,复用 snapshot 的 ref 编号(同一 DFS,同一编号空间,
 /// find 的 @eN 与 snapshot 的 @eN 可互换)。至少一个过滤条件,反对全树 dump。
 pub(crate) fn find_cmd(
+    target: Option<&str>,
     name: Option<&str>,
     role: Option<&str>,
     id: Option<&str>,
     app: Option<&str>,
     limit: Option<usize>,
 ) -> Result<CommandOutput, CtlError> {
+    if let Some(raw) = target {
+        let target = actl_core::parse_target(raw)?;
+        let loc = actl_uia::locate(app, &target, None)?;
+        return Ok(json!({
+            "window":{"title":loc.window_title}, "total":1,
+            "elements":[{"ref":null,"role":loc.role,"name":loc.name,
+                "automation_id":loc.automation_id,"target":target.describe()}],
+            "resolved_by":loc.resolved_by,
+        })
+        .into());
+    }
     if name.is_none() && role.is_none() && id.is_none() {
         return Err(CtlError::protocol(
             "find needs at least one of --name/--role/--id (full-tree dump is `snapshot`)",

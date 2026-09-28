@@ -35,6 +35,41 @@
 
 ### 3.2 分层模型:哪些统一,哪些适配
 
+#### 结构化 UIA 组合定位（2026-09）
+
+元素目标新增 `uia:<JSON>`，CLI 与 flow 的字符串参数共用同一解析器。例如：
+
+```powershell
+# PowerShell 7.3+ 标准原生命令参数传递；Windows PowerShell 5.1 建议改用 YAML args。
+actl find --target 'uia:{"match":{"role":"Button","name":"确定"},"within":{"id":"ExportOptions"},"scope":"descendants"}' --app MyApp
+```
+
+- 顶层字段仅 `match`（必填）、`within`（可选）、`scope`（默认 `descendants`，另可取 `children`）。
+- `match` 与 `within` 各含至少一个条件：`role`、`id`、`name`、`name_contains`；条件之间为 AND。
+  role 忽略大小写精确比较 UIA ControlType 名称；id/name 区分大小写精确比较；name_contains 为
+  区分大小写子串。name 与 name_contains 互斥，id 中的 `#` 是字面量，不表示序号。
+- 不支持嵌套 within、未知字段、重复 JSON 键、任意表达式。条件值 1–4096 UTF-8 字节且无 NUL，
+  JSON 部分最多 16 KiB。可选字段 null 等价于未提供，空过滤器拒绝。
+- `within` 在目标窗口 UIA 原始子树（含窗口自身）中必须唯一。随后在容器内查询目标，排除容器自身。
+  children 只查直接子级；descendants 查全部后代。不指定 within 时从窗口查起，descendants 包含窗口自身。
+- 组合查询的 --app 标题子串在 UIA 桌面直接子级中要求唯一，不做旧窗口查找的辅助窗口折叠或 owned-dialog 回退；
+  有歧义时使用 list-windows 得到的 hwnd:<n>，嵌套对话框用 within 限定。不传 --app 时绑定原生前台窗口。
+  HWND 对应窗口存在但 UIA provider 读取失败，保留 INTERNAL；不会声称窗口已消失。
+- 最终目标也必须唯一：零命中 NOT_FOUND，多命中 AMBIGUOUS；evidence 含 phase=within|match、
+  count、最多 20 个 candidates 及 truncated（窗口标题歧义时 phase=window）。候选仅含属性，不伪造 snapshot ref。
+- 组合查询不执行模糊、序号、距离锚点或 ItemContainer 虚拟化回退，也不自动展开控件。
+  不能与 --near/--snear/--to-near 混用，也不能作为这些锚点参数。未物化控件需调用方先显式操作并重新观察。
+- provider 枚举或必要属性读取失败返回 INTERNAL，不能证明不存在。每个查询阶段最多 5000 节点、40 层；
+  超限 NOT_ACTIONABLE（reason=selector_budget_exceeded），不使用截断结果确认唯一性。COM 调用仍可能阻塞。
+- get/click/type/set-value/select/toggle/指针命令/press --target/extract/screenshot --element/
+  verify/wait 的元素目标均接受该形式，动作与输入护栏不变。物理鼠标仍要求原命令的显式授权。
+  wait 对组合定位的观察错误直接传播，不将其当作消失；NOT_FOUND 仍表示尚未出现或已消失。
+- `find --target <uia:JSON>` 用于唯一定位诊断，与旧过滤 flags 及 limit 互斥；输出
+  `{window:{title},total:1,elements:[{ref:null,role,name,automation_id,target}],resolved_by:"uia-composite"}`，
+  不返回 snapshot_id。带 resolved_by 的命令响应同样标识 uia-composite。
+- flow 在执行任何步骤前校验各目标位置及 element: 后置条件里的组合查询，正文参数不按选择器解释。
+  运行时每次重新定位，不将 UIA 对象或临时 ref 存进计划。示例见 fixtures/flows/calculator-composite.yml。
+
 | 层 | 内容 | 时机 |
 |---|---|---|
 | **L1 通用原语**(统一) | 只依赖 OS 契约(accessibility 树 / 窗口系统 / 剪贴板),一套命令吃遍所有应用;**动词集合封闭**(~45 封顶,新增动词需 spec 提交评审) | M1–M2 全量 |

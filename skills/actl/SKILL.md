@@ -47,8 +47,10 @@ actl verify --value <target> "<期望>" --app <app> # 确认:立即断言
 2. **中文输入法环境**:文本输入加 `--paste`(剪贴板通道,绕过 IME 改写)。
 3. **效果断言用内容,不用窗口标题**(标题滞后/只取首行,实测会说谎):
    `verify --value` 读 UIA 值,或磁盘终验。
-4. **AMBIGUOUS 不是失败**:错误里 `evidence.candidates` 带可重放 ref,直接选一个
-   `click @eN --app X` 重试,不必重新 snapshot。
+4. **AMBIGUOUS 必须收紧定位**：优先使用 `uia:{"match":{"role":"Button","name":"确定"},"within":{"id":"panel"}}`。
+   match/within 各条件为 AND，容器和目标均要求唯一；name 精确、name_contains 子串，scope 为 children/descendants。
+   `find --target <uia:JSON> --app X` 可先核验，返回稳定查询、不返回 ref；组合查询错误的候选也不含 ref。
+   普通快照 ref 只在重新观察并绑定 snapshot 后使用，不依据候选序号盲点。
 5. **ref 是树遍历序号，动态界面会漂移**:即使同窗口，通知/弹层/列表变化也可能让 @eN 指向另一控件，
    不保证报 STALE_REF。变化后重新定位并核对名称、角色和内容；写操作优先稳定语义选择器。
    `--snapshot <id>` 现在同时核验窗口与实际命中控件的 RuntimeId/PID/角色/名称/AutomationId。
@@ -60,7 +62,7 @@ actl verify --value <target> "<期望>" --app <app> # 确认:立即断言
 
 ## 命令速查
 
-感知:snapshot(--skeleton/--view content) find(--name/--role/--id/--near) get list-windows status commands
+感知:snapshot(--skeleton/--view content) find(--name/--role/--id 或 --target uia:JSON) get list-windows status commands
 执行:click(--physical/--expect/--near/--no-activate) right-click double-click hover drag scroll type(--paste)
      press(--expect) key-down key-up set-value
 窗口:launch focus-window close-window resize-window wait(--element/--window/--gone/--stable/--idle) batch

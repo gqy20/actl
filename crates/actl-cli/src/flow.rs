@@ -101,6 +101,8 @@ pub fn validate(plan: &Plan) -> Result<(), CtlError> {
                 continue;
             };
             let command = parse(call).map_err(|e| context(&format!("{field}.args"), e))?;
+            crate::selector_input::validate(&command)
+                .map_err(|e| context(&format!("{field}.args"), e))?;
             validate_assertion(&command).map_err(|e| context(&format!("{field}.args"), e))?;
             if field != "run" && !matches!(command, Command::Verify { .. } | Command::Wait { .. }) {
                 return Err(context(

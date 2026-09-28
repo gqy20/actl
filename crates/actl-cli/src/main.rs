@@ -9,6 +9,7 @@ mod cli;
 mod flow;
 mod interact;
 mod query;
+mod selector_input;
 
 use std::time::Instant;
 
@@ -96,6 +97,7 @@ fn main() {
 
 /// 单命令执行体;batch 子命令复用同一入口(06 §3.7 唯一复合逃生舱)。
 pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
+    selector_input::validate(command)?;
     match command {
         Command::Flow(command) => flow::dispatch(command).map(Into::into),
         Command::Commands => commands().map(Into::into),
@@ -390,12 +392,14 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
         }
         Command::ListWindows { native, hwnd } => list_windows_cmd(*native, hwnd.as_deref()),
         Command::Find {
+            target,
             name,
             role,
             id,
             app,
             limit,
         } => find_cmd(
+            target.as_deref(),
             name.as_deref(),
             role.as_deref(),
             id.as_deref(),

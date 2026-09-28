@@ -1,0 +1,1 @@
+{"version":"1","ok":false,"command":"find","duration_ms":0,"error":{"code":"AMBIGUOUS","message":"uia match requires exactly one match; found 2","hint":"tighten the selector or pick by index","evidence":{"phase":"match","count":2,"candidates":[{"id":"save"},{"id":"deep"}],"truncated":false}}}

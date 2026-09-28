@@ -10,6 +10,8 @@ use crate::CtlError;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Target {
+    /// Strict conjunction with an optional unique container scope.
+    Uia(Box<crate::selector::Selector>),
     /// snapshot 中的第 N 个可交互元素(DFS 序重放)
     Ref(u32),
     /// Name 子串匹配(首个命中)
@@ -34,6 +36,7 @@ impl Target {
     /// 面向错误消息的人类可读形式
     pub fn describe(&self) -> String {
         match self {
+            Target::Uia(selector) => format!("uia:{}", serde_json::json!(selector)),
             Target::Ref(n) => format!("@e{n}"),
             Target::Name(s) => format!("name:{s}"),
             Target::Id(s) => format!("id:{s}"),
@@ -47,6 +50,9 @@ impl Target {
 
 /// 解析目标字符串;非法形式 → PROTOCOL(exit 2 之外的协议层错误)。
 pub fn parse_target(raw: &str) -> Result<Target, CtlError> {
+    if let Some(json) = raw.strip_prefix("uia:") {
+        return crate::selector::Selector::parse(json).map(|s| Target::Uia(Box::new(s)));
+    }
     if let Some(n) = raw.strip_prefix("@e") {
         let n: u32 = n.parse().map_err(|_| bad(raw))?;
         if n == 0 {

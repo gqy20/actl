@@ -11,6 +11,7 @@ pub mod handoff;
 pub mod history;
 pub mod keys;
 pub mod reports;
+pub mod selector;
 pub mod signal_session;
 pub mod snapshot;
 pub mod state;

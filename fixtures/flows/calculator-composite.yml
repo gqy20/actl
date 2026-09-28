@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=../../schemas/flow-v1.schema.json
+# Read-only: requires an already open, uniquely titled Chinese Calculator window.
+version: 1
+name: Inspect calculator with strict UIA selectors
+steps:
+  - id: locate_clear
+    title: Locate the clear button by role and AutomationId
+    run:
+      command: find
+      args: [--target, 'uia:{"match":{"role":"Button","id":"clearButton"}}', --app, 计算器]
+  - id: scoped_clear
+    title: Verify the clear button belongs to the calculator window
+    run:
+      command: verify
+      args: [--exists, 'uia:{"match":{"role":"Button","id":"clearButton"},"within":{"role":"Window","name":"计算器"}}', --app, 计算器]
+  - id: result
+    title: Read the current result without changing it
+    run:
+      command: get
+      args: ['uia:{"match":{"id":"CalculatorResults"}}', --property, name, --app, 计算器]

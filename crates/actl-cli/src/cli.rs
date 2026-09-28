@@ -156,7 +156,7 @@ pub(crate) enum Command {
     },
     /// Click an element (UIA Invoke by default; --physical for a real mouse click)
     Click {
-        /// Target: @eN (needs --app) | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | xy:<x>,<y> (physical-only; needs --app)
+        /// Target: uia:<JSON> (strict match/within/scope) | @eN (needs --app) | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | xy:<x>,<y> (physical-only; needs --app)
         target: String,
         /// Target window by title substring or hwnd:<n> (@eN refs require it; otherwise focused window)
         #[arg(long)]
@@ -189,7 +189,7 @@ pub(crate) enum Command {
     },
     /// Read properties of an element
     Get {
-        /// Target: @eN (needs --app) | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | xy:<x>,<y> (physical-only; needs --app)
+        /// Target: uia:<JSON> (strict match/within/scope) | @eN (needs --app) | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | xy:<x>,<y> (physical-only; needs --app)
         target: String,
         /// Property: name | role | automation_id | offscreen | value | text (default: all)
         #[arg(long)]
@@ -218,7 +218,7 @@ pub(crate) enum Command {
     },
     /// Type text into an element via keyboard (focuses the element first)
     Type {
-        /// Target: @eN | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N
+        /// Target: uia:<JSON> (strict match/within/scope) | @eN | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N
         target: String,
         /// Text to type (literal)
         text: String,
@@ -293,7 +293,7 @@ pub(crate) enum Command {
     },
     /// Set an element's value directly via UIA Value pattern (no keyboard)
     SetValue {
-        /// Target: @eN (needs --app) | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | xy:<x>,<y> (physical-only; needs --app)
+        /// Target: uia:<JSON> (strict match/within/scope) | @eN (needs --app) | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | xy:<x>,<y> (physical-only; needs --app)
         target: String,
         /// Value to set
         value: String,
@@ -309,7 +309,7 @@ pub(crate) enum Command {
     },
     /// Right-click an element (physical; opens context menus)
     RightClick {
-        /// Target: @eN | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N
+        /// Target: uia:<JSON> (strict match/within/scope) | @eN | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N
         target: String,
         /// Target window by title substring, or hwnd:<n> (0x ok; survives SPA title changes)
         #[arg(long)]
@@ -324,7 +324,7 @@ pub(crate) enum Command {
     },
     /// Double-click an element (physical)
     DoubleClick {
-        /// Target: @eN | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N
+        /// Target: uia:<JSON> (strict match/within/scope) | @eN | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N
         target: String,
         /// Target window by title substring, or hwnd:<n> (0x ok; survives SPA title changes)
         #[arg(long)]
@@ -339,7 +339,7 @@ pub(crate) enum Command {
     },
     /// Middle-click an element (browser: link in new tab; taskbar: new instance)
     MiddleClick {
-        /// Target: @eN | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N
+        /// Target: uia:<JSON> (strict match/within/scope) | @eN | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N
         target: String,
         /// Target window by title substring, or hwnd:<n> (0x ok; survives SPA title changes)
         #[arg(long)]
@@ -354,7 +354,7 @@ pub(crate) enum Command {
     },
     /// Triple-click an element (editors: paragraph-level selection)
     TripleClick {
-        /// Target: @eN | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N
+        /// Target: uia:<JSON> (strict match/within/scope) | @eN | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N
         target: String,
         /// Target window by title substring, or hwnd:<n> (0x ok; survives SPA title changes)
         #[arg(long)]
@@ -369,7 +369,7 @@ pub(crate) enum Command {
     },
     /// Move the pointer onto an element (hover; physical)
     Hover {
-        /// Target: @eN | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N
+        /// Target: uia:<JSON> (strict match/within/scope) | @eN | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N
         target: String,
         /// Target window by title substring, or hwnd:<n> (0x ok; survives SPA title changes)
         #[arg(long)]
@@ -513,6 +513,9 @@ pub(crate) enum Command {
     },
     /// Find elements by condition (token-saving targeted search vs snapshot)
     Find {
+        /// Resolve one strict uia:{"match":{"role":"Button","name":"OK"}} query; no transient ref
+        #[arg(long, conflicts_with_all = ["name", "role", "id", "limit"])]
+        target: Option<String>,
         /// Match element name containing this substring
         #[arg(long)]
         name: Option<String>,
@@ -551,7 +554,7 @@ pub(crate) enum Command {
     },
     /// Toggle an element's state (checkbox/switch; reports the resulting state)
     Toggle {
-        /// Target: @eN | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N
+        /// Target: uia:<JSON> (strict match/within/scope) | @eN | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N
         target: String,
         /// Target window by title substring, or hwnd:<n> (0x ok; survives SPA title changes)
         #[arg(long)]
@@ -855,7 +858,32 @@ pub(crate) fn build_cli() -> clap::Command {
     let mut root = Cli::command();
     for sub in root.get_subcommands_mut() {
         if let Some(text) = after_help_for(sub.get_name()) {
-            *sub = std::mem::take(sub).after_help(text);
+            let selector_help = if matches!(
+                sub.get_name(),
+                "find"
+                    | "click"
+                    | "get"
+                    | "type"
+                    | "set-value"
+                    | "select"
+                    | "toggle"
+                    | "right-click"
+                    | "double-click"
+                    | "triple-click"
+                    | "hover"
+                    | "drag"
+                    | "scroll"
+                    | "extract"
+                    | "press"
+                    | "screenshot"
+                    | "verify"
+                    | "wait"
+            ) {
+                "\nStrict UIA target: uia:{\"match\":{\"role\":\"Button\",\"name\":\"OK\"},\"within\":{\"id\":\"panel\"},\"scope\":\"descendants\"}\nConditions: role (case-insensitive exact), id/name (exact), name_contains (case-sensitive substring).\nScope: children or descendants (default). Container must be unique. No fuzzy/ordinal/--near fallback.\nExample (PowerShell 7.3+): actl find --target 'uia:{\"match\":{\"role\":\"Button\",\"name\":\"OK\"}}' --app MyApp\nfind --target returns one persistent target, no snapshot ref; conflicts with --name/--role/--id/--limit.\nErrors: PROTOCOL invalid query | NOT_FOUND zero matches | AMBIGUOUS multiple matches | INTERNAL provider read failed | NOT_ACTIONABLE traversal budget exceeded."
+            } else {
+                ""
+            };
+            *sub = std::mem::take(sub).after_help(format!("{text}{selector_help}"));
         }
     }
     root

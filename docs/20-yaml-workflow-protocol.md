@@ -58,6 +58,10 @@ on_failure 默认 pause，可设 fail。pause_before 默认 false，首次到达
 
 禁止 batch、嵌套 flow、管理命令、key-down/key-up；流程内不允许临时 `@eN` 或 `--snapshot`。
 使用语义选择器，每次动作重新解析目标。`xy:` 与物理操作仍遵循原 CLI 的显式授权和输入护栏。
+复杂目标可用 `uia:{"match":{"role":"Button","id":"clearButton"},"within":{"role":"Window","name":"计算器"}}`，
+在 args 中作为一个字符串（YAML 单引号包裹）。组合条件、唯一容器和直接子级/后代范围见 docs/06 §3.2。
+flow-validate 检查 run/before/verify 里的结构化目标；正文内容不会被误解析。只读示例：
+`fixtures/flows/calculator-composite.yml`。不把一次成功预检当作实际窗口或元素存在的证明。
 不提供 shell 字符串执行、变量替换、数据绑定、分支、循环、并行或源文件热更新。
 launch 仍具有原命令的程序启动语义，流程不是权限沙箱。
 

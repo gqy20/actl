@@ -1,0 +1,1 @@
+{"version":"1","ok":false,"command":"get","error":{"code":"PROTOCOL","message":"uia filter requires at least one condition","hint":"fix the command arguments (see `actl <cmd> -h`)"}}

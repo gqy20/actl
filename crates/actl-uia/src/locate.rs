@@ -24,6 +24,11 @@ pub struct Located {
 /// 在目标窗口内按 Target 定位元素(遍历可提前退出,优于全量 capture)。
 /// `Ref(n)` 数不到 = 树已变化 → STALE_REF;语义选择器无命中 → NOT_FOUND(06 §4)。
 pub fn locate(app: Option<&str>, target: &Target, near: Option<&str>) -> Result<Located, CtlError> {
+    if matches!(target, Target::Uia(_)) && near.is_some() {
+        return Err(CtlError::protocol(
+            "uia selectors do not support --near; use within and unique conditions",
+        ));
+    }
     // xy: 坐标目标无元素可解析——物理专用通道(pointer_at_physical),
     // 误入元素定位路径 = 协议错误(所有元素类命令对 xy 的统一拒绝)
     if let Target::Coord(..) = target {
@@ -33,6 +38,10 @@ pub fn locate(app: Option<&str>, target: &Target, near: Option<&str>) -> Result<
         )));
     }
     let auto = UIAutomation::new().map_err(internal)?;
+    if let Target::Uia(selector) = target {
+        let root = crate::scoped_locate::window(&auto, app)?;
+        return crate::scoped_locate::locate(&auto, &root, selector);
+    }
     let walker = auto.create_tree_walker().map_err(internal)?;
     let root = {
         let _t = actl_core::trace::scope("locate.window");
@@ -389,10 +398,10 @@ fn collect_matches(
                 elem.get_automation_id().ok().filter(|a| !a.is_empty()),
             )
         }
-        Target::Ref(_) | Target::Coord(..) => (None, None),
+        Target::Ref(_) | Target::Coord(..) | Target::Uia(_) => (None, None),
     };
     let hit = match target {
-        Target::Ref(_) | Target::Coord(..) => false,
+        Target::Ref(_) | Target::Coord(..) | Target::Uia(_) => false,
         Target::Name(s) => match (&name, fuzzy) {
             (Some(n), true) => actl_core::target::fuzzy_contains(n, s),
             (Some(n), false) => n.contains(s.as_str()),
@@ -541,6 +550,9 @@ fn collect_containers(
 /// 在 1 的误导性 TIMEOUT 根因)。
 fn poll(app: Option<&str>, target: &Target) -> Result<Option<Located>, CtlError> {
     actl_core::wait_control::check()?;
+    if matches!(target, Target::Uia(_)) {
+        return crate::scoped_locate::observed(locate(app, target, None));
+    }
     match locate(app, target, None) {
         Ok(loc) => Ok(Some(loc)),
         Err(e) if e.code == ErrorCode::Ambiguous => Err(e),

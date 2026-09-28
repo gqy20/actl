@@ -30,6 +30,7 @@ pub use identity::ReplayGuard;
 mod native_windows;
 mod pointer;
 mod read;
+mod scoped_locate;
 mod window;
 mod window_ready;
 pub use window_ready::wait_window_ready;

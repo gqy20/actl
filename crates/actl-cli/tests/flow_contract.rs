@@ -39,6 +39,49 @@ impl Drop for Sandbox {
 const SIMPLE: &str = "version: 1\nname: Inspect\nsteps:\n  - id: one\n    title: System\n    run: {command: status}\n  - id: two\n    title: System again\n    pause_before: true\n    run: {command: status}\n";
 
 #[test]
+fn structured_targets_validate_before_any_step_and_survive_persistence() {
+    let s = Sandbox::new();
+    let file = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../fixtures/flows/calculator-composite.yml"
+    );
+    let (code, mut result) = s.invoke(&["flow-validate", "--file", file]);
+    assert_eq!(code, 0, "{result}");
+    result.as_object_mut().unwrap().remove("duration_ms");
+    assert_eq!(
+        result,
+        serde_json::from_str::<Value>(include_str!("golden/flow_composite.json")).unwrap()
+    );
+    let (code, result) = s.invoke(&["flow-run", "--file", file, "--id", "composite", "--paused"]);
+    assert_eq!(code, 0, "{result}");
+    let plan: Value = serde_json::from_slice(
+        &std::fs::read(s.root.join("actl/flows/composite/plan.json")).unwrap(),
+    )
+    .unwrap();
+    assert!(plan.to_string().contains("clearButton"));
+    for phase in ["run", "before", "verify"] {
+        let step = if phase == "run" {
+            "run: {command: get, args: ['uia:{}']}".to_string()
+        } else {
+            format!(
+                "run: {{command: status}}\n   {phase}: {{command: verify, args: [--exists, 'uia:{{}}']}}"
+            )
+        };
+        let file = s.file(&format!("version: 1\nname: Invalid\nsteps:\n - id: first\n   title: First\n   run: {{command: status}}\n - id: bad\n   title: Bad\n   {step}\n"));
+        let (_, result) = s.invoke(&["flow-run", "--file", &file, "--id", "invalid-composite"]);
+        assert_eq!(result["error"]["code"], "PROTOCOL", "{result}");
+        assert_eq!(result["error"]["evidence"]["step_id"], "bad");
+        assert!(!s.root.join("actl/flows/invalid-composite").exists());
+    }
+    let (_, mut result) = s.invoke(&["get", r#"uia:{"match":{}}"#, "--app", "ACTL-NOT-OPEN"]);
+    result.as_object_mut().unwrap().remove("duration_ms");
+    assert_eq!(
+        result,
+        serde_json::from_str::<Value>(include_str!("golden/selector_error.json")).unwrap()
+    );
+}
+
+#[test]
 fn structural_and_command_errors_identify_the_step_and_field() {
     let s = Sandbox::new();
     for (call, field) in [
