@@ -34,6 +34,8 @@ pub struct StepRecord {
     pub error_code: Option<ErrorCode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error_evidence: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub outputs: std::collections::BTreeMap<String, serde_json::Value>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -64,6 +66,7 @@ impl Run {
                     verified: false,
                     error_code: None,
                     error_evidence: None,
+                    outputs: Default::default(),
                 })
                 .collect(),
         }
@@ -77,6 +80,12 @@ impl Run {
 }
 pub trait Host {
     fn execute(&mut self, call: &Invocation) -> Result<(), CtlError>;
+    fn execute_output(&mut self, call: &Invocation) -> Result<serde_json::Value, CtlError> {
+        self.execute(call).map(|()| serde_json::Value::Null)
+    }
+    fn validate_step(&self, _step: &crate::Step) -> Result<(), CtlError> {
+        Ok(())
+    }
     fn read_only(&self, call: &Invocation) -> bool;
     fn stopped(&self) -> bool;
     fn publish(&mut self, run: &Run);
@@ -102,6 +111,15 @@ pub fn execute(
     host: &mut impl Host,
     retry_step: Option<&str>,
 ) -> Result<(), CtlError> {
+    crate::data::validate(plan)?;
+    crate::data::check_saved(plan, run)?;
+    if plan
+        .steps
+        .iter()
+        .any(|s| !s.outputs.is_empty() && !host.read_only(&s.run))
+    {
+        return Err(CtlError::protocol("outputs require a read-only producer"));
+    }
     if run.status == Status::Completed {
         return Ok(());
     }
@@ -137,6 +155,25 @@ pub fn execute(
         if boundary(run, store, host)? {
             return Ok(());
         }
+        let resolved = crate::data::resolve(step, run).and_then(|s| {
+            host.validate_step(&s)?;
+            Ok(s)
+        });
+        let step = match resolved {
+            Ok(step) => step,
+            Err(error) => {
+                run.steps[i].error_code = Some(error.code);
+                run.steps[i].error_evidence = crate::failure_evidence(step.evidence, &error);
+                run.status = if step.on_failure == Failure::Fail {
+                    Status::Failed
+                } else {
+                    Status::Paused
+                };
+                run.reason = Some("binding_validation_failed".into());
+                run.save(store, host)?;
+                return Ok(());
+            }
+        };
         if matches!(
             run.steps[i].status,
             StepStatus::Uncertain | StepStatus::Running | StepStatus::Verifying
@@ -146,7 +183,7 @@ pub fn execute(
                 run.steps[i].status = StepStatus::Verifying;
                 run.save(store, host)?;
                 match host.execute(verify) {
-                    Ok(()) => {
+                    Ok(()) if step.outputs.len() == run.steps[i].outputs.len() => {
                         run.steps[i].status = StepStatus::Completed;
                         run.steps[i].verified = true;
                         run.steps[i].error_code = None;
@@ -154,6 +191,7 @@ pub fn execute(
                         run.save(store, host)?;
                         continue;
                     }
+                    Ok(()) => {} // A read completed but its output was not durably captured; re-read.
                     Err(error) => {
                         run.steps[i].error_evidence =
                             crate::failure_evidence(step.evidence, &error);
@@ -212,9 +250,18 @@ pub fn execute(
                 .ok_or_else(|| CtlError::protocol("step attempt count overflow"))?;
             run.steps[i].error_code = None;
             run.steps[i].error_evidence = None;
+            run.steps[i].outputs.clear();
             // Write-ahead record is required: failure to persist prevents the side effect.
             run.save(store, host)?;
-            let result = host.execute(&step.run);
+            let result = host.execute_output(&step.run).and_then(|value| {
+                let outputs = crate::data::extract(&step, &value)?;
+                run.steps[i].outputs = outputs;
+                if let Err(error) = crate::data::check_saved(plan, run) {
+                    run.steps[i].outputs.clear();
+                    return Err(error);
+                }
+                Ok(())
+            });
             if let Err(error) = result {
                 if error.code == ErrorCode::Aborted
                     && host.read_only(&step.run)

@@ -31,6 +31,7 @@ pub fn decode(raw: Value) -> Result<super::Plan, CtlError> {
                 "retry",
                 "on_failure",
                 "evidence",
+                "outputs",
             ]
             .contains(&key.as_str())
             {
@@ -53,7 +54,7 @@ pub fn decode(raw: Value) -> Result<super::Plan, CtlError> {
                 error(&format!("{base}.{key}"), id, "invocation must be an object")
             })?;
             for field in fields.keys() {
-                if !["command", "args"].contains(&field.as_str()) {
+                if !["command", "args", "bind"].contains(&field.as_str()) {
                     return Err(error(
                         &format!("{base}.{key}.{field}"),
                         id,

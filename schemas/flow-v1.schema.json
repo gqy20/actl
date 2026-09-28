@@ -28,6 +28,15 @@
     }
   },
   "$defs": {
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pointer", "type"],
+      "properties": {
+        "pointer": {"type": "string", "maxLength": 1024, "pattern": "^(|/.*)$", "description": "JSON Pointer relative to the successful command data, not its envelope."},
+        "type": {"enum": ["string", "number", "boolean", "array", "object", "null"]}
+      }
+    },
     "invocation": {
       "type": "object",
       "additionalProperties": false,
@@ -39,6 +48,12 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 64
+        },
+        "bind": {
+          "type": "object",
+          "propertyNames": {"pattern": "^(0|[1-9][0-9]*)$"},
+          "additionalProperties": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,80}\\.[A-Za-z0-9_-]{1,80}$"},
+          "description": "Replace an existing whole value argument by zero-based index. Only preceding scalar outputs; no interpolation or option injection."
         },
         "args": {
           "type": "array",
@@ -85,6 +100,12 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 256
+        },
+        "outputs": {
+          "type": "object", "maxProperties": 32,
+          "propertyNames": {"pattern": "^[A-Za-z0-9_-]{1,80}$"},
+          "additionalProperties": {"$ref": "#/$defs/output"},
+          "description": "Explicitly persist selected read-only run results. Contents are included in flow-status regardless of error evidence policy."
         },
         "run": {
           "$ref": "#/$defs/invocation"

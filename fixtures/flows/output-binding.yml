@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=../../schemas/flow-v1.schema.json
+# Read-only fixture: Calculator must already be open. No launch or input.
+version: 1
+name: Read and verify the calculator label
+steps:
+  - id: observe
+    title: Read the current result label
+    run:
+      command: get
+      args: ["id:CalculatorResults", "--property", "name", "--app", "计算器"]
+    outputs:
+      label: {pointer: /properties/name, type: string}
+  - id: confirm
+    title: Verify the saved label after a checkpoint
+    pause_before: true
+    run:
+      command: verify
+      args: ["--value", "id:CalculatorResults", "placeholder", "--property", "name", "--app", "计算器"]
+      bind: {"2": observe.label}

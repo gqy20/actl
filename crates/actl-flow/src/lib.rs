@@ -1,4 +1,5 @@
 //! Optional workflow layer. No Windows dependencies, shell evaluation or asynchronous runtime.
+pub mod data;
 pub mod engine;
 mod schema;
 pub mod store;
@@ -28,6 +29,8 @@ pub struct Step {
     pub on_failure: Failure,
     #[serde(default)]
     pub evidence: EvidencePolicy,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub outputs: std::collections::BTreeMap<String, data::Output>,
 }
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -62,6 +65,8 @@ pub struct Invocation {
     pub command: String,
     #[serde(default)]
     pub args: Vec<String>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub bind: std::collections::BTreeMap<String, String>,
 }
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -172,5 +177,6 @@ pub fn parse(text: &str) -> Result<Plan, CtlError> {
     {
         return Err(CtlError::protocol("normalized flow exceeds 256 KiB"));
     }
+    data::validate(&plan)?;
     Ok(plan)
 }

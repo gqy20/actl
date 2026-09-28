@@ -4,6 +4,14 @@
 
 ## 1. 定位
 
+### 流程输出绑定（2026-09-28）
+
+flow v1 增加可选 outputs（只读 run 的 JSON Pointer＋显式类型）与 bind（前序步骤输出替换完整参数）。
+字段和实际 CLI 参数分别预检，输出随步骤状态持久化，恢复不重跑已完成步骤；写步骤不导出数据。
+state/run 响应的步骤可带 outputs，显式保存的业务数据不受 error evidence 脱敏策略影响。
+缺失/类型/绑定错误为 PROTOCOL；绑定解析失败保存 paused/failed、reason=binding_validation_failed，动作次数不增加。
+完整语法、预算、负号参数限制及恢复语义见 [20 §8](20-yaml-workflow-protocol.md#8-显式输出与完整参数绑定2026-09-28)，测试记录见 [38](38-flow-output-bindings.md)。
+
 ### UIA 读取状态修订（2026-09-28）
 
 - `get` 保留成功读取的空字符串；`value` 仅在 ValuePattern 明确不支持时回退 TextPattern，读取失败不回退。

@@ -26,6 +26,8 @@
 
 ## 文档索引
 
+- [38 · 流程输出绑定与恢复](38-flow-output-bindings.md)：显式数据传递、持久化边界及故障验收。
+
 - [actl 业务流程目录](../skills/actl/workflows/README.md)：统一技能内的业务 YAML 归属、登记规范与当前能力边界。
 
 - [36 · winapp UIA 对照诊断与优化](36-winapp-uia-diagnostics.md)：本机安装和证据、只读采样流程、差异归因、复杂应用观察清单。

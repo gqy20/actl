@@ -10,7 +10,8 @@
 ## [Unreleased]
 
 ### Added
-- **业务流程目录约定**：可复用业务 YAML 归属 `skills/actl/workflows/`，由单一 actl 技能入口选择；明确与应用 pack、引擎 fixture、个人任务输入及运行状态的边界。新增目录索引，尚无业务流程交付，不宣称支持输出绑定、插值或子流程调用。
+- **流程输出绑定**：只读步骤可通过 JSON Pointer 导出显式类型的业务数据，后续步骤通过 bind 替换完整参数。输出与步骤状态共同持久化，恢复复用已完成结果；缺失、错类型、超限和实际参数预检失败阻止后续动作。新增 Schema、状态 golden、恢复/存储故障测试与只读计算器 fixture，详见 [38](docs/38-flow-output-bindings.md)。不支持字符串插值、集合参数展开或写步骤输出。
+- **业务流程目录约定**：可复用业务 YAML 归属 `skills/actl/workflows/`，由单一 actl 技能入口选择；明确与应用 pack、引擎 fixture、个人任务输入及运行状态的边界。新增目录索引，尚无业务流程交付；目录本身不增加执行能力。
 - **winapp 对照诊断文档**：登记官方 v0.7.0 安装校验和资源管理器只读冒烟，补充同窗口 UIA 树/属性/焦点对照流程及复杂应用观察清单；接入 agent 使用说明并修正早期同类工具判断。未引入运行依赖或修改执行协议，应用覆盖和代码优化待验收，见 [36](docs/36-winapp-uia-diagnostics.md)。
 - **浏览器接入原型**：新增独立同步 Python/Playwright 实验，覆盖精确会话/标签页绑定、iframe 的 CSS/XPath 定位、单次点击核验和显式断连；结果不确定时禁止重放。提供隔离页面启动器、离线测试与报告，不接入正式 CLI/YAML。真实接入验收尚受已有急停阻止，见 [记录](docs/34-browser-connection-prototype.md)。
 - 组合定位的实现、原始树枚举修正及只读真机证据见 [验收记录](docs/33-uia-composite-selectors.md)；新增可重复只读观察脚本，保留修正前失败记录。

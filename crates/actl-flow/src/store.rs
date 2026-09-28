@@ -93,6 +93,8 @@ impl Store {
         {
             return Err(CtlError::protocol("inconsistent flow state"));
         }
+        crate::data::validate(&plan)?;
+        crate::data::check_saved(&plan, &state)?;
         Ok((plan, state))
     }
     pub fn save(&self, state: &Run) -> Result<(), CtlError> {
@@ -137,6 +139,9 @@ fn read<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, CtlError> {
 }
 fn write<T: serde::Serialize>(path: &Path, value: &T) -> Result<(), CtlError> {
     let bytes = serde_json::to_vec(value).map_err(io)?;
+    if bytes.len() > 262_144 {
+        return Err(CtlError::protocol("saved flow exceeds 256 KiB"));
+    }
     let temp = path.with_extension("tmp");
     let mut f = OpenOptions::new()
         .create(true)

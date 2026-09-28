@@ -101,6 +101,12 @@ pub fn validate(plan: &Plan) -> Result<(), CtlError> {
                 continue;
             };
             let command = parse(call).map_err(|e| context(&format!("{field}.args"), e))?;
+            if field == "run" && !step.outputs.is_empty() && !read_only(&command) {
+                return Err(context(
+                    "outputs",
+                    CtlError::protocol("outputs require a read-only producer"),
+                ));
+            }
             crate::selector_input::validate(&command)
                 .map_err(|e| context(&format!("{field}.args"), e))?;
             validate_assertion(&command).map_err(|e| context(&format!("{field}.args"), e))?;
@@ -155,10 +161,20 @@ struct Adapter<'a> {
 }
 impl Host for Adapter<'_> {
     fn execute(&mut self, call: &Invocation) -> Result<(), CtlError> {
+        self.execute_output(call).map(|_| ())
+    }
+    fn validate_step(&self, step: &actl_flow::Step) -> Result<(), CtlError> {
+        validate(&Plan {
+            version: 1,
+            name: self.plan.name.clone(),
+            steps: vec![step.clone()],
+        })
+    }
+    fn execute_output(&mut self, call: &Invocation) -> Result<Value, CtlError> {
         let command = parse(call)?;
         let _scope = matches!(command, Command::Wait { .. })
             .then(|| actl_core::wait_control::Scope::enter(self.store.dir.join("pause-requested")));
-        crate::dispatch(&command).map(|_| ())
+        crate::dispatch(&command).map(|output| output.data)
     }
     fn read_only(&self, call: &Invocation) -> bool {
         parse(call).is_ok_and(|c| read_only(&c))

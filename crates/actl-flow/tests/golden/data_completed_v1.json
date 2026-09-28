@@ -1,0 +1,1 @@
+{"version":1,"id":"data","status":"completed","updated_ms":0,"steps":[{"id":"source","status":"completed","attempts":1,"checkpoint_passed":false,"verified":false,"error_code":null,"outputs":{"text":"hello 中文","count":2}},{"id":"sink","status":"completed","attempts":1,"checkpoint_passed":true,"verified":true,"error_code":null}],"reason":null}

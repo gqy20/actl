@@ -693,13 +693,13 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
 fn after_help_for(name: &str) -> Option<&'static str> {
     Some(match name {
         "flow-validate" => {
-            "Example:\n  actl flow-validate --file task.yml\nValidates all steps before any action; commands use argument arrays.\nErrors: PROTOCOL invalid YAML/command/policy | INTERNAL file error"
+            "Example:\n  actl flow-validate --file task.yml\nValidates all steps and output references before any action. outputs select typed read-only data via JSON Pointer; bind replaces a whole args entry by index. Resolved CLI arguments are revalidated before execution.\nErrors: PROTOCOL invalid YAML/command/policy | INTERNAL file error"
         }
         "flow-run" => {
             "Example:\n  actl flow-run --file task.yml --id report-01 --paused\nUnique ID; saves immutable plan and durable state. Physical actions retain explicit authorization.\nErrors: PROTOCOL invalid/reused ID | NOT_ACTIONABLE executor busy | ABORTED stop | INTERNAL storage"
         }
         "flow-status" => {
-            "Example:\n  actl flow-status --id report-01\nReports run state, pause request and runner_active. An inactive running record is interrupted.\nErrors: PROTOCOL invalid ID/state | INTERNAL storage"
+            "Example:\n  actl flow-status --id report-01\nReports run state, declared saved outputs, pause request and runner_active. Output contents are not redacted by error evidence policy. An inactive running record is interrupted.\nErrors: PROTOCOL invalid ID/state | INTERNAL storage"
         }
         "flow-pause" => {
             "Example:\n  actl flow-pause --id report-01\nRequests a boundary pause; workflow waits also check each poll. Only status=paused confirms it. In-flight COM calls and other CLI calls are not interrupted.\nErrors: PROTOCOL invalid ID/state | INTERNAL storage"

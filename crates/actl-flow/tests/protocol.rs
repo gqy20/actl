@@ -128,6 +128,7 @@ fn pause_in_checks_preserves_stage_without_false_assertion_failure() {
             p.steps[0].before = Some(Invocation {
                 command: "check".into(),
                 args: vec![],
+                bind: Default::default(),
             });
         }
         let (root, store, mut run) = setup(&p);

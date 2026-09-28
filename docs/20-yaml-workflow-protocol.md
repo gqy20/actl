@@ -76,7 +76,7 @@ on_failure 默认 pause，可设 fail。pause_before 默认 false，首次到达
 在 args 中作为一个字符串（YAML 单引号包裹）。组合条件、唯一容器和直接子级/后代范围见 docs/06 §3.2。
 flow-validate 检查 run/before/verify 里的结构化目标；正文内容不会被误解析。只读示例：
 `fixtures/flows/calculator-composite.yml`。不把一次成功预检当作实际窗口或元素存在的证明。
-不提供 shell 字符串执行、变量替换、数据绑定、分支、循环、并行或源文件热更新。
+支持下文定义的显式输出绑定和完整参数替换；不提供 shell 执行、字符串插值、表达式、分支、循环、并行或源文件热更新。
 launch 仍具有原命令的程序启动语义，流程不是权限沙箱。
 
 ## 3. 命令
@@ -146,8 +146,8 @@ run/resume 的历史 task_id 固定为运行 ID，workflow 事件存状态元数
 
 ## 6. 后续演进
 
-第一版不支持将旧运行进度自动迁移到修改后的 YAML，也不支持输出绑定与动态分支。
-后续需要稳定步骤 ID、计划修订关联、已完成步骤不变性检查，以及单独的人工核对协议。
+不支持将旧运行进度自动迁移到修改后的 YAML，也不支持动态分支；显式输出绑定见下文。
+计划修订仍需关联和已完成步骤不变性检查，以及单独的人工核对协议。
 跨应用成果判断、智能体修改计划、完整无障碍与多屏验证继续沿 docs/19 推进。
 
 自动测试覆盖严格解析、状态 golden、边界暂停、检查点、未确认写入不重放、显式重试、
@@ -192,3 +192,36 @@ action 事件的 data.action_id 标识该调用中的动作。因此动作身份
 `actl history --task <run_id> --step <step_id> --reports` 可返回该步的事件、调用边界和任务报告。
 报告是任务级，--step 不会把报告内容伪装成某一步的事实。历史轮转后不能保证永久追溯，
 未完成 flows 恢复记录独立保留。
+
+## 8. 显式输出与完整参数绑定（2026-09-28）
+
+v1 新增可选 `steps[].outputs` 和 invocation 的 `bind`；旧计划不含这些字段时行为不变。
+
+```yaml
+version: 1
+name: Read and verify
+steps:
+  - id: observe
+    title: Read a value
+    run:
+      command: get
+      args: ["id:amount", "--property", "value", "--app", "MyApp"]
+    outputs:
+      amount: {pointer: /properties/value, type: string}
+  - id: confirm
+    title: Verify the captured value
+    run:
+      command: verify
+      args: ["--value", "id:amount", "placeholder", "--property", "value", "--app", "MyApp"]
+      bind: {"2": observe.amount}
+```
+
+- outputs 只允许在只读 run 步骤上声明，不从 before/verify 或错误响应导出。pointer 是相对于成功命令 `data` 的 JSON Pointer；空 pointer 选择整个 data，`~0`/`~1` 转义及数组索引按 JSON Pointer 解释，不支持通配符或表达式。
+- 每个输出必须声明 type：string、number、boolean、array、object、null。字段缺失与显式 null 分开；空字符串、false、0、空数组/对象均保留。类型不符返回 PROTOCOL，不做隐式转换。
+- 输出名称沿用 1–80 位 ASCII ID 规则；每步最多 32 项，单值 JSON 编码最多 16 KiB，全部运行输出最多 64 KiB。状态文件与计划各最多 256 KiB，超限拒绝写入。
+- bind 使用带引号的零基参数索引作为键，例如 `"2"` 表示 args 第三个元素；值为 `先前步骤ID.输出名称`。不支持自身、后续或未声明输出引用；当前只允许 string/number/boolean 绑定命令参数。数组、对象与 null 可保存，但不能隐式拼成参数或展开参数列表。
+- args 中绑定位置仍需提供符合命令语法的占位值，以完成静态结构预检。解析引用后替换完整参数；字符串原样传递，数字与布尔值使用 JSON 字面表示，不经 shell。不支持 `${...}` 等字符串插值。未解析成功时绝不使用占位值执行。
+- 不允许绑定 command、选项名或新增参数；拒绝实际值以 `-` 开头、包含 NUL、超过 16 KiB 或为临时 `@eN`。这是本版限制，也包括负数字符串。所有实际参数再次按 CLI、目标和动作政策校验；合法类型不等于合法目标。绑定验证失败保存 paused/failed 与 reason=`binding_validation_failed`，本步 attempts 不增加、不执行 before/run/verify。
+- 输出在 `steps[].outputs` 持久化，先前步骤只有 completed 才能被引用。恢复时校验已保存类型和预算；完成标记缺少声明输出会拒绝恢复。详见 [数据路径与故障测试](38-flow-output-bindings.md)。
+- 已完成读取默认复用原业务数据；不宣称数据仍然新鲜。需要当前状态时使用显式 before/verify，并重新定位控件。写操作已成功且 completed 后不会因后续绑定失败而重放。
+- 输出是显式保存的业务内容，会出现在 state.json、flow-status 与运行响应中；`evidence: metadata` 仅脱敏错误证据，不脱敏 outputs。未声明的完整响应不保存，普通 workflow 事件仍只记录状态元数据。

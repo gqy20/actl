@@ -39,6 +39,46 @@ impl Drop for Sandbox {
 const SIMPLE: &str = "version: 1\nname: Inspect\nsteps:\n  - id: one\n    title: System\n    run: {command: status}\n  - id: two\n    title: System again\n    pause_before: true\n    run: {command: status}\n";
 
 #[test]
+fn data_output_persists_across_cli_resume_and_revalidates_bound_args() {
+    let s = Sandbox::new();
+    let file = s.file("version: 1\nname: Bind\nsteps:\n - id: source\n   title: Read\n   run: {command: status}\n   outputs: {os: {pointer: /os, type: string}}\n - id: sink\n   title: Read again\n   run: {command: wait, args: [--window, ACTL-ABSENT, --timeout, '1'], bind: {'3': source.os}}\n");
+    let (code, result) = s.invoke(&["flow-validate", "--file", &file]);
+    assert_eq!(code, 0, "{result}");
+    let (code, result) = s.invoke(&["flow-run", "--file", &file, "--id", "bindings"]);
+    assert_eq!(code, 0, "{result}");
+    assert_eq!(result["data"]["run"]["reason"], "binding_validation_failed");
+    assert_eq!(
+        result["data"]["run"]["steps"][0]["outputs"]["os"],
+        std::env::consts::OS
+    );
+    assert_eq!(result["data"]["run"]["steps"][1]["attempts"], 0);
+    let (_, resumed) = s.invoke(&["flow-resume", "--id", "bindings"]);
+    assert_eq!(resumed["data"]["run"]["steps"][0]["attempts"], 1);
+    assert_eq!(resumed["data"]["run"]["steps"][1]["attempts"], 0);
+    let fixture = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../fixtures/flows/output-binding.yml"
+    );
+    let (code, _) = s.invoke(&["flow-validate", "--file", fixture]);
+    assert_eq!(code, 0);
+}
+
+#[test]
+fn bound_read_runs_across_two_cli_processes() {
+    let s = Sandbox::new();
+    // Protocol version "1" is used as a harmless nonexistent HWND to exercise real dispatch.
+    let file=s.file("version: 1\nname: Bind\nsteps:\n - id: source\n   title: Read\n   run: {command: status}\n   outputs: {protocol: {pointer: /protocol, type: string}}\n - id: sink\n   title: Read handle\n   pause_before: true\n   run: {command: list-windows, args: [--native, --hwnd, '1'], bind: {'2': source.protocol}}\n");
+    let (code, result) = s.invoke(&["flow-run", "--file", &file, "--id", "read-bind"]);
+    assert_eq!(code, 0, "{result}");
+    assert_eq!(result["data"]["run"]["status"], "paused");
+    let (code, result) = s.invoke(&["flow-resume", "--id", "read-bind"]);
+    assert_eq!(code, 0, "{result}");
+    assert_eq!(result["data"]["run"]["status"], "completed");
+    assert_eq!(result["data"]["run"]["steps"][0]["attempts"], 1);
+    assert_eq!(result["data"]["run"]["steps"][1]["attempts"], 1);
+}
+
+#[test]
 fn structured_targets_validate_before_any_step_and_survive_persistence() {
     let s = Sandbox::new();
     let file = concat!(
