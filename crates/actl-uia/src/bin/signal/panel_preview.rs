@@ -74,6 +74,7 @@ fn export_panel_previews() {
         std::fs::write(dir.join("plan.json"), serde_json::to_vec(&plan).unwrap()).unwrap();
         std::fs::write(dir.join("state.json"), serde_json::to_vec(&state).unwrap()).unwrap();
         let request = actl_core::handoff::Request {
+            generation: "preview-only".into(),
             call: "preview-call".into(),
             task: "preview".into(),
             target: "记事本 · 本周会议纪要.txt".into(),

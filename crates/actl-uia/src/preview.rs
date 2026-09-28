@@ -60,12 +60,7 @@ fn observe(element: &uiautomation::UIElement) -> Result<([i32; 4], Value), CtlEr
 }
 
 fn check_stop() -> Result<(), CtlError> {
-    if actl_core::state::SignalPaths::default().stop_requested() {
-        return Err(CtlError::new(
-            ErrorCode::Aborted,
-            "preview interrupted by stop",
-        ));
-    }
+    actl_core::stop::check_current()?;
     actl_core::wait_control::check()
 }
 

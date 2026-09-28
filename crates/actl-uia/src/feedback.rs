@@ -79,15 +79,9 @@ pub(crate) fn window_action(
 }
 
 pub(crate) fn check_stop() -> Result<(), CtlError> {
-    if actl_core::state::SignalPaths::default().stop_requested() {
-        Err(CtlError::new(
-            ErrorCode::Aborted,
-            "stop requested before action; clear the flag explicitly to allow new actions",
-        ))
-    } else {
-        crate::display_gate::check_active()?;
-        crate::handoff::check()
-    }
+    actl_core::stop::check_current()?;
+    crate::display_gate::check_active()?;
+    crate::handoff::check()
 }
 
 pub(crate) fn target(elem: &UIElement, window: &str) -> ActionTarget {

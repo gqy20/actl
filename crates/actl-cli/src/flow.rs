@@ -1,5 +1,5 @@
 //! CLI adapter: preflight every invocation, then execute through the existing dispatcher.
-use crate::cli::{Cli, Command, FlowCommand};
+use crate::cli::{Cli, Command, DesktopCommand, FlowCommand};
 use actl_core::{CtlError, ErrorCode};
 use actl_flow::{
     Invocation, Plan, Retry,
@@ -121,6 +121,9 @@ pub fn validate(plan: &Plan) -> Result<(), CtlError> {
                 command,
                 Command::Batch { .. }
                     | Command::Preview { .. }
+                    | Command::Desktop(
+                        DesktopCommand::ExecutionStatus | DesktopCommand::ExecutionRecover
+                    )
                     | Command::Flow(_)
                     | Command::Desktop(_)
                     | Command::Commands
@@ -196,7 +199,7 @@ impl Host for Adapter<'_> {
         parse(call).is_ok_and(|c| read_only(&c))
     }
     fn stopped(&self) -> bool {
-        actl_core::state::SignalPaths::default().stop_requested()
+        actl_core::stop::check_current().is_err()
     }
     fn publish(&mut self, run: &Run) {
         let current = run
@@ -246,6 +249,12 @@ fn state(store: &Store) -> Result<Value, CtlError> {
     )
 }
 pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
+    if matches!(
+        command,
+        FlowCommand::Run { .. } | FlowCommand::Resume { .. }
+    ) {
+        actl_core::stop::check_current()?;
+    }
     let root = actl_core::state::SignalPaths::default().dir;
     match command {
         FlowCommand::Validate { file } => {
@@ -305,12 +314,7 @@ pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
             )?;
             validate(&plan)?;
             let active = store.lock(false)?;
-            if actl_core::state::SignalPaths::default().stop_requested() {
-                return Err(CtlError::new(
-                    ErrorCode::Aborted,
-                    "emergency stop remains set",
-                ));
-            }
+            actl_core::stop::check_current()?;
             store.clear_pause()?;
             engine::execute(
                 &plan,

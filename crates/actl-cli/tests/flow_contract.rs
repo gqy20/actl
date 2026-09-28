@@ -234,7 +234,11 @@ fn stop_is_sticky_and_pause_is_a_boundary_request() {
     std::fs::write(s.root.join("actl/stop-requested"), "stop").unwrap();
     let (code, result) = s.invoke(&["flow-resume", "--id", "test"]);
     assert_eq!(code, 1);
-    assert_eq!(result["error"]["code"], "ABORTED");
+    assert_eq!(result["error"]["code"], "NOT_ACTIONABLE");
+    assert_eq!(
+        result["error"]["evidence"]["reason"],
+        "execution_state_invalid"
+    );
     assert!(s.root.join("actl/stop-requested").exists());
 }
 #[test]

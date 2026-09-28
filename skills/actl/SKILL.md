@@ -31,7 +31,9 @@ actl 是统一技能入口。收到包含多步决策或跨应用操作的任务
 开始桌面任务可先调用 `actl display-start`：启动同目录的 actl-signal 并等待可见画面。
 `display-status` 只查询。观察类命令可独立运行；改变应用/输入/剪贴板的动作由程序检查显示就绪、
 确认本次动作预告后执行，skill 不需要轮询进程。`NOT_ACTIONABLE` 且说明显示不可用时，
-检查配套版本与状态条是否被隐藏；不要绕过检查。启动显示端不清除停止标志，`ABORTED` 时等待用户恢复。
+检查配套版本与状态条是否被隐藏；不要绕过检查。`ABORTED` 表示本次调用不能再用，核对已完成结果后发起新调用。
+历史停止不阻断新观察；新写操作在开始/继续时由用户确认。`execution-status` 区分 stopped 与 repair_required；
+明确请求修复时使用 `execution-recover`，它归档原记录并废止旧调用，不授予权限或自动恢复任务。不要手动删停止文件。
 
 整理桌面是可选步骤，仅在任务需要或用户要求时使用：
 
@@ -86,7 +88,7 @@ actl verify --value <target> "<期望>" --app <app> # 确认:立即断言
 执行:click(--physical/--expect/--near/--no-activate) right-click double-click hover drag scroll type(--paste)
      press(--expect) key-down key-up set-value
 窗口:launch focus-window close-window resize-window wait(--element/--window/--gone/--stable/--idle) batch
-桌面:minimize-window restore-window desktop-prepare desktop-restore display-start display-status
+桌面:minimize-window restore-window desktop-prepare desktop-restore display-start display-status execution-status execution-recover
 验证:verify(--exists/--value/--contains/--checked) extract(--table)
 系统:get-clipboard set-clipboard
 

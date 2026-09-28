@@ -333,7 +333,7 @@ L2  actl commands     机器 schema:全命令+参数的 JSON(agent 自发现入�
 | `ASSERTION_FAILED` | `verify`/`--expect` 断言未成立 | 检查前置步骤(`--expect` 默认 2s 轮询后判定) |
 | `PROTOCOL` | 协议/参数错误(不可恢复) | 修正命令参数 |
 | `INTERNAL` | 内部/UIA/系统层错误(非协议非目标问题) | 重试一次;持续出现附 evidence 报 issue |
-| `ABORTED` | 用户主动停止(紧急热键/停止文件,v0.1.1) | 用户显式解除急停，核验已执行结果后再继续；禁止自动重放 |
+| `ABORTED` | 本调用停止代次已失效，或流程被明确暂停/停止 | 核验结果后新建调用或显式恢复流程；新写操作在开始/继续时确认，禁止自动重放 |
 
 退出码:`0` 成功 · `1` 业务失败(可恢复) · `2` 协议/参数错误(不可恢复)。
 
@@ -407,10 +407,10 @@ stdout 保持原有单个 JSON envelope。显示通道是旁路、拉取式；�
 4. **短动作保留**：每调用 `recent_actions` 保留最近 32 个终结动作；消费者按
    `(call_id,seq)` 去重，2 秒过期，不补播显示进程启动前的动作。只对 delivered
    的空间动作绘制送达反馈。调用文件清理保留 60 秒内最多 128 个终态，运行态由心跳续期。
-5. **停止**：`stop-requested` 为粘性标志。输入锁等待后、动作准备间隔及执行前
-   检查；取消返回 `ABORTED`。UIA 修改和剪贴板写入也在调用前检查。停止请求与
+5. **停止**：使用持久代次区分旧调用与新调用。输入锁等待后、动作准备间隔及执行前
+   检查代次；取消返回 `ABORTED`。UIA 修改和剪贴板写入也在调用前检查。停止请求与
    本次调用确认停止分别呈现，不能承诺撤销已提交的 COM/输入。急停由菜单、详情急停按钮
-   或 Ctrl+Alt+F12 触发；显式“解除急停”前先撤销显示端授权，清除失败报告错误。
+   或 Ctrl+Alt+F12 触发；新任务开始时确认当前代次，旧调用仍失效；损坏状态使用显式修复入口。
    普通关闭显示条撤销授权并使显示租约失效，不写急停；重启不解除已有急停，也不自动续跑任务。
 6. **预告**：显示条可见时通过 `display-live` 时间戳声明在线，执行端对已解析动作
    提供约 300ms 可取消准备期，结束后重新校验目标或物理焦点。显示端不存在时不增加
@@ -622,20 +622,28 @@ mouse-up 会让授权在第一次 check 即失效，属实现缺陷）。授权�
 
 ### 暂停与继续控制（显示协议 v5）
 
-当前显示协议为 **v6**：普通关闭（WM_CLOSE / 菜单“关闭显示条”）与粘性急停分离。
+当前显示协议为 **v7**：普通关闭（WM_CLOSE / 菜单“关闭显示条”）与停止分离。
 关闭前撤销交接授权并发布 closed 租约，执行端在下一护栏检查拒绝后续桌面动作；已经送达的动作不能撤销。
 详情窗口单独关闭仍只关闭详情。正常替换仅在输入空闲时允许，不清已有急停。
 
-`stop-requested` 新写入 JSON v1：`version/requested_ms/source/pid/display_epoch`；首次请求保留，重复请求不覆盖来源。
-旧时间戳、空文件和损坏记录仍按停止处理，来源显示未知，不通过升级清除。停止状态观察失败也阻止输入。
-解除前通过显示端消息 WM_APP+49 同步确认撤销授权；旧显示端或未响应时返回 NOT_ACTIONABLE 并保留标志。
-落盘或删除/核验失败返回 INTERNAL 并显示错误；解除成功只允许发起后续操作，旧任务须核验并显式继续。
+`stop-requested` 使用严格 JSON v2：`version/generation/requested_ms/source/pid/display_epoch`，`stop-generation` 独立持久保存。
+每次急停在文件锁内生成新代次；CLI 入口绑定代次，输入、等待、batch 和 flow 边界核对。旧代次不会因确认开始或修复而复活。
+新纯观察和 preview 可在历史停止期间运行；再次急停仍取消正在进行的预览/等待。停止不能中断已经送达的原生调用。
+新桌面写操作仍须正常交接：请求携带 generation，用户开始时只确认该代次的停止并授予该任务权限，不恢复旧调用。
+停止期间新 flow 可做只读检查；写步骤仍需交接。旧 flow 仅在显式恢复后执行原有 resume_check/uncertain 核验。
+详情窗口通过 WM_APP+50 向主显示端请求绑定流程的确认；请求一次性消费且核对代次、时效和流程状态，排队子进程继承代次。
+旧 v1、时间戳、空文件、损坏记录不再作兼容解析，返回 execution_state_invalid；不靠升级自动清除。
+`execution-status` 无参数，输出 ready/stopped/repair_required、generation/stop（有效时）和固定 new_task_requires_consent=true、old_calls_resume=false。
+`execution-recover` 无参数，调用即明确请求修复：归档原始普通文件到 stop-history，生成新代次并撤销停止，返回 recovered/generation/archived/permission_granted=false/resumed=false。
+修复不启动任务或授予权限；拒绝目录/符号链接状态路径及已运行的旧协议显示端。状态不可读/不支持或修复失败返回 NOT_ACTIONABLE 并保留诊断。
+两条管理命令不能成为持久 flow 步骤。WM_APP+49 解除握手及直接 clear_stop 接口删除；v6 显示端不能与新 CLI 混用。
+实现与验收见 [47](47-execution-recovery.md)。
 
 显示租约升级 v5，避免旧版方框按钮仍执行急停。SessionState 新增可选 handoff_reason，
 旧记录缺省 None；人工交接事件同时刷新状态和历史，allowed 清除该字段。
 右侧按钮按当前状态显示暂停、检查并继续或详情：按下时绑定调用/流程，释放时不改绑其他任务。
 暂停只撤销该调用授权（返回 handoff reason=user_paused）并请求 flow-pause，不写 stop-requested；
-拖动状态条也只请求暂停。紧急停止仍由菜单、Ctrl+Alt+F12 或关闭显示端显式触发。
+拖动状态条也只请求暂停。紧急停止由急停按钮、菜单或 Ctrl+Alt+F12 显式触发，正常关闭不触发。
 
 只有 paused / needs_review 流程提供继续；点击前重读存档状态，停止标记存在时拒绝，
 同一次点击授予这个 flow ID 的短期桌面授权并执行 flow-resume，不自动清急停。

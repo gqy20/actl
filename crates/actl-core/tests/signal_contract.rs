@@ -24,7 +24,7 @@ fn workflow_progress_preserves_reason_and_reads_legacy() {
 }
 
 #[test]
-fn display_v6_contract_and_action_ack_identity() {
+fn display_v7_contract_and_action_ack_identity() {
     use actl_core::display::*;
     let l = DisplayLease {
         protocol: DISPLAY_PROTOCOL,
@@ -35,7 +35,7 @@ fn display_v6_contract_and_action_ack_identity() {
         ts_ms: 100,
     };
     let expected: serde_json::Value =
-        serde_json::from_str(include_str!("golden/display_v6.json")).unwrap();
+        serde_json::from_str(include_str!("golden/display_v7.json")).unwrap();
     assert_eq!(serde_json::to_value(l).unwrap(), expected);
     let p = paths();
     let now = unix_ms();
@@ -186,7 +186,7 @@ fn cancelled_and_partial_actions_never_generate_click_feedback() {
         p.read_state().unwrap().action.unwrap().phase,
         ActionPhase::Cancelled
     );
-    p.clear_stop().unwrap();
+    p.recover_execution().unwrap();
     let mut a = ActionGuard::begin("type", Default::default(), Default::default());
     a.executing();
     a.partial();

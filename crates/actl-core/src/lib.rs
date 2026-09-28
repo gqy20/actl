@@ -83,7 +83,7 @@ impl ErrorCode {
                 "retry once; if it persists, report an issue with the `evidence` payload"
             }
             Self::Aborted => {
-                "user requested stop; explicitly release emergency stop in actl-signal, inspect prior results, then explicitly continue; never replay automatically"
+                "this invocation was stopped; inspect prior results, then start a new invocation or explicitly resume the saved flow; new desktop writes require Start/Continue; never replay automatically"
             }
         }
     }

@@ -139,7 +139,9 @@ actl click role:Button --near id:clearButton --app 计算器    # 锚点就近
 - **桌面信号条 `actl-signal`**(建议同装):自动化运行时的知情权与逃生口——右上角
   常驻迷你状态条(不抢焦点、DPI 感知),绿=执行中 · 琥珀=正在注入键鼠 · 红=已停止 ·
   灰=空闲 · 暗=失联;**Ctrl+Alt+F12** 全局紧急停止,在途注入在动作边界被拒
-  (`ABORTED`),点击状态条清除停止标志恢复。
+  (`ABORTED`)。旧调用不会因恢复复活；新任务可正常发起并点击“开始”。
+  `actl execution-status` 查看运行状态；旧格式/损坏状态使用 `actl execution-recover` 归档修复，
+  修复不授予权限、不续跑任务。CLI 与显示端须成对更新至显示协议 v7。
 
 ### 命令一览(33 条,`actl commands` 自发现)
 

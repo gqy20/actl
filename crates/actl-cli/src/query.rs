@@ -370,7 +370,6 @@ pub(crate) fn batch_cmd(json_str: &str) -> Result<CommandOutput, CtlError> {
     if cmds.is_empty() {
         return Err(CtlError::protocol("batch needs at least one command"));
     }
-    let signals = actl_core::state::SignalPaths::default();
     let mut executed = 0usize;
     let mut steps: Vec<Value> = Vec::with_capacity(cmds.len());
     // 窗口基线(进入时的 hwnd 集):结束时差集 = 本轮新开的窗口。
@@ -391,12 +390,13 @@ pub(crate) fn batch_cmd(json_str: &str) -> Result<CommandOutput, CtlError> {
         .collect();
     for (i, line) in cmds.iter().enumerate() {
         // 步间双闸门:停止标志(用户热键)优先;随后步级状态落盘(阶段信号)
-        if signals.stop_requested() {
-            return Err(CtlError::new(
-                actl_core::ErrorCode::Aborted,
-                format!("batch stopped by user at step {i} (after {executed} ok)"),
-            ));
-        }
+        actl_core::stop::check_current().map_err(|mut e| {
+            e.message = format!(
+                "batch halted at step {i} (after {executed} ok): {}",
+                e.message
+            );
+            e
+        })?;
 
         // 意外弹窗闸门(warning 不阻断):前台窗口若既不在基线、也不匹配本批任何
         // --app 目标,记入该步 blocked_by——弹窗可能是良性的,裁决权归编排层;

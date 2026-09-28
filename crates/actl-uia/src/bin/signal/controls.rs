@@ -34,7 +34,7 @@ const CONTROLS: &[(i32, &str, i32, i32, i32, i32)] = &[
     (14, "详细信息", 388, 328, 148, 40),
     (104, "Ctrl+Alt+F12", 184, 395, 200, 22),
     (12, "紧急停止", 24, 386, 148, 40),
-    (13, "解除急停", 24, 386, 148, 40),
+    (13, "修复运行状态", 24, 386, 148, 40),
 ];
 unsafe fn layout(hwnd: HWND, dpi: u32) {
     let px = |n| paint::pixels(n, dpi);
@@ -164,6 +164,7 @@ unsafe fn refresh(hwnd: HWND) {
 }
 pub(super) unsafe fn refresh_with(hwnd: HWND, paths: &SignalPaths, id: Option<&str>) {
     let stopped = paths.stop_requested();
+    let repair = paths.execution_generation().is_err();
     let state = id.and_then(|id| flow_ui::read(paths, id));
     let flow = id.and_then(|id| {
         state
@@ -181,7 +182,7 @@ pub(super) unsafe fn refresh_with(hwnd: HWND, paths: &SignalPaths, id: Option<&s
             title: "桌面状态".into(),
             status: view.label,
             body: if stopped {
-                "解除急停后，任务仍需另行继续。"
+                "上一轮执行已停止。新任务可直接发起并点击开始；旧任务不会自动恢复。"
             } else {
                 "当前没有已绑定的可恢复任务。\r\n单次调用请在状态条查看或暂停；结束后由调用方接续。"
             }
@@ -227,10 +228,10 @@ pub(super) unsafe fn refresh_with(hwnd: HWND, paths: &SignalPaths, id: Option<&s
         },
     );
     let running = status == Some("running") && !stopped;
-    let resumable = matches!(status, Some("paused" | "needs_review")) && !stopped;
+    let resumable = matches!(status, Some("paused" | "needs_review" | "stopped")) && !repair;
     visible(hwnd, 10, running);
     visible(hwnd, 11, resumable);
-    visible(hwnd, 13, stopped);
+    visible(hwnd, 13, stopped || repair);
     visible(hwnd, 12, !stopped);
     visible(hwnd, 104, !stopped);
     let pause_pending = flow.as_ref().is_some_and(|(id, _)| {
@@ -259,7 +260,7 @@ pub(super) unsafe fn refresh_with(hwnd: HWND, paths: &SignalPaths, id: Option<&s
         11,
         if resume_pending {
             "正在检查"
-        } else if status == Some("needs_review") {
+        } else if matches!(status, Some("needs_review" | "stopped")) {
             "核对结果"
         } else {
             "继续"
@@ -276,7 +277,10 @@ pub(super) unsafe fn refresh_with(hwnd: HWND, paths: &SignalPaths, id: Option<&s
         GetDlgItem(Some(hwnd), 11).unwrap_or_default(),
         resumable && ready && !resume_pending,
     );
-    let _ = EnableWindow(GetDlgItem(Some(hwnd), 13).unwrap_or_default(), stopped);
+    let _ = EnableWindow(
+        GetDlgItem(Some(hwnd), 13).unwrap_or_default(),
+        stopped || repair,
+    );
     let _ = EnableWindow(GetDlgItem(Some(hwnd), 12).unwrap_or_default(), !stopped);
 }
 unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
@@ -606,7 +610,10 @@ mod tests {
         let mut s = SessionState::now(1, "wait", None, None, Phase::Stopped);
         s.ts_ms = unix_ms();
         paths.write_state(&s);
-        std::fs::write(paths.stop_file(), s.ts_ms.saturating_sub(1).to_string()).unwrap();
+        paths.request_stop().unwrap();
+        let mut stop = paths.stop_record().unwrap();
+        stop.requested_ms = s.ts_ms.saturating_sub(1);
+        std::fs::write(paths.stop_file(), serde_json::to_vec(&stop).unwrap()).unwrap();
         let actual = control_view(&paths).mode;
         std::fs::remove_dir_all(paths.dir).unwrap();
         assert_eq!(actual, model::Mode::Stopped);

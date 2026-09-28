@@ -47,6 +47,12 @@ pub(crate) fn check() -> Result<(), CtlError> {
         match query(CHECK_MESSAGE)? {
             ALLOWED => {}
             USER_PAUSED => return Err(failure("user_paused")),
+            CANCELLED => {
+                return Err(CtlError::new(
+                    actl_core::ErrorCode::Aborted,
+                    "execution generation changed",
+                ));
+            }
             MONITOR_UNAVAILABLE => return Err(failure("input_monitor_unavailable")),
             _ => return Err(failure("human_takeover_or_grant_expired")),
         }
@@ -79,6 +85,7 @@ fn request(target: &str) -> Result<(), CtlError> {
     }
     let _remove = Remove(paths.dir.join(&file));
     let mut request = Request {
+        generation: actl_core::stop::generation()?,
         call,
         task,
         target: target.chars().take(180).collect(),
@@ -102,6 +109,12 @@ fn request(target: &str) -> Result<(), CtlError> {
             MONITOR_UNAVAILABLE => return Err(failure("input_monitor_unavailable")),
             USER_PAUSED => return Err(failure("user_paused")),
             DEFERRED => return Err(failure("user_deferred")),
+            CANCELLED => {
+                return Err(CtlError::new(
+                    actl_core::ErrorCode::Aborted,
+                    "execution generation changed",
+                ));
+            }
             PENDING => std::thread::sleep(Duration::from_millis(crate::timing().handoff_poll_ms)),
             _ => return Err(failure("request_rejected")),
         }

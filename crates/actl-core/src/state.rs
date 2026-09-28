@@ -1,7 +1,7 @@
 //! 显示信号协议(docs/11 §10 / docs/13 §4.1):actl 侧状态源。
 //!
 //! 原语四件套:①`state.json` 命令级状态快照(开始/结束/batch 步间写入);
-//! ②`stop-requested` 停止标志(存在即停止,粘性——只有显式动作清除);
+//! ②`stop-requested` 当前停止记录 + `stop-generation` 调用取消代次;
 //! ③输入占用锁(actl-uia 的命名互斥体,"正在操控"的权威信号,本模块只约定
 //! 不实现);④时间戳心跳(消费端判失联)。
 //! 消费端(actl-signal 等)全部拉取、零订阅——"事件当触发器,拉取当真相源"
@@ -270,7 +270,7 @@ mod tests {
         assert!(!p.stop_requested());
         p.request_stop().unwrap();
         assert!(p.stop_requested());
-        p.clear_stop().unwrap();
+        p.recover_execution().unwrap();
         assert!(!p.stop_requested());
         let _ = std::fs::remove_dir_all(&p.dir);
     }

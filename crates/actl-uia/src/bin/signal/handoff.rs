@@ -37,6 +37,7 @@ const HOTKEY_ID: i32 = 0xB01;
 const HOTKEY_KEY: u32 = 'Y' as u32;
 #[derive(Default)]
 struct Service {
+    generation: Option<String>,
     consent: Consent,
     request: Option<(u32, Request)>,
     deferred: Option<String>,
@@ -46,6 +47,20 @@ struct Service {
     paused_call: Option<String>,
 }
 thread_local! { static SERVICE: RefCell<Service> = RefCell::new(Service::default()); }
+
+impl Service {
+    fn observe_generation(&mut self, generation: &str) {
+        if self.generation.as_deref() != Some(generation) {
+            self.consent.revoke();
+            self.active = None;
+            self.request = None;
+            unsafe {
+                close_panel(self);
+            }
+            self.generation = Some(generation.into());
+        }
+    }
+}
 
 struct Hooks(HHOOK, HHOOK);
 impl Drop for Hooks {
@@ -177,8 +192,18 @@ pub fn message(msg: u32, pid: u32) -> usize {
     }
     SERVICE.with(|cell| {
         let mut s = cell.borrow_mut();
+        let paths = SignalPaths::default();
+        let Ok(generation) = paths.execution_generation() else {
+            s.consent.revoke();
+            return CANCELLED;
+        };
+        s.observe_generation(&generation);
         let seq = activity();
         if msg == CHECK_MESSAGE {
+            if paths.stop_requested() {
+                s.consent.revoke();
+                return CANCELLED;
+            }
             let Some((owner, call, task)) = s.active.clone() else {
                 return YIELDED;
             };
@@ -194,6 +219,9 @@ pub fn message(msg: u32, pid: u32) -> usize {
         let Some(r) = read_request(pid) else {
             return YIELDED;
         };
+        if r.generation != generation {
+            return CANCELLED;
+        }
         if s.paused_call.as_deref() == Some(&r.call) {
             return USER_PAUSED;
         }
@@ -203,7 +231,7 @@ pub fn message(msg: u32, pid: u32) -> usize {
         if s.deferred.as_deref() == Some(&r.call) {
             return DEFERRED;
         }
-        if s.consent.check(&r.task, seq, unix_ms()) {
+        if !paths.stop_requested() && s.consent.check(&r.task, seq, unix_ms()) {
             s.active = Some((pid, r.call, r.task));
             return ALLOWED;
         }
@@ -525,7 +553,9 @@ unsafe fn decide(_hwnd: HWND, start: bool) {
                 && fresh
                 && WATCH_RUNNING.load(Ordering::SeqCst)
                 && super::input_watch::healthy()
-                && !SignalPaths::default().stop_requested()
+                && SignalPaths::default()
+                    .acknowledge_stop(&r.generation)
+                    .is_ok()
             {
                 s.consent.allow(&r.task, activity(), unix_ms());
             } else {
@@ -613,14 +643,18 @@ pub fn pause_call(call: &str) {
     });
 }
 /// A real user's Continue click grants only the flow that the button is bound to.
-pub fn allow_flow(task: &str) -> bool {
-    if SignalPaths::default().stop_requested() || !WATCH_RUNNING.load(Ordering::SeqCst) {
+pub fn allow_flow(task: &str, generation: &str) -> bool {
+    if !WATCH_RUNNING.load(Ordering::SeqCst) || !super::input_watch::healthy() {
+        return false;
+    }
+    let paths = SignalPaths::default();
+    if paths.acknowledge_stop(generation).is_err() {
         return false;
     }
     SERVICE.with(|cell| {
-        cell.borrow_mut()
-            .consent
-            .allow(task, INPUT_SEQ.load(Ordering::SeqCst), unix_ms())
+        let mut s = cell.borrow_mut();
+        s.generation = Some(generation.into());
+        s.consent.allow(task, activity(), unix_ms());
     });
     true
 }
@@ -631,6 +665,19 @@ pub fn revoke() {
 #[cfg(test)]
 mod pause_tests {
     use super::*;
+    #[test]
+    fn changing_generation_revokes_same_task_grant_and_active_caller() {
+        let mut s = Service::default();
+        s.observe_generation("old");
+        s.consent.allow("task", 0, 100);
+        s.active = Some((42, "call".into(), "task".into()));
+        s.observe_generation("new");
+        assert!(s.active.is_none());
+        assert!(!s.consent.check("task", 0, 101));
+        s.consent.allow("task", 0, 102);
+        s.observe_generation("new");
+        assert!(s.consent.check("task", 0, 103));
+    }
     #[test]
     fn revoke_requires_new_consent_without_resuming_old_task() {
         SERVICE.with(|cell| {

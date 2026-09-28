@@ -22,10 +22,12 @@ pub struct InputLock(HANDLE);
 
 impl InputLock {
     /// 等待并取得输入占用锁;忙 → TIMEOUT(附恢复建议)。
-    /// 停止标志优先于一切:用户按了紧急热键后,所有物理注入在此被拒
-    /// (ABORTED)——显示信号协议的执行侧闸门(docs/11 §10.3)。
+    /// 等待前后核对调用代次；新调用仍需后续交接授权，锁本身不授予权限。
     pub fn acquire(timeout_ms: u32) -> Result<Self, CtlError> {
-        Self::acquire_at(&actl_core::state::SignalPaths::default(), timeout_ms)
+        actl_core::stop::check_current()?;
+        let lock = Self::acquire_at(&actl_core::state::SignalPaths::default(), timeout_ms)?;
+        actl_core::stop::check_current()?;
+        Ok(lock)
     }
 
     /// 路径可注入版(测试隔离:真实 %LOCALAPPDATA% 里可能残留用户按下
@@ -34,12 +36,8 @@ impl InputLock {
         paths: &actl_core::state::SignalPaths,
         timeout_ms: u32,
     ) -> Result<Self, CtlError> {
-        if paths.stop_requested() {
-            return Err(CtlError::new(
-                ErrorCode::Aborted,
-                "stop requested via signal channel (emergency hotkey); clear the flag to resume",
-            ));
-        }
+        let invocation = actl_core::stop::Invocation::capture(paths);
+        invocation.check(paths)?;
         unsafe {
             // CreateMutexExW(flags=0) 等价 CreateMutexW;access=SYNCHRONIZE(0x0010_0000)
             // (裸值:免为单常量引入 Storage::FileSystem feature)
@@ -50,12 +48,7 @@ impl InputLock {
                 // ABANDONED:上一持有者异常退出,OS 已把所有权交给我们——
                 // 正确姿势是接管并继续(残留修饰键清场由 kbd 层负责)
                 let lock = Self(handle);
-                if paths.stop_requested() {
-                    return Err(CtlError::new(
-                        ErrorCode::Aborted,
-                        "stop requested while waiting for input lock",
-                    ));
-                }
+                invocation.check(paths)?;
                 // 持锁即独占物理路径:顺手清理 --no-activate 样式 journal 里
                 // 崩溃实例的残留条目(死进程清位;文件不存在时零开销)。
                 crate::bg_style::recover_stale(paths);

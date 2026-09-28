@@ -12,9 +12,11 @@ pub const YIELDED: usize = 4;
 pub const PANEL_UNAVAILABLE: usize = 5;
 pub const MONITOR_UNAVAILABLE: usize = 6;
 pub const USER_PAUSED: usize = 7;
+pub const CANCELLED: usize = 8;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Request {
+    pub generation: String,
     pub call: String,
     pub task: String,
     pub target: String,
@@ -26,6 +28,7 @@ impl Request {
             && now - self.ts_ms < 2000
             && !self.call.is_empty()
             && !self.task.is_empty()
+            && !self.generation.is_empty()
     }
 }
 

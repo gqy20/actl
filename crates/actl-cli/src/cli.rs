@@ -24,6 +24,10 @@ pub(crate) enum ViewMode {
 
 #[derive(Subcommand)]
 pub(crate) enum DesktopCommand {
+    /// Inspect execution cancellation state without granting permission
+    ExecutionStatus,
+    /// Explicitly repair execution state, archive old records and revoke old calls; never resume
+    ExecutionRecover,
     /// Read recent local call events, newest calls first
     History {
         /// Filter by the caller-provided ACTL_TASK_ID
@@ -660,6 +664,8 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
         Command::Status => "status",
         Command::Preview { .. } => "preview",
         Command::Desktop(DesktopCommand::DisplayStatus) => "display-status",
+        Command::Desktop(DesktopCommand::ExecutionStatus) => "execution-status",
+        Command::Desktop(DesktopCommand::ExecutionRecover) => "execution-recover",
         Command::Desktop(DesktopCommand::TaskArchive { .. }) => "task-archive",
         Command::Flow(FlowCommand::Validate { .. }) => "flow-validate",
         Command::Flow(FlowCommand::Run { .. }) => "flow-run",
@@ -759,6 +765,12 @@ fn after_help_for(name: &str) -> Option<&'static str> {
         }
         "click" => {
             "Example:\n  actl click @e3 --app Notepad --snapshot s1a2b\n  actl click name:item --app Explorer --physical --with ctrl\n(multi-select)\n  actl click id:session_item_x --app 微信 --physical --no-activate\n  actl click id:session_item_x --app 微信 --expect element:id:chat_message_list\n--expect window:<substr> = a NEW window must appear; element:<target> = postcondition:\nthe element must resolve afterwards (implicit wait, default 2s) — the materialization\ncheck for apps whose UIA actions report success without effect.\n--no-activate (--physical only): the click lands but the window does not come to the\nforeground or steal focus (WS_EX_NOACTIVATE guard; cursor returned afterwards).\nErrors: NOT_FOUND no match | AMBIGUOUS multi-match (candidates returned) | STALE_REF stale @eN (re-snapshot) | NOT_ACTIONABLE no pattern, occluded, or xy: point outside window bounds | PERM_DENIED foreground guard (--physical) or no-activate style rejected (elevated window) | ASSERTION_FAILED --expect unmet | PROTOCOL xy: without --physical/--app, bad --expect, or --no-activate without --physical"
+        }
+        "execution-status" => {
+            "Usage: actl execution-status\nArguments: none\nExample:\n  actl execution-status\nReports ready/stopped/repair_required; never grants permission.\nErrors: PROTOCOL invalid arguments"
+        }
+        "execution-recover" => {
+            "Usage: actl execution-recover\nArguments: none (invocation explicitly requests recovery)\nExample:\n  actl execution-recover\nArchives raw state and invalidates old calls. No task resumes and no permission is granted.\nErrors: NOT_ACTIONABLE incompatible companion or unreadable state; PROTOCOL invalid arguments"
         }
         "preview" => {
             "Example:\n  actl preview id:saveButton --app MyApp --message 'Save this draft' --duration 5000\n  actl preview @e3 --app MyApp --snapshot s123\nPreview only: no click, typing, clipboard change or desktop consent. Close the preview window or wait for expiry. Target movement or identity changes stop the preview. Not allowed in persisted flows.\nErrors: PROTOCOL invalid duration/message, coordinate or unbound ref | NOT_FOUND | AMBIGUOUS | STALE_REF target changed | NOT_ACTIONABLE invisible/invalid bounds or unavailable preview | ABORTED stop | INTERNAL observation/render failure"

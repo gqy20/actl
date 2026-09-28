@@ -16,6 +16,7 @@ enum Change {
     Stop,
     Rebuild,
     Dismiss,
+    AlreadyStopped,
 }
 
 // EnumWindows is synchronous; the caller retains this vector throughout the call.
@@ -65,6 +66,9 @@ fn run(change: Change, expected: &[&str]) {
         ));
     std::fs::create_dir_all(&root).unwrap();
     let paths = actl_core::state::SignalPaths::at(root.join("state/actl"));
+    if matches!(change, Change::AlreadyStopped) {
+        paths.request_stop().unwrap();
+    }
     let args = [
         "preview".to_string(),
         r#"uia:{"match":{"name":"ACTL isolated preview target"}}"#.into(),
@@ -143,6 +147,7 @@ fn run(change: Change, expected: &[&str]) {
                     PostMessageW(Some(*notice), WM_CLOSE, WPARAM(0), LPARAM(0)).unwrap();
                 }
                 Change::Cover => cover = Some(OwnedHost::start()),
+                Change::AlreadyStopped => {}
                 Change::Stop => paths
                     .request_stop_from("isolated_preview_test", None)
                     .unwrap(),
@@ -173,11 +178,18 @@ fn run(change: Change, expected: &[&str]) {
         "preview not ready: {value}; evidence {}",
         root.display()
     );
-    if matches!(change, Change::Dismiss) {
+    if matches!(change, Change::Dismiss | Change::AlreadyStopped) {
         assert!(output.status.success(), "{value}");
         assert_eq!(value["ok"], true);
         assert_eq!(value["data"]["executed"], false);
-        assert_eq!(value["data"]["exit_reason"], "dismissed");
+        assert_eq!(
+            value["data"]["exit_reason"],
+            if matches!(change, Change::Dismiss) {
+                "dismissed"
+            } else {
+                "expired"
+            }
+        );
     } else {
         assert!(!output.status.success(), "{value}");
         assert_eq!(value["ok"], false);
@@ -202,7 +214,7 @@ fn run(change: Change, expected: &[&str]) {
         "cleanup/focus: {}",
         root.display()
     );
-    if matches!(change, Change::Stop) {
+    if matches!(change, Change::Stop | Change::AlreadyStopped) {
         assert!(paths.stop_requested(), "must not clear stop");
     }
 }
@@ -248,4 +260,10 @@ fn rebuilt_target_does_not_inherit_old_preview() {
 #[ignore = "interactive desktop; WM_CLOSE message, not a physical mouse test"]
 fn closing_notice_returns_dismissed_without_execution() {
     run(Change::Dismiss, &[]);
+}
+
+#[test]
+#[ignore = "interactive desktop; historical stop must not block a new read-only preview"]
+fn historical_stop_allows_new_preview_without_clearing_marker() {
+    run(Change::AlreadyStopped, &[]);
 }

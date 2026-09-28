@@ -77,7 +77,7 @@ pub fn clear_message() {
         m.clear();
     }
 }
-pub fn request(id: &str, resume: bool) -> Result<(), String> {
+pub fn request(id: &str, resume: bool, generation: &str) -> Result<(), String> {
     if !actl_core::history::valid_id(id) {
         return Err("PROTOCOL：无效的流程标识".into());
     }
@@ -93,11 +93,12 @@ pub fn request(id: &str, resume: bool) -> Result<(), String> {
     request.record("requested", None);
     let child_request = request.clone();
     let run = id.to_owned();
+    let generation = generation.to_owned();
     std::thread::Builder::new()
         .name("signal-flow-request".into())
         .spawn(move || {
             child_request.record("dispatching", None);
-            let result = execute(&run, resume, &child_request.request_id);
+            let result = execute(&run, resume, &child_request.request_id, &generation);
             child_request.record(
                 if result.is_ok() {
                     "child_returned"
@@ -132,12 +133,13 @@ pub fn request(id: &str, resume: bool) -> Result<(), String> {
     }
     Ok(())
 }
-fn execute(id: &str, resume: bool, request_id: &str) -> Result<(), String> {
+fn execute(id: &str, resume: bool, request_id: &str, generation: &str) -> Result<(), String> {
     use std::os::windows::process::CommandExt;
     let exe = std::env::current_exe()
         .map_err(|_| "INTERNAL：无法定位程序")?
         .with_file_name("actl.exe");
     let output = std::process::Command::new(exe)
+        .env("ACTL_EXECUTION_GENERATION", generation)
         .env("ACTL_FLOW_REQUEST_SOURCE", "signal_control")
         .env("ACTL_FLOW_REQUEST_ID", request_id)
         .args([
@@ -263,22 +265,20 @@ mod tests {
 
 /// A click aimed at Pause must not instantly reverse a just-detected takeover.
 pub fn continue_ready(state: &serde_json::Value, now: u64) -> bool {
-    matches!(state["status"].as_str(), Some("paused" | "needs_review"))
-        && state["updated_ms"]
-            .as_u64()
-            .is_some_and(|t| now >= t && now - t >= 800)
+    matches!(
+        state["status"].as_str(),
+        Some("paused" | "needs_review" | "stopped")
+    ) && state["updated_ms"]
+        .as_u64()
+        .is_some_and(|t| now >= t && now - t >= 800)
 }
 /// Every native entry re-reads persisted state before dispatch; this never grants consent.
-pub fn resume_guard(
-    state: Option<&serde_json::Value>,
-    stopped: bool,
-    now: u64,
-) -> Result<(), String> {
-    if stopped {
-        return Err("请先解除急停，任务不会自动继续".into());
-    }
+pub fn resume_guard(state: Option<&serde_json::Value>, now: u64) -> Result<(), String> {
     let state = state.ok_or("任务状态未确认，请稍后查看")?;
-    if !matches!(state["status"].as_str(), Some("paused" | "needs_review")) {
+    if !matches!(
+        state["status"].as_str(),
+        Some("paused" | "needs_review" | "stopped")
+    ) {
         return Err("当前任务不可继续，请查看详细信息".into());
     }
     if !continue_ready(state, now) {
@@ -295,7 +295,9 @@ mod continue_tests {
         assert!(!continue_ready(&s, 99));
         assert!(!continue_ready(&s, 899));
         assert!(continue_ready(&s, 900));
-        for status in ["running", "completed", "stopped", "failed"] {
+        s["status"] = "stopped".into();
+        assert!(continue_ready(&s, 1000));
+        for status in ["running", "completed", "failed"] {
             s["status"] = status.into();
             assert!(!continue_ready(&s, 1000));
         }
@@ -303,13 +305,12 @@ mod continue_tests {
     #[test]
     fn every_entry_rejects_unknown_stopped_and_unsettled_resume() {
         let state = serde_json::json!({"status":"paused", "updated_ms":100});
-        assert!(resume_guard(Some(&state), false, 900).is_ok());
-        assert!(resume_guard(Some(&state), true, 900).is_err());
-        assert!(resume_guard(Some(&state), false, 899).is_err());
-        assert!(resume_guard(None, false, 900).is_err());
-        for status in ["running", "failed", "completed", "stopped"] {
+        assert!(resume_guard(Some(&state), 900).is_ok());
+        assert!(resume_guard(Some(&state), 899).is_err());
+        assert!(resume_guard(None, 900).is_err());
+        for status in ["running", "failed", "completed"] {
             let state = serde_json::json!({"status":status, "updated_ms":100});
-            assert!(resume_guard(Some(&state), false, 1000).is_err());
+            assert!(resume_guard(Some(&state), 1000).is_err());
         }
     }
 }

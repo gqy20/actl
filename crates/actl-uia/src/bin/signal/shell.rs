@@ -32,7 +32,6 @@ static EPOCH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 // Normal replacement is distinct from user close. Older displays do not acknowledge
 // this message; never fall back to WM_CLOSE or clear a pre-existing stop request.
 const REPLACE_CLOSE: u32 = WM_APP + 45;
-const REVOKE_CONSENT: u32 = WM_APP + 49;
 
 fn allow_close(_paths: &SignalPaths, message: u32, input_busy: Option<bool>) -> bool {
     message == WM_CLOSE || (message == REPLACE_CLOSE && input_busy == Some(false))
@@ -54,30 +53,9 @@ pub(super) fn request_emergency_stop(source: &str) -> Result<(), String> {
 
 pub(super) fn clear_emergency_stop() -> Result<(), String> {
     super::handoff::revoke();
-    // Details run in a separate process. Revoke in the actual display service
-    // before removing stop; otherwise a quick clear could revive its old grant.
-    unsafe {
-        if let Ok(hwnd) = FindWindowW(w!("actl_signal_window"), None) {
-            let mut acknowledged = 0;
-            let sent = SendMessageTimeoutW(
-                hwnd,
-                REVOKE_CONSENT,
-                WPARAM(0),
-                LPARAM(0),
-                SMTO_ABORTIFHUNG | SMTO_BLOCK,
-                2000,
-                Some(&mut acknowledged),
-            );
-            if sent.0 == 0 || acknowledged != 1 {
-                return Err(
-                    "NOT_ACTIONABLE：显示端未确认撤销授权，急停保持；请先更新或重启显示端".into(),
-                );
-            }
-        }
-    }
-    SignalPaths::default()
-        .clear_stop()
-        .map_err(|e| format!("INTERNAL：{}", e.message))
+    actl_uia::display_gate::recover_execution()
+        .map(|_| ())
+        .map_err(|e| e.message)
 }
 
 fn publish_lease(paths: &SignalPaths, state: &str) {
@@ -392,7 +370,7 @@ unsafe fn details(_hwnd: HWND) {
 unsafe fn menu(hwnd: HWND) {
     let mut lines = vec![
         "紧急停止".into(),
-        "解除急停".into(),
+        "修复运行状态".into(),
         "任务详情".into(),
         if IsWindowVisible(hwnd).as_bool() {
             "隐藏".into()
@@ -493,8 +471,6 @@ unsafe fn primary(hwnd: HWND, control: model::Control) {
                 Err("刚刚暂停，请确认任务状态后再点继续".into())
             } else if super::flow_ui::pending(&flow, true) {
                 Ok(())
-            } else if !super::handoff::allow_flow(&flow) {
-                Err("尚不能交接：请检查停止状态和输入监听".into())
             } else {
                 let result = flow_action(&flow, true);
                 if result.is_err() {
@@ -514,12 +490,15 @@ unsafe fn primary(hwnd: HWND, control: model::Control) {
 }
 
 pub(super) fn flow_action(id: &str, resume: bool) -> Result<(), String> {
-    if resume {
-        let paths = SignalPaths::default();
+    let paths = SignalPaths::default();
+    let generation = if resume {
         let state = super::flow_ui::read(&paths, id);
-        super::flow_ui::resume_guard(state.as_ref(), paths.stop_requested(), unix_ms())?;
-    }
-    super::flow_ui::request(id, resume)
+        super::flow_ui::resume_guard(state.as_ref(), unix_ms())?;
+        super::flow_start::allow(id)?
+    } else {
+        paths.execution_generation().map_err(|e| e.message)?
+    };
+    super::flow_ui::request(id, resume, &generation)
 }
 
 unsafe fn place(hwnd: HWND) {
@@ -551,6 +530,7 @@ unsafe fn place(hwnd: HWND) {
 
 unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
     match msg {
+        super::flow_start::MESSAGE => LRESULT(isize::from(super::flow_start::receive(wp.0 as u32))),
         actl_core::handoff::REQUEST_MESSAGE | actl_core::handoff::CHECK_MESSAGE => {
             LRESULT(super::handoff::message(msg, wp.0 as u32) as isize)
         }
@@ -721,10 +701,7 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
                 LRESULT(0)
             }
         }
-        REVOKE_CONSENT => {
-            super::handoff::revoke();
-            LRESULT(1)
-        }
+
         WM_DESTROY => {
             super::handoff::revoke();
             super::popup::hide();
@@ -909,7 +886,7 @@ mod tests {
             CAPTURE_HIDE,
             CAPTURE_RESTORE,
         ] {
-            assert_ne!(REVOKE_CONSENT, message);
+            assert_ne!(crate::flow_start::MESSAGE, message);
         }
     }
     #[test]

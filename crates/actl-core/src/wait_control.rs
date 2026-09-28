@@ -1,5 +1,5 @@
 //! Scoped cancellation for workflow waits; never interrupts an in-flight COM call.
-use crate::{CtlError, ErrorCode, state::SignalPaths};
+use crate::{CtlError, ErrorCode};
 use std::{cell::RefCell, marker::PhantomData, path::PathBuf, rc::Rc};
 
 thread_local! {
@@ -17,9 +17,10 @@ impl Drop for Scope {
     }
 }
 pub fn check() -> Result<(), CtlError> {
+    crate::stop::check_current()?;
     PAUSE.with(|p| {
         if let Some(path) = p.borrow().as_ref()
-            && (path.exists() || SignalPaths::default().stop_requested())
+            && path.exists()
         {
             return Err(CtlError::new(
                 ErrorCode::Aborted,

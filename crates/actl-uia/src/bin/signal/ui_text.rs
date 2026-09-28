@@ -31,7 +31,7 @@ pub fn reason(reason: &str) -> &'static str {
         "human_takeover_or_grant_expired" => "检测到其他输入或授权已过期，请重新确认。",
         "handoff_pending" => "尚未获得桌面授权；若提示已关闭，请重新发起。",
         "user_deferred" => "本次暂不开始。",
-        "stop_requested" => "已启用紧急停止；解除后仍需另行继续。",
+        "stop_requested" => "上一轮执行已停止；核对结果后可继续，也可开始新任务。",
         "precondition_failed" => "操作条件未满足，请查看详细信息。",
         "resume_check_failed" => "恢复检查未通过，请核对目标后再继续。",
         "binding_validation_failed" => "步骤输入未通过检查，请查看详细信息。",
@@ -52,7 +52,7 @@ pub fn summary(state: Option<&Value>, plan: Option<&Value>, stopped: bool) -> Su
             }
             .into(),
             body: if stopped {
-                "任务状态未确认。解除急停不会自动继续。"
+                "任务状态未确认。可发起新任务；旧任务不会自动恢复。"
             } else {
                 "暂时无法读取任务状态，请稍后查看。"
             }
@@ -89,7 +89,7 @@ pub fn summary(state: Option<&Value>, plan: Option<&Value>, stopped: bool) -> Su
         }
     }
     if stopped {
-        lines.push("解除急停后，任务仍需另行继续。".into());
+        lines.push("可核对并继续此任务，或发起新任务；旧调用不会恢复。".into());
     } else if let Some(r) = state["reason"].as_str() {
         lines.push(reason(r).into());
     } else if status == "needs_review" {

@@ -44,6 +44,10 @@ fn main() {
     };
     let command_name = command_name(&cli.command);
     let started = Instant::now();
+    let _execution = actl_core::stop::Scope::enter();
+    if let Ok(generation) = std::env::var("ACTL_EXECUTION_GENERATION") {
+        actl_core::stop::bind_generation(generation);
+    }
     // Control/query commands must not overwrite the workflow's desktop feedback.
     if matches!(
         &cli.command,
@@ -52,6 +56,7 @@ fn main() {
                 | crate::cli::FlowCommand::Status { .. }
                 | crate::cli::FlowCommand::Pause { .. }
         ) | Command::Preview { .. }
+            | Command::Desktop(DesktopCommand::ExecutionStatus | DesktopCommand::ExecutionRecover)
     ) {
         finish(
             command_name,
@@ -117,6 +122,14 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
         Command::Flow(command) => flow::dispatch(command).map(Into::into),
         Command::Commands => commands().map(Into::into),
         Command::Status => status().map(Into::into),
+        Command::Desktop(DesktopCommand::ExecutionStatus) => {
+            Ok(actl_core::state::SignalPaths::default()
+                .execution_status()
+                .into())
+        }
+        Command::Desktop(DesktopCommand::ExecutionRecover) => {
+            actl_uia::display_gate::recover_execution().map(Into::into)
+        }
         Command::Desktop(DesktopCommand::History {
             task,
             step,

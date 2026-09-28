@@ -14,6 +14,21 @@ use windows::{
 };
 thread_local! { static ACTIVE_EPOCH: RefCell<Option<String>> = const { RefCell::new(None) }; }
 
+/// Explicit state repair only; incompatible old displays must be upgraded first.
+pub fn recover_execution() -> Result<serde_json::Value, CtlError> {
+    let paths = SignalPaths::default();
+    if unsafe { FindWindowW(w!("actl_signal_window"), None) }.is_ok()
+        && paths
+            .display_lease()
+            .is_none_or(|l| l.protocol != actl_core::display::DISPLAY_PROTOCOL)
+    {
+        return Err(unavailable(
+            "close or upgrade the incompatible companion before execution-recover",
+        ));
+    }
+    paths.recover_execution()
+}
+
 pub fn prepare_action(
     kind: &str,
     target: &str,
