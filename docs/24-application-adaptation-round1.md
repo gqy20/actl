@@ -66,7 +66,9 @@ cargo xtask regress --case chrome-content-view
 这是人工场景入口，不会作为 CI 依赖或自动操作现有文档。
 
 ```powershell
-pwsh -NoProfile -File scenarios/app-observe.ps1 -App zotero -Program 'C:\Program Files\Zotero\zotero.exe' -CloseOwned
+# 由调用方将 ZOTERO_EXE 配置为本机已核实的 Zotero 可执行文件路径。
+if (-not $env:ZOTERO_EXE) { throw 'Set ZOTERO_EXE to the verified executable path.' }
+pwsh -NoProfile -File scenarios/app-observe.ps1 -App zotero -Program $env:ZOTERO_EXE -CloseOwned
 ```
 
 `-App` 支持 cloudmusic、zotero、meeting、vscode；`-Program` 必须传本机已核实路径。

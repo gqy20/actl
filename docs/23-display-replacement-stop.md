@@ -4,7 +4,7 @@
 
 用户未主动要求停止，但系统应用测试被 `%LOCALAPPDATA%/actl/stop-requested` 拦住。
 文件内容为 `1790522792555`，对应本地 23:26:32.555。
-运行中的 `C:/Users/gqy17/.cargo/bin/actl-signal.exe --replace` 于 23:26:32.504 启动，
+运行中的已安装显示端 `actl-signal.exe --replace` 于 23:26:32.504 启动，
 两者相差约 51 ms。旧实现的替换路径发送 WM_CLOSE；接收端 WM_CLOSE 无条件 request_stop。
 这条确定的代码路径与时间证据吻合。此前不能仅凭标记存在就归因为用户主动急停。
 

@@ -9,7 +9,9 @@ Windows 上独立运行的同步 Python/Playwright 原型。仅操作本次启�
 ```powershell
 uv sync --locked --project prototypes/browser
 uv run --project prototypes/browser python -m unittest discover -s prototypes/browser -v
-uv run --project prototypes/browser python prototypes/browser/probe.py --browser-executable C:/path/to/chrome.exe --output target/browser-probe-unique
+# 由调用方将 ACTL_PROBE_BROWSER 配置为已安装的 Chromium/Chrome 可执行文件路径。
+if (-not $env:ACTL_PROBE_BROWSER) { throw 'Set ACTL_PROBE_BROWSER to the browser executable path.' }
+uv run --project prototypes/browser python prototypes/browser/probe.py --browser-executable $env:ACTL_PROBE_BROWSER --output target/browser-probe-unique
 ```
 
 浏览器路径必须显式指定；脚本不安装浏览器。每次使用新的输出目录。也可复用已安装 Playwright 1.54.0 的 Python 环境。

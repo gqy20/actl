@@ -89,7 +89,7 @@ batch 执行调用者已经确定的操作序列。任务执行根据观察结�
   },
   "inputs": {
     "format": "pdf",
-    "output_path": "E:/reports/report.pdf"
+    "output_path": "<absolute-output-path>"
   },
   "constraints": {
     "overwrite": false,

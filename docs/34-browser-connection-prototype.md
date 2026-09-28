@@ -16,8 +16,8 @@ UIA 已提交为 `67ad72e`。浏览器原型位于 [prototypes/browser](../proto
 
 ## 本轮证据
 
-环境：Windows，Python 3.12.9，复用 `C:/Users/gqy17/AppData/Roaming/uv/tools/browser-use/Scripts/python.exe`，Playwright 1.54.0。
-候选浏览器为 `C:/Users/gqy17/AppData/Local/ms-playwright/chromium-1208/chrome-win64/chrome.exe`，本轮未启动，兼容性未经验证。
+环境：Windows，Python 3.12.9，复用已有 uv 工具环境，Playwright 1.54.0。
+候选浏览器来自本机 Playwright Chromium 缓存（构建 1208，chrome-win64），本轮未启动，兼容性未经验证。
 
 被测源码 SHA256：
 

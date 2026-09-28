@@ -54,11 +54,11 @@
 `display-status` 为 companion_missing，急停仍为上述已核对的原标志。
 
 已备份原安装二进制、租约和停止文件至 `target/stop-upgrade-20260928-155129/`，
-将门禁产物安装到 `C:/Users/gqy17/.cargo/bin/actl.exe` 与 `actl-signal.exe`，逐文件核验哈希一致。
+将门禁产物替换到原安装目录中的 `actl.exe` 与 `actl-signal.exe`，逐文件核验哈希一致。
 清理前再次检查无执行进程、停止文件哈希未变化，再删除本次明确授权清理的旧标志。
 
 通过安装后的 `actl display-start` 启动 v6；再次 `display-status` 确认 ready=true、responsive=true、
-stop_requested=false、protocol=6，PID=46980，HWND=26941512；进程路径确认为上述安装位置。
+stop_requested=false、protocol=6，PID=46980，HWND=26941512；进程路径确认为原安装位置。
 状态、进程路径和安装哈希分别保存在备份目录的 `display-status.json`、`running.json`、`installed-hashes.json`。
 当前显示端保留运行，未恢复任何旧任务，未授予桌面操作权限。
 

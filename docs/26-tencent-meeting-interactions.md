@@ -101,7 +101,7 @@ pwsh -NoProfile -File scenarios/tencent-meeting-draft.ps1 `
    本轮选择单流行的下载图标（界面约 1.77 MB）；不要误点相邻删除。
 4. 客户端转交默认 Chrome。网页“正在下载录制文件”不能作为完成证据；
    Chrome 下载记录显示文件 1,817 KB、完成，再检查实际文件。
-5. 下载位置取本机实际目录。本机 Windows 已把 Downloads 重定向到 `D:\C\Downloads`，
+5. 下载位置取本机实际目录。本轮 Windows 的 Downloads 已重定向，
    `%USERPROFILE%\Downloads` 不是这次保存位置。可通过下载项“在文件夹中显示”确认。
 
 文件验收：
