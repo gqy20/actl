@@ -1,13 +1,14 @@
 # computer_cli 调研与设计文档
 
-> 目标:做一个 **Windows 上的 AI-native 桌面操作 CLI**——纯命令行、无 MCP、底层驱动(UIA/accessibility 而非截图视觉),输出为 AI 友好的结构化 JSON。定位是"Quicker 的动作引擎"在 AI 时代的原语层,供任意 LLM agent 在 shell 中直接调用。
+> 目标:做一个 **Windows 上的 AI-native 桌面操作 CLI**——CLI 为基础入口、底层驱动(UIA/accessibility 而非截图视觉),输出为 AI 友好的结构化 JSON。定位是"Quicker 的动作引擎"在 AI 时代的原语层,供任意 LLM agent 在 shell 中直接调用。
 
-**状态**:调研完成,设计蓝图已固化,未开始实现。
-**日期**:2026-09-26
+**状态**：已发布实现与未发布变更见 [CHANGELOG](../CHANGELOG.md)，剩余工作见 [ROADMAP](ROADMAP.md)。
+**更新**：2026-09-28。执行端仅面向 Windows，Linux/macOS 暂不考虑实现。
+计划在被控设备本地启动可选 MCP 服务，供其他设备调用本设备能力；当前尚未实现。
 
 ## TL;DR
 
-1. **需求定义经过三轮澄清收敛**:不是视觉路线的 computer-use agent,不是"终端里塞 AI 聊天",也不是 MCP server——而是**给 AI 用的原子操作 CLI**(类似 ripgrep 之于 Claude Code)。
+1. **需求定义经过三轮澄清收敛**:不是视觉路线的 computer-use agent,不是"终端里塞 AI 聊天",核心通过 shell 独立调用；远程访问另规划 MCP 适配服务。产品基础是**给 AI 用的原子操作 CLI**(类似 ripgrep 之于 Claude Code)。
 2. **该品类刚出现且 Windows 是空位**:严格匹配的开源项目只有 agent-desktop(1.7k★,仅 macOS)和 terminator(1.6k★,Windows 但 CLI 非重心);两者设计互不覆盖,高星项目全部集中在视觉/浏览器赛道。
 3. **技术选型 Rust**:冷启动 ~10ms、微软官方 UIA binding(windows-rs)、单二进制分发、与品类全部同类项目同语言,可直接对齐 agent-desktop 的 Apache-2.0 协议设计。
 4. **代码量实测校准**:认真 MVP 约 15,000–25,000 行 Rust,solo 开发 1.5–3 个月;UIA 后端是行数黑洞且调试时间约为编写时间的 3 倍。
@@ -20,7 +21,7 @@
 | 文档 | 内容 |
 |---|---|
 | [PRD.md](PRD.md) | 产品需求:定位、用户故事、功能/非功能需求、成功指标、风险 |
-| [ROADMAP.md](ROADMAP.md) | 路线图:Phase 0–3 的范围、交付物、退出标准、排期原则 |
+| [ROADMAP.md](ROADMAP.md) | 路线图：剩余工作、验收标准、MCP 访问方向与平台范围 |
 | [TECH_STACK.md](TECH_STACK.md) | 技术选型规格:工具链、workspace 结构、依赖清单、ADR、测试与分发 |
 | [07-golden-tasks.md](07-golden-tasks.md) | 金任务集:各 Phase 的验收标的与测试纪律 |
 | [spike-findings.md](spike-findings.md) | M0 坑清单:五场景实测结论、性能量级、uiautomation crate 评估 |

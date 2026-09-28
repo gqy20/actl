@@ -25,12 +25,16 @@ JSON.
 |---|---|
 | Screenshots + vision models (Agent-S, UI-TARS, …) | Slow and costly: a VLM pass per step, coordinates guessed from images, misses are unattributable |
 | Have the AI write AutoHotkey scripts | Capable, but a "blind batch run": no per-step feedback, failures restart the whole script |
-| Run an MCP server | Heavy, eats agent context; actl is a plain CLI — any agent that can run a shell can use it |
+| MCP-only interface | Local shell use requires an additional service; actl provides a standalone CLI |
 
 One-line positioning: **what Playwright is to the browser, actl is to the Windows
 desktop.** Codex Computer Use officially prefers structured integration over
 computer use whenever available — actl is that structured integration for the
 Windows desktop ([comparison](docs/12-codex-computer-use-comparison.md)).
+
+Execution targets Windows. Linux and macOS desktop backends are not planned for now.
+An optional MCP service is planned to start locally on the controlled Windows device,
+allowing other devices to call its capabilities. It is not implemented yet; see the [roadmap](docs/ROADMAP.md).
 
 ## Install
 

@@ -1,10 +1,13 @@
 # 06 · 设计蓝图:Windows AI-native 桌面操作 CLI
 
-日期:2026-09-26 · 状态:草案(未实现) · 前置:[01 调研](01-research-landscape.md) · [04 选型](04-tech-decision.md) · [05 估算](05-implementation-estimate.md)
+更新:2026-09-28 · 状态:现行命令语义与设计；实现记录见 CHANGELOG，待办见 ROADMAP · 前置:[01 调研](01-research-landscape.md) · [04 选型](04-tech-decision.md) · [05 估算](05-implementation-estimate.md)
 
 ## 1. 定位
 
-一句话:**给 AI agent 用的 Windows 桌面原子操作 CLI——accessibility(UIA)驱动、无 MCP、无状态、输出机器友好。** 类比:Playwright 之于浏览器,本工具之于 Windows 桌面。
+一句话:**给 AI agent 用的 Windows 桌面原子操作 CLI——accessibility(UIA)驱动、原子命令可独立调用、输出机器友好。** 类比:Playwright 之于浏览器,本工具之于 Windows 桌面。
+
+平台范围：Windows；Linux/macOS 执行后端暂不考虑实现。MCP 计划作为独立适配服务，
+在被控设备本地启动，供其他设备调用本设备；尚未实现，规划见 [ROADMAP](ROADMAP.md)。
 
 - 脑(agent 的工具循环)与手(本 CLI)彻底分离;
 - 协议蓝本:agent-desktop(Apache-2.0,直接沿用其 envelope/ref/错误码契约);

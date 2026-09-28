@@ -56,7 +56,7 @@ SKILL.md 原文:**"It uses SendInput, UI Automation, and Windows.Graphics.Captur
 | JS 逻辑层 | `@oai/sky` dist 为**未压缩 tsc 产物**:`targets/{windows,mac,linux}/` 按动词拆文件(click/drag/clipboard_*/accessibility_tree/…),`core/` 为管道协议;`service.js` 可见运行时分发协议(setup 返回方法表、execute 按名反射调用、drag 句柄仅限 Linux);`sky/docs/` 另存 window/window2/full-desktop 三套 API 文档;publishConfig 泄露 macOS bundle 全貌(SkyComputerUseService/Client、CUALockScreenGuardian、normal/relaxed 双变体);运行时 node_modules 另捆绑 playwright(浏览器面 CDP 后端)与 sharp/pngjs/pixelmatch/jpeg-js(截图管线的图像处理依赖) | 可读但**无许可** |
 | 原生二进制 | `codex-computer-use-swift.exe`(56.5MB,UIA/SendInput/WGC 实现本体)与 `codex-computer-use.exe`(1.5MB,turn-ended 通知) | 编译产物,仅可逆向 |
 
-**对 actl 的合法边界**:可读 ≠ 开源——无 LICENSE 即保留所有权利。协议形状、确认策略、按 OS 组织 targets、恢复语义等**事实与设计思想**可合法借鉴;**代码一行不可复制**(并受 AGENTS.md"定案前不引入 vendored 外部代码"约束,Proprietary 代码永远不应 vendored);UIA 实现的可复制参考仍是 terminator(MIT)与 agent-desktop(Apache-2.0)。附带一条可行性佐证:sky 的 `targets/` 为三平台同构目录(linux 目录含 accessibility_tree/click/drag/clipboard_* 等动作集),对应 [ROADMAP](ROADMAP.md) Phase 3 的 Linux(AT-SPI2)后端候选。
+**对 actl 的合法边界**:可读 ≠ 开源——无 LICENSE 即保留所有权利。协议形状、确认策略、按 OS 组织 targets、恢复语义等**事实与设计思想**可合法借鉴;**代码一行不可复制**(并受 AGENTS.md"定案前不引入 vendored 外部代码"约束,Proprietary 代码永远不应 vendored);UIA 实现的可复制参考仍是 terminator(MIT)与 agent-desktop(Apache-2.0)。附带一条可行性佐证:sky 的 `targets/` 为三平台同构目录(linux 目录含 accessibility_tree/click/drag/clipboard_* 等动作集),这是第三方架构事实；actl 当前只规划 Windows 执行端，Linux/macOS 后端暂不考虑实现，见 [ROADMAP](ROADMAP.md)。
 
 ## 2. sky window2 API × actl v0.1.0 对照
 

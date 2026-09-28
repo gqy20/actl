@@ -18,9 +18,12 @@
 |---|---|
 | 截图 + 视觉模型(Agent-S、UI-TARS 等) | 慢、贵:每步过一遍 VLM,看图猜坐标,点错无法归因 |
 | 让 AI 写 AutoHotkey 脚本 | 能力够,但是"整段盲跑":没有逐步反馈,失败只能整段重来 |
-| 挂一个 MCP server | 重、占 agent 上下文;actl 是普通 CLI,任何能跑 shell 的 agent 拿来就用 |
+| 仅提供 MCP 接口 | 本机 shell 调用还需额外服务；actl 的 CLI 可独立使用 |
 
 一句话定位:**Playwright 之于浏览器,actl 之于 Windows 桌面**。Codex Computer Use 的官方降级顺序即"有结构化集成就优先于 computer use"——actl 就是 Windows 桌面上的那个结构化集成([对照分析](docs/12-codex-computer-use-comparison.md))。
+
+平台范围：Windows；Linux/macOS 桌面执行后端暂不考虑实现。计划提供可选 MCP 服务，
+在被控 Windows 设备本地启动，供其他设备调用本设备能力；当前尚未实现，见 [路线图](docs/ROADMAP.md)。
 
 ## 安装
 

@@ -67,4 +67,4 @@ agent-desktop、terminator、desktop-cli **三者全是 Rust**。单二进制分
 
 - **坚持无状态原子命令 + ref scoped to snapshot**:每次 `snapshot` 发新 snapshot_id,ref 仅在本 scope 有效,失效返回 STALE_REF 让 agent 重取——agent-desktop 验证过的核心设计;
 - 常驻 daemon(`serve` 模式,desktop-cli 有此形态)是**后期优化项**,性能成为瓶颈时再加;
-- MCP 适配层(如果将来要)作为独立薄壳另做,不进核心——terminator 的教训:MCP 层(39k 行)比核心库(34k 行)还大,是最重的非必要负担。
+- MCP 适配层独立于核心：计划在被控 Windows 设备本地启动服务，供其他设备调用本设备能力；传输、认证和故障恢复待设计，见 [ROADMAP](ROADMAP.md)。Linux/macOS 执行后端暂不考虑实现。

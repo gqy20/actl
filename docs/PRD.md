@@ -9,7 +9,7 @@
 
 ### 1.1 一句话定位
 
-**给 AI agent 用的 Windows 桌面原子操作 CLI**:UIA(accessibility)驱动、无状态、无 MCP、输出机器友好——Playwright 之于浏览器,本产品之于 Windows 桌面。
+**给 AI agent 用的 Windows 桌面原子操作 CLI**:UIA(accessibility)驱动、原子命令可独立调用、输出机器友好——Playwright 之于浏览器,本产品之于 Windows 桌面。
 
 ### 1.2 问题陈述
 
@@ -25,7 +25,11 @@
 协作式暂停恢复；协议见 [20](20-yaml-workflow-protocol.md)。原子 CLI 继续可独立使用。
 可视化流程编辑器、常驻 agent、通用脚本引擎仍不在范围内。
 
-**非目标(明确不做,详见 [06 §9](06-design-blueprint.md))**:可视化编排、触发面板/热键、动作市场、MCP 进核心、截图视觉定位、常驻 agent、跨平台(Windows only 起步)。
+2026-09-28 范围调整：计划提供独立 MCP 适配服务，在被控 Windows 设备上显式启动，
+供其他设备上的客户端调用本设备能力；复用本地交接、急停和执行护栏。当前尚未实现，
+传输、认证与恢复契约待设计，见 [ROADMAP](ROADMAP.md)。Linux/macOS 执行后端不安排实现。
+
+**非目标(明确不做,详见 [06 §9](06-design-blueprint.md))**:可视化编排、触发面板/热键、动作市场、MCP 进核心、截图视觉定位、常驻 agent、Linux/macOS 桌面执行后端（暂不考虑实现）。
 
 ---
 
@@ -93,7 +97,7 @@
 
 | 风险 | 等级 | 对策 |
 |---|---|---|
-| UIA 长尾(老 Win32/Electron/管理员窗口) | 高 | M0 spike 提前踩坑([ROADMAP Phase 0](ROADMAP.md));`--physical` 兜底 |
+| UIA 长尾(老 Win32/Electron/管理员窗口) | 高 | M0 spike 提前踩坑([spike 实测](spike-findings.md));`--physical` 兜底 |
 | uiautomation-rs 维护断档 | 中 | 评估 vendor/fork;核心只依赖 windows-rs 官方 binding |
 | windows crate 版本冲突 | 中 | ADR-003 全依赖锁同版本([TECH_STACK](TECH_STACK.md)) |
 | 被滥用于恶意自动化 | 中 | 物理操作显式化、dry-run、文档明示安全边界;不做隐身设计 |

@@ -4,7 +4,7 @@
 [apps/browser.yml](../skills/actl/apps/browser.yml)) · 环境:Win11 zh-cn,
 Edge(Chromium,系统自带,"个人" profile),开发机交互桌面
 
-关联:[设计蓝图 §6](06-design-blueprint.md) · [ROADMAP 追加批](ROADMAP.md) ·
+关联:[设计蓝图 §6](06-design-blueprint.md) · [ROADMAP 待验收工作](ROADMAP.md) ·
 [PACKS 契约](../skills/actl/PACKS.md) · fixture:[edge-content-view.sh](../fixtures/edge-content-view.sh)
 / [xhs-browse.sh](../fixtures/xhs-browse.sh)
 

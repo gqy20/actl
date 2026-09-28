@@ -1,5 +1,9 @@
 # 05 · 实现估算:基于同类仓库实测校准
 
+> 历史调研/估算，保留当时口径。当前范围以 [PRD](PRD.md) 和 [ROADMAP](ROADMAP.md) 为准：
+> MCP 计划在被控 Windows 设备本地启动供其他设备调用；Linux/macOS 执行后端暂不考虑实现。
+> 下文对纯 CLI 的估算不包含未来 MCP 服务。
+
 日期:2026-09-26 · 方法:shallow clone 三个同类开源仓库,统计 Rust 代码行数(`find -name "*.rs" | xargs cat | wc -l`,已修正分批统计误差)
 
 ## 1. 实测数据

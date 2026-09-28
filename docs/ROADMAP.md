@@ -1,131 +1,106 @@
 # ROADMAP · 路线图
 
-版本:v0.1 · 日期:2026-09-26 · 时间为相对工期(T = 项目启动日)
-关联:[PRD](PRD.md) · [估算](05-implementation-estimate.md) · [设计蓝图](06-design-blueprint.md) · [技术选型](TECH_STACK.md)
+更新：2026-09-28
+关联：[PRD](PRD.md) · [设计蓝图](06-design-blueprint.md) · [技术选型](TECH_STACK.md)
 
----
+本文件只维护剩余工作、优先级与验收标准。已完成变更统一见 [CHANGELOG](../CHANGELOG.md)：
+未发布实现记在 Unreleased，已发布功能保留在对应版本。实现完成不等于真机验收完成，
+场景证据与限制保留在各专题文档中。
 
-## 总览
+## 范围与里程碑
 
-已完成阶段(Phase 0 spike、Phase 1 M1 → v0.1.0,2026-09-26 发布)的历史明细见
-[CHANGELOG](../CHANGELOG.md) 与 [spike-findings](spike-findings.md);本文件只保留未完成工作。
+- 执行端聚焦 Windows。Linux 与 macOS 执行后端暂不考虑实现，不安排里程碑。
+- 本机使用以 CLI 为入口；MCP 作为可选的独立服务适配层，方向见下文。
+- M2 = v0.2.0，以可靠性和验收收尾；M3 = v0.3.0，以协议稳定和实际需求驱动的扩展为主。
+  1.0 留给正式稳定版。版本是验收目标，不用命令数量或未经复核的相对工期推定完成日期。
 
+## Phase 2 · M2 v0.2.0 剩余工作
+
+### P0 · 人机协作与恢复验收
+
+- [ ] 完成显示 v5 的真机闭环：人工开始 → 执行 → 主动暂停或键鼠让行 → 右侧继续 → 业务结果核验。
+  覆盖未开始步骤、结果不确定的写步骤、多个任务切换及急停状态；不得恢复错任务或重复写入。
+- [ ] 验证后台可操作、占用桌面、等待交接、已暂停、已让行和故障状态的文字及按钮一致性；
+  单条 CLI 和普通脚本没有持久化续跑能力时，应明确提示由调用方接续。
+- [ ] 验证提示窗口隐藏、屏外、多屏 DPI、显示端失联和重启后的诊断与恢复路径。
+- [ ] 评估输入监听钩子被系统静默移除的检测与失效处理，确保不能将监听失效视为无人操作。
+
+验收以 [桌面交接记录](32-desktop-handoff.md) 补齐证据。目前 v5 的桌面继续正向路径仍待真机验收；
+已有急停不得被回归脚本或继续按钮自动解除。
+
+### P1 · 应用场景与输入可靠性
+
+- [ ] 结合新的交接、控件身份和焦点校验，补跑系统应用、记事本及 Office 的待验收脚本；
+  分别记录通过、受阻和失败，不能用离线脚本测试代替真机结果。
+- [ ] 深化 Edge、Chrome、夸克网盘、Zotero、腾讯会议、VS Code、网易云和 Office 的业务闭环。
+  以现有场景记录及 pack 为起点，只补尚未覆盖或受新护栏影响的路径；微信暂不优先。
+- [ ] 对数字输入、搜索、表格定位和日期时间选择比较键盘与点击路线：同环境记录耗时、
+  成功率、焦点准确性和恢复成本；按控件能力选择路线，不把键盘更快作为预设结论。
+- [ ] 对夸克和 Zotero 补足控件重建、焦点切换、输入后读回的真实场景；对腾讯会议补足
+  日期时间控件及会议、录制页面的剩余交互验证。产生实际会议或下载内容的动作按任务授权执行。
+
+验收：每个场景具备明确前置条件、可核对的结果、失败证据与资源归属清理；
+结论落入场景文档并同步应用 pack。真实应用场景轨与系统 fixture 的 CI 轨分别维护。
+参见 [窗口基建](30-window-infrastructure.md)、[控件身份与输入焦点](31-element-identity-input-focus.md)。
+
+### P2 · 发布验收
+
+- [ ] 在固定环境完成金任务全量回归，US1 十次重跑成功率 ≥90%；人工交接与受阻运行分别记账。
+- [ ] 在正常负载环境重新测量冷启动、snapshot、输出体积与 skeleton 削减率，按
+  [PRD §4/§6](PRD.md) 验收；耗时仅在同一环境头内比较，复核浏览器形态的 token 口径。
+- [ ] 在非开发机按 README 复现 US3，验证安装、CLI 与配套显示端版本匹配及首次使用体验。
+- [ ] 核对本轮发布产物、文档、契约 golden 与 CHANGELOG；完成 `cargo xtask gate`。
+
+**退出标准**：上述可靠性与发布验收有可复查结果，金任务与 NFR 达标，外部机器复现成功。
+已有版本的通过记录保留在 CHANGELOG，不代替本轮变更后的验收。
+
+## Phase 3 · M3 v0.3.0 候选方向
+
+以下方向按实际需求排序，实施前明确边界与验收，不承诺全部随 v0.3.0 交付。
+
+- 流程扩展：输出绑定、分支循环、计划修订迁移；普通脚本接入可恢复任务的契约。
+  先验证具体场景需求，再扩展 [YAML 流程协议](20-yaml-workflow-protocol.md)。
+- 应用 pack 的长尾维护；`list-notifications` 与 `list-surfaces` 的必要性及范围裁定。
+- 本地 `serve` 与增量观察：依据 [实时状态研究](13-realtime-state-maintenance.md) 评估收益，
+  明确快照有效期、崩溃回退及按需事件订阅；不维护全局常驻 UIA 树。
+- 录制可复现操作轨迹、独立运行环境、复杂任务面板：分别做需求和故障模型评审。
+  WebView2 内容层仍是候选，不能把原生交接卡与详情面板的现有实现列为待开发。
+- 游戏场景：按 [游戏场景研究](17-game-scenarios.md) 验证 Minecraft 命令通道与截图验收，
+  相对视角和鼠标按下/抬起能力按需要评审。
+- MCP 远程访问适配，具体方向如下。
+
+**发布标准**：envelope 协议评审冻结、错误码全集文档化、破坏性变更按版本与 spec 登记，
+并有可复现的端到端教程。候选功能不作为默认发布门槛。
+
+### MCP · 本设备启动服务，其他设备调用
+
+计划拓扑：
+
+```text
+其他设备上的 MCP 客户端 / agent
+              ↓ 经授权的网络连接
+被控 Windows 设备上显式启动的 MCP 服务
+              ↓ 复用 actl 的命令与安全护栏
+         本设备上的 Windows 应用
 ```
-Phase 2  T+1 ─ T+3月      M2 认真 MVP     v0.2.0  (45+ 命令,金任务 ≥90%,对外发布)
-Phase 3  T+3月起,长期     生产级打磨      v0.3.0  (协议冻结,生态渠道)
-```
 
-> 版本口径(2026-09-26 修订):里程碑版本 = 0.<里程碑号>.0——M1 期以 0.1.x 递增
-> (已发布 0.1.0–0.1.2),**M2 完成 = 0.2.0,M3 完成 = 0.3.0**;取代本文件早期
-> "M2=v0.3.0 / M3=v1.0" 的写法(1.0 保留给协议冻结后的正式稳定版,不再是里程碑承诺)。
+服务运行在要被操作的设备上，向其他设备提供本设备的操作能力。本机 CLI 仍可独立使用。
+MCP 适配独立于核心；这是待设计能力，当前没有可用的 MCP 启动命令或远程接口。
 
-> M1 是 M2 的纵向切片,先跑通再铺全——时间线上 Phase 1 与 Phase 2 重叠。
+实施前需完成：
 
-## Phase 2 · M2 认真 MVP v0.2.0(T+1 ~ T+3 月,累计 12–22k 行)
+- [ ] 选择适合跨设备访问的 MCP 传输方式，定义监听地址、身份认证、加密与访问授权；
+  不将本地 stdio 接口误当成可直接远程访问的服务。
+- [ ] 定义客户端与本地任务的关联、并发排队、断线后的暂停/结果查询以及授权撤销；
+  写入结果不确定时禁止因网络重连自动重放。
+- [ ] 复用本机交接提示、暂停/继续、急停、焦点校验与操作记录，远程调用须在本机可见且可中止。
+- [ ] 完成双设备验收：授权调用、拒绝未授权请求、人工接管、网络中断与恢复核对。
 
-> **批次排序(2026-09-26 定,实证驱动)**:
-> **第一批·输入可靠性硬化**(先行,约 1-2 周,不铺新命令)——①输入占用协调
-> (doc 09 §6.2:进程间执行锁、长注入分批+批间焦点复核、焦点被抢即停并上报
-> 已执行部分;`input_effects` 字段进 envelope)——四次并发真人输入损坏注入的
-> 活体实证(docs/spike-findings);②激活感知目标解析(UWP 后台挂起时单命令
-> stall ~2s,操作前探测唤醒;cloak/挂起判定依据 [13 §1.1](13-realtime-state-maintenance.md));③`--physical` 规范裁定(06 蓝图)+物理鼠标链
-> (doc 09 §6 七步:right-click/drag/hover/scroll 的共同前置);④小项:修饰键
-> 只清自己按下的、Toggle/ExpandCollapse/ScrollItem 分发、`snapshot_id` ref
-> 版本化校验(后移第二批:依赖快照持久化/会话状态设计,与 fallback 定位链同做)。
-> **第二批·命令面与定位链**:45+ 命令补全、fallback 定位链(resolved_by)。
-> **追加·显示信号层**(2026-09-26 用户需求,已随第二批落地):状态快照/停止标志/
-> 输入锁观测/失联判定四原语 + `actl-signal` 伴随程序(置顶状态条+托盘+
-> Ctrl+Alt+F12 紧急停止,状态灯取市场通行色);规范见 06 §7.5。
-> **收尾·对外发布**:README 示例、crates.io、scoop;同步发布 Agent Skill
-> (SKILL.md + envelope 生成的错误码恢复指南,docs/12 §3.4:品类空缺、成本极低)。
-> 协议评审候选(docs/12 §4):AMBIGUOUS/STALE_REF 携带结构化 evidence。
+MCP 的目标是跨设备访问；本地 `serve` 的目标是观察与执行性能，两者独立评估。
+远端客户端可以来自不同系统，这不意味着要实现 Linux/macOS 的桌面执行后端。
 
-**目标**:达到 PRD §6 全部指标,对外发布(README 示例 + crates.io + GitHub Releases)。
+## 维护规则
 
-**范围(in)**:
-- 命令补全至 45+:right-click/double-click/select/toggle/scroll/drag/hover、key-down、resize-window、notifications、`verify` 族、`extract`、`wait` 完整谓词语法
-- `wait`/`verify` 实现约定([13 §4](13-realtime-state-maintenance.md)):轮询制,默认值取生态共识——间隔 ~100ms、窗口/元素级超时 3–5s、text 类指数退避 200ms→1s、动作后 settle ~500ms;窗口状态判定走物理层快照组合(GetGUIThreadInfo/DWMWA_CLOAKED 等,§4.3),不引入事件订阅
-- **fallback 定位链**(primary UIA 路径 → 名称模糊+锚点 → role+序数,`resolved_by` 上报)——RPA 借鉴核心([03 §3](03-rpa-vs-quicker.md))
-- skeleton 投影(token 削减 ≥70%);evidence(失败附局部树/截图引用);`click --expect`
-- 集成测试 fixtures(计算器/记事本/ms-settings);envelope 契约测试
-- 分发:cargo install、GitHub Releases 单 exe、scoop manifest
-
-**收尾状态(2026-09-26,v0.1.2 并入)**:README 示例化 ✓ · scoop manifest ✓ ·
-Agent Skill ✓ · crates.io 已发布且 tag 自动同步(三 crate;cargo install actl-cli)✓ ·
-**US1 十次重跑 10/10(100%)** ✓ · NFR:P95 73.3ms<80 ✓(P50 54.9 微超 50,信号层
-状态写的有意权衡)· 信号条交互(菜单/品牌图标/拖动+位置记忆/字重打磨)✓ ·
-时序评估闭环(Timing 旋钮 + 画像/扫描 fixtures + 三默认值维持,docs/timing-2026-09.md)✓ ·
-外部机器复现 US3 待非开发机验证。
-
-**收官批进展(2026-09-27,v0.1.4 已发;Office/微信场景见 docs/14)**:命令面 27/31
-(wait 谓词/select/toggle/paste;list-notifications 搁置 M3,list-surfaces 待裁定)· 窗口
-治理(close/focus --pid/--hwnd、batch windows_created+blocked_by 弹窗闸门、fixtures trap
-清理、GUI 禁 taskkill)· launch App Paths 解析 · help 全命令四要素 · 信号条重设计
-(波纹/自适应/实时耗时/Per-Monitor DPI)· regress 一键回归 · Office 三闭环双应用
-(Excel GridPattern 直读+剪贴板直灌;Word TextPattern;docs/14)· 微信核心通道全通
-(发送/搜索/文件/联系人/朋友圈/@人/群信息;pack 路线+quirks)· 应用档案 pack v1
-(excel/word/wechat + lint-packs + actl×collector 分工协议)。
-0.2.0 剩余:正常日 timing/P50 复测、金任务 10 轮全量回归、外部机器 US3(用户侧)、actl-signal.rs 拆分(959 行已过 800 警告线;壳/轮询/渲染/几何四模块,登记于 docs/11 §14)、信号条失联判定修正(age 阈值不分 phase,终态后静默误报"失联",docs/11 §15)。
-
-**追加批·浏览器内容通道 + 坐标寻址 + 打磨(v0.1.5 已发,2026-09-27)**:
-`--view content`/`--stable`/`xy:`(视觉兜底)/`id:#N`/`--app hwnd:` 五个
-spec 与 wait AMBIGUOUS 修复随本批发布;明细见 CHANGELOG [0.1.5]。
-原浏览器内容通道批记录:`snapshot --view content`(内容域
-投影,chrome 整枝丢弃,与 skeleton 组合)与 `wait --stable`(settle 谓词)——
-真实会话浏览器赛道的机制地基(Chrome 136 起默认 profile 禁 CDP,UIA 是唯一
-非视觉通道);browser pack + 场景实测(docs/16)随后跟进,PRD §4 浏览器形态
-token 豁免项待实测数字复核。
-
-**退出标准**:
-- 金任务集全过,US1"跨 3 应用数据搬运"成功率 ≥ 90%(10 次重跑);
-- 冷启动、输出体积、token 消耗三项 NFR 达标(PRD §4);
-- 外部机器(非开发机)按 README 复现 US3 成功。
-
-## Phase 3 · 生产级 v0.3.0(T+3 月起,长期)
-
-**目标**:协议冻结,靠 Issue 驱动打磨长尾。
-
-候选方向(按社区反馈排序,不预先承诺):
-- 长尾 workaround 库(应用特化 pack,参考 desktop-cli 的 application packs 思路)
-- `serve` 常驻模式(协议不变;收益主项是增量观察 `changed since <snapshot_id>` 与定向应答,次级才是冷启动摊销与 wait 提速——设计原则见 [13 §4.5](13-realtime-state-maintenance.md):本地状态富度与协议面解耦、禁 eager 预取、serve 挂掉自动回落单发);可选事件加速:UIA/WinEvent 订阅仅作 wait 触发器(uiautomation crate `event` feature,零新增依赖),前置条件与防御清单见 [13 §4.4](13-realtime-state-maintenance.md)——不维护常驻树、不空闲全局订阅;推迟理由 = 防御工程 + 故障模型 + 会话语义定案(ref 稳定性/快照持久校验),与 token 无关
-- 录制器 → agent 可复现"操作轨迹"(OpenAdapt 思路)
-- Linux(AT-SPI2)/ macOS 后端(协议层已平台无关)
-- MCP 薄壳(独立 crate,不进核心)
-- 显示层面板化(docs/11 Phase B/C:介入卡/任务面板/Narrator)——先以 HTML/TS 原型做设计验证(不进发布链);面板化前按 [11 §14](11-desktop-interaction-and-display-research.md) 决策门 spike“现有 Rust 壳 + WebView2 内容层”(拉取协议不变,壳继续拥有窗口/焦点/热键/托盘);不采 Tauri(tokio,ADR-001 冲突)、不采 Electron(体量)
-- 游戏场景(Minecraft 建造灌入路线,规划见 [17](17-game-scenarios.md);命令通道灌入 + F2 截图验收,"手工搭"的输入保真度原语登记于 17 §3;依赖信号条失联修正)
-
-**v0.3.0 发布标准**:envelope 协议评审冻结;错误码全集文档化;破坏性变更仅随版本号递增
-并登记 spec(0.x 期破坏性演进常态,冻结后不再静默破坏);有一篇可复现的端到端教程。
-
----
-
-## 里程碑速查
-
-| 里程碑 | 版本 | 核心交付 | 验收 |
-|---|---|---|---|
-| M2 | v0.2.0 | 45+ 命令 + fallback 链 + 分发 | 金任务 ≥90% + 三项 NFR |
-| M3 | v0.3.0 | 协议冻结 + 长尾打磨 | 发布标准如上 |
-
-## 排期原则
-
-1. **金任务先行**:每个 Phase 的验收任务在开发前定义,不为凑功能延后验收;
-2. **范围铁律**:PRD 非目标清单(§1.3)膨胀 = 项目失败的第一原因;
-3. **UIA 黑洞预算**:按"写 1 行调 3 行"留时间([05 §5](05-implementation-estimate.md)),进度落后先砍命令面广度,不砍可靠性特性(fallback/verify/evidence)。
-
-
-### 显示层紧凑版补充（2026-09-27）
-
-已实现：信号条拆分、终态失联修正、持续心跳、组合输入影响、动作预告/取消、
-点击波纹/UIA 边界反馈、截图排除。详见 [18](18-display-layer-implementation.md)。
-此前 0.2.0 剩余列表中的信号条拆分与失联修正由本项完成；任务级计划/暂停恢复、
-完整详情面板和 WebView2 仍为后期候选。
-
-### 记录与日常体验补充（2026-09-27）
-
-已实现操作事件历史、任务关联、调用方报告归档、有限保留、错误处理建议与成果保留规则。
-后续依次验证任务级控制权交接、人工介入、稳定阶段呈现、多屏与辅助技术；独立运行环境
-需专项评审。落地边界与验收标准见 [19](19-history-and-user-experience.md)。
-
-YAML 流程 v1 已实现定义预检、步骤执行、检查点/请求暂停、持久化进度及恢复前验证；
-托盘支持当前流程暂停/继续。协议评估与限制见 [20](20-yaml-workflow-protocol.md)。
-尚待：输出绑定、分支循环、计划修订迁移、人工交接卡与独立环境。
+1. 完成的实现从本文件移出，写入 CHANGELOG 的对应版本；尚未验收的部分继续保留为待办。
+2. 研究文档保留当时的事实与结论，现行范围以 PRD 和本路线图为准。
+3. 新增范围先核对 PRD 非目标；优先修可靠性与补验收，不以铺命令数量代替业务结果。
