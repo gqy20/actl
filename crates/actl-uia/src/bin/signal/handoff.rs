@@ -9,6 +9,9 @@ use std::{
 };
 use windows::Win32::Graphics::Gdi::*;
 use windows::Win32::UI::HiDpi::GetDpiForWindow;
+use windows::Win32::UI::Input::KeyboardAndMouse::{
+    MOD_ALT, MOD_CONTROL, RegisterHotKey, UnregisterHotKey,
+};
 use windows::{
     Win32::{Foundation::*, System::LibraryLoader::GetModuleHandleW, UI::WindowsAndMessaging::*},
     core::{PCWSTR, w},
@@ -16,6 +19,12 @@ use windows::{
 
 static WATCH_RUNNING: AtomicBool = AtomicBool::new(false);
 static INPUT_SEQ: AtomicU64 = AtomicU64::new(0);
+
+/// 交接授权快捷键:Ctrl+Alt+Y(=开始/继续;Ctrl+Alt+F12 已留作紧急停止)。
+/// 与按钮等价的授权通道——免鼠标行程与落点瞄准;授权动作的余韵(键抬起/
+/// 手部后摇)由 Consent 宽限窗(GRACE_MS)统一吸收。
+const HOTKEY_ID: i32 = 0xB01;
+const HOTKEY_KEY: u32 = 'Y' as u32;
 #[derive(Default)]
 struct Service {
     consent: Consent,
@@ -254,7 +263,7 @@ unsafe fn create_panel(request: Option<&Request>) -> windows::core::Result<HWND>
         None,
     )?;
     let label = format!(
-        "准备开始 / 继续桌面操作\n任务：{}\n当前目标：{}\n任务可能切换窗口、使用键鼠和剪贴板。\n点击开始后请暂时放开键鼠；继续操作会让任务停下。",
+        "准备开始 / 继续桌面操作\n任务：{}\n当前目标：{}\n任务可能切换窗口、使用键鼠和剪贴板。\n点击开始或按 Ctrl+Alt+Y；之后请暂时放开键鼠，继续操作会让任务停下。",
         request.map_or("", |r| r.task.as_str()),
         request.map_or("", |r| r.target.as_str())
     );
@@ -274,7 +283,7 @@ unsafe fn create_panel(request: Option<&Request>) -> windows::core::Result<HWND>
             Some(module.into()),
             None,
         )?;
-        for (id, text, x) in [(1, w!("开始 / 继续"), 16), (2, w!("稍后"), 190)] {
+        for (id, text, x) in [(1, w!("开始 / 继续  Ctrl+Alt+Y"), 16), (2, w!("稍后"), 190)] {
             CreateWindowExW(
                 WINDOW_EX_STYLE(0),
                 w!("BUTTON"),
@@ -297,6 +306,8 @@ unsafe fn create_panel(request: Option<&Request>) -> windows::core::Result<HWND>
         return Err(e);
     }
     layout(hwnd, GetDpiForWindow(hwnd));
+    // 快捷键注册尽力而为:被占用则按钮仍可用,不因热键冲突拒绝交接
+    let _ = RegisterHotKey(Some(hwnd), HOTKEY_ID, MOD_CONTROL | MOD_ALT, HOTKEY_KEY);
     let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
     Ok(hwnd)
 }
@@ -373,6 +384,7 @@ unsafe extern "system" fn panel_proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARA
             LRESULT(0)
         }
         WM_DESTROY => {
+            let _ = UnregisterHotKey(Some(hwnd), HOTKEY_ID);
             let font = SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
             if font != 0 {
                 let _ = DeleteObject(HGDIOBJ(font as *mut _));
@@ -384,24 +396,34 @@ unsafe extern "system" fn panel_proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARA
         }
         WM_COMMAND | WM_CLOSE => {
             let start = msg == WM_COMMAND && wp.0 & 0xffff == 1;
-            // No outstanding SERVICE borrow when dispatching user messages.
-            SERVICE.with(|cell| {
-                let mut s = cell.borrow_mut();
-                if let Some((pid, r)) = s.request.take() {
-                    let fresh = read_request(pid).is_some_and(|now| now.call == r.call);
-                    if start && fresh && !SignalPaths::default().stop_requested() {
-                        s.consent
-                            .allow(&r.task, INPUT_SEQ.load(Ordering::SeqCst), unix_ms());
-                    } else {
-                        s.deferred = Some(r.call);
-                    }
-                }
-                close_panel(&mut s);
-            });
+            decide(hwnd, start);
+            LRESULT(0)
+        }
+        WM_HOTKEY if wp.0 as i32 == HOTKEY_ID => {
+            decide(hwnd, true);
             LRESULT(0)
         }
         _ => DefWindowProcW(hwnd, msg, wp, lp),
     }
+}
+
+/// 授权/稍后的共同裁决:开始(按钮或 Ctrl+Alt+Y)在请求仍新鲜且未停止时
+/// 授予 Consent;其余路径(关闭/稍后/过期)记 deferred。任何路径都收面板。
+unsafe fn decide(_hwnd: HWND, start: bool) {
+    // No outstanding SERVICE borrow when dispatching user messages.
+    SERVICE.with(|cell| {
+        let mut s = cell.borrow_mut();
+        if let Some((pid, r)) = s.request.take() {
+            let fresh = read_request(pid).is_some_and(|now| now.call == r.call);
+            if start && fresh && !SignalPaths::default().stop_requested() {
+                s.consent
+                    .allow(&r.task, INPUT_SEQ.load(Ordering::SeqCst), unix_ms());
+            } else {
+                s.deferred = Some(r.call);
+            }
+        }
+        close_panel(&mut s);
+    });
 }
 
 #[cfg(test)]

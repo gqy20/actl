@@ -33,8 +33,14 @@ impl Request {
 pub struct Consent {
     grant: Option<(String, u64, u64, u64)>,
 }
+/// 授权动作自身余韵的宽限窗:授权(点击"开始"或快捷键)后的物理输入在
+/// 此窗内视为 settle(按键/鼠标抬起、手部余动),刷新基线而非撤销。
+/// 没有它,严格相等判定会让授权点击自己的 mouse-up 必然杀死授权
+/// (实测:human_takeover_or_grant_expired 于授权后第一次 check 即现)。
+pub const GRACE_MS: u64 = 750;
 impl Consent {
-    /// Called only by the companion's explicit user Start/Continue button.
+    /// Called only by the companion's explicit user Start/Continue action
+    /// (button click or Ctrl+Alt+Y hotkey).
     pub fn allow(&mut self, task: &str, input_seq: u64, now: u64) {
         self.grant = Some((task.into(), input_seq, now, now));
     }
@@ -45,13 +51,18 @@ impl Consent {
         let Some((owner, seq, started, touched)) = self.grant.as_mut() else {
             return false;
         };
-        if *seq != input_seq
-            || now < *touched
-            || now - *touched >= 60_000
-            || now - *started >= 600_000
-        {
+        if now < *touched || now - *touched >= 60_000 || now - *started >= 600_000 {
             self.revoke();
             return false;
+        }
+        if *seq != input_seq {
+            if now - *started < GRACE_MS {
+                // 宽限窗内:授权动作的余韵,重设基线继续放行
+                *seq = input_seq;
+            } else {
+                self.revoke();
+                return false;
+            }
         }
         if owner != task {
             return false;
@@ -110,11 +121,34 @@ mod tests {
     #[test]
     fn same_field_input_revokes_even_without_focus_change() {
         let mut c = Consent::default();
-        c.allow("a", 10, 100);
-        assert!(!c.check("a", 11, 101));
-        assert!(!c.check("a", 10, 102));
-        c.allow("a", 12, 103);
-        assert!(c.check("a", 12, 104));
+        c.allow("a", 10, 10_000); // 宽限窗之外的时间原点
+        assert!(!c.check("a", 11, 10_000 + GRACE_MS + 1));
+        assert!(!c.check("a", 10, 10_000 + GRACE_MS + 2));
+        c.allow("a", 12, 10_000 + GRACE_MS + 3);
+        assert!(c.check("a", 12, 10_000 + GRACE_MS + 4));
+    }
+
+    #[test]
+    fn grant_settle_grace_absorbs_then_goes_strict() {
+        let mut c = Consent::default();
+        c.allow("a", 10, 1_000);
+        // 授权 mouse-up 与手部余动(宽限窗内):刷新基线,不撤销
+        assert!(c.check("a", 12, 1_050));
+        assert!(c.check("a", 15, 1_700));
+        // 窗外的新输入 = 外部接管,撤销
+        assert!(!c.check("a", 16, 1_000 + GRACE_MS + 5));
+        // 撤销后不可复活
+        assert!(!c.check("a", 16, 1_000 + GRACE_MS + 10));
+    }
+
+    #[test]
+    fn grace_does_not_change_task_scope_or_expiry() {
+        let mut c = Consent::default();
+        c.allow("a", 10, 1_000);
+        assert!(!c.check("b", 11, 1_100), "余韵不改任务归属");
+        assert!(c.check("a", 11, 1_100));
+        // idle/expiry 上限照旧
+        assert!(!c.check("a", 11, 1_100 + 60_000));
     }
     #[test]
     fn expiry_restart_and_clock_reversal_fail_closed() {
