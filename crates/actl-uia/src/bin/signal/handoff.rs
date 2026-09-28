@@ -536,6 +536,16 @@ pub fn revoke() {
 mod pause_tests {
     use super::*;
     #[test]
+    fn revoke_requires_new_consent_without_resuming_old_task() {
+        SERVICE.with(|cell| {
+            let mut s = cell.borrow_mut();
+            *s = Service::default();
+            s.consent.allow("task-a", 0, 100);
+        });
+        revoke();
+        SERVICE.with(|cell| assert!(!cell.borrow_mut().consent.check("task-a", 0, 101)));
+    }
+    #[test]
     fn pause_is_call_bound_and_does_not_revoke_another_task() {
         SERVICE.with(|cell| {
             let mut s = cell.borrow_mut();

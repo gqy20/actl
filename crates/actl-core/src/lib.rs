@@ -15,6 +15,7 @@ pub mod selector;
 pub mod signal_session;
 pub mod snapshot;
 pub mod state;
+pub mod stop;
 pub mod target;
 pub mod timing;
 pub mod trace;
@@ -52,7 +53,7 @@ pub enum ErrorCode {
     Protocol,
     /// 内部/UIA/系统层错误 → 重试一次;持续出现附 evidence 报 issue
     Internal,
-    /// 用户主动停止(紧急热键/停止文件)→ 清除停止标志后可安全重试
+    /// 用户主动停止：显式解除后仍须核验结果，禁止盲目重放。
     Aborted,
 }
 
@@ -78,7 +79,7 @@ impl ErrorCode {
                 "retry once; if it persists, report an issue with the `evidence` payload"
             }
             Self::Aborted => {
-                "user requested stop; clear the stop flag (actl-signal UI or delete the file) and retry"
+                "user requested stop; explicitly release emergency stop in actl-signal, inspect prior results, then explicitly continue; never replay automatically"
             }
         }
     }

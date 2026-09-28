@@ -30,7 +30,7 @@ const CONTROLS: &[(i32, &str, i32, i32, i32, i32)] = &[
     (14, "关闭", 388, 328, 148, 40),
     (104, "紧急停止  ·  Ctrl+Alt+F12", 24, 386, 512, 22),
     (12, "停止操作", 24, 420, 148, 40),
-    (13, "允许后续操作", 184, 420, 188, 40),
+    (13, "解除急停", 184, 420, 188, 40),
 ];
 unsafe fn layout(hwnd: HWND, dpi: u32) {
     let px = |n| paint::pixels(n, dpi);
@@ -156,6 +156,7 @@ unsafe fn refresh(hwnd: HWND) {
             ));
         }
     }
+    text.push_str(&paths.stop_details());
     set_text(hwnd, 100, &text.replace('\n', "\r\n"));
     let message = flow_ui::message();
     if !message.is_empty() {
@@ -269,14 +270,8 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
                 10 | 11 => current()
                     .ok_or_else(|| "没有可操作的流程".into())
                     .and_then(|(id, _)| super::shell::flow_action(&id, wp.0 & 0xffff == 11)),
-                12 => {
-                    SignalPaths::default().request_stop();
-                    Ok(())
-                }
-                13 => {
-                    SignalPaths::default().clear_stop();
-                    Ok(())
-                }
+                12 => super::shell::request_emergency_stop("details_button"),
+                13 => super::shell::clear_emergency_stop(),
                 2 | 14 | 15 => {
                     let _ = DestroyWindow(hwnd);
                     return LRESULT(0);

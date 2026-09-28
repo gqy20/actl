@@ -2,7 +2,7 @@
 use crate::state::{SignalPaths, unix_ms};
 use serde::{Deserialize, Serialize};
 
-pub const DISPLAY_PROTOCOL: u32 = 5;
+pub const DISPLAY_PROTOCOL: u32 = 6;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DisplayLease {
     pub protocol: u32,
@@ -75,6 +75,8 @@ mod tests {
         l.state = "capture".into();
         assert!(!l.ready(101));
         assert!(l.compatible(101));
+        l.state = "closed".into();
+        assert!(!l.ready(101));
         l.protocol = 2;
         assert!(!l.compatible(101));
     }

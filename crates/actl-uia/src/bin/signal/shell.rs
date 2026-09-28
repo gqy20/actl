@@ -32,14 +32,52 @@ static EPOCH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 // Normal replacement is distinct from user close. Older displays do not acknowledge
 // this message; never fall back to WM_CLOSE or clear a pre-existing stop request.
 const REPLACE_CLOSE: u32 = WM_APP + 45;
+const REVOKE_CONSENT: u32 = WM_APP + 49;
 
-fn allow_close(paths: &SignalPaths, message: u32, input_busy: Option<bool>) -> bool {
-    if message == WM_CLOSE {
-        paths.request_stop();
-        true
-    } else {
-        message == REPLACE_CLOSE && input_busy == Some(false)
+fn allow_close(_paths: &SignalPaths, message: u32, input_busy: Option<bool>) -> bool {
+    message == WM_CLOSE || (message == REPLACE_CLOSE && input_busy == Some(false))
+}
+
+pub(super) fn request_emergency_stop(source: &str) -> Result<(), String> {
+    super::handoff::revoke();
+    let lease = SignalPaths::default().display_lease();
+    SignalPaths::default()
+        .request_stop_from(
+            source,
+            EPOCH
+                .get()
+                .map(String::as_str)
+                .or_else(|| lease.as_ref().map(|l| l.epoch.as_str())),
+        )
+        .map_err(|e| format!("INTERNAL：{}", e.message))
+}
+
+pub(super) fn clear_emergency_stop() -> Result<(), String> {
+    super::handoff::revoke();
+    // Details run in a separate process. Revoke in the actual display service
+    // before removing stop; otherwise a quick clear could revive its old grant.
+    unsafe {
+        if let Ok(hwnd) = FindWindowW(w!("actl_signal_window"), None) {
+            let mut acknowledged = 0;
+            let sent = SendMessageTimeoutW(
+                hwnd,
+                REVOKE_CONSENT,
+                WPARAM(0),
+                LPARAM(0),
+                SMTO_ABORTIFHUNG | SMTO_BLOCK,
+                2000,
+                Some(&mut acknowledged),
+            );
+            if sent.0 == 0 || acknowledged != 1 {
+                return Err(
+                    "NOT_ACTIONABLE：显示端未确认撤销授权，急停保持；请先更新或重启显示端".into(),
+                );
+            }
+        }
     }
+    SignalPaths::default()
+        .clear_stop()
+        .map_err(|e| format!("INTERNAL：{}", e.message))
 }
 
 fn publish_lease(paths: &SignalPaths, state: &str) {
@@ -57,12 +95,7 @@ fn publish_lease(paths: &SignalPaths, state: &str) {
 }
 
 pub(super) fn stop_timestamp(paths: &SignalPaths) -> Option<u64> {
-    paths.stop_requested().then(|| {
-        std::fs::read_to_string(paths.stop_file())
-            .ok()
-            .and_then(|s| s.trim().parse().ok())
-            .unwrap_or(u64::MAX)
-    })
+    paths.stop_timestamp()
 }
 
 // Filesystem snapshots arrive on a worker; the window thread only takes the latest value.
@@ -112,6 +145,7 @@ unsafe fn tick(hwnd: HWND) {
     let states = call_snapshot();
     let stop = stop_timestamp(&paths);
     let mut v = model::view(&states, now, stop, actl_uia::display_support::input_busy());
+    v.details.push_str(&paths.stop_details());
     if matches!(
         v.mode,
         model::Mode::Running | model::Mode::Background | model::Mode::Desktop
@@ -359,14 +393,14 @@ unsafe fn details(_hwnd: HWND) {
 unsafe fn menu(hwnd: HWND) {
     let mut lines = vec![
         "停止操作".into(),
-        "允许后续操作".into(),
+        "解除急停（任务需另行继续）".into(),
         "详情".into(),
         if IsWindowVisible(hwnd).as_bool() {
             "隐藏".into()
         } else {
             "显示".into()
         },
-        "停止并退出".into(),
+        "关闭显示条".into(),
         "流程控制".into(),
     ];
     let paths = SignalPaths::default();
@@ -396,8 +430,16 @@ unsafe fn menu(hwnd: HWND) {
 
 unsafe fn menu_action(hwnd: HWND, cmd: usize) {
     match cmd {
-        1 => SignalPaths::default().request_stop(),
-        2 => SignalPaths::default().clear_stop(),
+        1 | 2 => {
+            let result = if cmd == 1 {
+                request_emergency_stop("menu")
+            } else {
+                clear_emergency_stop()
+            };
+            if let Err(error) = result {
+                super::popup::show(hwnd, vec!["急停状态更新失败".into(), error], false);
+            }
+        }
         3 => details(hwnd),
         4 => {
             let _ = ShowWindow(
@@ -410,7 +452,8 @@ unsafe fn menu_action(hwnd: HWND, cmd: usize) {
             );
         }
         5 => {
-            SignalPaths::default().request_stop();
+            super::handoff::revoke();
+            publish_lease(&SignalPaths::default(), "closed");
             let _ = DestroyWindow(hwnd);
         }
         6 => details(hwnd),
@@ -622,7 +665,9 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
             LRESULT(0)
         }
         WM_HOTKEY => {
-            SignalPaths::default().request_stop();
+            if let Err(error) = request_emergency_stop("hotkey") {
+                super::popup::show(hwnd, vec!["急停保存失败".into(), error], false);
+            }
             tick(hwnd);
             LRESULT(0)
         }
@@ -673,13 +718,20 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
                 msg,
                 actl_uia::display_support::input_busy(),
             ) {
+                super::handoff::revoke();
+                publish_lease(&SignalPaths::default(), "closed");
                 let _ = DestroyWindow(hwnd);
                 LRESULT(1)
             } else {
                 LRESULT(0)
             }
         }
+        REVOKE_CONSENT => {
+            super::handoff::revoke();
+            LRESULT(1)
+        }
         WM_DESTROY => {
+            super::handoff::revoke();
             super::popup::hide();
             overlay::hide();
             super::perimeter::hide();
@@ -853,6 +905,19 @@ pub unsafe fn run() -> windows::core::Result<()> {
 mod tests {
     use super::*;
     #[test]
+    fn revoke_message_does_not_collide_with_handoff_or_close() {
+        for message in [
+            actl_core::handoff::REQUEST_MESSAGE,
+            actl_core::handoff::CHECK_MESSAGE,
+            actl_core::handoff::RECOVER_MESSAGE,
+            REPLACE_CLOSE,
+            CAPTURE_HIDE,
+            CAPTURE_RESTORE,
+        ] {
+            assert_ne!(REVOKE_CONSENT, message);
+        }
+    }
+    #[test]
     fn replacement_must_not_send_user_close() {
         let source = include_str!("shell.rs");
         let replacement = source.split("pub unsafe fn run()").nth(1).unwrap();
@@ -863,7 +928,7 @@ mod tests {
         );
     }
     #[test]
-    fn replacement_preserves_stop_and_user_close_requests_stop() {
+    fn ordinary_close_does_not_create_stop_and_preserves_existing_stop() {
         let dir = std::env::temp_dir().join(actl_core::snapshot::new_snapshot_id());
         let paths = SignalPaths::at(dir.clone());
         assert!(allow_close(&paths, REPLACE_CLOSE, Some(false)));
@@ -872,6 +937,11 @@ mod tests {
         assert!(!allow_close(&paths, REPLACE_CLOSE, None));
         assert!(!paths.stop_requested());
         assert!(allow_close(&paths, WM_CLOSE, Some(true)));
+        assert!(
+            !paths.stop_requested(),
+            "ordinary close must not create sticky emergency stop"
+        );
+        paths.request_stop().unwrap();
         let original = std::fs::read(paths.stop_file()).unwrap();
         assert!(allow_close(&paths, REPLACE_CLOSE, Some(false)));
         assert_eq!(std::fs::read(paths.stop_file()).unwrap(), original);

@@ -1,0 +1,11 @@
+{
+  "version": "1",
+  "ok": false,
+  "command": "click",
+  "error": {
+    "code": "ABORTED",
+    "message": "emergency stop active",
+    "hint": "user requested stop; explicitly release emergency stop in actl-signal, inspect prior results, then explicitly continue; never replay automatically"
+  },
+  "duration_ms": 0
+}

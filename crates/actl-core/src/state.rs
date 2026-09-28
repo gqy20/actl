@@ -217,21 +217,6 @@ impl SignalPaths {
         let text = std::fs::read_to_string(self.state_file()).ok()?;
         serde_json::from_str(&text).ok()
     }
-
-    /// 写入停止标志(粘性:清除是显式动作)。
-    pub fn request_stop(&self) {
-        let _ = std::fs::create_dir_all(&self.dir);
-        let _ = std::fs::write(self.stop_file(), unix_ms().to_string());
-    }
-
-    pub fn stop_requested(&self) -> bool {
-        self.stop_file().is_file()
-    }
-
-    /// 显式清除停止标志(actl-signal 的"清除"按钮调用)。
-    pub fn clear_stop(&self) {
-        let _ = std::fs::remove_file(self.stop_file());
-    }
 }
 
 #[cfg(test)]
@@ -270,9 +255,9 @@ mod tests {
     fn stop_flag_is_sticky_until_cleared() {
         let p = tmp();
         assert!(!p.stop_requested());
-        p.request_stop();
+        p.request_stop().unwrap();
         assert!(p.stop_requested());
-        p.clear_stop();
+        p.clear_stop().unwrap();
         assert!(!p.stop_requested());
         let _ = std::fs::remove_dir_all(&p.dir);
     }

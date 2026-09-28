@@ -3,6 +3,15 @@ use actl_core::signal_session::{ActionGuard, SignalSession};
 use actl_core::state::*;
 
 #[test]
+fn emergency_stop_hint_requires_review_before_continuation() {
+    let error = actl_core::CtlError::new(actl_core::ErrorCode::Aborted, "emergency stop active");
+    let actual = actl_core::ErrorEnvelope::new("click", &error, 0);
+    let expected: serde_json::Value =
+        serde_json::from_str(include_str!("golden/emergency_stop.json")).unwrap();
+    assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+}
+
+#[test]
 fn workflow_progress_preserves_reason_and_reads_legacy() {
     let expected: serde_json::Value =
         serde_json::from_str(include_str!("golden/workflow_progress.json")).unwrap();
@@ -15,7 +24,7 @@ fn workflow_progress_preserves_reason_and_reads_legacy() {
 }
 
 #[test]
-fn display_v5_contract_and_action_ack_identity() {
+fn display_v6_contract_and_action_ack_identity() {
     use actl_core::display::*;
     let l = DisplayLease {
         protocol: DISPLAY_PROTOCOL,
@@ -26,7 +35,7 @@ fn display_v5_contract_and_action_ack_identity() {
         ts_ms: 100,
     };
     let expected: serde_json::Value =
-        serde_json::from_str(include_str!("golden/display_v5.json")).unwrap();
+        serde_json::from_str(include_str!("golden/display_v6.json")).unwrap();
     assert_eq!(serde_json::to_value(l).unwrap(), expected);
     let p = paths();
     let now = unix_ms();
@@ -171,13 +180,13 @@ fn cancelled_and_partial_actions_never_generate_click_feedback() {
     let mut s = SignalSession::start(p.clone(), "type", None);
     {
         let _a = ActionGuard::begin("click", Default::default(), Default::default());
-        p.request_stop();
+        p.request_stop().unwrap();
     }
     assert_eq!(
         p.read_state().unwrap().action.unwrap().phase,
         ActionPhase::Cancelled
     );
-    p.clear_stop();
+    p.clear_stop().unwrap();
     let mut a = ActionGuard::begin("type", Default::default(), Default::default());
     a.executing();
     a.partial();
