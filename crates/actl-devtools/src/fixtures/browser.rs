@@ -32,8 +32,7 @@ pub(super) fn run(
             "--inprivate"
         },
         "--force-renderer-accessibility",
-        "--user-data-dir",
-        &profile.to_string_lossy(),
+        &format!("--user-data-dir={}", profile.to_string_lossy()),
         &html.to_string_lossy(),
     ])?;
     c.call(&["wait", "--window", &marker, "--timeout", "15000"])?;

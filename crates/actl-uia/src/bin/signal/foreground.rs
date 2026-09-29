@@ -11,9 +11,14 @@ fn eligible(
     pid != 0
         && pid != u32::MAX
         && request.call.starts_with(&format!("{pid}-"))
-        && actual
+        && (actual
             .to_string_lossy()
             .eq_ignore_ascii_case(&expected.to_string_lossy())
+            || actual
+                .canonicalize()
+                .ok()
+                .zip(expected.canonicalize().ok())
+                .is_some_and(|(a, b)| a.as_os_str().eq_ignore_ascii_case(b.as_os_str())))
 }
 
 pub fn transfer(pid: u32, request: &Request) {
@@ -88,6 +93,24 @@ fn transfer_checked(pid: u32, request: &Request) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn lexical_alias_of_the_same_executable_is_eligible() {
+        let path = std::env::current_exe().unwrap();
+        let alias = path
+            .parent()
+            .unwrap()
+            .join(".")
+            .join(path.file_name().unwrap());
+        let request = Request {
+            approval: Default::default(),
+            generation: "g".into(),
+            call: "42-call".into(),
+            task: "t".into(),
+            target: "browser".into(),
+            ts_ms: 0,
+        };
+        assert!(eligible(42, &request, &alias, &path));
+    }
     #[test]
     fn delegation_is_bound_to_current_cli_not_all_processes() {
         let mut request = Request {

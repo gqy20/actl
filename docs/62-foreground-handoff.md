@@ -10,6 +10,12 @@ press Ctrl+T 和 focus-window 均在 window_prepare 失败，未发送后续键�
 
 ## 修正
 
+2026-09-29 后续真机发现安装目录别名使执行器路径字符串比较失败（caller_identity_mismatch_or_exited）。补充同文件规范化路径核验，仍绑定调用 PID、任务及进程存活，不接受其他文件。相关源级复现与修正记录为 target/foreground-alias-red.log、foreground-alias-test.log。
+
+随后直接使用 actl 在 ZCode 与 Chrome 间完成 3 轮“ZCode 前台 → Chrome 前台 → 最小化 Chrome → 恢复 Chrome 前台”，12 次动作与紧随其后的原生状态断言全部通过，证据 target/foreground-direct-rounds/summary.json。多数动作约 3–5 秒，首个含交接等待约 8.7 秒；仅在本环境内报告，不称性能达标。含此前一次独立前台操作的同任务历史共 13 次转交/归还成功、2 次用户开始，不能宣称整份历史只确认一次。
+
+新窗口补验：热启动复用已有测试 Chrome PID、新隔离 profile 冷启动各 4 步通过，包含前台和页面输入目标核验，见 [64](64-bounded-observation-recovery.md)。测试窗口已正常关闭并核验原进程实例退出。上述通过不覆盖锁屏、其他权限级别、所有模态窗口或长期连续使用。
+
 显示端在真实开始事件及同任务授权复用时，按调用转交前台资格。
 核对当前调用 PID 前缀、同目录 actl.exe 路径、进程存活；持有句柄至 API 返回。
 不向所有进程开放，不改变任务授权、暂停、急停或具体输入焦点检查。

@@ -13,6 +13,8 @@ app_version: "Edge 1xx / Chrome 1xx(Chromium 系)"
 verified_date: 2026-09-27
 verified_env: Win11 zh-cn(Edge + Chrome 双实证,docs/16)
 quirks:
+  - id: isolated_startup_profile
+    note: Chrome 隔离启动使用单个参数 --user-data-dir=<绝对目录>，不要将目录拆成独立参数；否则可能被打开为网页。启动成功后单独确认目标窗口并前置，激活失败不重复启动。2026-09-29 本地页面热/冷启动、前台及输入目标核验通过；远端页面不据此记通过，见 docs/64。
   - id: foreground_handoff
     note: 前台失败先核对 window_prepare 的 activation_returned/foreground_before 和同 request_call 的 foreground_transfer/foreground_return；任务授权不等于 Windows 前台资格。2026-09-29 协议 v9 六步跨应用切窗、最小化恢复通过，开始一次；不外推到导航或小红书采集。禁止据前台失败重复启动或重放导航，见 docs/62-foreground-handoff.md。
   - id: revalidation_20260929
