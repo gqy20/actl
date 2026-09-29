@@ -774,6 +774,14 @@ pub fn resolve_window(r: WindowRef<'_>) -> Result<UIElement, CtlError> {
     match r {
         WindowRef::Title(pattern) => find_window(&auto, &walker, pattern),
         WindowRef::Pid(pid) => {
+            // Prove native absence before involving unrelated desktop providers.
+            // Enumeration failure still propagates; an unknown inventory is not empty.
+            if !crate::native_windows()?.iter().any(|w| w.pid == pid) {
+                return Err(CtlError::new(
+                    ErrorCode::NotFound,
+                    format!("no top-level window owned by pid {pid}"),
+                ));
+            }
             let matches = crate::window_observation::select(top_windows(&auto, &walker)?, |w| {
                 w.get_process_id()
                     .map(|p| p == pid)

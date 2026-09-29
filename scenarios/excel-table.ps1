@@ -11,27 +11,30 @@ $c=@{root=$root;binary=(Resolve-Path $Actl).Path;calls=[Collections.Generic.List
 $report=@{passed=$false;reason='';checks=[Collections.Generic.List[object]]::new();application=$null}
 $code=1
 function Open-OwnedWorkbook {
-    $baseline=@((Invoke-FixtureCli $c @('list-windows')).windows|ForEach-Object hwnd)
+    $baseline=@((Invoke-FixtureCli $c @('list-windows','--native')).windows|ForEach-Object hwnd)
     $null=Invoke-FixtureCli $c @('launch',$Program,'/x',$file)
     $null=Invoke-FixtureCli $c @('wait','--window',$marker,'--timeout','20000')
-    $windows=@(Get-FixtureCandidates (Invoke-FixtureCli $c @('list-windows')).windows $baseline $marker)
+    $windows=@(Get-FixtureCandidates (Invoke-FixtureCli $c @('list-windows','--native')).windows $baseline $marker)
     Assert-Fixture ($windows.Count -eq 1 -and $windows[0].class -eq 'XLMAIN') 'Workbook ownership ambiguous'
     $process=Get-Process -Id $windows[0].pid
     Assert-Fixture ($process.Path -eq $Program) 'Workbook executable mismatch'
     Save-FixtureOwner $c $windows[0] $marker
+    $null=Invoke-FixtureCli $c @('focus-window','--hwnd',[string]$c.owned.hwnd)
 }
 function Select-Range([string]$Address) {
     $null=Invoke-FixtureCli $c @('type','id:1001',$Address,'--app',$c.app)
-    $null=Invoke-FixtureCli $c @('press','enter','--app',$c.app)
+    $null=Invoke-FixtureCli $c @('press','enter','--target','id:1001','--app',$c.app)
+    $c.cell_target='uia:'+(@{match=@{name=($Address -split ':')[0]}}|ConvertTo-Json -Compress)
+    $null=Invoke-FixtureCli $c @('find','--target',$c.cell_target,'--app',$c.app)
 }
 function Paste-Range([string]$Address,[string]$Text) {
     Select-Range $Address
     $null=Invoke-FixtureCli $c @('set-clipboard',$Text)
-    $null=Invoke-FixtureCli $c @('paste','--app',$c.app)
-    $null=Invoke-FixtureCli $c @('press','esc','--app',$c.app)
+    $null=Invoke-FixtureCli $c @('press','ctrl+v','--target',$c.cell_target,'--app',$c.app)
+    $null=Invoke-FixtureCli $c @('press','esc','--target',$c.cell_target,'--app',$c.app)
 }
 function Assert-Workbook([string]$Name,[hashtable]$Expected) {
-    $null=Invoke-FixtureCli $c @('press','ctrl+s','--app',$c.app)
+    $null=Invoke-FixtureCli $c @('press','ctrl+s','--target',$c.cell_target,'--app',$c.app)
     $deadline=[DateTime]::UtcNow.AddSeconds(5)
     do {
         $actual=Read-OfficeContent $file excel
@@ -63,29 +66,29 @@ try {
     Paste-Range 'B2' '4'
     $expected.B2='4';$expected.D2='50';$expected.D4='71'
     Assert-Workbook 'recalculate' $expected
-    $null=Invoke-FixtureCli $c @('press','ctrl+z','--app',$c.app)
+    $null=Invoke-FixtureCli $c @('press','ctrl+z','--target',$c.cell_target,'--app',$c.app)
     $expected.B2='2';$expected.D2='25';$expected.D4='46'
     Assert-Workbook 'undo' $expected
-    $null=Invoke-FixtureCli $c @('press','ctrl+y','--app',$c.app)
+    $null=Invoke-FixtureCli $c @('press','ctrl+y','--target',$c.cell_target,'--app',$c.app)
     $expected.B2='4';$expected.D2='50';$expected.D4='71'
     Assert-Workbook 'redo' $expected
     Select-Range 'A1:D4'
-    $null=Invoke-FixtureCli $c @('press','ctrl+c','--app',$c.app)
+    $null=Invoke-FixtureCli $c @('press','ctrl+c','--target',$c.cell_target,'--app',$c.app)
     $clip=Invoke-FixtureCli $c @('get-clipboard')
     $clip|ConvertTo-Json -Depth 5|Set-Content "$root/copied-range.json" -Encoding utf8
     Assert-Fixture ($clip.text.Replace("`r`n","`n").TrimEnd("`n") -ceq "Item`tQty`tPrice`tTotal`nAlpha`t4`t12.5`t50`n中文`t3`t7`t21`nSum`t`t`t71") 'Range clipboard differs'
     $report.checks.Add(@{name='copy_range';passed=$true})
-    $null=Invoke-FixtureCli $c @('press','esc','--app',$c.app)
+    $null=Invoke-FixtureCli $c @('press','esc','--target',$c.cell_target,'--app',$c.app)
     Close-OfficeWindow $c
     $c.owned=$null
     Open-OwnedWorkbook
     Assert-Workbook 'reopen' $expected
     Select-Range 'D4'
-    $null=Invoke-FixtureCli $c @('press','ctrl+c','--app',$c.app)
+    $null=Invoke-FixtureCli $c @('press','ctrl+c','--target',$c.cell_target,'--app',$c.app)
     $clip=Invoke-FixtureCli $c @('get-clipboard')
     Assert-Fixture ($clip.text.Trim() -eq '71') 'Reopened calculation readback differs'
     $report.checks.Add(@{name='reopen_uia_keyboard_readback';passed=$true})
-    $null=Invoke-FixtureCli $c @('press','esc','--app',$c.app)
+    $null=Invoke-FixtureCli $c @('press','esc','--target',$c.cell_target,'--app',$c.app)
     $code=0
 }catch{$report.reason=$_.Exception.Message}
 finally {

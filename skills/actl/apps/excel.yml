@@ -10,6 +10,8 @@ app_version: "16.0.20326.20158"
 verified_date: 2026-09-28
 verified_env: "Windows 10.0.26200.0 zh-CN；真实 Office 用户配置；独立合成 XLSX"
 quirks:
+  - id: revalidation_20260929
+    note: 2026-09-29 独立 XLSX 通过 TSV、公式表达式、重算、撤销、重做与区域复制 6 项核验；按起始单元格名称唯一定位并断言焦点成功。关闭阶段 snapshot 遇到窗口消失，最终关闭已确认，重开尚未验收；不将整轮记为通过，见 docs/51。
   - id: current_execution_contract
     note: 名称框 id:1001 输入前确认名称框唯一且已选择旧地址；Enter 只在名称框聚焦时执行。跳转后现场观察并核对目标单元格/编辑面，cell_input_selector 是其唯一语义选择器（不是 ref），须确认实际键盘焦点。粘贴与单元格提交使用该目标；焦点不同则停止，不退回仅按窗口放行。
   - id: protected_view

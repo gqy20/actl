@@ -46,7 +46,9 @@ try {
         $document=Invoke-FixtureCli $context @('find','--name',$marker,'--role','Document','--app',$context.app)
         Assert-Fixture (@($document.elements).Count -eq 1) 'Test document is not unique'
         $null=Invoke-FixtureCli $context @('click','name:Start stream','--app',$context.app)
-        $settle=Invoke-FixtureCli $context @('wait','--element',$document.elements[0].ref,'--stable','--app',$context.app,'--timeout','20000')
+        # wait has no --snapshot: re-resolve the unique document by exact semantics.
+        $documentTarget='uia:'+(@{match=@{role='Document';name=$document.elements[0].name}}|ConvertTo-Json -Compress)
+        $settle=Invoke-FixtureCli $context @('wait','--element',$documentTarget,'--stable','--app',$context.app,'--timeout','20000')
         $measurements.settle=$settle
         Assert-Fixture ($settle.waited_ms -ge 1000 -and $settle.waited.changes -ge 1) 'No observed content changes during settle'
         $unexpected=$false
@@ -58,7 +60,7 @@ try {
     }
     $document=Invoke-FixtureCli $context @('find','--name',$marker,'--role','Document','--app',$context.app)
     Assert-Fixture (@($document.elements).Count -eq 1) 'Test document is not unique'
-    $text=Invoke-FixtureCli $context @('get',$document.elements[0].ref,'--property','text','--app',$context.app)
+    $text=Invoke-FixtureCli $context @('get',$document.elements[0].ref,'--property','text','--snapshot',$context.last_snapshot_id,'--app',$context.app)
     Assert-Fixture ($text.properties.text.Contains('quick brown fox') -and $text.properties.text.Contains('敏捷的棕色狐狸')) 'Page text mismatch'
     if($Scenario -eq 'content-view'){Assert-Fixture ($text.properties.text.Contains('lazy-item-40')) 'Dynamic content incomplete'}
     foreach($view in @('full','skeleton','content','both')){

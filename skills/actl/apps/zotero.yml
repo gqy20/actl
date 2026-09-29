@@ -9,6 +9,10 @@ app_version: "10.0.3"
 verified_date: 2026-09-28
 verified_env: Windows 10.0.26200.0 zh-cn
 quirks:
+  - id: import_readback_correction
+    note: docs/53 只读数据库核对证明 2026-09-29 首轮两条 RIS 文献已正确落库；失败在界面未暴露预期条目行，不能重放导入，须核对列表视图与截图。搜索导出仍未验收。
+  - id: revalidation_20260929
+    note: 2026-09-29：独立 profile/data 的导入菜单动作成功，但未观察到预期两条文献，搜索导出尚未验收；原因未确定，测试窗口已关闭，见 docs/51。
   - id: current_execution_contract
     note: 每次 find 后将选定元素的完整 ref 与同次 snapshot_id 成对保存；第二次搜索定位使用 fresh_search_ref/fresh_search_snapshot_id。publication/filename 使用各自前缀；set-value 后读回必须等于新路径。窗口枚举失败立即停止，不把失败当作没有窗口。
   - id: export_dialog_ids

@@ -13,6 +13,8 @@ app_version: "Edge 1xx / Chrome 1xx(Chromium 系)"
 verified_date: 2026-09-27
 verified_env: Win11 zh-cn(Edge + Chrome 双实证,docs/16)
 quirks:
+  - id: revalidation_20260929
+    note: 2026-09-29：隔离 profile 的 Edge/Chrome 本地动态页面均通过稳定等待、歧义拒绝、中英文读取与四种投影，并核验关闭；不外推到地址栏导航、远端业务或局部容器验收，见 docs/51。
   - id: current_execution_contract
     note: 导航、弹层及标签切换后重新观察；document_selector 为当前页面唯一的语义选择器，不固定 Document#2。document_ref/document_snapshot_id 来自同次 find，link_ref/link_snapshot_id 从 Hyperlink 候选核对目标后取得；address_selector 是现场识别的地址栏唯一语义选择器，Ctrl+L/Ctrl+T 后先确认该输入框焦点。不得自动重放结果不明的点击。
   - id: isolated_probe_documents

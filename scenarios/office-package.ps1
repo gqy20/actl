@@ -73,7 +73,14 @@ function Close-OfficeWindow($Context) {
         if($same.Count -eq 1 -and $same[0].class -eq 'XLMAIN' -and $same[0].title -eq 'Excel' -and $same[0].pid -eq $Context.owned.pid) {
             $process=Get-Process -Id $Context.owned.pid -ErrorAction Stop
             Assert-Fixture ($process.StartTime.ToUniversalTime().Ticks -eq $Context.owned.started) 'Office process identity changed during close'
-            $tree=Invoke-FixtureCli $Context @('snapshot','--app',$Context.app)
+            try {$tree=Invoke-FixtureCli $Context @('snapshot','--app',$Context.app)} catch {
+                # The same native window may finish closing between the two reads.
+                # Recheck native existence; do not replay close or swallow provider errors.
+                $last=Get-Content $Context.calls[$Context.calls.Count-1].stdout -Raw|ConvertFrom-Json
+                if($last.error.code -ne 'NOT_FOUND'){throw}
+                Start-Sleep -Milliseconds 100
+                continue
+            }
             if(Test-OfficeEmptyHost $same[0] $tree) {
                 # Require the task's file to be released as well as an empty hidden UIA host.
                 $stream=[IO.File]::Open($Context.file,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None)
@@ -81,6 +88,7 @@ function Close-OfficeWindow($Context) {
                 $Context.cleanup='document_closed_host_retained';return
             }
         }
+        Start-Sleep -Milliseconds 100
     }while([DateTime]::UtcNow -lt $deadline)
     throw 'Office close pending; inspect the owned window before continuing'
 }

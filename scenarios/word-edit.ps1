@@ -12,17 +12,18 @@ $report=@{passed=$false;reason='';checks=[Collections.Generic.List[object]]::new
 $code=1
 function Normalize-WordText([string]$Text){$Text.Replace("`r`n","`n").Replace("`r","`n").TrimEnd("`n")}
 function Open-OwnedDocument {
-    $baseline=@((Invoke-FixtureCli $c @('list-windows')).windows|ForEach-Object hwnd)
+    $baseline=@((Invoke-FixtureCli $c @('list-windows','--native')).windows|ForEach-Object hwnd)
     $null=Invoke-FixtureCli $c @('launch',$Program,'/n',$file)
     $null=Invoke-FixtureCli $c @('wait','--window',$marker,'--timeout','20000')
-    $windows=@(Get-FixtureCandidates (Invoke-FixtureCli $c @('list-windows')).windows $baseline $marker)
+    $windows=@(Get-FixtureCandidates (Invoke-FixtureCli $c @('list-windows','--native')).windows $baseline $marker)
     Assert-Fixture ($windows.Count -eq 1 -and $windows[0].class -eq 'OpusApp') 'Document ownership ambiguous'
     $process=Get-Process -Id $windows[0].pid
     Assert-Fixture ($process.Path -eq $Program) 'Document executable mismatch'
     Save-FixtureOwner $c $windows[0] $marker
+    $null=Invoke-FixtureCli $c @('focus-window','--hwnd',[string]$c.owned.hwnd)
 }
 function Assert-Document([string]$Name,[string]$Expected) {
-    $null=Invoke-FixtureCli $c @('press','ctrl+s','--app',$c.app)
+    $null=Invoke-FixtureCli $c @('press','ctrl+s','--target','uia:{"match":{"role":"Document"}}','--app',$c.app)
     $deadline=[DateTime]::UtcNow.AddSeconds(5)
     do {
         $actual=Read-OfficeContent $file word
@@ -30,7 +31,7 @@ function Assert-Document([string]$Name,[string]$Expected) {
         Start-Sleep -Milliseconds 100
     }while([DateTime]::UtcNow -lt $deadline)
     Assert-Fixture ($actual -ceq $Expected) "Saved document differs: $Name"
-    $read=Invoke-FixtureCli $c @('get','role:Document','--property','text','--app',$c.app)
+    $read=Invoke-FixtureCli $c @('get','uia:{"match":{"role":"Document"}}','--property','text','--app',$c.app)
     Assert-Fixture ((Normalize-WordText $read.properties.text) -ceq $Expected) "UIA document differs: $Name"
     $report.checks.Add(@{name=$Name;passed=$true;sha256=(Get-OfficeHash $file)})
 }
@@ -42,24 +43,22 @@ try {
     New-OfficeSeed $file word
     $report.application=@{program=$Program;version=(Get-Item $Program).VersionInfo.FileVersion;file=$file;os=[Environment]::OSVersion.VersionString}
     Open-OwnedDocument
-    $null=Invoke-FixtureCli $c @('type','role:Document','ACTL prefix ','--paste','--app',$c.app)
+    $null=Invoke-FixtureCli $c @('type','uia:{"match":{"role":"Document"}}','ACTL prefix ','--paste','--app',$c.app)
     Assert-Document 'insert_preserves_seed' 'ACTL prefix ACTL seed'
-    $null=Invoke-FixtureCli $c @('press','ctrl+a','--app',$c.app)
+    $null=Invoke-FixtureCli $c @('press','ctrl+a','--target','uia:{"match":{"role":"Document"}}','--app',$c.app)
     $body="ACTL report 2026`n第一段 中文 12345`nSecond paragraph 67890"
-    $null=Invoke-FixtureCli $c @('set-clipboard',$body.Replace("`n","`r`n"))
-    $null=Invoke-FixtureCli $c @('paste','--app',$c.app)
+    $null=Invoke-FixtureCli $c @('type','uia:{"match":{"role":"Document"}}',$body.Replace("`n","`r`n"),'--paste','--app',$c.app)
     Assert-Document 'replace_multiple_paragraphs' $body
-    $null=Invoke-FixtureCli $c @('press','ctrl+end','--app',$c.app)
+    $null=Invoke-FixtureCli $c @('press','ctrl+end','--target','uia:{"match":{"role":"Document"}}','--app',$c.app)
     $suffix="`nAppend 中文 Ω 24680"
-    $null=Invoke-FixtureCli $c @('set-clipboard',$suffix.Replace("`n","`r`n"))
-    $null=Invoke-FixtureCli $c @('paste','--app',$c.app)
+    $null=Invoke-FixtureCli $c @('type','uia:{"match":{"role":"Document"}}',$suffix.Replace("`n","`r`n"),'--paste','--app',$c.app)
     Assert-Document 'append_at_end' ($body+$suffix)
-    $null=Invoke-FixtureCli $c @('press','ctrl+z','--app',$c.app)
+    $null=Invoke-FixtureCli $c @('press','ctrl+z','--target','uia:{"match":{"role":"Document"}}','--app',$c.app)
     Assert-Document 'undo_append' $body
-    $null=Invoke-FixtureCli $c @('press','ctrl+y','--app',$c.app)
+    $null=Invoke-FixtureCli $c @('press','ctrl+y','--target','uia:{"match":{"role":"Document"}}','--app',$c.app)
     Assert-Document 'redo_append' ($body+$suffix)
-    $null=Invoke-FixtureCli $c @('press','ctrl+a','--app',$c.app)
-    $null=Invoke-FixtureCli $c @('press','ctrl+b','--app',$c.app)
+    $null=Invoke-FixtureCli $c @('press','ctrl+a','--target','uia:{"match":{"role":"Document"}}','--app',$c.app)
+    $null=Invoke-FixtureCli $c @('press','ctrl+b','--target','uia:{"match":{"role":"Document"}}','--app',$c.app)
     Assert-Document 'bold_preserves_text' ($body+$suffix)
     $stream=Open-OfficeReadStream $file
     $zip=[IO.Compression.ZipArchive]::new($stream,[IO.Compression.ZipArchiveMode]::Read)
@@ -73,7 +72,7 @@ try {
         }
     }finally{$zip.Dispose();$stream.Dispose()}
     $report.checks.Add(@{name='bold_in_saved_xml';passed=$true})
-    $null=Invoke-FixtureCli $c @('press','right','--app',$c.app)
+    $null=Invoke-FixtureCli $c @('press','right','--target','uia:{"match":{"role":"Document"}}','--app',$c.app)
     Close-OfficeWindow $c
     $c.owned=$null
     Open-OwnedDocument

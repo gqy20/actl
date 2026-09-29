@@ -9,6 +9,8 @@ app_version: "16.0.20326.20158"
 verified_date: 2026-09-28
 verified_env: "Windows 10.0.26200.0 zh-CN；独立合成 DOCX，兼容性模式"
 quirks:
+  - id: revalidation_20260929
+    note: 2026-09-29：独立 DOCX 首次 type 在 UIA control_type 观察阶段报 STALE_REF，完整写入未通过；测试窗口已关闭，见 docs/51。
   - id: current_execution_contract
     note: window 必须唯一并对应已授权文档；有多个 Word 窗口时现场确认 HWND。正文粘贴/选择使用 --target 断言当前焦点，拒绝时先观察，不用试输文本抢焦点。anchor 只接受重新核对的唯一语义选择器；保存后核对磁盘与正文，不用标题证明落盘。
   - id: protected_view

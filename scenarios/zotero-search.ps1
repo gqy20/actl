@@ -32,12 +32,12 @@ user_pref("extensions.zotero.firstRun2", false);
 user_pref("extensions.zotero.firstRunGuidance", false);
 '@|Set-Content "$profile/user.js"
  $report.application=@{version=(Get-Item $Program).VersionInfo.FileVersion;program=$Program;profile=$profile;data=$data}
- $baseline=@((Invoke-FixtureCli $c @('list-windows')).windows|ForEach-Object hwnd)
+ $baseline=@((Invoke-FixtureCli $c @('list-windows','--native')).windows|ForEach-Object hwnd)
  $null=Invoke-FixtureCli $c @('launch',$Program,'-no-remote','-profile',$profile,'-datadir',$data)
  $deadline=[DateTime]::UtcNow.AddSeconds(30)
  do{
-  $windows=@((Invoke-FixtureCli $c @('list-windows')).windows|Where-Object {
-   if($_.hwnd -in $baseline){return $false}
+  $windows=@((Invoke-FixtureCli $c @('list-windows','--native')).windows|Where-Object {
+   if($_.hwnd -in $baseline -or $_.class -ne 'MozillaWindowClass' -or $_.visible -eq $false){return $false}
    $p=Get-CimInstance Win32_Process -Filter "ProcessId=$($_.pid)"
    $p -and $p.ExecutablePath -eq $Program -and $p.CommandLine.Contains($profile) -and $p.CommandLine.Contains($data)
   })
@@ -85,16 +85,16 @@ user_pref("extensions.zotero.firstRunGuidance", false);
  $null=Invoke-FixtureCli $c @('right-click','id:item-tree-main-default-row-0','--app',$c.app)
  $null=Invoke-FixtureCli $c @('click','name:导出条目','--app',$c.app)
  $null=Invoke-FixtureCli $c @('wait','--window','导出…','--timeout','10000')
- $dialogs=@((Invoke-FixtureCli $c @('list-windows')).windows|Where-Object {$_.pid -eq $c.owned.pid -and $_.class -eq 'MozillaDialogClass' -and $_.title -eq '导出…'})
+ $dialogs=@((Invoke-FixtureCli $c @('list-windows','--native')).windows|Where-Object {$_.pid -eq $c.owned.pid -and $_.class -eq 'MozillaDialogClass' -and $_.title -eq '导出…'})
  Assert-Fixture ($dialogs.Count -eq 1) 'Export format dialog not unique'
  $formatApp="hwnd:$($dialogs[0].hwnd)"
  $null=Invoke-FixtureCli $c @('click','id:format-menu','--app',$formatApp)
  $null=Invoke-FixtureCli $c @('click','name:CSL JSON','--app',$formatApp)
- $beforeSave=@((Invoke-FixtureCli $c @('list-windows')).windows|ForEach-Object hwnd)
+ $beforeSave=@((Invoke-FixtureCli $c @('list-windows','--native')).windows|ForEach-Object hwnd)
  $null=Invoke-FixtureCli $c @('click','name:OK','--app',$formatApp)
  $deadline=[DateTime]::UtcNow.AddSeconds(15)
  do{
-  $save=@((Invoke-FixtureCli $c @('list-windows')).windows|Where-Object {$_.hwnd -notin $beforeSave -and $_.class -eq '#32770' -and $_.title -eq '导出' -and $_.PSObject.Properties['owner_title'] -and $_.owner_title.Contains('Zotero')})
+  $save=@((Invoke-FixtureCli $c @('list-windows','--native')).windows|Where-Object {$_.hwnd -notin $beforeSave -and $_.class -eq '#32770' -and $_.title -eq '导出' -and $_.PSObject.Properties['owner_title'] -and $_.owner_title.Contains('Zotero')})
  }while($save.Count -eq 0 -and [DateTime]::UtcNow -lt $deadline)
  Assert-Fixture ($save.Count -eq 1) 'Export save dialog not unique'
  $saveApp="hwnd:$($save[0].hwnd)"

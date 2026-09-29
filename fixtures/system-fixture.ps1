@@ -75,6 +75,12 @@ function Assert-Fixture([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
 }
 
+# Query only matching provider candidates; no full-tree ref allocation for one target.
+function Find-FixtureTarget($Context, [string]$Name, [string]$Role) {
+    $target='uia:'+(@{match=@{role=$Role;name_contains=$Name}}|ConvertTo-Json -Compress)
+    return Invoke-FixtureCli $Context @('find','--target',$target,'--app',$Context.app)
+}
+
 function Get-FixtureCandidates($Windows, $Baseline, [string]$Title, [int]$ExpectedPid = 0) {
     return @($Windows | Where-Object {
         $_.PSObject.Properties['hwnd'] -and $_.hwnd -and $_.hwnd -notin $Baseline -and
@@ -122,9 +128,19 @@ function Close-FixtureWindow($Context) {
     }
     $null = Invoke-FixtureCli $Context @('close-window','--hwnd',[string]$Context.owned.hwnd)
     $Context.cleanup = 'retained_close_pending'
-    $remaining = @((Invoke-FixtureCli $Context @('list-windows','--native','--hwnd',[string]$Context.owned.hwnd)).windows | Where-Object { $_.PSObject.Properties['hwnd'] -and $_.hwnd -eq $Context.owned.hwnd })
-    Assert-Fixture ($remaining.Count -eq 0) 'Owned window did not close'
-    $Context.cleanup = 'closed_verified'
+    $deadline = [DateTime]::UtcNow.AddSeconds(5)
+    do {
+        $remaining = @((Invoke-FixtureCli $Context @('list-windows','--native','--hwnd',[string]$Context.owned.hwnd)).windows | Where-Object { $_.PSObject.Properties['hwnd'] -and $_.hwnd -eq $Context.owned.hwnd })
+        if ($remaining.Count -eq 0) { $Context.cleanup = 'closed_verified'; return }
+        if ($remaining[0].pid -ne $Context.owned.pid -or $remaining[0].class -ne $Context.owned.class) {
+            $Context.cleanup = 'retained_identity_changed'; throw 'Window identity changed during close'
+        }
+        if (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'actl/stop-requested')) {
+            $Context.cleanup = 'retained_stop'; throw 'Cleanup observation stopped'
+        }
+        Start-Sleep -Milliseconds 100
+    } while ([DateTime]::UtcNow -lt $deadline)
+    throw 'Owned window did not close'
 }
 
 function Invoke-SystemFixture([string]$Case, [string]$Actl) {
