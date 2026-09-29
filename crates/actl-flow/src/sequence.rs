@@ -47,30 +47,34 @@ pub fn expand(raw: &mut serde_json::Value) -> Result<(), CtlError> {
         .and_then(serde_json::Value::as_array_mut)
     {
         for step in steps {
-            if let Some(run) = step.get_mut("run")
-                && let Some(sequence) = run.get("sequence")
-            {
-                if run.as_object().is_none_or(|object| object.len() != 1) {
-                    return Err(CtlError::protocol(
-                        "sequence cannot be combined with invocation fields",
-                    ));
+            for field in ["run", "otherwise"] {
+                if let Some(run) = step.get_mut(field)
+                    && let Some(sequence) = run.get("sequence")
+                {
+                    if run.as_object().is_none_or(|object| object.len() != 1) {
+                        return Err(CtlError::protocol(
+                            "sequence cannot be combined with invocation fields",
+                        ));
+                    }
+                    let calls = sequence
+                        .as_array()
+                        .ok_or_else(|| CtlError::protocol("sequence must be an array"))?;
+                    let args = calls
+                        .iter()
+                        .map(|call| {
+                            serde_json::to_string(call)
+                                .map_err(|e| CtlError::internal(e.to_string()))
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    let call = Invocation {
+                        command: COMMAND.into(),
+                        args,
+                        bind: Default::default(),
+                    };
+                    decode(&call)?;
+                    *run = serde_json::to_value(call)
+                        .map_err(|e| CtlError::internal(e.to_string()))?;
                 }
-                let calls = sequence
-                    .as_array()
-                    .ok_or_else(|| CtlError::protocol("sequence must be an array"))?;
-                let args = calls
-                    .iter()
-                    .map(|call| {
-                        serde_json::to_string(call).map_err(|e| CtlError::internal(e.to_string()))
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                let call = Invocation {
-                    command: COMMAND.into(),
-                    args,
-                    bind: Default::default(),
-                };
-                decode(&call)?;
-                *run = serde_json::to_value(call).map_err(|e| CtlError::internal(e.to_string()))?;
             }
         }
     }

@@ -33,7 +33,9 @@ steps:
 - retry 默认 never；read_only 仅限只读 run。stale_read 只重试阶段中的只读 STALE_REF，最多三次、间隔 200ms，写 run 不因此重放。on_failure 为 pause（默认）或 fail。
 - pause_before: true 在首次进入步骤前暂停。evidence 默认为 metadata；full 会保存断言内容。计划参数和显式输出本身仍可能包含敏感信息。
 - 用语义选择器，每次重新定位。禁止临时 `@eN`、`--snapshot`、batch、嵌套 flow、管理命令和 key-down/key-up。
-- 不支持字符串插值、表达式、分支、循环、并行或自动引用 pack。物理操作仍需显式 `--physical`，沿用命令的焦点及桌面交接护栏。
+- 支持简单 `when`/`unless` 与可选 `otherwise`：条件为即时只读断言，成功为真、ASSERTION_FAILED 为假，其他错误暂停。严格 UIA `verify --exists` 仅在已确认窗口/容器中完整查询零命中才为假。未派发步骤恢复重新判断；不确定步骤保留路线先核验。条件步骤不声明 outputs。不支持字符串插值、通用表达式、嵌套分支、循环、并行或自动引用 pack。物理操作仍需显式 `--physical`，沿用命令的焦点及桌面交接护栏。
+- `verify-window --app <唯一标题片段|hwnd:句柄> --state exists|absent|foreground|minimized|visible` 可判断原生窗口状态；visible 不证明无遮挡。窗口缺失时 absent 为真、其他为假；多个匹配报 AMBIGUOUS。模板见 workflows/ensure-app-window.yml、dismiss-optional-control.yml、ensure-element-value.yml。两条路线都预检，公共 before/resume_check/verify 须适用于两条路线。
+- 条件观察失败后，目前按 on_failure 暂停或失败，不会自动缩小查询、选择歧义候选或启动窗口。恢复前先查原错误与现场，明确目标后继续；已经派发的动作先核验。可配置的有界恢复策略仍待实现，不向 YAML 添加未定义字段。基础恢复优先于复杂编排推进。
 
 ```powershell
 actl flow-validate --file task.yml

@@ -40,6 +40,7 @@ mod scoped_locate;
 mod table;
 pub use table::{TableResult, extract_table};
 mod window;
+pub mod window_check;
 mod window_observation;
 mod window_ready;
 pub use window_ready::wait_window_ready;

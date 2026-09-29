@@ -25,6 +25,9 @@ pub fn decode(raw: Value) -> Result<super::Plan, CtlError> {
                 "id",
                 "title",
                 "run",
+                "when",
+                "unless",
+                "otherwise",
                 "before",
                 "verify",
                 "resume_check",
@@ -44,7 +47,15 @@ pub fn decode(raw: Value) -> Result<super::Plan, CtlError> {
                 return Err(error(&format!("{base}.{key}"), id, "required string field"));
             }
         }
-        for key in ["run", "before", "verify", "resume_check"] {
+        for key in [
+            "run",
+            "before",
+            "verify",
+            "resume_check",
+            "when",
+            "unless",
+            "otherwise",
+        ] {
             if key != "run" && step.get(key).is_none_or(Value::is_null) {
                 continue;
             }

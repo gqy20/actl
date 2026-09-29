@@ -521,6 +521,15 @@ pub(crate) enum Command {
         #[arg(long)]
         pid: Option<u32>,
     },
+    /// Assert native window existence or state without changing focus
+    VerifyWindow {
+        /// Unique window title substring or hwnd:<decimal/hex>
+        #[arg(long)]
+        app: String,
+        /// Native state to assert without activating the window
+        #[arg(long, value_parser = ["exists", "absent", "foreground", "minimized", "visible"])]
+        state: String,
+    },
     /// Verify both the owned window and its original process instance have exited
     VerifyClosed {
         #[arg(long)]
@@ -782,6 +791,7 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
         Command::VerifyRows { .. } => "verify-rows",
         Command::VerifyOwner { .. } => "verify-owner",
         Command::VerifyClosed { .. } => "verify-closed",
+        Command::VerifyWindow { .. } => "verify-window",
         Command::VerifyClipboard { .. } => "verify-clipboard",
         Command::Extract { .. } => "extract",
         Command::Select { .. } => "select",
@@ -803,7 +813,7 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
 fn after_help_for(name: &str) -> Option<&'static str> {
     Some(match name {
         "flow-validate" => {
-            "Example:\n  actl flow-validate --file task.yml\nOptional --inputs values.yml resolves declared whole-argument inputs before validating every step. Resources are checked without creating files; data.resources uses the validation-preview context. --emit-plan includes the concrete preview plan and input values, not initialized resources. run.sequence groups up to 16 prevalidated calls with one result check. outputs select typed read-only data via JSON Pointer; bind replaces a whole args entry by index. Resolved CLI arguments are revalidated before execution.\nErrors: PROTOCOL invalid YAML/command/policy/resource | INTERNAL file error"
+            "Example:\n  actl flow-validate --file task.yml\nOptional --inputs values.yml resolves declared whole-argument inputs before validating every step. Resources are checked without creating files; data.resources uses the validation-preview context. --emit-plan includes the concrete preview plan and input values, not initialized resources. when/unless select run or otherwise using immediate assertions; unknown observations stop. Both routes are prevalidated. run/otherwise.sequence groups up to 16 calls with one result check. outputs select typed read-only data via JSON Pointer; bind replaces a whole args entry by index. Resolved CLI arguments are revalidated before execution.\nErrors: PROTOCOL invalid YAML/command/policy/resource | INTERNAL file error"
         }
         "verify-file" => {
             "Example:\n  actl verify-file --path report.json --kind json --expected '{}'\nReads text/JSON or OOXML via a fixed read-only Windows PowerShell inspector. Text normalizes CRLF to LF; docx returns text and bold; xlsx returns cell values/formulas from sheet1. Maximum input/output 4 MiB. No user scripts or Office automation. Known mismatches are re-read in a 5-second settle window; unknown read errors stop immediately.\nErrors: PROTOCOL invalid expectation | ASSERTION_FAILED content differs | NOT_ACTIONABLE unreadable/unsupported document | INTERNAL inspector failure"
@@ -816,6 +826,9 @@ fn after_help_for(name: &str) -> Option<&'static str> {
         }
         "verify-closed" => {
             "Example:\n  actl verify-closed --hwnd 123 --pid 456 --instance 2026-09-29T00:00:00Z\nReads native windows and process creation time. Window disappearance alone never proves closure. Known running state is re-read for up to a 5-second settle window.\nErrors: PROTOCOL invalid HWND | ASSERTION_FAILED original instance remains | NOT_ACTIONABLE process observation failed"
+        }
+        "verify-window" => {
+            "Example:\n  actl verify-window --app Chrome --state foreground\nReads native window state without activating it. Zero matches is false for exists/foreground/minimized/visible, true for absent. Multiple matches are ambiguous.\nErrors: PROTOCOL invalid app/state | ASSERTION_FAILED known state mismatch | AMBIGUOUS multiple windows | INTERNAL/NOT_ACTIONABLE observation failed"
         }
         "verify-clipboard" => {
             "Example:\n  actl verify-clipboard --expected 'Exact text' --normalize-lines\nRead-only exact text assertion. Optional normalization converts CRLF to LF and trims trailing LF.\nErrors: ASSERTION_FAILED text differs | NOT_ACTIONABLE unavailable clipboard | INTERNAL read failure"

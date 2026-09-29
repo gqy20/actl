@@ -518,6 +518,10 @@ verified 是提交者声明；报告内容由提交者简化，不自动脱敏�
 
 ## 7.7 YAML 顺序流程 v1
 
+简单条件扩展：步骤可声明互斥的 `when`/`unless` 即时只读断言和可选 `otherwise` 动作，未选中且无备用路线时跳过。两条路线均预检；条件步骤不声明 outputs。成功为真，ASSERTION_FAILED 为假；严格 UIA 存在性断言仅在已确认窗口/容器、完整零命中时将带明确查询证据的 NOT_FOUND 判假，其他观察错误以 condition_observation_failed 停止。branch=run/otherwise/skip 在派发前持久化，未派发恢复重判，不确定步骤保持原路线先核验。完整字段、执行顺序及模板见 [63](63-simple-workflow-conditions.md)。
+
+新增只读命令 `verify-window --app <标题片段|hwnd:句柄> --state <exists|absent|foreground|minimized|visible>`：成功 data 为 `{action:"verify-window",state,matched:true,window}`，window 为 `{hwnd,pid,title,foreground,minimized,visible}` 或 null；已知不成立返回 ASSERTION_FAILED，evidence 保留对应 matched=false 数据。多匹配返回 AMBIGUOUS，查询错误原样传播，无匹配仅 absent 成立。窗口存在与前台判断不证明资源归属、无遮挡或进程退出。
+
 新增 flow-validate/run/status/pause/resume，完整字段、状态与边界以
 [20](20-yaml-workflow-protocol.md) 为本节规范性扩展。
 独立流程层复用原子命令，run/resume 按运行 ID 关联操作历史。

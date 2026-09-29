@@ -6,6 +6,7 @@
 //! `interact`(操作类)与 `query`(观察/编排类);本文件只做入口、分发与 envelope 落盘。
 
 mod cli;
+mod condition;
 mod file_check;
 mod flow;
 mod interact;
@@ -141,6 +142,9 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             actl_uia::preview::show(app, &target, message, *duration).map(Into::into)
         }
         Command::Flow(command) => flow::dispatch(command).map(Into::into),
+        Command::VerifyWindow { app, state } => {
+            actl_uia::window_check::verify_window(app, state).map(Into::into)
+        }
         Command::VerifyClosed {
             hwnd,
             pid,

@@ -46,6 +46,7 @@ fn read_only(cmd: &Command) -> bool {
             | Command::VerifyRows { .. }
             | Command::VerifyOwner { .. }
             | Command::VerifyClosed { .. }
+            | Command::VerifyWindow { .. }
             | Command::VerifyClipboard { .. }
             | Command::Wait { .. }
             | Command::GetClipboard
@@ -54,6 +55,7 @@ fn read_only(cmd: &Command) -> bool {
 
 fn validate_assertion(command: &Command) -> Result<(), CtlError> {
     match command {
+        Command::VerifyWindow { app, state } => actl_uia::window_check::validate(app, state)?,
         Command::VerifyOwner {
             program,
             token,
@@ -145,6 +147,18 @@ fn validate_assertion(command: &Command) -> Result<(), CtlError> {
 }
 pub fn validate(plan: &Plan) -> Result<(), CtlError> {
     for (index, step) in plan.steps.iter().enumerate() {
+        actl_flow::branch::validate(step)?;
+        if let Some(otherwise) = &step.otherwise {
+            let mut child = step.clone();
+            child.run = otherwise.clone();
+            child.otherwise = None;
+            validate(&Plan {
+                version: plan.version,
+                name: plan.name.clone(),
+                handoff: plan.handoff,
+                steps: vec![child],
+            })?;
+        }
         if let Some(calls) = actl_flow::sequence::decode(&step.run)? {
             if step.verify.is_none() || !step.outputs.is_empty() || step.retry == Retry::ReadOnly {
                 return Err(CtlError::protocol(
@@ -154,6 +168,7 @@ pub fn validate(plan: &Plan) -> Result<(), CtlError> {
             for call in calls {
                 let mut child = step.clone();
                 child.run = call;
+                child.otherwise = None;
                 validate(&Plan {
                     version: plan.version,
                     name: plan.name.clone(),
@@ -172,6 +187,8 @@ pub fn validate(plan: &Plan) -> Result<(), CtlError> {
         };
         for (field, call) in [
             ("run", Some(&step.run)),
+            ("when", step.when.as_ref()),
+            ("unless", step.unless.as_ref()),
             ("before", step.before.as_ref()),
             ("verify", step.verify.as_ref()),
             ("resume_check", step.resume_check.as_ref()),
@@ -198,12 +215,35 @@ pub fn validate(plan: &Plan) -> Result<(), CtlError> {
                         | Command::VerifyRows { .. }
                         | Command::VerifyOwner { .. }
                         | Command::VerifyClosed { .. }
+                        | Command::VerifyWindow { .. }
                         | Command::VerifyClipboard { .. }
                 )
             {
                 return Err(context(
                     field,
                     CtlError::protocol("checks require verify or wait"),
+                ));
+            }
+            if matches!(field, "when" | "unless") && matches!(command, Command::Wait { .. }) {
+                return Err(context(
+                    field,
+                    CtlError::protocol("conditions require immediate assertions, not wait"),
+                ));
+            }
+            if matches!(field, "when" | "unless")
+                && let Command::Verify {
+                    exists: Some(target),
+                    app,
+                    ..
+                } = &command
+                && (app.as_ref().is_none_or(|app| app.trim().is_empty())
+                    || !matches!(actl_core::parse_target(target)?, actl_core::Target::Uia(_)))
+            {
+                return Err(context(
+                    field,
+                    CtlError::protocol(
+                        "element existence conditions require explicit --app and a strict uia: selector",
+                    ),
                 ));
             }
             if matches!(
@@ -256,6 +296,16 @@ struct Adapter<'a> {
     store: &'a Store,
 }
 impl Host for Adapter<'_> {
+    fn condition(&mut self, call: &Invocation) -> Result<bool, CtlError> {
+        let element_exists = matches!(
+            parse(call)?,
+            Command::Verify {
+                exists: Some(_),
+                ..
+            }
+        );
+        crate::condition::outcome(self.execute(call), element_exists)
+    }
     fn observation_event(
         &mut self,
         phase: &str,

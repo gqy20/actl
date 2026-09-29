@@ -9,6 +9,9 @@ use serde_json::json;
 
 pub fn check(plan: &Plan, step: &Step, run: &Run, now_ms: u64) -> Result<(), CtlError> {
     for call in std::iter::once(&step.run)
+        .chain(step.when.iter())
+        .chain(step.unless.iter())
+        .chain(step.otherwise.iter())
         .chain(step.before.iter())
         .chain(step.verify.iter())
         .chain(step.resume_check.iter())

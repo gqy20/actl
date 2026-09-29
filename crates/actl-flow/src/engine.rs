@@ -40,6 +40,8 @@ pub struct StepRecord {
     pub outputs_captured_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub observation_retries: Vec<crate::recovery::ObservationRetry>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch: Option<crate::branch::Branch>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -73,6 +75,7 @@ impl Run {
                     outputs: Default::default(),
                     outputs_captured_ms: None,
                     observation_retries: vec![],
+                    branch: None,
                 })
                 .collect(),
         }
@@ -85,6 +88,13 @@ impl Run {
     }
 }
 pub trait Host {
+    fn condition(&mut self, call: &Invocation) -> Result<bool, CtlError> {
+        match self.execute(call) {
+            Ok(()) => Ok(true),
+            Err(error) if error.code == ErrorCode::AssertionFailed => Ok(false),
+            Err(error) => Err(error),
+        }
+    }
     fn observation_event(
         &mut self,
         _phase: &str,
@@ -141,6 +151,8 @@ pub fn execute(
             .iter()
             .chain(s.verify.iter())
             .chain(s.resume_check.iter())
+            .chain(s.when.iter())
+            .chain(s.unless.iter())
             .any(|c| !host.read_only(c))
     }) {
         return Err(CtlError::protocol("flow checks must be read-only"));
@@ -156,11 +168,12 @@ pub fn execute(
         host.publish(run);
         return Ok(());
     }
-    if plan
-        .steps
-        .iter()
-        .any(|s| s.retry == Retry::ReadOnly && !host.read_only(&s.run))
-    {
+    if plan.steps.iter().any(|s| {
+        s.retry == Retry::ReadOnly
+            && std::iter::once(&s.run)
+                .chain(s.otherwise.iter())
+                .any(|call| !host.read_only(call))
+    }) {
         return Err(CtlError::protocol(
             "automatic retry is only allowed for read-only commands",
         ));
@@ -196,7 +209,7 @@ pub fn execute(
             host.validate_step(&s)?;
             Ok(s)
         });
-        let step = match resolved {
+        let mut step = match resolved {
             Ok(step) => step,
             Err(error) => {
                 run.steps[i].error_code = Some(error.code);
@@ -211,6 +224,7 @@ pub fn execute(
                 return Ok(());
             }
         };
+        crate::branch::restore(&mut step, &run.steps[i])?;
         let reuse_scene_check = resuming
             && run.steps[i].status == StepStatus::Pending
             && step.resume_check.is_some()
@@ -317,6 +331,19 @@ pub fn execute(
             return Ok(());
         }
         let attempts = if step.retry == Retry::ReadOnly { 3 } else { 1 };
+        if !matches!(
+            run.steps[i].status,
+            StepStatus::Running | StepStatus::Verifying | StepStatus::Uncertain
+        ) {
+            match crate::branch::choose(&mut step, i, run, store, host)? {
+                crate::branch::Selection::Skip => continue,
+                crate::branch::Selection::Halt => return Ok(()),
+                crate::branch::Selection::Execute => {}
+            }
+        }
+        if boundary(run, store, host)? {
+            return Ok(());
+        }
         for attempt in 0..attempts {
             // Preconditions and retries may take time; check again before dispatch.
             if !crate::freshness::guard(plan, &plan.steps[i], run, store, host)? {

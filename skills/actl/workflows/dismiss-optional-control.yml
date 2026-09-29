@@ -1,0 +1,19 @@
+version: 1
+name: 按需关闭弹层
+handoff: {approval: once_per_run}
+inputs:
+  app: {}
+  dialog: {}
+  dismiss: {}
+steps:
+  - id: dismiss
+    title: 弹层存在才点击关闭
+    when:
+      command: verify
+      args: [--exists, {input: dialog}, --app, {input: app}]
+    run:
+      command: click
+      args: [{input: dismiss}, --app, {input: app}]
+    verify:
+      command: wait
+      args: [--gone, {input: dialog}, --app, {input: app}, --timeout, '3000']

@@ -45,8 +45,12 @@ fn error(step: &str, field: &str, message: &str) -> CtlError {
 pub fn validate(plan: &Plan) -> Result<(), CtlError> {
     let mut known = BTreeMap::new();
     for (i, step) in plan.steps.iter().enumerate() {
+        crate::branch::validate(step)?;
         for (phase, call) in [
             ("run", Some(&step.run)),
+            ("when", step.when.as_ref()),
+            ("unless", step.unless.as_ref()),
+            ("otherwise", step.otherwise.as_ref()),
             ("before", step.before.as_ref()),
             ("verify", step.verify.as_ref()),
             ("resume_check", step.resume_check.as_ref()),
@@ -135,6 +139,9 @@ pub fn extract(step: &Step, result: &Value) -> Result<BTreeMap<String, Value>, C
 pub fn resolve(step: &Step, run: &Run) -> Result<Step, CtlError> {
     let mut resolved = step.clone();
     for call in std::iter::once(&mut resolved.run)
+        .chain(resolved.when.iter_mut())
+        .chain(resolved.unless.iter_mut())
+        .chain(resolved.otherwise.iter_mut())
         .chain(resolved.before.iter_mut())
         .chain(resolved.verify.iter_mut())
         .chain(resolved.resume_check.iter_mut())
@@ -187,6 +194,7 @@ pub fn resolve(step: &Step, run: &Run) -> Result<Step, CtlError> {
 pub fn check_saved(plan: &Plan, run: &Run) -> Result<(), CtlError> {
     let mut bytes = 0;
     for (step, record) in plan.steps.iter().zip(&run.steps) {
+        crate::branch::check_saved(step, record)?;
         for (name, value) in &record.outputs {
             let spec = step
                 .outputs

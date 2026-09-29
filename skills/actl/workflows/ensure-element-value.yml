@@ -1,0 +1,19 @@
+version: 1
+name: 仅在值不匹配时修改
+handoff: {approval: once_per_run}
+inputs:
+  app: {}
+  target: {}
+  value: {}
+steps:
+  - id: ensure-value
+    title: 已达到目标值则跳过
+    unless:
+      command: verify
+      args: [--value, {input: target}, {input: value}, --property, value, --app, {input: app}]
+    run:
+      command: set-value
+      args: [{input: target}, {input: value}, --app, {input: app}]
+    verify:
+      command: verify
+      args: [--value, {input: target}, {input: value}, --property, value, --app, {input: app}]

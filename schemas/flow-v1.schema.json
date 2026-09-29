@@ -91,11 +91,24 @@
             "command": {
               "enum": [
                 "verify",
-                "wait", "verify-file", "verify-rows", "verify-owner", "verify-closed", "verify-clipboard"
+                "wait", "verify-file", "verify-rows", "verify-owner", "verify-closed", "verify-clipboard", "verify-window"
               ]
             }
           }
         }
+      ]
+    },
+    "condition": {
+      "allOf": [
+        {"$ref": "#/$defs/check"},
+        {"properties": {"command": {"not": {"const": "wait"}}}}
+      ]
+    },
+    "action": {
+      "oneOf": [
+        {"$ref": "#/$defs/invocation"},
+        {"type": "object", "additionalProperties": false, "required": ["sequence"],
+         "properties": {"sequence": {"type": "array", "minItems": 1, "maxItems": 16, "items": {"$ref": "#/$defs/invocation"}}}}
       ]
     },
     "step": {
@@ -106,7 +119,17 @@
         "title",
         "run"
       ],
+      "allOf": [
+        {"not": {"required": ["when", "unless"], "properties": {"when": {"type": "object"}, "unless": {"type": "object"}}}},
+        {"if": {"required": ["otherwise"], "properties": {"otherwise": {"type": "object"}}},
+         "then": {"anyOf": [{"required": ["when"], "properties": {"when": {"type": "object"}}}, {"required": ["unless"], "properties": {"unless": {"type": "object"}}}]}},
+        {"if": {"anyOf": [{"required": ["when"], "properties": {"when": {"type": "object"}}}, {"required": ["unless"], "properties": {"unless": {"type": "object"}}}]},
+         "then": {"properties": {"outputs": {"maxProperties": 0}}}}
+      ],
       "properties": {
+        "when": {"anyOf": [{"$ref": "#/$defs/condition"}, {"type": "null"}]},
+        "unless": {"anyOf": [{"$ref": "#/$defs/condition"}, {"type": "null"}]},
+        "otherwise": {"anyOf": [{"$ref": "#/$defs/action"}, {"type": "null"}]},
         "id": {
           "type": "string",
           "pattern": "^[A-Za-z0-9_-]{1,80}$"

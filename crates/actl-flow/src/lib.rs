@@ -1,4 +1,5 @@
 //! Optional workflow layer. No Windows dependencies, shell evaluation or asynchronous runtime.
+pub mod branch;
 pub mod data;
 pub mod engine;
 pub mod freshness;
@@ -27,6 +28,12 @@ pub struct Step {
     pub id: String,
     pub title: String,
     pub run: Invocation,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub when: Option<Invocation>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unless: Option<Invocation>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub otherwise: Option<Invocation>,
     pub before: Option<Invocation>,
     pub verify: Option<Invocation>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -162,6 +169,9 @@ pub fn parse(text: &str) -> Result<Plan, CtlError> {
         }
         for (phase, call) in [
             ("run", Some(&step.run)),
+            ("when", step.when.as_ref()),
+            ("unless", step.unless.as_ref()),
+            ("otherwise", step.otherwise.as_ref()),
             ("before", step.before.as_ref()),
             ("verify", step.verify.as_ref()),
             ("resume_check", step.resume_check.as_ref()),

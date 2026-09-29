@@ -1,0 +1,21 @@
+version: 1
+name: 复用或启动应用窗口
+handoff: {approval: once_per_run}
+inputs:
+  app: {}
+  program: {}
+steps:
+  - id: ensure-window
+    title: 已有窗口切到前台，否则启动
+    when:
+      command: verify-window
+      args: [--app, {input: app}, --state, exists]
+    run:
+      command: focus-window
+      args: [{input: app}]
+    otherwise:
+      command: launch
+      args: [--wait-window, {input: app}, --timeout, '10000', {input: program}]
+    verify:
+      command: verify-window
+      args: [--app, {input: app}, --state, foreground]
