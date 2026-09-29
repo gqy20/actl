@@ -9,6 +9,10 @@ app_version: "1.139.0"
 verified_date: 2026-09-28
 verified_env: Windows 10.0.26200.0 zh-cn; independent user-data-dir; extensions disabled; force-renderer-accessibility
 quirks:
+  - id: explicit_editor_readiness
+    note: vscode-edit 首次打开与重开分别先等原生窗口、核对归属、确认前台，再等待具体文件的 Edit 内容稳定并核验完整 TextPattern。原 22 步扩展为 26 步，组合模板同步为 68 步；窗口标题出现不代表编辑器可输入，焦点仍由动作护栏逐次核验。实测见 docs/66。
+  - id: quick_open_and_replace_readiness
+    note: 文件切换直接 Ctrl+P，等待文件输入框后 ValuePattern 写入并读回，再在 quickInput_list 内激活唯一文件结果。查找/替换按容器 Window 精确名称限定两个 Edit 和按钮，等待输入框稳定、写值后精确核验；不按 Ctrl+H 后立即假定输入框可写。路线修订与恢复验收见 docs/66，旧 F1 路线记录保留。
   - id: workflow_live_20260929
     note: 新 workflow 首轮完成 17/22；关闭后首次核验 NOT_ACTIONABLE，恢复后通过；转到行输入在 type 阶段失败并停在待核对，未重放写入。不能视为整轮通过，见 docs/58。
   - id: workflow_migration_20260929

@@ -59,11 +59,7 @@
       "verify": {
         "command": "wait",
         "args": [
-          "--element",
-          {
-            "input": "editor"
-          },
-          "--app",
+          "--window",
           {
             "input": "app"
           },
@@ -106,6 +102,93 @@
           "type": "string",
           "pointer": "/process_start"
         }
+      }
+    },
+    {
+      "id": "initial-foreground",
+      "title": "Ensure owned window is foreground",
+      "unless": {
+        "command": "verify-window",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--state",
+          "foreground"
+        ]
+      },
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      },
+      "run": {
+        "command": "focus-window",
+        "args": [
+          {
+            "input": "app"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-window",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--state",
+          "foreground"
+        ]
+      }
+    },
+    {
+      "id": "initial-ready",
+      "title": "Wait for editor content and verify complete text",
+      "run": {
+        "command": "wait",
+        "args": [
+          "--element",
+          {
+            "input": "editor"
+          },
+          "--stable",
+          "--app",
+          {
+            "input": "app"
+          },
+          "--timeout",
+          "15000"
+        ]
+      },
+      "verify": {
+        "command": "verify",
+        "args": [
+          "--value",
+          {
+            "input": "editor"
+          },
+          "Original 中文 baseline 123\nSecond line\n",
+          "--property",
+          "text",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
       }
     },
     {
@@ -1087,11 +1170,7 @@
       "verify": {
         "command": "wait",
         "args": [
-          "--element",
-          {
-            "input": "editor"
-          },
-          "--app",
+          "--window",
           {
             "input": "app"
           },
@@ -1135,6 +1214,93 @@
         }
       },
       "title": "Verify reopened process identity"
+    },
+    {
+      "id": "reopened-foreground",
+      "title": "Ensure owned window is foreground",
+      "unless": {
+        "command": "verify-window",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--state",
+          "foreground"
+        ]
+      },
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      },
+      "run": {
+        "command": "focus-window",
+        "args": [
+          {
+            "input": "app"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-window",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--state",
+          "foreground"
+        ]
+      }
+    },
+    {
+      "id": "reopened-ready",
+      "title": "Wait for editor content and verify complete text",
+      "run": {
+        "command": "wait",
+        "args": [
+          "--element",
+          {
+            "input": "editor"
+          },
+          "--stable",
+          "--app",
+          {
+            "input": "app"
+          },
+          "--timeout",
+          "15000"
+        ]
+      },
+      "verify": {
+        "command": "verify",
+        "args": [
+          "--value",
+          {
+            "input": "editor"
+          },
+          "Replacement 中文 final\nNumber 123456789\n",
+          "--property",
+          "text",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      }
     },
     {
       "run": {
@@ -1417,9 +1583,23 @@
             ]
           },
           {
+            "args": [
+              "--element",
+              "uia:{\"within\":{\"name\":\"查找/替换\",\"role\":\"Window\"},\"match\":{\"name\":\"查找\",\"role\":\"Edit\"}}",
+              "--stable",
+              "--app",
+              {
+                "input": "app"
+              },
+              "--timeout",
+              "5000"
+            ],
+            "command": "wait"
+          },
+          {
             "command": "set-value",
             "args": [
-              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"查找\"}}",
+              "uia:{\"within\":{\"name\":\"查找/替换\",\"role\":\"Window\"},\"match\":{\"name\":\"查找\",\"role\":\"Edit\"}}",
               "123456789",
               "--app",
               {
@@ -1428,9 +1608,37 @@
             ]
           },
           {
+            "args": [
+              "--value",
+              "uia:{\"within\":{\"name\":\"查找/替换\",\"role\":\"Window\"},\"match\":{\"name\":\"查找\",\"role\":\"Edit\"}}",
+              "123456789",
+              "--property",
+              "value",
+              "--app",
+              {
+                "input": "app"
+              }
+            ],
+            "command": "verify"
+          },
+          {
+            "args": [
+              "--element",
+              "uia:{\"within\":{\"name\":\"查找/替换\",\"role\":\"Window\"},\"match\":{\"name\":\"替换\",\"role\":\"Edit\"}}",
+              "--stable",
+              "--app",
+              {
+                "input": "app"
+              },
+              "--timeout",
+              "5000"
+            ],
+            "command": "wait"
+          },
+          {
             "command": "set-value",
             "args": [
-              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"替换\"}}",
+              "uia:{\"within\":{\"name\":\"查找/替换\",\"role\":\"Window\"},\"match\":{\"name\":\"替换\",\"role\":\"Edit\"}}",
               "987654321",
               "--app",
               {
@@ -1439,9 +1647,23 @@
             ]
           },
           {
+            "args": [
+              "--value",
+              "uia:{\"within\":{\"name\":\"查找/替换\",\"role\":\"Window\"},\"match\":{\"name\":\"替换\",\"role\":\"Edit\"}}",
+              "987654321",
+              "--property",
+              "value",
+              "--app",
+              {
+                "input": "app"
+              }
+            ],
+            "command": "verify"
+          },
+          {
             "command": "click",
             "args": [
-              "name:全部替换 (Ctrl+Alt+Enter)",
+              "uia:{\"within\":{\"name\":\"查找/替换\",\"role\":\"Window\"},\"match\":{\"name\":\"全部替换 (Ctrl+Alt+Enter)\",\"role\":\"Button\"}}",
               "--app",
               {
                 "input": "app"
@@ -1451,7 +1673,7 @@
           {
             "command": "click",
             "args": [
-              "name:关闭 (Escape)",
+              "uia:{\"within\":{\"name\":\"查找/替换\",\"role\":\"Window\"},\"match\":{\"name\":\"关闭 (Escape)\",\"role\":\"Button\"}}",
               "--app",
               {
                 "input": "app"
@@ -1528,61 +1750,14 @@
       "run": {
         "sequence": [
           {
-            "command": "press",
             "args": [
-              "f1",
+              "ctrl+p",
               "--app",
               {
                 "input": "app"
               }
-            ]
-          },
-          {
-            "command": "wait",
-            "args": [
-              "--element",
-              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"键入要运行的命令的名称。\"}}",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000"
-            ]
-          },
-          {
-            "command": "set-value",
-            "args": [
-              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"键入要运行的命令的名称。\"}}",
-              ">转到文件",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "command": "wait",
-            "args": [
-              "--element",
-              "uia:{\"match\":{\"role\":\"ListItem\",\"name_contains\":\"转到文件...,\"},\"within\":{\"id\":\"quickInput_list\"}}",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000"
-            ]
-          },
-          {
-            "command": "click",
-            "args": [
-              "uia:{\"match\":{\"role\":\"ListItem\",\"name_contains\":\"转到文件...,\"},\"within\":{\"id\":\"quickInput_list\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
+            ],
+            "command": "press"
           },
           {
             "command": "wait",
@@ -1712,61 +1887,14 @@
       "run": {
         "sequence": [
           {
-            "command": "press",
             "args": [
-              "f1",
+              "ctrl+p",
               "--app",
               {
                 "input": "app"
               }
-            ]
-          },
-          {
-            "command": "wait",
-            "args": [
-              "--element",
-              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"键入要运行的命令的名称。\"}}",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000"
-            ]
-          },
-          {
-            "command": "set-value",
-            "args": [
-              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"键入要运行的命令的名称。\"}}",
-              ">转到文件",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "command": "wait",
-            "args": [
-              "--element",
-              "uia:{\"match\":{\"role\":\"ListItem\",\"name_contains\":\"转到文件...,\"},\"within\":{\"id\":\"quickInput_list\"}}",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000"
-            ]
-          },
-          {
-            "command": "click",
-            "args": [
-              "uia:{\"match\":{\"role\":\"ListItem\",\"name_contains\":\"转到文件...,\"},\"within\":{\"id\":\"quickInput_list\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
+            ],
+            "command": "press"
           },
           {
             "command": "wait",

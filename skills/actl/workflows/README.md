@@ -36,7 +36,7 @@
 
 | 流程 | 用途 | 校验状态 |
 |---|---|---|
-| [ensure-app-window.yml](ensure-app-window.yml) | 输入 app/program；app 为唯一标题片段，先启动或复用，再独立核对前台 | Chrome 隔离本地页组合实测通过，测试计划显式补 profile/page 启动参数；不提供关闭与归属证明 |
+| [ensure-app-window.yml](ensure-app-window.yml) | 输入 app/program/ready_target；依次确认窗口、前台、业务目标出现且稳定 | ready_target 必须指向页面内的业务控件；稳定采样不替代业务内容、可写性或输入焦点核验；不提供关闭与归属证明 |
 | [dismiss-optional-control.yml](dismiss-optional-control.yml) | 输入 app/dialog/dismiss；dialog 为严格 UIA 选择器，窗口保留，存在才点击并核验消失 | Chrome 本地页存在/消失跳过实测通过；其他应用分别验收 |
 | [ensure-element-value.yml](ensure-element-value.yml) | 输入 app/target/value；目标支持 ValuePattern，已达目标值则跳过 | Chrome 本地页写入/读回/已达标跳过实测通过；出现一次 60 秒查询后重查成功，见 docs/64 |
 | [vscode-resume.yml](vscode-resume.yml) | 隔离文件启动、一次输入、完整文本核验；输入 program/profile/file/app/target | 参数预检测试；旧生成计划真机通过，新模板本轮待验收 |
@@ -60,7 +60,7 @@ v1 无插值且公共文件禁固定 HWND,静态计划无法锚定,待 M3 契约
 
 | 流程 | 必需信息与前提 | 校验状态 |
 |---|---|---|
-| [vscode-edit.yml](vscode-edit.yml) | 独立 profile、两个任务文件、程序路径及现场选择器；file_result/second_result 限定 quickInput_list 内的任务文件名 | 预检及 Quick Input 组件探查通过；完整 22 步待复验 |
+| [vscode-edit.yml](vscode-edit.yml) | 独立 profile、两个任务文件、程序路径及现场选择器；首次打开与重开均独立确认归属、前台和完整编辑器文本 | 原 22 步增加 4 个前台/就绪步骤，共 26 步；本轮实测见 docs/66 |
 | [word-edit.yml](word-edit.yml) | 独立 DOCX、程序路径、正文选择器及每阶段预期文本 | 预检及合成文件断言通过；新流程真机待复验 |
 | [excel-table.yml](excel-table.yml) | 独立 XLSX、程序路径、名称框及区域数据/公式预期 | 预检及合成文件断言通过；新流程真机待复验 |
 | [zotero-search.yml](zotero-search.yml) | 独立 profile/data、RIS、导出路径及条目预期 | 预检通过；新流程真机待复验 |
@@ -73,7 +73,7 @@ actl flow-run --file skills/actl/workflows/vscode-edit.yml --id vscode-001
 
 每次从头运行使用新的 ID；无需先运行 PS 或生成 inputs.json。先只读预检可用 flow-validate --file 同一模板。可选 --inputs 仍支持覆盖默认输入；覆盖文件路径不会把资源写到该外部路径，调用方须自行提供并确认外部文件。
 
-[verify-applications.yml](verify-applications.yml) 为四软件合计 64 步整批计划，资源按软件子目录隔离，整批共用一个任务 ID 和 once_per_run；其步骤与单软件模板的一致性由测试检查。首次交接及暂停恢复遵循当前授权规则。旧准备/合并脚本已删除，历史验收保留。
+[verify-applications.yml](verify-applications.yml) 为四软件合计 68 步整批计划，资源按软件子目录隔离，整批共用一个任务 ID 和 once_per_run；其步骤与单软件模板的一致性由测试检查。首次交接及暂停恢复遵循当前授权规则。旧准备/合并脚本已删除，历史验收保留。
 
 资源根目录为本机 actl 状态目录下的 flow-resources/<ID>。预检不创建资源；执行前完整预检通过才新建资源，已有同名目录拒绝覆盖。恢复不重建初始文件，也不重读模板。
 

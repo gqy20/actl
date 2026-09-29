@@ -21,7 +21,7 @@ steps:
 
 可复用模板见 `skills/actl/workflows/`：
 
-- `ensure-app-window.yml`：输入 app/program，已有窗口前置，否则启动并核对前台。app 使用唯一标题片段；启动分支不使用旧 HWND。
+- `ensure-app-window.yml`：输入 app/program/ready_target，独立确认窗口存在、前台状态，再等待业务目标出现且稳定。app 使用唯一标题片段；启动分支不使用旧 HWND。ready_target 应指向页面内的业务控件，不能用窗口根代替；稳定采样不证明可写或焦点正确，业务流程仍须核验内容与动作条件。
 - `dismiss-optional-control.yml`：输入 app/dialog/dismiss；dialog 是严格 `uia:` 选择器。在已确认的应用窗口内，有控件才点击 dismiss，再等待该控件消失。窗口本身必须保留；此模板不用于关闭整个窗口。
 - `ensure-element-value.yml`：输入 app/target/value；已是目标值则跳过，否则 set-value 后核验。目标必须支持 ValuePattern。
 

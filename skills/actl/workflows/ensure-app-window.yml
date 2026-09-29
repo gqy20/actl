@@ -4,6 +4,7 @@ handoff: {approval: once_per_run}
 inputs:
   app: {}
   program: {}
+  ready_target: {}
 steps:
   - id: ensure-window
     recovery: {max_retries: 2, timeout_ms: 3000, interval_ms: 200}
@@ -32,3 +33,8 @@ steps:
     verify:
       command: verify-window
       args: [--app, {input: app}, --state, foreground]
+  - id: ensure-target-ready
+    title: 等待业务目标出现并稳定
+    run:
+      command: wait
+      args: [--element, {input: ready_target}, --stable, --app, {input: app}, --timeout, '15000']

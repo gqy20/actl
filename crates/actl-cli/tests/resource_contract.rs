@@ -117,7 +117,7 @@ fn all_application_templates_validate_without_input_files() {
     }
     assert_eq!(
         Value::Object(counts),
-        json!({"vscode-edit":22,"word-edit":20,"excel-table":13,"zotero-search":9,"verify-applications":64,"vscode-resume":3})
+        json!({"vscode-edit":26,"word-edit":20,"excel-table":13,"zotero-search":9,"verify-applications":68,"vscode-resume":3})
     );
     assert!(!s.0.join("actl/flow-resources").exists());
 }

@@ -105,7 +105,7 @@ fn reusable_condition_templates_preflight_with_concrete_inputs() {
     for (name, values) in [
         (
             "ensure-app-window.yml",
-            json!({"app":"Notepad","program":"notepad.exe"}),
+            json!({"app":"Notepad","program":"notepad.exe","ready_target":selector}),
         ),
         (
             "dismiss-optional-control.yml",
