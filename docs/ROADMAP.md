@@ -30,6 +30,8 @@
 
 - [ ] 补齐前台交接 v9 的人工接管、进程内嵌套动作及多窗口真机矩阵；保留 Windows 拒绝激活时的可恢复提示。证据与边界见 [62](62-foreground-handoff.md)。
 
+- [ ] `--physical --with` 修饰键白名单校验：kbd 层 `modifier_vk` 把未知键名（如 `ctrlx`）静默映射为 Win 键，物理点击会注入 Win+点击；应在事件编译前拒绝（PROTOCOL），补 kbd 单测。CLI 层窗口解析先于事件编译，契约测试无法离线覆盖该分支，单测须落在 uia 层。
+
 ### 原生迁移后待验收
 
 - [ ] 对新 Rust 夹具复验 Calculator、Notepad、Explorer、msinfo32、Edge/Chrome 及显示端；验证身份、单次写入、失败保留和优雅清理，不能沿用旧 PS 的通过记录。

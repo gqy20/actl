@@ -99,6 +99,9 @@ fn basename_template_copies_relative_assets() {
 
 #[test]
 fn all_application_templates_validate_without_input_files() {
+    // 与 flow_contract::reusable_workflows_preflight 的分工:那边带具体 --inputs
+    // 验证解析后的计划;这里验证模板仅靠声明默认值即可通过预检(应用模板
+    // 开箱可验),步骤数 golden 兼作模板变更探测器。两条件不同,勿合并。
     let s = Sandbox::new();
     let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/actl/workflows");
     let mut counts = serde_json::Map::new();

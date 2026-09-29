@@ -112,6 +112,18 @@ fn success_envelope_shape() {
 }
 
 #[test]
+fn version_is_the_documented_stdout_exception() {
+    // --version 与 --help 是 stdout 人类文本的唯一例外(ADR-002):不是 JSON
+    let (code, stdout) = actl(&["--version"]);
+    assert_eq!(code, 0);
+    assert!(stdout.contains(env!("CARGO_PKG_VERSION")));
+    assert!(
+        serde_json::from_str::<serde_json::Value>(&stdout).is_err(),
+        "--version must stay human text, not JSON"
+    );
+}
+
+#[test]
 fn protocol_error_exits_two() {
     // press 无 --app:fail-closed 门,PROTOCOL → exit 2
     let (code, stdout) = actl(&["press", "enter"]);
@@ -435,6 +447,11 @@ fn snapshot_view_content_missing_window_is_not_found() {
     assert_eq!(code, 1);
     let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
     assert_eq!(v["error"]["code"], "NOT_FOUND");
+    assert!(v["error"]["hint"].is_string(), "failure carries a hint");
+    assert!(
+        v.get("snapshot_id").is_none(),
+        "failure envelope carries no snapshot_id"
+    );
 }
 
 #[test]
@@ -475,6 +492,15 @@ fn close_window_by_missing_pid_is_not_found() {
 }
 
 #[test]
+fn launch_unknown_program_is_not_found_exit_1() {
+    // launch 的失败语义是业务失败(NOT_FOUND exit 1),不是参数错误
+    let (code, stdout) = actl(&["launch", "definitely-not-a-program-xyz"]);
+    assert_eq!(code, 1);
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
+    assert_eq!(v["error"]["code"], "NOT_FOUND");
+}
+
+#[test]
 fn window_commands_without_selector_is_protocol() {
     let (code, stdout) = actl(&["close-window"]);
     assert_eq!(
@@ -486,8 +512,12 @@ fn window_commands_without_selector_is_protocol() {
 }
 
 #[test]
-fn batch_reports_no_windows_created_on_headless_run() {
-    // windows_created:空差集时省略(token);CI 安全路径(status 不开窗)
+fn batch_headless_status_has_no_created_windows_and_no_blocked_by() {
+    // 同一条 CI 安全调用(status 不开窗)上的两个离线不变量:
+    // ① windows_created 空差集时省略(token);
+    // ② 前台(终端)在批前基线内 → 步条目不带 blocked_by。
+    // 锁屏会话下前台=锁屏界面(非基线非 --app),blocked_by 如实上报是正确行为;
+    // 仅当告警指向普通窗口时才视为虚假告警
     let (code, stdout) = actl(&["batch", "--json", r#"["status"]"#]);
     assert_eq!(code, 0);
     let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
@@ -498,18 +528,8 @@ fn batch_reports_no_windows_created_on_headless_run() {
                 .as_array()
                 .is_some_and(|a| a.is_empty())
     );
-}
-
-#[test]
-fn batch_steps_have_no_blocked_by_when_foreground_is_baseline() {
-    // 正常路径:前台(终端)在批前基线内 → 步条目不带 blocked_by
-    let (code, stdout) = actl(&["batch", "--json", r#"["status"]"#]);
-    assert_eq!(code, 0);
-    let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
-    let step = &v["data"]["steps"][0];
+    let step = &data["steps"][0];
     assert_eq!(step["ok"], true);
-    // 锁屏会话下前台=锁屏界面(非基线非 --app),blocked_by 如实上报是正确行为;
-    // 仅当告警指向普通窗口时才视为虚假告警
     match step.get("blocked_by") {
         None => {}
         Some(b) => assert!(
@@ -566,21 +586,9 @@ fn pointer_commands_with_validated_args() {
     assert_eq!(code, 2);
     let (code, _) = actl(&["triple-click"]);
     assert_eq!(code, 2);
-    // --with 需要 --physical(组合修饰只在物理点击时有意义)
+    // --with 需要 --physical(组合修饰只在物理点击时有意义);clap 只做
+    // requires 校验。修饰键取值域没有离线断言点:窗口解析先于事件编译,
+    // 真实桌面上结果随窗口匹配数变化;白名单缺口登记在 ROADMAP
     let (code, _) = actl(&["click", "name:x", "--app", "y", "--with", "ctrl"]);
     assert_eq!(code, 2);
-    // --with 只接受已知修饰键
-    let (code, stdout) = actl(&[
-        "click",
-        "name:x",
-        "--app",
-        "y",
-        "--physical",
-        "--with",
-        "ctrlx",
-    ]);
-    let _ = stdout;
-    // 修饰键名校验在 pointer 层(运行时 PROTOCOL);clap 只做 requires 校验
-    // 此处只验证 --with 不与 --physical 缺失共存
-    assert!(code == 0 || code == 1 || code == 2);
 }
