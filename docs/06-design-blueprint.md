@@ -102,7 +102,12 @@ state/run 响应的步骤可带 outputs，显式保存的业务数据不受 erro
 局部输出增加 `ref_scope:"container"`、投影前的 `observed_nodes` 和 `scope`：
 `{version:1,selector,identity,depth,limit}`，identity 包含 RuntimeId/PID/角色/名称/AutomationId。
 `truncated` 和 `truncation_reasons` 如实标记深度/数量截断；观察失败保留错误，不伪装为空结果。
-定位容器仍需要全窗口唯一性核验，其预算超限会拒绝，局部参数不放宽此规则。
+定位容器仍需要完整范围内的唯一性核验。严格 UIA 条件含精确 id 或 name 时，使用原生属性条件查询
+取回全部候选（优先 id），按原 children/descendants/含根语义查询，保持 RawView，再核验全部组合条件。
+候选超过 5000 返回 NOT_ACTIONABLE / selector_budget_exceeded；查询或属性失败直接报错，不回退或取首个命中。
+此路径不受无关分支的客户端深度上限阻断；已知 role 也使用原生 ControlType 条件筛选；只有 name_contains 等无原生精确条件时仍按原节点/深度预算遍历。
+适用于严格 find、动作定位、局部快照及其绑定重放；局部快照本身的 depth/limit 截断规则不变。
+单个原生查询仍为同步调用，可能因 provider 缓慢阻塞，不宣称硬超时或服务端工作量上限。
 
 局部 ref 从 `@e1` 重新编号，必须携带本次返回的 `--snapshot <snapshot_id>` 使用，不能与全窗口 ref 混用。
 持久化记录保存容器和预算；重放时按原范围重新观察，核对窗口、容器和具体元素身份。
@@ -612,6 +617,14 @@ NOT_ACTIONABLE 显示或窗口未就绪；ABORTED 用户停止；INTERNAL 持久
 
 
 ### 桌面交接与窗口就绪（2026-09-28，显示协议 v4）
+
+任务交接策略（显示协议 v8）：flow YAML 可增加 `handoff: {approval: once_per_run}`。
+省略时保持 `expiring`（空闲 60 秒、总长 10 分钟）。once_per_run 在同任务内不因这两种超时失效，
+首次仍需用户确认，人工接管、暂停撤销、停止代次变化、显示端重启和监听故障仍撤销授权。
+策略变化必须重新确认，不能升级已有授权；窗口、焦点与物理输入参数要求不变。
+普通脚本通过 `ACTL_TASK_CONFIG` 指定 YAML 文件，格式为 `version: 1` 加同样的 `handoff`；
+必须同时设置每次运行唯一的 `ACTL_TASK_ID`，不同运行不得复用 ID。配置严格拒绝未知字段、重复键与未知策略，
+不存在 authorized/跳过确认字段。授权仅在显示端内存中，文件不保存授权。flow 以保存的 plan 策略为准。
 
 完整规则见 [32-desktop-handoff.md](32-desktop-handoff.md)。动作反馈门禁在展示动作前要求
 人工点击任务交接窗口，25 秒未响应返回 NOT_ACTIONABLE；ACTL_TASK_ID / flow ID 范围内

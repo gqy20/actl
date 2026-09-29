@@ -5,6 +5,7 @@ pub mod freshness;
 pub mod recovery;
 mod schema;
 pub mod store;
+pub mod task_config;
 use actl_core::CtlError;
 use serde::{Deserialize, Serialize};
 
@@ -13,6 +14,8 @@ use serde::{Deserialize, Serialize};
 pub struct Plan {
     pub version: u32,
     pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub handoff: Option<actl_core::handoff::Policy>,
     pub steps: Vec<Step>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -117,26 +120,7 @@ pub enum Failure {
 }
 
 pub fn parse(text: &str) -> Result<Plan, CtlError> {
-    if text.len() > 262_144 {
-        return Err(CtlError::protocol("flow exceeds 256 KiB"));
-    }
-    let mut options = serde_saphyr::Options::default();
-    options.duplicate_keys = serde_saphyr::DuplicateKeyPolicy::Error;
-    options.merge_keys = serde_saphyr::MergeKeyPolicy::Error;
-    options.reject_unsupported_tags = true;
-    options.strict_booleans = true;
-    options.with_snippet = false;
-    let mut budget = serde_saphyr::Budget::default();
-    budget.max_depth = 16;
-    budget.max_aliases = 0;
-    budget.max_anchors = 0;
-    budget.max_documents = 1;
-    budget.max_events = 100_000;
-    budget.max_nodes = 50_000;
-    budget.max_total_scalar_bytes = 262_144;
-    options.budget = Some(budget);
-    let raw: serde_json::Value = serde_saphyr::from_str_with_options(text, options)
-        .map_err(|e| CtlError::protocol(format!("invalid flow YAML: {e}")))?;
+    let raw = decode_yaml(text)?;
     let plan = schema::decode(raw)?;
     for (field, invalid, message) in [
         ("version", plan.version != 1, "expected version 1"),
@@ -213,4 +197,28 @@ pub fn parse(text: &str) -> Result<Plan, CtlError> {
     }
     data::validate(&plan)?;
     Ok(plan)
+}
+
+fn decode_yaml(text: &str) -> Result<serde_json::Value, CtlError> {
+    if text.len() > 262_144 {
+        return Err(CtlError::protocol("flow exceeds 256 KiB"));
+    }
+    let mut options = serde_saphyr::Options::default();
+    options.duplicate_keys = serde_saphyr::DuplicateKeyPolicy::Error;
+    options.merge_keys = serde_saphyr::MergeKeyPolicy::Error;
+    options.reject_unsupported_tags = true;
+    options.strict_booleans = true;
+    options.with_snippet = false;
+    let mut budget = serde_saphyr::Budget::default();
+    budget.max_depth = 16;
+    budget.max_aliases = 0;
+    budget.max_anchors = 0;
+    budget.max_documents = 1;
+    budget.max_events = 100_000;
+    budget.max_nodes = 50_000;
+    budget.max_total_scalar_bytes = 262_144;
+    options.budget = Some(budget);
+    let raw: serde_json::Value = serde_saphyr::from_str_with_options(text, options)
+        .map_err(|e| CtlError::protocol(format!("invalid flow YAML: {e}")))?;
+    Ok(raw)
 }

@@ -3,6 +3,8 @@
 #![windows_subsystem = "windows"]
 #[path = "signal/controls.rs"]
 mod controls;
+#[path = "signal/flow_display.rs"]
+mod flow_display;
 #[path = "signal/flow_start.rs"]
 mod flow_start;
 #[path = "signal/flow_ui.rs"]
@@ -11,8 +13,12 @@ mod flow_ui;
 mod frame;
 #[path = "signal/handoff.rs"]
 mod handoff;
+#[path = "signal/handoff_audit.rs"]
+mod handoff_audit;
 #[path = "signal/icon.rs"]
 mod icon;
+#[path = "signal/input_diagnostics.rs"]
+mod input_diagnostics;
 #[path = "signal/input_watch.rs"]
 mod input_watch;
 #[path = "signal/model.rs"]

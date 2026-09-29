@@ -44,6 +44,10 @@ fn main() {
     };
     let command_name = command_name(&cli.command);
     let started = Instant::now();
+    if let Err(error) = flow::configure_task() {
+        finish(command_name, Err(error), 0);
+        return;
+    }
     let _execution = actl_core::stop::Scope::enter();
     if let Ok(generation) = std::env::var("ACTL_EXECUTION_GENERATION") {
         actl_core::stop::bind_generation(generation);

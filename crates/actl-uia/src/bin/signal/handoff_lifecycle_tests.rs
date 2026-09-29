@@ -11,6 +11,7 @@ impl Fixture {
             SignalPaths::at(std::env::temp_dir().join(actl_core::snapshot::new_snapshot_id()));
         let generation = paths.execution_generation().unwrap();
         let request = Request {
+            approval: actl_core::handoff::Approval::Expiring,
             generation: generation.clone(),
             call: "lifecycle-call".into(),
             task: "lifecycle-task".into(),

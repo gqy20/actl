@@ -1,6 +1,26 @@
 //! Task consent is volatile: restart, external input, or expiry revokes it.
 use serde::{Deserialize, Serialize};
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Approval {
+    #[default]
+    Expiring,
+    OncePerRun,
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Policy {
+    pub approval: Approval,
+}
+thread_local! { static POLICY: std::cell::Cell<Approval> = const { std::cell::Cell::new(Approval::Expiring) }; }
+pub fn configure(policy: Approval) {
+    POLICY.with(|p| p.set(policy));
+}
+pub fn configured() -> Approval {
+    POLICY.with(|p| p.get())
+}
+
 pub const INPUT_TAG: usize = 0x4143544c;
 pub const REQUEST_MESSAGE: u32 = 0x8000 + 46;
 pub const CHECK_MESSAGE: u32 = 0x8000 + 47;
@@ -16,6 +36,7 @@ pub const CANCELLED: usize = 8;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Request {
+    pub approval: Approval,
     pub generation: String,
     pub call: String,
     pub task: String,
@@ -35,6 +56,8 @@ impl Request {
 #[derive(Default)]
 pub struct Consent {
     grant: Option<(String, u64, u64, u64)>,
+    approval: Approval,
+    reason: Option<&'static str>,
 }
 /// 授权动作自身余韵的宽限窗:授权(点击"开始"或快捷键)后的物理输入在
 /// 此窗内视为 settle(按键/鼠标抬起、手部余动),刷新基线而非撤销。
@@ -45,17 +68,39 @@ impl Consent {
     /// Called only by the companion's explicit user Start/Continue action
     /// (button click or Ctrl+Alt+Y hotkey).
     pub fn allow(&mut self, task: &str, input_seq: u64, now: u64) {
+        self.allow_with_policy(task, input_seq, now, Approval::Expiring);
+    }
+    pub fn allow_with_policy(&mut self, task: &str, input_seq: u64, now: u64, approval: Approval) {
+        self.approval = approval;
         self.grant = Some((task.into(), input_seq, now, now));
+        self.reason = Some("allowed");
     }
     pub fn revoke(&mut self) {
-        self.grant = None;
+        self.revoke_with_reason("revoked");
+    }
+    pub fn revoke_with_reason(&mut self, reason: &'static str) {
+        if self.grant.take().is_some() || self.reason.is_none() {
+            self.reason = Some(reason);
+        }
+    }
+    pub fn reason(&self) -> &'static str {
+        self.reason.unwrap_or("no_grant")
     }
     pub fn check(&mut self, task: &str, input_seq: u64, now: u64) -> bool {
         let Some((owner, seq, started, touched)) = self.grant.as_mut() else {
             return false;
         };
-        if now < *touched || now - *touched >= 60_000 || now - *started >= 600_000 {
-            self.revoke();
+        let expired = if now < *touched {
+            Some("clock_reversed")
+        } else if self.approval == Approval::Expiring && now - *started >= 600_000 {
+            Some("duration_expired")
+        } else if self.approval == Approval::Expiring && now - *touched >= 60_000 {
+            Some("idle_expired")
+        } else {
+            None
+        };
+        if let Some(reason) = expired {
+            self.revoke_with_reason(reason);
             return false;
         }
         if *seq != input_seq {
@@ -63,15 +108,29 @@ impl Consent {
                 // 宽限窗内:授权动作的余韵,重设基线继续放行
                 *seq = input_seq;
             } else {
-                self.revoke();
+                self.revoke_with_reason("external_input");
                 return false;
             }
         }
         if owner != task {
+            self.reason = Some("different_task");
             return false;
         }
         *touched = now;
         true
+    }
+    pub fn check_policy(
+        &mut self,
+        task: &str,
+        input_seq: u64,
+        now: u64,
+        approval: Approval,
+    ) -> bool {
+        if self.grant.is_some() && self.approval != approval {
+            self.reason = Some("policy_changed");
+            return false;
+        }
+        self.check(task, input_seq, now)
     }
 }
 

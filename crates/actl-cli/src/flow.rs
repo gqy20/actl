@@ -9,6 +9,20 @@ use actl_flow::{
 use clap::Parser;
 use serde_json::{Value, json};
 
+pub fn configure_task() -> Result<(), CtlError> {
+    if let Some(path) = std::env::var_os("ACTL_TASK_CONFIG") {
+        if actl_core::history::task_from_env()?.is_none() {
+            return Err(CtlError::protocol(
+                "ACTL_TASK_CONFIG requires a unique ACTL_TASK_ID",
+            ));
+        }
+        let text = actl_flow::store::read_text(std::path::Path::new(&path))?;
+        let config = actl_flow::task_config::parse(&text)?;
+        actl_core::handoff::configure(config.handoff.approval);
+    }
+    Ok(())
+}
+
 fn parse(call: &Invocation) -> Result<Command, CtlError> {
     Cli::try_parse_from(
         std::iter::once("actl")
@@ -185,11 +199,13 @@ impl Host for Adapter<'_> {
     fn validate_step(&self, step: &actl_flow::Step) -> Result<(), CtlError> {
         validate(&Plan {
             version: 1,
+            handoff: self.plan.handoff,
             name: self.plan.name.clone(),
             steps: vec![step.clone()],
         })
     }
     fn execute_output(&mut self, call: &Invocation) -> Result<Value, CtlError> {
+        actl_core::handoff::configure(self.plan.handoff.unwrap_or_default().approval);
         let command = parse(call)?;
         let _scope = matches!(command, Command::Wait { .. })
             .then(|| actl_core::wait_control::Scope::enter(self.store.dir.join("pause-requested")));

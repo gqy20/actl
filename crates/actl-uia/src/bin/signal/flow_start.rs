@@ -30,6 +30,7 @@ pub fn allow(id: &str) -> Result<String, String> {
             .ok_or_else(|| "输入监听或运行状态未就绪".into());
     }
     let request = Request {
+        approval: actl_core::handoff::Approval::Expiring,
         generation: generation.clone(),
         call: actl_core::snapshot::new_snapshot_id(),
         task: id.into(),

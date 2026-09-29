@@ -37,6 +37,11 @@ pub fn reason(reason: &str) -> &'static str {
         "binding_validation_failed" => "步骤输入未通过检查，请查看详细信息。",
         "action_failed" => "操作未完成，请先核对已有结果。",
         "verification_failed" => "结果未通过核对，不会自动重做。",
+        "result_observation_failed" => "暂时无法读取上一步结果；继续仅重新核验，不会重做。",
+        "result_unconfirmed; inspect before authorizing --retry-step" => {
+            "实际结果与预期不符，可能只完成了一部分；继续仅重新核验，不会重做。"
+        }
+        "input_monitor_unavailable" => "输入监听暂不可用，任务已暂停；恢复后点击继续重新核验。",
         _ => "需要处理，请查看详细信息。",
     }
 }

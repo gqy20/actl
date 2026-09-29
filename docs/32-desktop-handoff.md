@@ -12,6 +12,12 @@
 共享 PowerShell fixture 为同次场景自动生成任务 ID，尊重调用方已有 ID；交接中断后保留窗口，不继续清理。
 普通 CLI 没有任务 ID 时仅当前调用有效。授权保存在显示进程内存中：空闲 60 秒、总长 10 分钟、
 显示端重启、紧急停止或外部键鼠输入均会使其失效。调用方不得伪造点击或写文件授予授权。
+
+显示协议 v8 支持 `handoff: {approval: once_per_run}`：同任务不因空闲 60 秒或总长 10 分钟失效。
+首次提示明确说明本任务确认一次，人工输入/停止/监听异常仍撤销授权。默认 `expiring` 保持旧超时。
+flow 在顶层设置 handoff；普通脚本设置 `ACTL_TASK_CONFIG` 指向含 version: 1 和 handoff 的 YAML，
+并为整轮生成唯一 ACTL_TASK_ID，不能跨运行复用。配置只描述策略，不保存已授权状态。
+`scenarios/verify-applications.ps1` 使用 `verification-task.yml` 共用一次任务交接，出现交接中断后停止整批。
 现有 `--physical` 显式要求不变；点击交接按钮不代替 `--physical`。
 
 ## 人工接管
@@ -89,6 +95,10 @@ UIA 属性调用本身受 provider 调度影响，轮询超时不等于整个 CO
 已进入系统的输入仍不能撤回；恢复先验证 uncertain 步骤。明确 action_started:false 的交接拒绝
 保留 pending，可直接继续到未开始的步骤。单 CLI 和 PowerShell 脚本保留现场，由调用方接续，
 当前版本不提供假继续按钮。紧急停止独立于暂停，不会自动解除。
+
+需要界面继续的验证使用 `scenarios/vscode-resume.ps1`：动作在执行前登记为持久化 flow，暂停后由绑定 run ID 的继续按钮恢复，不重新运行准备脚本。核验判据与当前迁移范围见 [55](55-resumable-desktop-tasks.md)。
+
+重复提示诊断记录在本地 history 的 consent_decision：区分实际 shown、用户 granted 与 reused，附带策略、失效原因和两路活动计数，不记录输入内容。Raw Input 只排除无设备且携带 actl 注入标记的自身事件，其余来源或解析失败仍让行。复现和验收见 [54](54-repeated-handoff.md)。
 
 
 v5 验证：`target/cooperation-gate-final.log` 完整门禁通过；模型覆盖人工让行文案、后台可操作、

@@ -85,13 +85,14 @@ fn request(target: &str) -> Result<(), CtlError> {
     }
     let _remove = Remove(paths.dir.join(&file));
     let mut request = Request {
+        approval: actl_core::handoff::configured(),
         generation: actl_core::stop::generation()?,
         call,
         task,
         target: target.chars().take(180).collect(),
         ts_ms: unix_ms(),
     };
-    actl_core::signal_session::handoff_event("handoff_pending");
+    let mut waiting = false;
     let start = Instant::now();
     while start.elapsed() < Duration::from_secs(25) {
         crate::feedback::check_stop()?;
@@ -115,7 +116,13 @@ fn request(target: &str) -> Result<(), CtlError> {
                     "execution generation changed",
                 ));
             }
-            PENDING => std::thread::sleep(Duration::from_millis(crate::timing().handoff_poll_ms)),
+            PENDING => {
+                if !waiting {
+                    actl_core::signal_session::handoff_event("handoff_pending");
+                    waiting = true;
+                }
+                std::thread::sleep(Duration::from_millis(crate::timing().handoff_poll_ms));
+            }
             _ => return Err(failure("request_rejected")),
         }
     }

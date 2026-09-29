@@ -87,7 +87,9 @@ fn call_snapshot() -> Vec<actl_core::state::SessionState> {
             .name("signal-state-reader".into())
             .spawn(move || {
                 loop {
-                    let states = SignalPaths::default().read_calls();
+                    let paths = SignalPaths::default();
+                    let mut states = paths.read_calls();
+                    super::flow_display::retain(&paths, &mut states);
                     if let Ok(mut latest) = output.lock() {
                         *latest = states;
                     }

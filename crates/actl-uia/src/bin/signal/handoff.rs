@@ -24,6 +24,15 @@ thread_local! {
 static WATCH_RUNNING: AtomicBool = AtomicBool::new(false);
 static INPUT_SEQ: AtomicU64 = AtomicU64::new(0);
 
+fn audit(request: &Request, stage: &str, reason: &str) {
+    super::handoff_audit::record(
+        request,
+        stage,
+        reason,
+        INPUT_SEQ.load(Ordering::SeqCst),
+        super::input_watch::ACTIVITY.load(Ordering::SeqCst),
+    );
+}
 fn activity() -> u64 {
     INPUT_SEQ
         .load(Ordering::SeqCst)
@@ -42,6 +51,8 @@ struct Service {
     request: Option<(u32, Request)>,
     deferred: Option<String>,
     active: Option<(u32, String, String)>,
+    active_request: Option<Request>,
+    audited_failure: Option<String>,
     panel: Option<HWND>,
     failed_call: Option<String>,
     paused_call: Option<String>,
@@ -49,9 +60,19 @@ struct Service {
 thread_local! { static SERVICE: RefCell<Service> = RefCell::new(Service::default()); }
 
 impl Service {
+    fn audit_failure(&mut self, request: Option<&Request>, reason: &str) {
+        let request = request.or(self.active_request.as_ref());
+        if let Some(request) = request
+            && self.audited_failure.as_deref() != Some(&request.call)
+        {
+            audit(request, "revoked", reason);
+            self.audited_failure = Some(request.call.clone());
+        }
+    }
     fn invalidate(&mut self) {
         self.consent.revoke();
         self.active = None;
+        self.active_request = None;
         self.request = None;
         self.generation = None;
         unsafe {
@@ -158,6 +179,7 @@ pub unsafe fn watch() -> windows::core::Result<Watch> {
 unsafe extern "system" fn keyboard(code: i32, wp: WPARAM, lp: LPARAM) -> LRESULT {
     if code >= 0 {
         let event = &*(lp.0 as *const KBDLLHOOKSTRUCT);
+        super::input_diagnostics::hook(event.flags.contains(LLKHF_INJECTED), event.dwExtraInfo);
         if external_input(event.flags.contains(LLKHF_INJECTED), event.dwExtraInfo) {
             INPUT_SEQ.fetch_add(1, Ordering::SeqCst);
         }
@@ -167,6 +189,7 @@ unsafe extern "system" fn keyboard(code: i32, wp: WPARAM, lp: LPARAM) -> LRESULT
 unsafe extern "system" fn mouse(code: i32, wp: WPARAM, lp: LPARAM) -> LRESULT {
     if code >= 0 {
         let event = &*(lp.0 as *const MSLLHOOKSTRUCT);
+        super::input_diagnostics::hook(event.flags & LLMHF_INJECTED != 0, event.dwExtraInfo);
         if external_input(event.flags & LLMHF_INJECTED != 0, event.dwExtraInfo) {
             INPUT_SEQ.fetch_add(1, Ordering::SeqCst);
         }
@@ -186,7 +209,14 @@ fn read_request(paths: &SignalPaths, pid: u32) -> Option<Request> {
 /// Synchronous query: callback input counters are checked at every injection boundary.
 pub fn message(msg: u32, pid: u32) -> usize {
     if !WATCH_RUNNING.load(Ordering::SeqCst) || !super::input_watch::healthy() {
-        SERVICE.with(|s| s.borrow_mut().consent.revoke());
+        SERVICE.with(|s| {
+            let mut s = s.borrow_mut();
+            s.consent.revoke_with_reason("input_monitor_unavailable");
+            s.audit_failure(
+                read_request(&SignalPaths::default(), pid).as_ref(),
+                "input_monitor_unavailable",
+            );
+        });
         return MONITOR_UNAVAILABLE;
     }
     SERVICE.with(|cell| {
@@ -212,6 +242,8 @@ pub fn message(msg: u32, pid: u32) -> usize {
             return if owner == pid && s.consent.check(&task, seq, unix_ms()) {
                 ALLOWED
             } else {
+                let reason = s.consent.reason();
+                s.audit_failure(None, reason);
                 YIELDED
             };
         }
@@ -230,7 +262,9 @@ pub fn message(msg: u32, pid: u32) -> usize {
         if s.deferred.as_deref() == Some(&r.call) {
             return DEFERRED;
         }
-        if !paths.stop_requested() && s.consent.check(&r.task, seq, unix_ms()) {
+        if !paths.stop_requested() && s.consent.check_policy(&r.task, seq, unix_ms(), r.approval) {
+            audit(&r, "reused", "allowed");
+            s.active_request = Some(r.clone());
             s.active = Some((pid, r.call, r.task));
             return ALLOWED;
         }
@@ -264,7 +298,13 @@ unsafe fn tick_with(paths: &SignalPaths, healthy: bool) {
         };
         s.observe_generation(&generation);
         if paths.stop_requested() || !healthy {
-            s.consent.revoke();
+            s.consent.revoke_with_reason(if healthy {
+                "stopped"
+            } else {
+                "input_monitor_unavailable"
+            });
+            let reason = s.consent.reason();
+            s.audit_failure(None, reason);
         }
         if let Some((pid, request)) = &s.request
             && read_request(paths, *pid).is_none_or(|r| r.call != request.call)
@@ -274,7 +314,12 @@ unsafe fn tick_with(paths: &SignalPaths, healthy: bool) {
         }
         if s.request.is_some() && s.panel.is_none() {
             match create_panel(s.request.as_ref().map(|(_, r)| r)) {
-                Ok(hwnd) => s.panel = Some(hwnd),
+                Ok(hwnd) => {
+                    if let Some((_, request)) = &s.request {
+                        audit(request, "shown", s.consent.reason());
+                    }
+                    s.panel = Some(hwnd);
+                }
                 Err(e) => {
                     eprintln!("NOT_ACTIONABLE: handoff panel unavailable: {e}");
                     s.failed_call = s.request.take().map(|(_, r)| r.call);
@@ -352,16 +397,18 @@ pub(super) unsafe fn build_panel_with(
                 .any(|s| s["attempts"].as_u64().unwrap_or(0) > 0 || s["status"] == "completed")
         });
     let context = format!("目标：{}", request.map_or("待确认", |r| r.target.as_str()));
+    let policy_text = if request.is_some_and(|r| r.approval == Approval::OncePerRun) {
+        "本任务开始时确认一次，不因等待超时。\r\n使用键鼠与剪贴板；人工接管后暂停。"
+    } else {
+        "可能切换窗口、使用键鼠和剪贴板。\r\n确认后请暂勿操作；操作键鼠会请求暂停。"
+    };
     let children = (|| -> windows::core::Result<()> {
         for (id, text) in [
             (102, title.as_str()),
             (15, "关闭"),
             (103, "等待你确认"),
             (10, context.as_str()),
-            (
-                104,
-                "可能切换窗口、使用键鼠和剪贴板。\r\n确认后请暂勿操作；操作键鼠会请求暂停。",
-            ),
+            (104, policy_text),
             (105, "Ctrl+Alt+Y"),
             (14, "详细信息"),
             (
@@ -567,7 +614,9 @@ unsafe fn decide(_hwnd: HWND, start: bool) {
                     .acknowledge_stop(&r.generation)
                     .is_ok()
             {
-                s.consent.allow(&r.task, activity(), unix_ms());
+                s.consent
+                    .allow_with_policy(&r.task, activity(), unix_ms(), r.approval);
+                audit(&r, "granted", "user_start");
             } else {
                 s.deferred = Some(r.call);
             }
@@ -658,13 +707,24 @@ pub fn allow_flow(task: &str, generation: &str) -> bool {
         return false;
     }
     let paths = SignalPaths::default();
+    let Some(plan) = super::ui_text::plan(&paths, task) else {
+        return false;
+    };
+    let policy = match plan.get("handoff") {
+        None | Some(serde_json::Value::Null) => Policy::default(),
+        Some(value) => match serde_json::from_value::<Policy>(value.clone()) {
+            Ok(policy) => policy,
+            Err(_) => return false,
+        },
+    };
     if paths.acknowledge_stop(generation).is_err() {
         return false;
     }
     SERVICE.with(|cell| {
         let mut s = cell.borrow_mut();
         s.observe_generation(generation);
-        s.consent.allow(task, activity(), unix_ms());
+        s.consent
+            .allow_with_policy(task, activity(), unix_ms(), policy.approval);
     });
     true
 }
