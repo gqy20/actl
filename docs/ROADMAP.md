@@ -62,7 +62,7 @@
   验收：短暂失败可恢复；持续失败有界退出；未知不走否定分支；暂停/停止阻止派发；重启/继续不静默刷新预算；不确定动作不重放；保留每次观察、恢复措施及退出原因。
 - [ ] 简单条件模板逐应用验收：窗口复用/启动、可选控件关闭、已有值跳过；代码与参数预检不代替业务验收，见 [63](63-simple-workflow-conditions.md)。
 
-- [ ] 从 resources 入口复验四软件整批：单软件复验见 [66](66-application-readiness.md)、[67](67-vscode-navigation-controls.md)。一至五轮记录见 [68](68-combined-batch-first-round.md)。路线层：Word 段第四轮 20 步全过（docx 打开期锁→UIA 核验生效）；Excel close/reopen 链第四轮通过（XLMAIN 壳→verify-window absent 生效），cell-readback 旧路线第五轮暴露并已修（51c8841，待真机验证）；Zotero -datadir 反斜杠（${run.dir_native}）第三/五轮启动与归属通过，卡在 import 前置（空库无 item-tree，待适配）。第三/五轮整批被桌面竞争反复打断（含外来程序注入触发让行）。四段全过 + 资源隔离核对 + 恢复保留编辑结果 + 正常收尾后方可关闭。
+- [ ] 从 resources 入口复验四软件整批：单软件复验见 [66](66-application-readiness.md)、[67](67-vscode-navigation-controls.md)。一至五轮记录见 [68](68-combined-batch-first-round.md)。路线层四软件单链已全部通过（2026-09-30：Zotero 9/9 zotero-verify11、Excel 13/13 excel-verify8、Word 20/20、VS Code 26/26，见 docs/68）；组合整批第六次死于深夜锁屏（护栏正确拒绝），只差一次解锁状态下的整批运行。四段全过 + 资源隔离核对 + 恢复保留编辑结果 + 正常收尾后方可关闭。遗留：Excel 残壳优雅退出无解（WM_CLOSE/COM Quit 均无效，9 壳堆积拖慢全局，重启清）。
 
 - [ ] 完成四个已迁移应用 workflow 的真机复验，核对一次交接、组内暂停、不确定结果、独立文件核验及进程归属，见 [57](57-application-workflow-migration.md)。VS Code 已有独立可恢复验证入口，真机状态及边界见 [55](55-resumable-desktop-tasks.md)；旧脚本退出不具备自动续跑能力。
 

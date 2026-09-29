@@ -9,6 +9,10 @@ app_version: "10.0.3"
 verified_date: 2026-09-28
 verified_env: Windows 10.0.26200.0 zh-cn
 quirks:
+  - id: search_commit_semantics
+    note: 2026-09-30 实测（docs/68）：快速搜索框 type 为追加语义（需先 click 聚焦 + ctrl+a 全选才替换）；输入即实时过滤、tab 提交会清空框与过滤；裸 press 间歇被首启升级通知条（sync-reminder）挡。workflow 用 click+ctrl+a+type 三段。全新 profile 首启有「升级到 Zotero 10」通知条，不挡输入但拖慢首个动作。
+  - id: dialog_selector_ambiguity
+    note: 2026-09-30：publication 字段须精确 name 匹配（集合树「我的出版物」可编辑行使 name_contains 歧义）；导出格式列表项须 role=ListItem 限定（弹出 List 自身显示当前选中值同名）；Windows 保存对话框跑在 contentproc 子进程（命令行无 profile 令牌，verify-owner 不可用）；保存文件名框拒收正斜杠路径（须 ${run.dir_native}）。
   - id: datadir_backslash_required
     note: 2026-09-29 实证（docs/68 第二轮）：Zotero 10 的 -datadir 只接受反斜杠绝对路径或字面量 profile，正斜杠路径（引擎 ${run.dir} 默认正斜杠）会弹「错误」对话框（-datadir requires an absolute path or 'profile'）且不建主窗口；隔离启动因此 20s 超时。workflow 用 ${run.dir_native} 反斜杠变体后真机验证通过（data 目录正常落盘）。-profile 不受影响，正斜杠可用。
   - id: window_title_disambiguation

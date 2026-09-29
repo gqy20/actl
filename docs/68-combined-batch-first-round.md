@@ -127,3 +127,29 @@ journal consent_decision 证据：撤销时刻 `hook_foreign_injected_events` 0�
 3. zotero import 前置适配（空库无 item-tree）待修。
 4. excel paste 中断重放后的 xlsx 差异未定案（复现优先）。
 5. 显示端续跑执行器的 journal 未完整并入任务时间线（第五轮 525 事件止于首执行器，续跑波次的步骤事件缺失）——诊断工具链缺口，待查。
+
+---
+
+# 单应用全链收官（2026-09-30 凌晨）
+
+## 四软件单链全部首次通过
+
+- **Zotero 9/9**（zotero-verify11）：import 前置改 collection-tree 就绪 + 导入后等行渲染；搜索改 click+ctrl+a+type（实测 type 追加、tab 清空过滤、裸 press 被首启通知条挡）；publication 精确 name；CSL 列表项 role 限定；保存对话框（contentproc 子进程）去 verify-owner；导出路径 `${run.dir_native}`（正斜杠被保存对话框拒收，用户截图实证「X:/.xlsx」/「文件名无效」）。recovery 预算实救 1 次 STALE_REF。
+- **Excel 13/13**（excel-verify8）：close 核验根因定案——拆窗实测 3-15 秒（孤立对照 2.8-4.2 秒），旧单发判定必撞假阴性；修为 wait --gone（60s 耐心、观察期错误视为仍在）+ verify-window 15 秒 settle。reopen 冷启动 INTERNAL 纳入观察恢复可重试（真机实救 1 次）。cell-readback 镜像 copy-range 路线通过。
+- Word 20/20（第四轮）、VS Code 26/26（第二/四轮）此前已过。
+
+## 引擎侧修复（commit b7dee16）
+
+verify-window settle、wait --gone 观察容错、INTERNAL 纳入 retryable（docs/65 观察瞬态家族），单测覆盖。
+
+## 诊断教训（入档）
+
+- **bash 内联转义事故**：`"C:\...\$T\$T.xlsx"` 在工具层+bash 双引号组合下产出 `...$T$T.xlsx`，Excel 收到残渣 `X:/.xlsx` 弹「无法找到」错误框——closelab 系列实验全部作废后由用户截图定位。含反斜杠/变量的命令一律写脚本文件执行（AGENTS 中文参数纪律的推广）。
+- **Excel 僵尸壳堆积**：今晚每轮整链留一壳（现 9 个），拖慢 Excel 全局操作（用户观察到鼠标转圈）；WM_CLOSE 与 COM Application.Quit 均无法退出（加载项钉住）。不 taskkill，留待重启；根因（加载项钉住）与缓解（流程已把壳存在视为正常）记 pack。
+- 第六次整批（apps-verify9-20260930）死于**锁屏**（深夜自动锁屏，前景=「Windows 默认锁屏界面」），四段 open 全部被锁屏护栏正确 fail-closed——非路线缺陷。轮询 5 分钟未解锁，按纪律受阻不记通过；**四链已各自通过，整批只差一次解锁状态下的运行**。
+
+## 待办
+
+1. 解锁状态跑一次组合整批（verify-applications.yml 68 步）收尾验收。
+2. Excel 壳堆积的根因与优雅退出路径（加载项钉住；重启后复测一轮确认壳数不无限增长）。
+3. 早前已记录项见 ROADMAP（交接来源区分、续跑 journal 完整性等）。
