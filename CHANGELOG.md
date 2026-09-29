@@ -9,6 +9,8 @@
 
 ## [Unreleased]
 
+- **同族风险修复波（docs/70 复盘落地）**：① 观察耐心家族收口——`verify --value`（元素重渲染旧值）与 verify-clipboard（复制送达与可读的竞态，空/旧内容均重读）补 5 秒沉降；verify-rows 行树缺失改报 NOT_FOUND 并入沉降（=尚未渲染，可重试），歧义保持 NOT_ACTIONABLE 立即失败。② **失败取证三路留证**——synthetic 失败证据附带错误原文 message（截断 200 字，脱敏路径维持原契约）；步骤失败瞬间向 flow-resources/<id>/evidence/<步骤>-<相位>.* 落三件套：整屏 PNG（人看到的）、原生窗口清单 JSON（Win32 直读，锁屏/隐藏壳/歧义窗口）、定向 UIA 快照 JSON（按失败调用 `--app`，自动化视角的树与 automation_id；窗口垂死时如实跳过）。引擎六处失败位 → Host 钩子（携带失败调用，含序列 JSON 内嵌 --app 提取，单测覆盖）→ CLI 实现，只吞错不碍流程、同名覆盖不堆积；新增 screenshot_screen 虚拟屏全域截图。③ **整批桌面空闲门**——组合模板专属首步 `wait --idle 15000`（最长 5 分钟；单应用模板保持可交互不加门；合成契约注入同步，68→69 步；flow 步骤校验认 --idle 无目标等待形态）。④ bash 转义纪律入 AGENTS——反斜杠路径与 $ 变量在工具层+bash 双引号组合下会被吃（实证 X:/.xlsx 残渣参数），与 GBK 规则并为一条「含中文/反斜杠/变量一律脚本文件执行」。
+
 - **观察判定耐心家族收口（docs/68、docs/70）**：verify-window 断言失败改为 15 秒内重读（实测带加载项的 Excel 拆窗 3-15 秒，原单发判定必撞假阴性，对齐 verify-closed/rows/file 的 settle）；`wait --gone` 把观察期错误（垂死窗口的 STALE_REF/INTERNAL）视为"尚未消失"在超时内继续轮询；观察恢复的 retryable 集合纳入 INTERNAL（冷启动窗口 UIA 查询抖动，docs/65 同族，有界 3 次/15 秒不吞真错误）。真机：excel-verify8 的 reopen 一次 INTERNAL 被 recovery 实救。
 
 - **Zotero 全链路线修复（9/9 真机通过，zotero-verify11）**：import 前置改 collection-tree 就绪检查（全新空库无 item-tree-main-default）并在导入后等行渲染再核验；快速搜索改 click 聚焦 + ctrl+a 全选 + type 替换（实测 type 为追加语义、tab 提交会清空过滤、裸 press 间歇被首启升级通知条挡）；publication 字段改精确 name 匹配（集合树「我的出版物」可编辑行使 name_contains 歧义）；导出格式列表项加 role=ListItem 限定（弹出 List 自身与选中值同名）；移除保存对话框上的 verify-owner（该对话框跑在 contentproc 子进程，命令行不含任务令牌）；导出文件名改 `${run.dir_native}`（Windows 保存对话框拒收正斜杠路径，用户截图实证「文件名无效」）。zotero 全部 9 步配 recovery 预算。
