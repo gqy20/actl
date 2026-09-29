@@ -73,7 +73,16 @@ actl flow-run --file skills/actl/workflows/vscode-edit.yml --id vscode-001
 
 每次从头运行使用新的 ID；无需先运行 PS 或生成 inputs.json。先只读预检可用 flow-validate --file 同一模板。可选 --inputs 仍支持覆盖默认输入；覆盖文件路径不会把资源写到该外部路径，调用方须自行提供并确认外部文件。
 
-[verify-applications.yml](verify-applications.yml) 为四软件合计 68 步整批计划，资源按软件子目录隔离，整批共用一个任务 ID 和 once_per_run；其步骤与单软件模板的一致性由测试检查。首次交接及暂停恢复遵循当前授权规则。旧准备/合并脚本已删除，历史验收保留。
+[verify-applications.yml](verify-applications.yml) 为四软件合计 69 步整批计划（首步桌面空闲门），资源按软件子目录隔离，整批共用一个任务 ID 和 once_per_run；其步骤与单软件模板的一致性由测试检查。首次交接及暂停恢复遵循当前授权规则。旧准备/合并脚本已删除，历史验收保留。
+
+**整批运行序列（无人值守约定，调用方执行）**：
+
+1. `actl wait --idle 15000 --timeout 120000`——等桌面空闲（用户在场主动让行）；
+2. `actl desktop-prepare --all`——清场：最小化全部普通应用窗口（排除显示端/任务栏/工具窗；逐窗记录身份与位置，会话令牌在返回 data.session 与 journal 中；失败含已完成清单）；
+3. `actl flow-run --file skills/actl/workflows/verify-applications.yml --id <新任务ID>`——整批（模板首步另带 idle 门兜底）；
+4. 收尾（可选）：`actl desktop-restore --session <步骤2返回的令牌>`——恢复被清场窗口的原状态与位置；用户中途手动动过的窗口如实报告 skipped。
+
+desktop-prepare/restore 属调用方桌面会话生命周期，不放流程步骤内（动作步需 verify 且会话成对管理；流程内禁管理命令的设计意图见协议文档）。两次授权：prepare 卡片一次、flow 首个桌面动作一次（once_per_run 后复用）。
 
 资源根目录为本机 actl 状态目录下的 flow-resources/<ID>。预检不创建资源；执行前完整预检通过才新建资源，已有同名目录拒绝覆盖。恢复不重建初始文件，也不重读模板。
 

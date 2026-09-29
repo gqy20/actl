@@ -153,3 +153,11 @@ verify-window settle、wait --gone 观察容错、INTERNAL 纳入 retryable（do
 1. 解锁状态跑一次组合整批（verify-applications.yml 68 步）收尾验收。
 2. Excel 壳堆积的根因与优雅退出路径（加载项钉住；重启后复测一轮确认壳数不无限增长）。
 3. 早前已记录项见 ROADMAP（交接来源区分、续跑 journal 完整性等）。
+
+## 整批清场运行序列（2026-09-30 定稿）
+
+组合整批启动前清桌面的需求落地为**调用方运行序列**（非流程步骤）：`desktop-prepare --all`
+本就是为此设计的命令（ordinary 窗口过滤、逐窗身份+placement 快照、崩溃可恢复会话、
+`desktop-restore` 还原），但其会话生命周期与"动作步必须 verify"的协议约束决定它属
+调用方。序列与两次授权说明见 workflows/README 整批运行序列节。教训入档：动手前先
+搜命令集——本次险些重复实现一套已存在且更完整的 desktop-prepare/restore。
