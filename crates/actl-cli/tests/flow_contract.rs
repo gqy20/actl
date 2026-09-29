@@ -204,15 +204,19 @@ fn reusable_workflows_preflight_without_desktop_actions() {
                             "Quick Input must use ValuePattern"
                         );
                     }
-                    if call.command == "click" {
+                    if call.command == "click" && call.args[0].contains("ListItem") {
                         assert!(
                             call.args[0].contains("quickInput_list"),
                             "result clicks must be container scoped"
                         );
                     }
                     assert!(
-                        !(call.command == "press" && call.args[0] == "enter"),
-                        "activate the verified result instead of injecting into a virtual-focus input"
+                        !(call.command == "press"
+                            && matches!(
+                                call.args[0].as_str(),
+                                "enter" | "f1" | "ctrl+g" | "ctrl+p"
+                            )),
+                        "use UIA navigation controls instead of Quick Input shortcuts"
                     );
                 }
             }

@@ -42,6 +42,8 @@
           {
             "input": "program"
           },
+          "--locale",
+          "en",
           "--new-window",
           "--disable-extensions",
           "--skip-welcome",
@@ -159,19 +161,36 @@
       "id": "initial-ready",
       "title": "Wait for editor content and verify complete text",
       "run": {
-        "command": "wait",
-        "args": [
-          "--element",
+        "sequence": [
           {
-            "input": "editor"
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"role\":\"MenuItem\",\"name\":\"File\"}}",
+              "--app",
+              {
+                "input": "app"
+              },
+              "--timeout",
+              "5000"
+            ],
+            "command": "wait"
           },
-          "--stable",
-          "--app",
           {
-            "input": "app"
-          },
-          "--timeout",
-          "15000"
+            "command": "wait",
+            "args": [
+              "--element",
+              {
+                "input": "editor"
+              },
+              "--stable",
+              "--app",
+              {
+                "input": "app"
+              },
+              "--timeout",
+              "15000"
+            ]
+          }
         ]
       },
       "verify": {
@@ -223,18 +242,37 @@
             ]
           },
           {
-            "command": "press",
             "args": [
-              "ctrl+s",
-              "--target",
-              {
-                "input": "editor"
-              },
+              "uia:{\"match\":{\"name\":\"File\",\"role\":\"MenuItem\"}}",
               "--app",
               {
                 "input": "app"
               }
-            ]
+            ],
+            "command": "click"
+          },
+          {
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
+              "--app",
+              {
+                "input": "app"
+              },
+              "--timeout",
+              "5000"
+            ],
+            "command": "wait"
+          },
+          {
+            "args": [
+              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ],
+            "command": "click"
           }
         ]
       },
@@ -293,32 +331,70 @@
       "run": {
         "sequence": [
           {
-            "command": "press",
             "args": [
-              "ctrl+z",
-              "--target",
-              {
-                "input": "editor"
-              },
+              "uia:{\"match\":{\"name\":\"Edit\",\"role\":\"MenuItem\"}}",
               "--app",
               {
                 "input": "app"
               }
-            ]
+            ],
+            "command": "click"
           },
           {
-            "command": "press",
             "args": [
-              "ctrl+s",
-              "--target",
+              "--element",
+              "uia:{\"match\":{\"name\":\"Undo Ctrl+Z\",\"role\":\"MenuItem\"}}",
+              "--app",
               {
-                "input": "editor"
+                "input": "app"
               },
+              "--timeout",
+              "5000"
+            ],
+            "command": "wait"
+          },
+          {
+            "args": [
+              "uia:{\"match\":{\"name\":\"Undo Ctrl+Z\",\"role\":\"MenuItem\"}}",
               "--app",
               {
                 "input": "app"
               }
-            ]
+            ],
+            "command": "click"
+          },
+          {
+            "args": [
+              "uia:{\"match\":{\"name\":\"File\",\"role\":\"MenuItem\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ],
+            "command": "click"
+          },
+          {
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
+              "--app",
+              {
+                "input": "app"
+              },
+              "--timeout",
+              "5000"
+            ],
+            "command": "wait"
+          },
+          {
+            "args": [
+              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ],
+            "command": "click"
           }
         ]
       },
@@ -377,32 +453,70 @@
       "run": {
         "sequence": [
           {
-            "command": "press",
             "args": [
-              "ctrl+y",
-              "--target",
-              {
-                "input": "editor"
-              },
+              "uia:{\"match\":{\"name\":\"Edit\",\"role\":\"MenuItem\"}}",
               "--app",
               {
                 "input": "app"
               }
-            ]
+            ],
+            "command": "click"
           },
           {
-            "command": "press",
             "args": [
-              "ctrl+s",
-              "--target",
+              "--element",
+              "uia:{\"match\":{\"name\":\"Redo Ctrl+Y\",\"role\":\"MenuItem\"}}",
+              "--app",
               {
-                "input": "editor"
+                "input": "app"
               },
+              "--timeout",
+              "5000"
+            ],
+            "command": "wait"
+          },
+          {
+            "args": [
+              "uia:{\"match\":{\"name\":\"Redo Ctrl+Y\",\"role\":\"MenuItem\"}}",
               "--app",
               {
                 "input": "app"
               }
-            ]
+            ],
+            "command": "click"
+          },
+          {
+            "args": [
+              "uia:{\"match\":{\"name\":\"File\",\"role\":\"MenuItem\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ],
+            "command": "click"
+          },
+          {
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
+              "--app",
+              {
+                "input": "app"
+              },
+              "--timeout",
+              "5000"
+            ],
+            "command": "wait"
+          },
+          {
+            "args": [
+              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ],
+            "command": "click"
           }
         ]
       },
@@ -489,18 +603,37 @@
             ]
           },
           {
-            "command": "press",
             "args": [
-              "ctrl+s",
-              "--target",
-              {
-                "input": "editor"
-              },
+              "uia:{\"match\":{\"name\":\"File\",\"role\":\"MenuItem\"}}",
               "--app",
               {
                 "input": "app"
               }
-            ]
+            ],
+            "command": "click"
+          },
+          {
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
+              "--app",
+              {
+                "input": "app"
+              },
+              "--timeout",
+              "5000"
+            ],
+            "command": "wait"
+          },
+          {
+            "args": [
+              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ],
+            "command": "click"
           }
         ]
       },
@@ -559,32 +692,70 @@
       "run": {
         "sequence": [
           {
-            "command": "press",
             "args": [
-              "ctrl+z",
-              "--target",
-              {
-                "input": "editor"
-              },
+              "uia:{\"match\":{\"name\":\"Edit\",\"role\":\"MenuItem\"}}",
               "--app",
               {
                 "input": "app"
               }
-            ]
+            ],
+            "command": "click"
           },
           {
-            "command": "press",
             "args": [
-              "ctrl+s",
-              "--target",
+              "--element",
+              "uia:{\"match\":{\"name\":\"Undo Ctrl+Z\",\"role\":\"MenuItem\"}}",
+              "--app",
               {
-                "input": "editor"
+                "input": "app"
               },
+              "--timeout",
+              "5000"
+            ],
+            "command": "wait"
+          },
+          {
+            "args": [
+              "uia:{\"match\":{\"name\":\"Undo Ctrl+Z\",\"role\":\"MenuItem\"}}",
               "--app",
               {
                 "input": "app"
               }
-            ]
+            ],
+            "command": "click"
+          },
+          {
+            "args": [
+              "uia:{\"match\":{\"name\":\"File\",\"role\":\"MenuItem\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ],
+            "command": "click"
+          },
+          {
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
+              "--app",
+              {
+                "input": "app"
+              },
+              "--timeout",
+              "5000"
+            ],
+            "command": "wait"
+          },
+          {
+            "args": [
+              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ],
+            "command": "click"
           }
         ]
       },
@@ -643,32 +814,70 @@
       "run": {
         "sequence": [
           {
-            "command": "press",
             "args": [
-              "ctrl+y",
-              "--target",
-              {
-                "input": "editor"
-              },
+              "uia:{\"match\":{\"name\":\"Edit\",\"role\":\"MenuItem\"}}",
               "--app",
               {
                 "input": "app"
               }
-            ]
+            ],
+            "command": "click"
           },
           {
-            "command": "press",
             "args": [
-              "ctrl+s",
-              "--target",
+              "--element",
+              "uia:{\"match\":{\"name\":\"Redo Ctrl+Y\",\"role\":\"MenuItem\"}}",
+              "--app",
               {
-                "input": "editor"
+                "input": "app"
               },
+              "--timeout",
+              "5000"
+            ],
+            "command": "wait"
+          },
+          {
+            "args": [
+              "uia:{\"match\":{\"name\":\"Redo Ctrl+Y\",\"role\":\"MenuItem\"}}",
               "--app",
               {
                 "input": "app"
               }
-            ]
+            ],
+            "command": "click"
+          },
+          {
+            "args": [
+              "uia:{\"match\":{\"name\":\"File\",\"role\":\"MenuItem\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ],
+            "command": "click"
+          },
+          {
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
+              "--app",
+              {
+                "input": "app"
+              },
+              "--timeout",
+              "5000"
+            ],
+            "command": "wait"
+          },
+          {
+            "args": [
+              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ],
+            "command": "click"
           }
         ]
       },
@@ -755,18 +964,37 @@
             ]
           },
           {
-            "command": "press",
             "args": [
-              "ctrl+s",
-              "--target",
-              {
-                "input": "editor"
-              },
+              "uia:{\"match\":{\"name\":\"File\",\"role\":\"MenuItem\"}}",
               "--app",
               {
                 "input": "app"
               }
-            ]
+            ],
+            "command": "click"
+          },
+          {
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
+              "--app",
+              {
+                "input": "app"
+              },
+              "--timeout",
+              "5000"
+            ],
+            "command": "wait"
+          },
+          {
+            "args": [
+              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ],
+            "command": "click"
           }
         ]
       },
@@ -825,32 +1053,70 @@
       "run": {
         "sequence": [
           {
-            "command": "press",
             "args": [
-              "ctrl+z",
-              "--target",
-              {
-                "input": "editor"
-              },
+              "uia:{\"match\":{\"name\":\"Edit\",\"role\":\"MenuItem\"}}",
               "--app",
               {
                 "input": "app"
               }
-            ]
+            ],
+            "command": "click"
           },
           {
-            "command": "press",
             "args": [
-              "ctrl+s",
-              "--target",
+              "--element",
+              "uia:{\"match\":{\"name\":\"Undo Ctrl+Z\",\"role\":\"MenuItem\"}}",
+              "--app",
               {
-                "input": "editor"
+                "input": "app"
               },
+              "--timeout",
+              "5000"
+            ],
+            "command": "wait"
+          },
+          {
+            "args": [
+              "uia:{\"match\":{\"name\":\"Undo Ctrl+Z\",\"role\":\"MenuItem\"}}",
               "--app",
               {
                 "input": "app"
               }
-            ]
+            ],
+            "command": "click"
+          },
+          {
+            "args": [
+              "uia:{\"match\":{\"name\":\"File\",\"role\":\"MenuItem\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ],
+            "command": "click"
+          },
+          {
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
+              "--app",
+              {
+                "input": "app"
+              },
+              "--timeout",
+              "5000"
+            ],
+            "command": "wait"
+          },
+          {
+            "args": [
+              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ],
+            "command": "click"
           }
         ]
       },
@@ -909,32 +1175,70 @@
       "run": {
         "sequence": [
           {
-            "command": "press",
             "args": [
-              "ctrl+y",
-              "--target",
-              {
-                "input": "editor"
-              },
+              "uia:{\"match\":{\"name\":\"Edit\",\"role\":\"MenuItem\"}}",
               "--app",
               {
                 "input": "app"
               }
-            ]
+            ],
+            "command": "click"
           },
           {
-            "command": "press",
             "args": [
-              "ctrl+s",
-              "--target",
+              "--element",
+              "uia:{\"match\":{\"name\":\"Redo Ctrl+Y\",\"role\":\"MenuItem\"}}",
+              "--app",
               {
-                "input": "editor"
+                "input": "app"
               },
+              "--timeout",
+              "5000"
+            ],
+            "command": "wait"
+          },
+          {
+            "args": [
+              "uia:{\"match\":{\"name\":\"Redo Ctrl+Y\",\"role\":\"MenuItem\"}}",
               "--app",
               {
                 "input": "app"
               }
-            ]
+            ],
+            "command": "click"
+          },
+          {
+            "args": [
+              "uia:{\"match\":{\"name\":\"File\",\"role\":\"MenuItem\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ],
+            "command": "click"
+          },
+          {
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
+              "--app",
+              {
+                "input": "app"
+              },
+              "--timeout",
+              "5000"
+            ],
+            "command": "wait"
+          },
+          {
+            "args": [
+              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ],
+            "command": "click"
           }
         ]
       },
@@ -1021,18 +1325,37 @@
             ]
           },
           {
-            "command": "press",
             "args": [
-              "ctrl+s",
-              "--target",
-              {
-                "input": "editor"
-              },
+              "uia:{\"match\":{\"name\":\"File\",\"role\":\"MenuItem\"}}",
               "--app",
               {
                 "input": "app"
               }
-            ]
+            ],
+            "command": "click"
+          },
+          {
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
+              "--app",
+              {
+                "input": "app"
+              },
+              "--timeout",
+              "5000"
+            ],
+            "command": "wait"
+          },
+          {
+            "args": [
+              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ],
+            "command": "click"
           }
         ]
       },
@@ -1153,6 +1476,8 @@
           {
             "input": "program"
           },
+          "--locale",
+          "en",
           "--new-window",
           "--disable-extensions",
           "--skip-welcome",
@@ -1270,19 +1595,36 @@
       "id": "reopened-ready",
       "title": "Wait for editor content and verify complete text",
       "run": {
-        "command": "wait",
-        "args": [
-          "--element",
+        "sequence": [
           {
-            "input": "editor"
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"role\":\"MenuItem\",\"name\":\"File\"}}",
+              "--app",
+              {
+                "input": "app"
+              },
+              "--timeout",
+              "5000"
+            ],
+            "command": "wait"
           },
-          "--stable",
-          "--app",
           {
-            "input": "app"
-          },
-          "--timeout",
-          "15000"
+            "command": "wait",
+            "args": [
+              "--element",
+              {
+                "input": "editor"
+              },
+              "--stable",
+              "--app",
+              {
+                "input": "app"
+              },
+              "--timeout",
+              "15000"
+            ]
+          }
         ]
       },
       "verify": {
@@ -1344,79 +1686,41 @@
       "run": {
         "sequence": [
           {
-            "command": "press",
             "args": [
-              "f1",
+              {
+                "input": "app"
+              }
+            ],
+            "command": "focus-window"
+          },
+          {
+            "args": [
+              "uia:{\"match\":{\"role\":\"Button\"},\"within\":{\"id\":\"status.editor.selection\"}}",
               "--app",
               {
                 "input": "app"
               }
-            ]
+            ],
+            "command": "click"
           },
           {
             "command": "wait",
             "args": [
               "--element",
-              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"键入要运行的命令的名称。\"}}",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"Go to line.\"}}",
               "--app",
               {
                 "input": "app"
               },
               "--timeout",
-              "5000"
+              "5000",
+              "--stable"
             ]
           },
           {
             "command": "set-value",
             "args": [
-              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"键入要运行的命令的名称。\"}}",
-              ">转到行",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "command": "wait",
-            "args": [
-              "--element",
-              "uia:{\"match\":{\"role\":\"ListItem\",\"name_contains\":\"转到行/列...,\"},\"within\":{\"id\":\"quickInput_list\"}}",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000"
-            ]
-          },
-          {
-            "command": "click",
-            "args": [
-              "uia:{\"match\":{\"role\":\"ListItem\",\"name_contains\":\"转到行/列...,\"},\"within\":{\"id\":\"quickInput_list\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "command": "wait",
-            "args": [
-              "--element",
-              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"转到行。\"}}",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000"
-            ]
-          },
-          {
-            "command": "set-value",
-            "args": [
-              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"转到行。\"}}",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"Go to line.\"}}",
               ":2",
               "--app",
               {
@@ -1428,7 +1732,7 @@
             "command": "verify",
             "args": [
               "--value",
-              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"转到行。\"}}",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"Go to line.\"}}",
               ":2",
               "--property",
               "value",
@@ -1442,47 +1746,48 @@
             "command": "wait",
             "args": [
               "--element",
-              "uia:{\"match\":{\"role\":\"ListItem\",\"name\":\"转到第 2 行，第 1 列。按 Enter 键导航。\"},\"within\":{\"id\":\"quickInput_list\"}}",
+              "uia:{\"match\":{\"role\":\"ListItem\",\"name\":\"Go to line 2, column 1. Press Enter to navigate.\"},\"within\":{\"id\":\"quickInput_list\"}}",
+              "--app",
+              {
+                "input": "app"
+              },
+              "--timeout",
+              "5000",
+              "--stable"
+            ]
+          },
+          {
+            "command": "click",
+            "args": [
+              "uia:{\"match\":{\"role\":\"ListItem\",\"name\":\"Go to line 2, column 1. Press Enter to navigate.\"},\"within\":{\"id\":\"quickInput_list\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"role\":\"Button\",\"name\":\"Ln 2, Col 1\"},\"within\":{\"id\":\"status.editor.selection\"}}",
+              "--stable",
               "--app",
               {
                 "input": "app"
               },
               "--timeout",
               "5000"
-            ]
-          },
-          {
-            "command": "click",
-            "args": [
-              "uia:{\"match\":{\"role\":\"ListItem\",\"name\":\"转到第 2 行，第 1 列。按 Enter 键导航。\"},\"within\":{\"id\":\"quickInput_list\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
+            ],
+            "command": "wait"
           },
           {
             "command": "verify",
             "args": [
               "--value",
               "id:status.editor.selection",
-              "行 2，列 1",
+              "Ln 2, Col 1",
               "--property",
               "name",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "command": "press",
-            "args": [
-              "home",
-              "--target",
-              {
-                "input": "editor"
-              },
               "--app",
               {
                 "input": "app"
@@ -1504,18 +1809,37 @@
             ]
           },
           {
-            "command": "press",
             "args": [
-              "ctrl+s",
-              "--target",
-              {
-                "input": "editor"
-              },
+              "uia:{\"match\":{\"name\":\"File\",\"role\":\"MenuItem\"}}",
               "--app",
               {
                 "input": "app"
               }
-            ]
+            ],
+            "command": "click"
+          },
+          {
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
+              "--app",
+              {
+                "input": "app"
+              },
+              "--timeout",
+              "5000"
+            ],
+            "command": "wait"
+          },
+          {
+            "args": [
+              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ],
+            "command": "click"
           }
         ]
       },
@@ -1567,25 +1891,57 @@
         ]
       },
       "id": "goto-line",
-      "title": "Go to line and verify inserted text"
+      "title": "Go to line and verify inserted text",
+      "evidence": "full"
     },
     {
       "run": {
         "sequence": [
           {
-            "command": "press",
             "args": [
-              "ctrl+h",
+              {
+                "input": "app"
+              }
+            ],
+            "command": "focus-window"
+          },
+          {
+            "args": [
+              "uia:{\"match\":{\"name\":\"Edit\",\"role\":\"MenuItem\"}}",
               "--app",
               {
                 "input": "app"
               }
-            ]
+            ],
+            "command": "click"
           },
           {
             "args": [
               "--element",
-              "uia:{\"within\":{\"name\":\"查找/替换\",\"role\":\"Window\"},\"match\":{\"name\":\"查找\",\"role\":\"Edit\"}}",
+              "uia:{\"match\":{\"name\":\"Replace Ctrl+H\",\"role\":\"MenuItem\"}}",
+              "--app",
+              {
+                "input": "app"
+              },
+              "--timeout",
+              "5000"
+            ],
+            "command": "wait"
+          },
+          {
+            "args": [
+              "uia:{\"match\":{\"name\":\"Replace Ctrl+H\",\"role\":\"MenuItem\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ],
+            "command": "click"
+          },
+          {
+            "args": [
+              "--element",
+              "uia:{\"within\":{\"name\":\"Find / Replace\",\"role\":\"Window\"},\"match\":{\"name\":\"Find\",\"role\":\"Edit\"}}",
               "--stable",
               "--app",
               {
@@ -1599,7 +1955,7 @@
           {
             "command": "set-value",
             "args": [
-              "uia:{\"within\":{\"name\":\"查找/替换\",\"role\":\"Window\"},\"match\":{\"name\":\"查找\",\"role\":\"Edit\"}}",
+              "uia:{\"within\":{\"name\":\"Find / Replace\",\"role\":\"Window\"},\"match\":{\"name\":\"Find\",\"role\":\"Edit\"}}",
               "123456789",
               "--app",
               {
@@ -1610,7 +1966,7 @@
           {
             "args": [
               "--value",
-              "uia:{\"within\":{\"name\":\"查找/替换\",\"role\":\"Window\"},\"match\":{\"name\":\"查找\",\"role\":\"Edit\"}}",
+              "uia:{\"within\":{\"name\":\"Find / Replace\",\"role\":\"Window\"},\"match\":{\"name\":\"Find\",\"role\":\"Edit\"}}",
               "123456789",
               "--property",
               "value",
@@ -1624,7 +1980,7 @@
           {
             "args": [
               "--element",
-              "uia:{\"within\":{\"name\":\"查找/替换\",\"role\":\"Window\"},\"match\":{\"name\":\"替换\",\"role\":\"Edit\"}}",
+              "uia:{\"within\":{\"name\":\"Find / Replace\",\"role\":\"Window\"},\"match\":{\"name\":\"Replace\",\"role\":\"Edit\"}}",
               "--stable",
               "--app",
               {
@@ -1638,7 +1994,7 @@
           {
             "command": "set-value",
             "args": [
-              "uia:{\"within\":{\"name\":\"查找/替换\",\"role\":\"Window\"},\"match\":{\"name\":\"替换\",\"role\":\"Edit\"}}",
+              "uia:{\"within\":{\"name\":\"Find / Replace\",\"role\":\"Window\"},\"match\":{\"name\":\"Replace\",\"role\":\"Edit\"}}",
               "987654321",
               "--app",
               {
@@ -1649,7 +2005,7 @@
           {
             "args": [
               "--value",
-              "uia:{\"within\":{\"name\":\"查找/替换\",\"role\":\"Window\"},\"match\":{\"name\":\"替换\",\"role\":\"Edit\"}}",
+              "uia:{\"within\":{\"name\":\"Find / Replace\",\"role\":\"Window\"},\"match\":{\"name\":\"Replace\",\"role\":\"Edit\"}}",
               "987654321",
               "--property",
               "value",
@@ -1663,7 +2019,7 @@
           {
             "command": "click",
             "args": [
-              "uia:{\"within\":{\"name\":\"查找/替换\",\"role\":\"Window\"},\"match\":{\"name\":\"全部替换 (Ctrl+Alt+Enter)\",\"role\":\"Button\"}}",
+              "uia:{\"within\":{\"name\":\"Find / Replace\",\"role\":\"Window\"},\"match\":{\"name\":\"Replace All (Ctrl+Alt+Enter)\",\"role\":\"Button\"}}",
               "--app",
               {
                 "input": "app"
@@ -1673,7 +2029,7 @@
           {
             "command": "click",
             "args": [
-              "uia:{\"within\":{\"name\":\"查找/替换\",\"role\":\"Window\"},\"match\":{\"name\":\"关闭 (Escape)\",\"role\":\"Button\"}}",
+              "uia:{\"within\":{\"name\":\"Find / Replace\",\"role\":\"Window\"},\"match\":{\"name\":\"Close (Escape)\",\"role\":\"Button\"}}",
               "--app",
               {
                 "input": "app"
@@ -1681,18 +2037,37 @@
             ]
           },
           {
-            "command": "press",
             "args": [
-              "ctrl+s",
-              "--target",
-              {
-                "input": "editor"
-              },
+              "uia:{\"match\":{\"name\":\"File\",\"role\":\"MenuItem\"}}",
               "--app",
               {
                 "input": "app"
               }
-            ]
+            ],
+            "command": "click"
+          },
+          {
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
+              "--app",
+              {
+                "input": "app"
+              },
+              "--timeout",
+              "5000"
+            ],
+            "command": "wait"
+          },
+          {
+            "args": [
+              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ],
+            "command": "click"
           }
         ]
       },
@@ -1744,38 +2119,48 @@
         ]
       },
       "id": "find-replace",
-      "title": "Replace matches and verify complete saved text"
+      "title": "Replace matches and verify complete saved text",
+      "evidence": "full"
     },
     {
       "run": {
         "sequence": [
           {
             "args": [
-              "ctrl+p",
+              {
+                "input": "app"
+              }
+            ],
+            "command": "focus-window"
+          },
+          {
+            "args": [
+              "uia:{\"match\":{\"role\":\"Button\",\"name\":\"Open Quick Access\"}}",
               "--app",
               {
                 "input": "app"
               }
             ],
-            "command": "press"
+            "command": "click"
           },
           {
             "command": "wait",
             "args": [
               "--element",
-              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"按名称搜索文件\"}}",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"Search files by name\"}}",
               "--app",
               {
                 "input": "app"
               },
               "--timeout",
-              "5000"
+              "5000",
+              "--stable"
             ]
           },
           {
             "command": "set-value",
             "args": [
-              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"按名称搜索文件\"}}",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"Search files by name\"}}",
               {
                 "input": "second"
               },
@@ -1789,7 +2174,7 @@
             "command": "verify",
             "args": [
               "--value",
-              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"按名称搜索文件\"}}",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"Search files by name\"}}",
               {
                 "input": "second"
               },
@@ -1813,7 +2198,8 @@
                 "input": "app"
               },
               "--timeout",
-              "5000"
+              "5000",
+              "--stable"
             ]
           },
           {
@@ -1881,38 +2267,48 @@
         ]
       },
       "id": "quick-open-second",
-      "title": "Open second and verify full editor text"
+      "title": "Open second and verify full editor text",
+      "evidence": "full"
     },
     {
       "run": {
         "sequence": [
           {
             "args": [
-              "ctrl+p",
+              {
+                "input": "app"
+              }
+            ],
+            "command": "focus-window"
+          },
+          {
+            "args": [
+              "uia:{\"match\":{\"role\":\"Button\",\"name\":\"Open Quick Access\"}}",
               "--app",
               {
                 "input": "app"
               }
             ],
-            "command": "press"
+            "command": "click"
           },
           {
             "command": "wait",
             "args": [
               "--element",
-              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"按名称搜索文件\"}}",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"Search files by name\"}}",
               "--app",
               {
                 "input": "app"
               },
               "--timeout",
-              "5000"
+              "5000",
+              "--stable"
             ]
           },
           {
             "command": "set-value",
             "args": [
-              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"按名称搜索文件\"}}",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"Search files by name\"}}",
               {
                 "input": "file"
               },
@@ -1926,7 +2322,7 @@
             "command": "verify",
             "args": [
               "--value",
-              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"按名称搜索文件\"}}",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"Search files by name\"}}",
               {
                 "input": "file"
               },
@@ -1950,7 +2346,8 @@
                 "input": "app"
               },
               "--timeout",
-              "5000"
+              "5000",
+              "--stable"
             ]
           },
           {
@@ -2018,7 +2415,8 @@
         ]
       },
       "id": "quick-open-file",
-      "title": "Open file and verify full editor text"
+      "title": "Open file and verify full editor text",
+      "evidence": "full"
     },
     {
       "run": {

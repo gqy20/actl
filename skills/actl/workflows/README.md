@@ -60,7 +60,7 @@ v1 无插值且公共文件禁固定 HWND,静态计划无法锚定,待 M3 契约
 
 | 流程 | 必需信息与前提 | 校验状态 |
 |---|---|---|
-| [vscode-edit.yml](vscode-edit.yml) | 独立 profile、两个任务文件、程序路径及现场选择器；首次打开与重开均独立确认归属、前台和完整编辑器文本 | 原 22 步增加 4 个前台/就绪步骤，共 26 步；本轮实测见 docs/66 |
+| [vscode-edit.yml](vscode-edit.yml) | 独立 profile、两个任务文件、程序路径及现场选择器；首次打开与重开均独立确认归属、前台和完整编辑器文本 | 原 22 步增加 4 个前台/就绪步骤，共 26 步；固定 --locale en；通过按钮和菜单导航，实测见 docs/66、docs/67 |
 | [word-edit.yml](word-edit.yml) | 独立 DOCX、程序路径、正文选择器及每阶段预期文本 | 预检及合成文件断言通过；新流程真机待复验 |
 | [excel-table.yml](excel-table.yml) | 独立 XLSX、程序路径、名称框及区域数据/公式预期 | 预检及合成文件断言通过；新流程真机待复验 |
 | [zotero-search.yml](zotero-search.yml) | 独立 profile/data、RIS、导出路径及条目预期 | 预检通过；新流程真机待复验 |

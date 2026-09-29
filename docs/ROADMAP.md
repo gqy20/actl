@@ -60,7 +60,7 @@
   验收：短暂失败可恢复；持续失败有界退出；未知不走否定分支；暂停/停止阻止派发；重启/继续不静默刷新预算；不确定动作不重放；保留每次观察、恢复措施及退出原因。
 - [ ] 简单条件模板逐应用验收：窗口复用/启动、可选控件关闭、已有值跳过；代码与参数预检不代替业务验收，见 [63](63-simple-workflow-conditions.md)。
 
-- [ ] 从 resources 入口复验四软件整批：新增 VS Code 就绪步骤后单软件为 26 步、组合为 68 步，首轮与后续复验见 [66](66-application-readiness.md)。核对资源隔离、恢复保留编辑结果与正常收尾，不继承旧脚本的真机结论。
+- [ ] 从 resources 入口复验四软件整批：新增 VS Code 就绪步骤后单软件为 26 步、组合为 68 步，首轮与后续复验见 [66](66-application-readiness.md)、[67](67-vscode-navigation-controls.md)。核对资源隔离、恢复保留编辑结果与正常收尾，不继承旧脚本的真机结论。
 
 - [ ] 完成四个已迁移应用 workflow 的真机复验，核对一次交接、组内暂停、不确定结果、独立文件核验及进程归属，见 [57](57-application-workflow-migration.md)。VS Code 已有独立可恢复验证入口，真机状态及边界见 [55](55-resumable-desktop-tasks.md)；旧脚本退出不具备自动续跑能力。
 
@@ -178,4 +178,4 @@ MCP 的目标是跨设备访问；本地 `serve` 的目标是观察与执行性�
 2. 研究文档保留当时的事实与结论，现行范围以 PRD 和本路线图为准。
 3. 新增范围先核对 PRD 非目标；优先修可靠性与补验收，不以铺命令数量代替业务结果。
 
-- [ ] 修复并复验 VS Code workflow 行号输入 NOT_ACTIONABLE、关闭核验时序，以及暂停/继续和去重检查的端到端效果；保留首轮 17/22 与失败证据，见 [58](58-workflow-live-and-feedback.md)。
+- [ ] 继续验收 VS Code workflow 暂停/继续和不确定写入去重的端到端效果；正常连续运行与行号输入、关闭的完整证据见 [67](67-vscode-navigation-controls.md)，保留首轮 17/22 失败证据 [58](58-workflow-live-and-feedback.md)。
