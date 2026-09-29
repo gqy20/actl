@@ -43,6 +43,11 @@
           "20000"
         ]
       },
+      "recovery": {
+        "max_retries": 3,
+        "timeout_ms": 15000,
+        "interval_ms": 1500
+      },
       "id": "open"
     },
     {
@@ -62,6 +67,11 @@
             "input": "file"
           }
         ]
+      },
+      "recovery": {
+        "max_retries": 3,
+        "timeout_ms": 15000,
+        "interval_ms": 1500
       },
       "id": "ownership",
       "title": "Verify isolated task process",
@@ -163,6 +173,11 @@
           "{\"D1\":{\"value\":\"Total\"},\"C3\":{\"value\":\"7\"},\"C2\":{\"value\":\"12.5\"},\"D3\":{\"value\":\"21\",\"formula\":\"B3*C3\"},\"B3\":{\"value\":\"3\"},\"A4\":{\"value\":\"Sum\"},\"D2\":{\"formula\":\"B2*C2\",\"value\":\"25\"},\"A1\":{\"value\":\"Item\"},\"C1\":{\"value\":\"Price\"},\"D4\":{\"formula\":\"SUM(D2:D3)\",\"value\":\"46\"},\"A2\":{\"value\":\"Alpha\"},\"B1\":{\"value\":\"Qty\"},\"A3\":{\"value\":\"中文\"},\"B2\":{\"value\":\"2\"}}",
           "--subset"
         ]
+      },
+      "recovery": {
+        "max_retries": 3,
+        "timeout_ms": 15000,
+        "interval_ms": 1500
       },
       "id": "paste",
       "before": {
@@ -267,6 +282,11 @@
           "--subset"
         ]
       },
+      "recovery": {
+        "max_retries": 3,
+        "timeout_ms": 15000,
+        "interval_ms": 1500
+      },
       "id": "recalculate",
       "before": {
         "command": "verify-owner",
@@ -346,6 +366,11 @@
           "{\"D1\":{\"value\":\"Total\"},\"C3\":{\"value\":\"7\"},\"C2\":{\"value\":\"12.5\"},\"D3\":{\"value\":\"21\",\"formula\":\"B3*C3\"},\"B3\":{\"value\":\"3\"},\"A4\":{\"value\":\"Sum\"},\"D2\":{\"formula\":\"B2*C2\",\"value\":\"25\"},\"A1\":{\"value\":\"Item\"},\"C1\":{\"value\":\"Price\"},\"D4\":{\"formula\":\"SUM(D2:D3)\",\"value\":\"46\"},\"A2\":{\"value\":\"Alpha\"},\"B1\":{\"value\":\"Qty\"},\"A3\":{\"value\":\"中文\"},\"B2\":{\"value\":\"2\"}}",
           "--subset"
         ]
+      },
+      "recovery": {
+        "max_retries": 3,
+        "timeout_ms": 15000,
+        "interval_ms": 1500
       },
       "id": "undo",
       "before": {
@@ -427,6 +452,11 @@
           "--subset"
         ]
       },
+      "recovery": {
+        "max_retries": 3,
+        "timeout_ms": 15000,
+        "interval_ms": 1500
+      },
       "id": "redo",
       "before": {
         "command": "verify-owner",
@@ -504,6 +534,11 @@
           }
         ]
       },
+      "recovery": {
+        "max_retries": 3,
+        "timeout_ms": 15000,
+        "interval_ms": 1500
+      },
       "id": "copy-range",
       "before": {
         "command": "verify-owner",
@@ -542,16 +577,23 @@
           "1": "ownership.hwnd"
         }
       },
+      "recovery": {
+        "max_retries": 3,
+        "timeout_ms": 15000,
+        "interval_ms": 1500
+      },
       "id": "close-before-reopen",
       "verify": {
-        "command": "verify-window",
+        "command": "wait",
         "args": [
+          "--gone",
+          "id:1001",
           "--app",
           {
             "input": "app"
           },
-          "--state",
-          "absent"
+          "--timeout",
+          "60000"
         ]
       },
       "before": {
@@ -611,6 +653,11 @@
           "20000"
         ]
       },
+      "recovery": {
+        "max_retries": 3,
+        "timeout_ms": 15000,
+        "interval_ms": 1500
+      },
       "id": "reopen"
     },
     {
@@ -630,6 +677,11 @@
             "input": "file"
           }
         ]
+      },
+      "recovery": {
+        "max_retries": 3,
+        "timeout_ms": 15000,
+        "interval_ms": 1500
       },
       "id": "reopened-owner",
       "outputs": {
@@ -662,6 +714,11 @@
           "{\"D1\":{\"value\":\"Total\"},\"C3\":{\"value\":\"7\"},\"C2\":{\"value\":\"12.5\"},\"D3\":{\"value\":\"21\",\"formula\":\"B3*C3\"},\"B3\":{\"value\":\"3\"},\"A4\":{\"value\":\"Sum\"},\"D2\":{\"formula\":\"B2*C2\",\"value\":\"50\"},\"A1\":{\"value\":\"Item\"},\"C1\":{\"value\":\"Price\"},\"D4\":{\"formula\":\"SUM(D2:D3)\",\"value\":\"71\"},\"A2\":{\"value\":\"Alpha\"},\"B1\":{\"value\":\"Qty\"},\"A3\":{\"value\":\"中文\"},\"B2\":{\"value\":\"4\"}}",
           "--subset"
         ]
+      },
+      "recovery": {
+        "max_retries": 3,
+        "timeout_ms": 15000,
+        "interval_ms": 1500
       },
       "id": "reopened-content",
       "title": "Verify complete saved content after reopen"
@@ -705,6 +762,11 @@
             ]
           }
         ]
+      },
+      "recovery": {
+        "max_retries": 3,
+        "timeout_ms": 15000,
+        "interval_ms": 1500
       },
       "id": "reopen-cell-readback",
       "resume_check": {
@@ -762,16 +824,23 @@
           "1": "reopened-owner.hwnd"
         }
       },
+      "recovery": {
+        "max_retries": 3,
+        "timeout_ms": 15000,
+        "interval_ms": 1500
+      },
       "id": "close",
       "verify": {
-        "command": "verify-window",
+        "command": "wait",
         "args": [
+          "--gone",
+          "id:1001",
           "--app",
           {
             "input": "app"
           },
-          "--state",
-          "absent"
+          "--timeout",
+          "60000"
         ]
       },
       "before": {

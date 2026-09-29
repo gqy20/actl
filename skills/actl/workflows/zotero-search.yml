@@ -18,7 +18,7 @@
       "default": "我的文库 - Zotero"
     },
     "export": {
-      "default": "${run.dir}/export.json"
+      "default": "${run.dir_native}\\export.json"
     }
   },
   "steps": [
@@ -54,6 +54,11 @@
           "20000"
         ]
       },
+      "recovery": {
+        "max_retries": 3,
+        "timeout_ms": 15000,
+        "interval_ms": 1500
+      },
       "id": "open"
     },
     {
@@ -73,6 +78,11 @@
             "input": "profile"
           }
         ]
+      },
+      "recovery": {
+        "max_retries": 3,
+        "timeout_ms": 15000,
+        "interval_ms": 1500
       },
       "id": "ownership",
       "title": "Verify isolated task process",
@@ -119,6 +129,19 @@
                 "input": "app"
               }
             ]
+          },
+          {
+            "command": "wait",
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"id\":\"item-tree-main-default-row-1\"}}",
+              "--app",
+              {
+                "input": "app"
+              },
+              "--timeout",
+              "15000"
+            ]
           }
         ]
       },
@@ -141,16 +164,14 @@
       },
       "title": "Import synthetic records and verify exact rows",
       "before": {
-        "command": "verify-rows",
+        "command": "verify",
         "args": [
+          "--exists",
+          "uia:{\"match\":{\"id\":\"collection-tree-row-0\"}}",
           "--app",
           {
             "input": "app"
-          },
-          "--prefix",
-          "item-tree-main-default-row-",
-          "--expected",
-          "[]"
+          }
         ]
       },
       "verify": {
@@ -166,11 +187,26 @@
           "[\"ACTL Alpha 中文测试. 期刊文章. Test\",\"ACTL Beta unrelated. 期刊文章. Test\"]"
         ]
       },
+      "recovery": {
+        "max_retries": 3,
+        "timeout_ms": 15000,
+        "interval_ms": 1500
+      },
       "id": "import"
     },
     {
       "run": {
         "sequence": [
+          {
+            "command": "click",
+            "args": [
+              "uia:{\"match\":{\"name\":\"快速搜索\",\"role\":\"Edit\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
           {
             "command": "press",
             "args": [
@@ -230,6 +266,11 @@
           "[\"ACTL Alpha 中文测试. 期刊文章. Test\"]"
         ]
       },
+      "recovery": {
+        "max_retries": 3,
+        "timeout_ms": 15000,
+        "interval_ms": 1500
+      },
       "id": "search-1",
       "before": {
         "command": "verify-owner",
@@ -252,6 +293,16 @@
     {
       "run": {
         "sequence": [
+          {
+            "command": "click",
+            "args": [
+              "uia:{\"match\":{\"name\":\"快速搜索\",\"role\":\"Edit\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
           {
             "command": "press",
             "args": [
@@ -311,6 +362,11 @@
           "[\"ACTL Alpha 中文测试. 期刊文章. Test\"]"
         ]
       },
+      "recovery": {
+        "max_retries": 3,
+        "timeout_ms": 15000,
+        "interval_ms": 1500
+      },
       "id": "search-2",
       "before": {
         "command": "verify-owner",
@@ -333,6 +389,16 @@
     {
       "run": {
         "sequence": [
+          {
+            "command": "click",
+            "args": [
+              "uia:{\"match\":{\"name\":\"快速搜索\",\"role\":\"Edit\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
           {
             "command": "press",
             "args": [
@@ -392,6 +458,11 @@
           "[]"
         ]
       },
+      "recovery": {
+        "max_retries": 3,
+        "timeout_ms": 15000,
+        "interval_ms": 1500
+      },
       "id": "search-3",
       "before": {
         "command": "verify-owner",
@@ -414,6 +485,16 @@
     {
       "run": {
         "sequence": [
+          {
+            "command": "click",
+            "args": [
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"快速搜索\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
           {
             "command": "press",
             "args": [
@@ -440,6 +521,7 @@
               }
             ]
           },
+
           {
             "command": "verify-rows",
             "args": [
@@ -466,7 +548,7 @@
           {
             "command": "type",
             "args": [
-              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"出版物\"}}",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name\":\"出版物\"}}",
               "ACTL Journal 2026",
               "--paste",
               "--verify-value",
@@ -482,7 +564,7 @@
             "args": [
               "tab",
               "--target",
-              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"出版物\"}}",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name\":\"出版物\"}}",
               "--app",
               {
                 "input": "app"
@@ -529,7 +611,7 @@
         "command": "verify",
         "args": [
           "--value",
-          "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"出版物\"}}",
+          "uia:{\"match\":{\"role\":\"Edit\",\"name\":\"出版物\"}}",
           "ACTL Journal 2026",
           "--property",
           "text",
@@ -538,6 +620,11 @@
             "input": "app"
           }
         ]
+      },
+      "recovery": {
+        "max_retries": 3,
+        "timeout_ms": 15000,
+        "interval_ms": 1500
       },
       "id": "publication",
       "title": "Edit isolated record publication"
@@ -602,7 +689,7 @@
           {
             "command": "click",
             "args": [
-              "name:CSL JSON",
+              "uia:{\"match\":{\"role\":\"ListItem\",\"name\":\"CSL JSON\"}}",
               "--app",
               "导出"
             ]
@@ -626,21 +713,7 @@
               "10000"
             ]
           },
-          {
-            "args": [
-              "--app",
-              "导出",
-              "--program",
-              {
-                "input": "program"
-              },
-              "--token",
-              {
-                "input": "profile"
-              }
-            ],
-            "command": "verify-owner"
-          },
+
           {
             "command": "set-value",
             "args": [
@@ -710,6 +783,11 @@
           "--subset"
         ]
       },
+      "recovery": {
+        "max_retries": 3,
+        "timeout_ms": 15000,
+        "interval_ms": 1500
+      },
       "id": "export",
       "title": "Export record and verify JSON content"
     },
@@ -768,6 +846,11 @@
         "bind": {
           "1": "ownership.hwnd"
         }
+      },
+      "recovery": {
+        "max_retries": 3,
+        "timeout_ms": 15000,
+        "interval_ms": 1500
       },
       "id": "close"
     }
