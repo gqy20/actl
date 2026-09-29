@@ -97,6 +97,19 @@
   },
   "steps": [
     {
+      "title": "Wait for an idle desktop before the batch",
+      "run": {
+        "command": "wait",
+        "args": [
+          "--idle",
+          "15000",
+          "--timeout",
+          "300000"
+        ]
+      },
+      "id": "idle-gate"
+    },
+    {
       "title": "Open isolated editor",
       "run": {
         "command": "launch",

@@ -120,7 +120,7 @@ fn all_application_templates_validate_without_input_files() {
     }
     assert_eq!(
         Value::Object(counts),
-        json!({"vscode-edit":26,"word-edit":20,"excel-table":13,"zotero-search":9,"verify-applications":68,"vscode-resume":3})
+        json!({"vscode-edit":26,"word-edit":20,"excel-table":13,"zotero-search":9,"verify-applications":69,"vscode-resume":3})
     );
     assert!(!s.0.join("actl/flow-resources").exists());
 }
@@ -154,6 +154,12 @@ fn combined_template_matches_individual_steps_and_resources() {
     }
     let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/actl/workflows");
     let mut expected = json!({"version":1,"name":"Application verification","handoff":{"approval":"once_per_run"},"inputs":{},"resources":{"directories":[],"files":[]},"steps":[]});
+    // 整批专属首步:桌面空闲门(验收批的无人值守约定,单应用流程保持可交互,
+    // 因此不出现在任何单应用模板,由合成推导单独注入)。
+    expected["steps"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"id":"idle-gate","title":"Wait for an idle desktop before the batch","run":{"command":"wait","args":["--idle","15000","--timeout","300000"]}}));
     for name in ["vscode-edit", "excel-table", "word-edit", "zotero-search"] {
         let mut raw: Value = serde_json::from_str(
             &std::fs::read_to_string(base.join(format!("{name}.yml"))).unwrap(),
