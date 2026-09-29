@@ -285,3 +285,29 @@ steps:
 只有 verify 明确返回 ASSERTION_FAILED 且用户指定 --retry-step 才允许进入重新执行路径，
 仍须通过 before 和现有写操作交接护栏。断言失败本身并不证明写入从未发生，作者与用户须确认重放适宜。
 已有人工接管错误继续按 handoff 处理；STALE_REF 不会推断为人工接管。
+
+## 可复用流程输入（2026-09-29）
+
+`flow-validate` 和 `flow-run` 支持 `--inputs values.yml`（UTF-8 YAML 或 JSON 字符串映射）。
+流程顶层 `inputs: {app: {}, text: {default: hello}}` 声明必填参数或字符串默认值。
+四种调用阶段的 args 可用 `{input: app}` 替换一个完整参数，不做 shell 求值、拼接或环境变量展开。
+缺少必填值、未知参数、重复键、非字符串、NUL、超过 16 KiB 或以 `-` 开头的输入返回 PROTOCOL。
+最多 128 个声明；名称沿用 1–80 位 ASCII ID。所有解析后的命令仍须通过 CLI 和流程策略预检。
+仅参数值可绑定，command、策略、步骤 ID 等不可参数化；命令选项应明确写在流程中。
+
+```powershell
+actl flow-validate --file skills/actl/workflows/verify-text.yml --inputs target/readback-inputs.yml
+actl flow-run --file skills/actl/workflows/verify-text.yml --inputs target/readback-inputs.yml --id readback-001 --paused
+actl flow-resume --id readback-001
+```
+
+输入文件示例：
+```yaml
+app: 唯一任务窗口标记
+target: 'uia:{"match":{"role":"Edit","name":"任务编辑器"}}'
+expected: 预期完整文本
+```
+
+运行前解析并保存具体 plan，保存内容没有 inputs 或绑定对象；恢复不重读模板/参数文件。
+参数仍会进入本地运行计划，不能因错误证据脱敏而认为计划也已脱敏。
+独立测试文件、Office 种子文档及 profile 的准备仍由验收工具负责；引擎不执行任意 PS。

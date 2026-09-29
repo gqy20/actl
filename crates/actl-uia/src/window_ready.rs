@@ -4,6 +4,12 @@ use std::time::{Duration, Instant};
 use windows::Win32::UI::Input::KeyboardAndMouse::IsWindowEnabled;
 use windows::Win32::{Foundation::*, UI::WindowsAndMessaging::*};
 
+fn request_activation(mut is_foreground: impl FnMut() -> bool, request: impl FnOnce()) {
+    if !is_foreground() {
+        request();
+    }
+}
+
 pub(crate) fn activate(win: &uiautomation::UIElement) -> Result<(), CtlError> {
     let hwnd = crate::window::native_hwnd(win).ok_or_else(|| {
         CtlError::new(
@@ -65,8 +71,16 @@ pub(crate) fn activate(win: &uiautomation::UIElement) -> Result<(), CtlError> {
         return Err(failure("window_offscreen"));
     }
     crate::feedback::check_stop()?;
-    // SetFocus may report success while Windows refuses foreground activation.
-    let _ = win.set_focus();
+    // Request native foreground once, without invoking a provider's SetFocus on
+    // the window root. Child input focus is still checked by the input guard.
+    request_activation(
+        || unsafe { GetForegroundWindow() } == root,
+        || {
+            // SAFETY: root was checked above; Windows can reject this request and
+            // the bounded foreground observation below remains authoritative.
+            let _ = unsafe { SetForegroundWindow(root) };
+        },
+    );
     let start = Instant::now();
     while start.elapsed() < Duration::from_millis(crate::timing().vis_probe_ms) {
         crate::feedback::check_stop()?;
@@ -111,5 +125,24 @@ pub fn wait_window_ready(pattern: &str, timeout_ms: u64) -> Result<serde_json::V
             ));
         }
         std::thread::sleep(Duration::from_millis(crate::timing().ready_poll_ms));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::request_activation;
+
+    #[test]
+    fn foreground_window_does_not_receive_another_activation_request() {
+        let mut requests = 0;
+        request_activation(|| true, || requests += 1);
+        assert_eq!(requests, 0);
+    }
+
+    #[test]
+    fn background_window_gets_only_one_request() {
+        let mut requests = 0;
+        request_activation(|| false, || requests += 1);
+        assert_eq!(requests, 1);
     }
 }

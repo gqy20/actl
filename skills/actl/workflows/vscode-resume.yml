@@ -1,0 +1,45 @@
+version: 1
+name: VS Code 暂停与继续验证
+handoff: {approval: once_per_run}
+inputs:
+  program: {}
+  profile: {}
+  file: {}
+  app: {}
+  target: {}
+  text: {default: 'ACTL resumable input verified.'}
+  empty: {default: "\n"}
+steps:
+  - id: open
+    title: 打开隔离测试文件
+    run:
+      command: launch
+      args: [{input: program}, --new-window, --disable-extensions, --skip-welcome, --skip-release-notes, --force-renderer-accessibility, --user-data-dir, {input: profile}, {input: file}]
+    verify:
+      command: wait
+      args: [--element, {input: target}, --app, {input: app}, --timeout, '15000']
+    retry: stale_read
+  - id: input
+    title: 重新观察后输入测试文本
+    resume_check:
+      command: verify
+      args: [--exists, {input: target}, --app, {input: app}]
+    before:
+      command: verify
+      args: [--value, {input: target}, {input: empty}, --property, text, --app, {input: app}]
+    run:
+      command: type
+      args: [{input: target}, {input: text}, --paste, --app, {input: app}]
+    verify:
+      command: verify
+      args: [--value, {input: target}, {input: text}, --property, text, --app, {input: app}]
+    retry: stale_read
+  - id: readback
+    title: 核对完整文本
+    resume_check:
+      command: verify
+      args: [--exists, {input: target}, --app, {input: app}]
+    run:
+      command: verify
+      args: [--value, {input: target}, {input: text}, --property, text, --app, {input: app}]
+    retry: stale_read

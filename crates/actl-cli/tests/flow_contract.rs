@@ -1,6 +1,76 @@
 use serde_json::{Value, json};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+
+#[test]
+fn reusable_workflows_preflight_without_desktop_actions() {
+    let s = Sandbox::new();
+    for (name, values) in [
+        (
+            "vscode-resume",
+            "program: 'C:/test/Code.exe'\nprofile: 'C:/test/profile'\nfile: 'C:/test/unique.txt'\napp: unique\ntarget: 'id:editor'",
+        ),
+        (
+            "verify-text",
+            "app: unique\ntarget: 'id:editor'\nexpected: text",
+        ),
+        (
+            "edit-value",
+            "app: unique\ntarget: 'id:editor'\nprevious: old\nvalue: new",
+        ),
+    ] {
+        let template = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join(format!("../../skills/actl/workflows/{name}.yml"));
+        let path = s.root.join("values.yml");
+        std::fs::write(&path, values).unwrap();
+        let (code, result) = s.invoke(&[
+            "flow-validate",
+            "--file",
+            template.to_str().unwrap(),
+            "--inputs",
+            path.to_str().unwrap(),
+        ]);
+        assert_eq!(code, 0, "{name}: {result}");
+    }
+}
+
+#[test]
+fn declared_inputs_validate_and_save_a_concrete_plan() {
+    let s = Sandbox::new();
+    let file = s.file("version: 1\nname: Inputs\ninputs: {app: {}}\nsteps:\n - id: read\n   title: Read\n   run: {command: snapshot, args: [--app, {input: app}]}\n");
+    let path = s.root.join("inputs.yml");
+    std::fs::write(&path, "app: unique-test-window").unwrap();
+    let inputs = path.to_str().unwrap();
+    let (code, mut result) = s.invoke(&["flow-validate", "--file", &file, "--inputs", inputs]);
+    assert_eq!(code, 0, "{result}");
+    result.as_object_mut().unwrap().remove("duration_ms");
+    assert_eq!(
+        result,
+        serde_json::from_str::<Value>(include_str!("golden/flow_inputs.json")).unwrap()
+    );
+    let (code, result) = s.invoke(&[
+        "flow-run",
+        "--file",
+        &file,
+        "--inputs",
+        inputs,
+        "--id",
+        "inputs-test",
+        "--paused",
+    ]);
+    assert_eq!(code, 0, "{result}");
+    std::fs::write(&path, "app: changed").unwrap();
+    let store = actl_flow::store::Store::at(&s.root.join("actl"), "inputs-test").unwrap();
+    let (plan, _) = store.load().unwrap();
+    assert_eq!(plan.steps[0].run.args, ["--app", "unique-test-window"]);
+    assert_ne!(s.invoke(&["flow-validate", "--file", &file]).0, 0);
+    std::fs::write(&path, "app: --physical").unwrap();
+    assert_ne!(
+        s.invoke(&["flow-validate", "--file", &file, "--inputs", inputs])
+            .0,
+        0
+    );
+}
 struct Sandbox {
     root: PathBuf,
 }

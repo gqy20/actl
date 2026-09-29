@@ -110,6 +110,7 @@ CI(GitHub Actions,`windows-latest`):`cargo xtask gate`(file-lines 单文件行�
 
 Phase 2 输入监听冗余使用既有 windows 依赖的 Raw Input 注册、消息窗口和计时器，
 unsafe 限定在 actl-uia 的显示程序模块。原生资源由专用线程创建并释放，接收活动但不记录输入内容。
+GetRawInputData 仅向对齐的 RAWINPUT 栈缓冲区读取；校验返回长度、头部长度、设备来源与类型后读取对应 union 的附加标记，不保存键值或坐标。无法识别的事件保守计为外部输入。
 历史清理限频使用标准库文件锁；没有新增直接依赖、async 或外部常驻服务。验收见 [44](44-phase2-acceptance.md)。
 
 - 选型**论证**(语言对比、冷启动数据、为什么不是 C#):[04-tech-decision.md](04-tech-decision.md)
@@ -159,3 +160,5 @@ actl-uia/bin/signal/handoff 的 unsafe 用于原生非激活提示窗口和低�
 不持有指针、不做回调内 IO、不屏蔽输入；RAII 卸载 hooks。客户端仅用有界 SendMessageTimeout
 查询，不跨进程传递指针。window_ready 的 unsafe 仅诊断/恢复/核验目标 HWND，不绕过前台限制。
 显示 v5 强制新旧两端兼容；grant 只在显示进程内存，磁盘请求不是授权。
+
+window_ready 的原生激活使用 SetForegroundWindow 单次请求并核验实际前台；已在前台不重复请求。unsafe 仍限于 actl-uia，不注入 Alt、不放宽 Windows 前台限制，输入控件焦点仍由原护栏核验。

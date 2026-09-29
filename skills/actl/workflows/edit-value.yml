@@ -1,0 +1,24 @@
+version: 1
+name: 核对原值后更新输入框
+handoff: {approval: once_per_run}
+inputs:
+  app: {}
+  target: {}
+  previous: {}
+  value: {}
+steps:
+  - id: edit
+    title: 核对原值并写入完整新值
+    resume_check:
+      command: verify
+      args: [--exists, {input: target}, --app, {input: app}]
+    before:
+      command: verify
+      args: [--value, {input: target}, {input: previous}, --property, value, --app, {input: app}]
+    run:
+      command: set-value
+      args: [{input: target}, {input: value}, --app, {input: app}]
+    verify:
+      command: verify
+      args: [--value, {input: target}, {input: value}, --property, value, --app, {input: app}]
+    retry: stale_read

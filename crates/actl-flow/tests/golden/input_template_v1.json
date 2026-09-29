@@ -1,0 +1,1 @@
+{"version":1,"name":"resolved","inputs":{"target":{"default":"id:editor"}},"steps":[{"id":"read","title":"Read","run":{"command":"get","args":[{"input":"target"}]},"before":{"command":"verify","args":["--exists",{"input":"target"}]},"verify":{"command":"verify","args":["--exists",{"input":"target"}]},"resume_check":{"command":"verify","args":["--exists",{"input":"target"}]}}]}

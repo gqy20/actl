@@ -95,12 +95,18 @@ pub(crate) enum FlowCommand {
     Validate {
         #[arg(long)]
         file: String,
+        /// UTF-8 YAML/JSON string map for declared workflow inputs
+        #[arg(long)]
+        inputs: Option<String>,
     },
     /// Run a validated workflow and save resumable state under a unique ID
     #[command(name = "flow-run")]
     Run {
         #[arg(long)]
         file: String,
+        /// Resolve inputs once; resume uses the saved concrete plan
+        #[arg(long)]
+        inputs: Option<String>,
         #[arg(long)]
         id: String,
         /// Save the plan and start paused for inspection
@@ -730,10 +736,10 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
 fn after_help_for(name: &str) -> Option<&'static str> {
     Some(match name {
         "flow-validate" => {
-            "Example:\n  actl flow-validate --file task.yml\nValidates all steps and output references before any action. outputs select typed read-only data via JSON Pointer; bind replaces a whole args entry by index. Resolved CLI arguments are revalidated before execution.\nErrors: PROTOCOL invalid YAML/command/policy | INTERNAL file error"
+            "Example:\n  actl flow-validate --file task.yml\nOptional --inputs values.yml resolves declared whole-argument inputs before validating every step. outputs select typed read-only data via JSON Pointer; bind replaces a whole args entry by index. Resolved CLI arguments are revalidated before execution.\nErrors: PROTOCOL invalid YAML/command/policy | INTERNAL file error"
         }
         "flow-run" => {
-            "Example:\n  actl flow-run --file task.yml --id report-01 --paused\nUnique ID; saves immutable plan and durable state. Physical actions retain explicit authorization.\nErrors: PROTOCOL invalid/reused ID | NOT_ACTIONABLE executor busy | ABORTED stop | INTERNAL storage"
+            "Example:\n  actl flow-run --file task.yml --id report-01 --paused\nOptional --inputs values.yml; unique ID; saves resolved immutable plan and durable state. Resume never rereads inputs. Physical actions retain explicit authorization.\nErrors: PROTOCOL invalid/reused ID | NOT_ACTIONABLE executor busy | ABORTED stop | INTERNAL storage"
         }
         "flow-status" => {
             "Example:\n  actl flow-status --id report-01\nReports run state, declared saved outputs, pause request and runner_active. Output contents are not redacted by error evidence policy. An inactive running record is interrupted.\nErrors: PROTOCOL invalid ID/state | INTERNAL storage"

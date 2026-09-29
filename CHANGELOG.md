@@ -9,6 +9,8 @@
 
 ## [Unreleased]
 
+- workflow 增加声明式 inputs 与 --inputs 文件，预检后保存具体计划，恢复不重读输入；新增 VS Code、文本核验与 ValuePattern 编辑模板，VS Code 场景只准备资源。
+- 窗口激活已在前台时不重复请求，后台使用单次原生前台请求并有界核验，避免窗口根 UIA SetFocus 的额外副作用；误让行整体验收仍待真机复验。
 
 ### Changed
 

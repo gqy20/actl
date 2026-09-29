@@ -17,7 +17,7 @@ actl 通过系统无障碍树(UIA)精确定位控件,像 Playwright 操作 DOM �
 
 actl 是统一技能入口。收到包含多步决策或跨应用操作的任务时，先查
 [workflows/README.md](workflows/README.md) 的流程索引，再按需读取 `apps/` 中的应用知识。
-可复用业务 YAML 放在 `workflows/`，不为每个业务任务新建独立 skill。
+可复用业务 YAML 放在 `workflows/`，不为每个业务任务新建独立 skill。声明式输入用 `--inputs values.yml` 传入 flow-validate / flow-run；恢复沿用保存的具体计划，不重新生成任务。
 应用档案描述软件的操作特点，流程描述完整业务目标的步骤、核验与恢复。
 
 先核对流程适用条件、必需信息、用户授权和验证状态，再按现行协议准备计划并运行
@@ -93,7 +93,8 @@ actl verify --value <target> "<期望>" --app <app> # 确认:立即断言
 容器变化后重新观察；没有唯一容器时先 find/inspect，不用扩大输出代替定位。此功能不保证降低总扫描耗时。
 验收输出削减使用仓库 `scenarios/local-observation.ps1`：传已核对的 HWND 和严格容器选择器。
 只在完整/局部观察均未截断、前后内容和身份稳定时比较；分别检查 elements 与完整 envelope 字节，
-不把字节等同 token。深树中的容器唯一性定位仍可能触及预算，失败保留错误，不能按已找到的首个候选继续。
+不把字节等同 token。深树定位优先提供精确 id/name：由原生查询完整候选再核验唯一性。
+已知 role 可走原生候选查询；只有 name_contains 等宽泛查询仍有遍历预算；原生候选超限或 provider 失败须保留错误，不能按首个候选继续。
 执行:click(--physical/--expect/--near/--no-activate) right-click double-click hover drag scroll type(--paste)
      press(--expect) key-down key-up set-value
 窗口:launch focus-window close-window resize-window wait(--element/--window/--gone/--stable/--idle) batch

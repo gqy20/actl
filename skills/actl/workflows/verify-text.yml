@@ -1,0 +1,17 @@
+version: 1
+name: 核对已打开应用中的完整文本
+inputs:
+  app: {}
+  target: {}
+  expected: {}
+  property: {default: text}
+steps:
+  - id: readback
+    title: 重新定位并核对完整文本
+    resume_check:
+      command: verify
+      args: [--exists, {input: target}, --app, {input: app}]
+    run:
+      command: verify
+      args: [--value, {input: target}, {input: expected}, --property, {input: property}, --app, {input: app}]
+    retry: stale_read

@@ -264,6 +264,15 @@ fn state(store: &Store) -> Result<Value, CtlError> {
         json!({"run":run,"runner_active":active,"interrupted":interrupted,"pause_requested":store.pause_requested()}),
     )
 }
+fn load_plan(file: &str, inputs: &Option<String>) -> Result<Plan, CtlError> {
+    let text = actl_flow::store::read_text(std::path::Path::new(file))?;
+    let values = inputs
+        .as_ref()
+        .map(|file| actl_flow::store::read_text(std::path::Path::new(file)))
+        .transpose()?;
+    actl_flow::inputs::resolve(&text, values.as_deref())
+}
+
 pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
     if matches!(
         command,
@@ -273,8 +282,8 @@ pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
     }
     let root = actl_core::state::SignalPaths::default().dir;
     match command {
-        FlowCommand::Validate { file } => {
-            let plan = actl_flow::parse(&actl_flow::store::read_text(std::path::Path::new(file))?)?;
+        FlowCommand::Validate { file, inputs } => {
+            let plan = load_plan(file, inputs)?;
             validate(&plan)?;
             Ok(json!({"valid":true,"version":1,"name":plan.name,"steps":plan.steps.len()}))
         }
@@ -293,8 +302,13 @@ pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
             );
             result
         }
-        FlowCommand::Run { file, id, paused } => {
-            let plan = actl_flow::parse(&actl_flow::store::read_text(std::path::Path::new(file))?)?;
+        FlowCommand::Run {
+            file,
+            inputs,
+            id,
+            paused,
+        } => {
+            let plan = load_plan(file, inputs)?;
             validate(&plan)?;
             let store = Store::at(&root, id)?;
             let _global = store.lock(true)?;

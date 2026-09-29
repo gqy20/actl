@@ -9,6 +9,12 @@ app_version: "1.139.0"
 verified_date: 2026-09-28
 verified_env: Windows 10.0.26200.0 zh-cn; independent user-data-dir; extensions disabled; force-renderer-accessibility
 quirks:
+  - id: resumable_verification
+    note: 2026-09-29，VS Code 1.139.1 的 scenarios/vscode-resume.ps1 持久化任务通过打开、单次输入与完整 TextPattern 读回；暂停后使用同一 flow ID 继续，不重跑准备脚本。此结论不覆盖磁盘保存和关闭，见 docs/55。新增 workflows/vscode-resume.yml 已承接桌面步骤，PS 仅准备隔离资源；通用 verify-text.yml 本轮只读全文核验通过，新模板写入复验另见 docs/56。
+  - id: empty_text_pattern
+    note: 本机空编辑器 TextPattern 返回一个换行；不能据此推断非空文本也有附加换行。核验应先观察实际通道行为并精确比较完整结果，不使用包含匹配掩盖部分输入。
+  - id: revalidation_20260929
+    note: 2026-09-29：10 项编辑磁盘核验通过，但完整场景在关闭重开阶段中断；用户报告手动关闭。另用全新 profile 独立验证单次 close-window 后窗口与进程退出通过。命令面板等后半程未验收，见 docs/51。
   - id: current_execution_contract
     note: command_input、command、input、find、replace、editor 的 ref/snapshot_id 分别来自各自 find，禁止互用；set-value 后精确比对 value。编辑器 type 是插入，不用 --verify-value 将整篇内容误当插入片段；保存仍按磁盘全文验收。输入后控件变化则重新观察，不重放写入。
   - id: multiple_edit_surfaces

@@ -10,6 +10,18 @@
     "steps"
   ],
   "properties": {
+    "inputs": {
+      "type": "object", "maxProperties": 128,
+      "propertyNames": {"pattern": "^[A-Za-z0-9_-]{1,80}$"},
+      "additionalProperties": {
+        "type": "object", "additionalProperties": false,
+        "properties": {"default": {"type": "string", "maxLength": 16384}}
+      }
+    },
+    "handoff": {
+      "type": "object", "additionalProperties": false, "required": ["approval"],
+      "properties": {"approval": {"enum": ["expiring", "once_per_run"]}}
+    },
     "version": {
       "const": 1
     },
@@ -60,9 +72,11 @@
           "type": "array",
           "maxItems": 128,
           "items": {
-            "type": "string",
-            "maxLength": 16384,
-            "pattern": "^[^\\u0000]*$"
+            "oneOf": [
+              {"type": "string", "maxLength": 16384, "pattern": "^[^\\u0000]*$"},
+              {"type": "object", "additionalProperties": false, "required": ["input"],
+               "properties": {"input": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,80}$"}}}
+            ]
           }
         }
       }
