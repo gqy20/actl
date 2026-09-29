@@ -126,6 +126,12 @@ fn failures_without_source_evidence_get_structured_synthesis() {
     assert_eq!(evidence["phase"], "verify");
     assert_eq!(evidence["command"], "check");
     assert_eq!(evidence["synthetic"], true);
+    // 错误原文随证据保留:归因不再依赖手工复现(docs/68 Word 锁文件教训)。
+    assert!(
+        evidence["message"]
+            .as_str()
+            .is_some_and(|m| !m.trim().is_empty())
+    );
 }
 
 #[test]

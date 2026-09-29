@@ -50,7 +50,9 @@ pub mod scoped_snapshot;
 pub use window::persist_snapshot_scoped;
 pub mod kbd;
 pub mod mouse;
-pub use capture::{ShotResult, screenshot_element, screenshot_rect, screenshot_window};
+pub use capture::{
+    ShotResult, screenshot_element, screenshot_rect, screenshot_screen, screenshot_window,
+};
 pub use native_windows::{native_window, native_windows};
 
 pub use action::{

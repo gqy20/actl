@@ -97,18 +97,29 @@ fn validate_assertion(command: &Command) -> Result<(), CtlError> {
             element,
             window,
             gone,
+            idle,
             property,
             ..
         } => {
-            if [element.is_some(), window.is_some(), gone.is_some()]
-                .into_iter()
-                .filter(|v| *v)
-                .count()
+            // --idle(桌面空闲门)是仅有的无目标等待形态:整批无人值守前置,
+            // 只读且不定位任何元素/窗口,与三种目标等待互斥。
+            if [
+                element.is_some(),
+                window.is_some(),
+                gone.is_some(),
+                idle.is_some(),
+            ]
+            .into_iter()
+            .filter(|v| *v)
+            .count()
                 != 1
             {
                 return Err(CtlError::protocol(
-                    "flow wait requires exactly one of --element/--window/--gone",
+                    "flow wait requires exactly one of --element/--window/--gone/--idle",
                 ));
+            }
+            if idle.is_some() {
+                return Ok(());
             }
             for target in element.iter().chain(gone.iter()) {
                 actl_core::parse_target(target)?;
@@ -301,6 +312,36 @@ impl Host for Adapter<'_> {
             "workflow_recovery",
             json!({"step_id":step_id,"observation":event}),
         );
+    }
+    fn capture_failure(&mut self, step_id: &str, phase: &str) {
+        // 失败瞬间整屏留证到 flow-resources/<id>/evidence/:归因依赖现场
+        // (docs/68 两次靠用户手快截图定位)。诊断动作只吞错,绝不影响流程;
+        // 文件名按 步骤-相位 固定,同步重试覆盖旧图,不无限堆积。
+        let name = format!("{}-{}.png", step_id.replace(['/', '\\', ':'], "_"), phase);
+        let Some(root) = self
+            .store
+            .dir
+            .parent()
+            .and_then(|flows| flows.parent())
+            .map(|state| state.join("flow-resources"))
+        else {
+            return;
+        };
+        let Some(id) = self.store.dir.file_name().and_then(|n| n.to_str()) else {
+            return;
+        };
+        let dir = root.join(id).join("evidence");
+        let path = dir.join(name);
+        let result = std::fs::create_dir_all(&dir)
+            .map_err(|e| e.to_string())
+            .and_then(|_| {
+                actl_uia::screenshot_screen(Some(&path.to_string_lossy()))
+                    .map(|_| ())
+                    .map_err(|e| e.to_string())
+            });
+        if let Err(error) = result {
+            eprintln!("INTERNAL: failure screenshot unavailable for {step_id}/{phase}: {error}");
+        }
     }
     fn condition(&mut self, call: &Invocation) -> Result<bool, CtlError> {
         let element_exists = matches!(

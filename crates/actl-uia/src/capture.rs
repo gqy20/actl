@@ -379,6 +379,26 @@ pub fn screenshot_rect(
     finish(px, w, h, out)
 }
 
+/// 整屏域:虚拟屏全域(多显示器合并)。失败留证的默认视野——对话框归属、
+/// 前景状态等上下文都在全屏里,单窗口截图会漏。
+pub fn screenshot_screen(out: Option<&str>) -> Result<ShotResult, CtlError> {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN,
+        SM_YVIRTUALSCREEN,
+    };
+    let _dpi = Pmv2Guard::enter();
+    let (x, y, w, h) = unsafe {
+        (
+            GetSystemMetrics(SM_XVIRTUALSCREEN),
+            GetSystemMetrics(SM_YVIRTUALSCREEN),
+            GetSystemMetrics(SM_CXVIRTUALSCREEN),
+            GetSystemMetrics(SM_CYVIRTUALSCREEN),
+        )
+    };
+    let (px, w, h) = unsafe { blt_region(x, y, w, h)? };
+    finish(px, w, h, out)
+}
+
 /// 窗口域:标题/hwnd 解析唯一窗口;PrintWindow 抗遮挡,最小化如实拒
 pub fn screenshot_window(r: WindowRef<'_>, out: Option<&str>) -> Result<ShotResult, CtlError> {
     let _dpi = Pmv2Guard::enter();

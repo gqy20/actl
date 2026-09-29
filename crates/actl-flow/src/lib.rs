@@ -204,7 +204,9 @@ pub fn route_defect(record: &engine::StepRecord) -> bool {
 }
 
 /// Redacted failure evidence, or a minimal structured synthesis when the source
-/// error carries none: the phase, the failing command name and the attempt count.
+/// error carries none: the phase, the failing command name, the attempt count and
+/// the error message itself (truncated) — the message is engine-side diagnostic
+/// text, keeping it removes the need to hand-reproduce failures for their cause.
 pub fn step_failure_evidence(
     step: &Step,
     error: &CtlError,
@@ -215,9 +217,14 @@ pub fn step_failure_evidence(
         Some(serde_json::json!({
             "phase": phase,
             "command": command,
+            "message": message_excerpt(error),
             "synthetic": true,
         }))
     })
+}
+fn message_excerpt(error: &CtlError) -> String {
+    // 只取正文,错误码由 error_code 字段承载,不重复。
+    error.message.chars().take(200).collect()
 }
 
 pub fn parse(text: &str) -> Result<Plan, CtlError> {
