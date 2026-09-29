@@ -15,6 +15,14 @@ struct Node {
 }
 
 trait Tree: Clone {
+    fn exact_candidates(
+        &self,
+        _filter: &Filter,
+        _scope: Scope,
+        _include_root: bool,
+    ) -> Result<Option<Vec<Self>>, CtlError> {
+        Ok(None)
+    }
     fn children(&self) -> Result<Vec<Self>, CtlError>;
     fn matches(&self, filter: &Filter) -> Result<bool, CtlError>;
     fn evidence(&self) -> Result<serde_json::Value, CtlError>;
@@ -30,6 +38,59 @@ pub(crate) fn observed<T>(result: Result<T, CtlError>) -> Result<Option<T>, CtlE
 }
 
 impl Tree for Node {
+    fn exact_candidates(
+        &self,
+        filter: &Filter,
+        scope: Scope,
+        include_root: bool,
+    ) -> Result<Option<Vec<Self>>, CtlError> {
+        use uiautomation::{types::UIProperty, variants::Variant};
+        let seed = filter
+            .id
+            .as_ref()
+            .map(|s| (UIProperty::AutomationId, Variant::from(s.clone())))
+            .or_else(|| {
+                filter
+                    .name
+                    .as_ref()
+                    .map(|s| (UIProperty::Name, Variant::from(s.clone())))
+            })
+            .or_else(|| {
+                filter
+                    .role
+                    .as_deref()
+                    .and_then(role_id)
+                    .map(|id| (UIProperty::ControlType, Variant::from(id)))
+            });
+        let Some((property, value)) = seed else {
+            return Ok(None);
+        };
+        let auto = UIAutomation::new().map_err(internal)?;
+        let condition = auto
+            .create_property_condition(property, value, None)
+            .map_err(|e| crate::read_channel::failure("selector.condition", e))?;
+        let native_scope = match (scope, include_root) {
+            (Scope::Children, _) => TreeScope::Children,
+            (Scope::Descendants, true) => TreeScope::Subtree,
+            (Scope::Descendants, false) => TreeScope::Descendants,
+        };
+        // RawView cache and the complete provider result preserve scope/uniqueness.
+        // Failure must never fall through to DFS or become an empty result.
+        self.element
+            .find_all_build_cache(native_scope, &condition, &self.cache)
+            .map(|hits| {
+                Some(
+                    hits.into_iter()
+                        .map(|element| Self {
+                            element,
+                            condition: self.condition.clone(),
+                            cache: self.cache.clone(),
+                        })
+                        .collect(),
+                )
+            })
+            .map_err(|e| crate::read_channel::failure("selector.query", e))
+    }
     fn children(&self) -> Result<Vec<Self>, CtlError> {
         self.element
             .find_all_build_cache(TreeScope::Children, &self.condition, &self.cache)
@@ -82,6 +143,25 @@ fn collect<T: Tree>(
     scope: Scope,
     include_root: bool,
 ) -> Result<Vec<T>, CtlError> {
+    actl_core::wait_control::check()?;
+    if let Some(candidates) = root.exact_candidates(filter, scope, include_root)? {
+        if candidates.len() > crate::window::MAX_ELEMENTS {
+            return Err(CtlError::with_evidence(
+                ErrorCode::NotActionable,
+                "uia query exceeded candidate budget; narrow the conditions",
+                json!({"reason":"selector_budget_exceeded"}),
+            ));
+        }
+        let mut hits = Vec::new();
+        for candidate in candidates {
+            actl_core::wait_control::check()?;
+            if candidate.matches(filter)? {
+                hits.push(candidate);
+            }
+        }
+        actl_core::wait_control::check()?;
+        return Ok(hits);
+    }
     let mut pending = vec![(root.clone(), 0u32)];
     let mut count = 0usize;
     let mut hits = Vec::new();
@@ -247,9 +327,18 @@ pub(crate) fn locate(
     })
 }
 
+// Match the supported UIA enum, preserving case-insensitive strict role semantics.
+fn role_id(role: &str) -> Option<i32> {
+    use uiautomation::types::ControlType;
+    (ControlType::Button as i32..=ControlType::AppBar as i32).find(|id| {
+        ControlType::try_from(*id).is_ok_and(|kind| format!("{kind:?}").eq_ignore_ascii_case(role))
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    mod provider;
     #[derive(Clone)]
     struct Fake {
         id: &'static str,

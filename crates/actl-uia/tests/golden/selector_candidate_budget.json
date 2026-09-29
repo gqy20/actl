@@ -1,0 +1,1 @@
+{"version":"1","ok":false,"command":"find","error":{"code":"NOT_ACTIONABLE","message":"uia query exceeded candidate budget; narrow the conditions","hint":"scroll or focus the element first; for value writes consider `set-value`","evidence":{"reason":"selector_budget_exceeded"}},"duration_ms":0}

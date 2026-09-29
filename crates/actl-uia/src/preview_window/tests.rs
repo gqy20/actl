@@ -10,6 +10,9 @@ impl OwnedHost {
         Self::with_choices(false)
     }
     fn with_choices(choices: bool) -> Self {
+        Self::with_tree(choices, false)
+    }
+    fn with_tree(choices: bool, deep: bool) -> Self {
         let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let signal = stop.clone();
         let (tx, rx) = std::sync::mpsc::channel();
@@ -43,6 +46,26 @@ impl OwnedHost {
                         50,
                         Some(hwnd),
                         Some(HMENU(id as *mut _)),
+                        None,
+                        None,
+                    )
+                    .unwrap();
+                }
+            }
+            if deep {
+                let mut parent = hwnd;
+                for _ in 0..45 {
+                    parent = CreateWindowExW(
+                        WINDOW_EX_STYLE(0),
+                        w!("STATIC"),
+                        w!("deep"),
+                        WS_CHILD | WS_VISIBLE,
+                        0,
+                        0,
+                        10,
+                        10,
+                        Some(parent),
+                        None,
                         None,
                         None,
                     )

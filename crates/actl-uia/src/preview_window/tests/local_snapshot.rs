@@ -3,6 +3,51 @@ use super::*;
 use serde_json::{Value, json};
 
 #[test]
+#[ignore = "interactive desktop; owned deep tree, no input"]
+fn exact_container_survives_unrelated_deep_branch() {
+    let host = OwnedHost::with_tree(true, true);
+    let app = format!("hwnd:{}", host.hwnd);
+    let full = crate::capture(Some(&app)).unwrap();
+    assert!(
+        full.truncated,
+        "fixture must exceed the old DFS depth limit"
+    );
+    let result = crate::scoped_snapshot::capture(&app, r#"uia:{"match":{"id":"11"}}"#, 0, 1);
+    assert!(result.is_ok(), "{:#?}", result.err());
+    let (local, _) = result.unwrap();
+    assert_eq!(local.nodes.len(), 1);
+    assert_eq!(local.nodes[0].name.as_deref(), Some("Option B"));
+    for selector in [
+        r#"uia:{"match":{"name":"Option B"},"scope":"children"}"#,
+        r#"uia:{"match":{"id":"11"},"within":{"name":"ACTL isolated preview target"},"scope":"children"}"#,
+    ] {
+        assert!(crate::scoped_snapshot::capture(&app, selector, 0, 1).is_ok());
+    }
+    for (selector, expected) in [
+        (
+            r#"uia:{"match":{"name":"deep"}}"#,
+            actl_core::ErrorCode::Ambiguous,
+        ),
+        (
+            r#"uia:{"match":{"id":"11","role":"Edit"}}"#,
+            actl_core::ErrorCode::NotFound,
+        ),
+        (
+            r#"uia:{"match":{"id":"11"},"within":{"id":"11"}}"#,
+            actl_core::ErrorCode::NotFound,
+        ),
+    ] {
+        assert_eq!(
+            crate::scoped_snapshot::capture(&app, selector, 0, 1)
+                .err()
+                .unwrap()
+                .code,
+            expected
+        );
+    }
+}
+
+#[test]
 #[ignore = "interactive desktop; ACTL_PREVIEW_CLI and pwsh required"]
 fn local_observation_sampler_records_owned_window_without_input() {
     let binary = std::env::var("ACTL_PREVIEW_CLI").unwrap();
