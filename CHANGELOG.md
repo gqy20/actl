@@ -9,6 +9,8 @@
 
 ## [Unreleased]
 
+- 真机回归新增目标预览入口：`cargo xtask preview-tests` 构建 CLI 与 devtools 后串行运行 preview_window 交互用例（活动急停时整轮让行报阻塞 77；锁屏/遮挡由用例护栏拒绝并如实失败；默认跳过需人工点击的 mouse_selection_acceptance），替代此前仅存于 docs/46 的手工命令片段。flow 契约测试的 Sandbox 补清 ACTL_TASK_CONFIG，消除开发者 shell 残留该变量时的隐性污染。
+
 - 测试清理与门禁计时：旧 cli.rs 契约用例并入 cli_contract.rs（去除 6 项重复、删除恒真断言、合并同调用的两个 batch 断言）；停止代际并发一致性测试写者循环 100→30 轮，去除纯归档 IO 耗时；gate 各步耗时随 stderr 输出，慢环节可头内比较。核查中确认 `--physical --with <键名>` 缺白名单校验、未知键名静默映射为 Win 键，已登记 ROADMAP 待修。
 
 - UIA 语义动作预览后按 RuntimeId、PID、角色、名称、AutomationId 和原生宿主身份复核目标；布局移动不再误报不可操作。动作重新获取所选 Pattern，控件禁用或身份变化仍拒绝；键盘焦点与物理命中护栏保留。workflow 的 metadata 证据保留 target_identity_changed / target_disabled 原因。

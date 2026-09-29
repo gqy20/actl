@@ -21,6 +21,7 @@ fn main() -> ExitCode {
         Some("gate") => gate(),
         Some("fmt") => code(run(&["fmt", "--all"])),
         Some("regress") => regress(),
+        Some("preview-tests") => preview_tests(),
         Some("fixture" | "diagnose" | "package") => devtools(),
         Some("lint-packs") => lint_packs(std::env::args().nth(2).as_deref()),
         Some(_) | None => {
@@ -31,6 +32,8 @@ fn main() -> ExitCode {
                  cargo xtask fmt     format all code
                  cargo xtask fixture CASE | diagnose KIND | package [OPTIONS]
                  cargo xtask regress [--list | --suite flow|system|scenario | --case ID] [--unattended] (native Rust)
+  \
+                 cargo xtask preview-tests  serially run ignored preview_window live tests (interactive desktop)
   \n                 cargo xtask lint-packs [dir] validate app packs against the CLI schema\n                 \
                  (default skills/actl/apps; pass a dir to lint out-of-repo private packs)"
             );
@@ -210,6 +213,76 @@ fn devtools() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// 目标预览真机回归(docs/46):preview_window 子树的交互用例默认 #[ignore],
+/// 不进 gate/CI,由本命令显式串行运行(需交互桌面)。用例只创建/关闭自有
+/// 预览窗口、不注入输入,但会读取真实停止状态:存在活动急停时先让行并按
+/// 阻塞(77)退出。锁屏/遮挡不做预检——用例自身的中心点护栏会正确拒绝
+/// (NOT_ACTIONABLE),verify-window 的可见窗口过滤看不到锁屏,标题启发式
+/// 又跨 locale 脆弱,不在 xtask 重复造探测。mouse_selection_acceptance
+/// 需要人工/computer-use 在 30s 内真实点击,默认跳过;单独验证时手动
+/// `cargo test -p actl-uia --lib mouse_selection -- --ignored --test-threads=1`。
+fn preview_tests() -> ExitCode {
+    let ws_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    if !run(&["build", "-p", "actl-cli", "--bin", "actl"])
+        || !run(&["build", "-p", "actl-devtools"])
+    {
+        return ExitCode::FAILURE;
+    }
+    let actl = ws_root.join("target/debug/actl.exe");
+    let devtools = ws_root.join("target/debug/actl-devtools.exe");
+    // 让行预检:活动急停时不动桌面,整轮报阻塞而非逐用例失败
+    if let Ok(output) = std::process::Command::new(&actl)
+        .arg("execution-status")
+        .env_remove("ACTL_TASK_ID")
+        .output()
+        && String::from_utf8_lossy(&output.stdout).contains("\"state\":\"stopped\"")
+    {
+        eprintln!("✗ preview-tests blocked: active emergency stop on this machine.");
+        eprintln!("  Honor it; resolve via execution-recover, then rerun (AGENTS 暂停与停止分离).");
+        return ExitCode::from(77);
+    }
+    eprintln!(
+        "▶ preview_window live tests (serial, owned windows only; docs/46)\n  \
+         ACTL_PREVIEW_CLI={}\n  \
+         ACTL_DEVTOOLS={}",
+        actl.display(),
+        devtools.display()
+    );
+    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
+    let ok = timed("preview-window tests", || {
+        Command::new(&cargo)
+            .args([
+                "test",
+                "-p",
+                "actl-uia",
+                "--lib",
+                "preview_window::tests",
+                "--",
+                "--ignored",
+                "--test-threads=1",
+                "--skip",
+                "mouse_selection",
+            ])
+            .env("ACTL_PREVIEW_CLI", &actl)
+            .env("ACTL_DEVTOOLS", &devtools)
+            .env_remove("ACTL_TASK_ID")
+            .status()
+            .map(|s| s.success())
+            .unwrap_or_else(|error| {
+                eprintln!("preview-tests: {error}");
+                false
+            })
+    });
+    if !ok {
+        eprintln!(
+            "✗ preview-tests failed — 先查环境再怀疑代码(诊断三段法):锁屏/遮挡/受保护视图\n  \
+             会让预览护栏正确拒绝(NOT_ACTIONABLE center covered);逐用例证据在\n  \
+             target/preview-lifecycle、target/preview-choice。"
+        );
+    }
+    code(ok)
 }
 /// 路线收束校验:status 必填且取值合法(id 唯一性在收集时已查)。返回问题数。
 fn check_route(rel: &str, id: &str, status: Option<&str>) -> usize {

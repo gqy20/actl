@@ -78,7 +78,13 @@
 - Windows 环境仍为 10.0.26200.0。被测 `target/validation/release/actl.exe` 的 SHA-256 为 `53BB84D00D73A53EA483931996FD1CFCB14E59797C5FD42809513DDE49F01CD8`；测试程序 `target/debug/deps/actl_uia-107b82953eeb6492.exe` 为 `DAFFC0A640E896BB8A3857A8E8F242668AF330E6BCD7768B1BE70DEA37D1D105`，绝对路径另存 `target/preview-batch2-hashes.json`。
 - 8 项逐调用记录均确认前台保持、该 CLI PID 无预览残留、自有目标/遮挡窗口已关闭；停止用例的隔离标记保留在本地证据目录。未修改生产预览行为或错误码映射。
 
-复验命令（PowerShell，使用已经构建的 release）：
+复验命令（推荐入口：构建 debug `actl`/`actl-devtools`，设好 `ACTL_PREVIEW_CLI`/`ACTL_DEVTOOLS` 后串行运行；活动急停时整轮让行报阻塞 77；锁屏/遮挡下用例会被预览护栏正确拒绝（NOT_ACTIONABLE center covered），解锁后复跑；默认跳过需人工/computer-use 点击的 `mouse_selection_acceptance`，该用例单独验证）：
+
+```
+cargo xtask preview-tests
+```
+
+等价手工命令（PowerShell，使用已经构建的 release；历史各轮证据即此路径产出）：
 
 ```powershell
 $env:PATH='C:\Users\gqy17\scoop\shims;'+$env:PATH
