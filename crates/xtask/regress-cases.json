@@ -1,125 +1,155 @@
 [
-  {"id":"quark-search","script":"scenarios/quark-search.ps1","suite":"scenario","state":"manual","input":"keyboard","reason":"Requires an observed signed-in drive HWND; run explicitly with -Hwnd"},
-  {"id":"input-target","script":"fixtures/input-target.ps1","suite":"system","state":"ready","input":"keyboard","reason":"Owned Notepad: bound refs, exact focus refusal and value readback"},
+  {
+    "id": "quark-search",
+    "suite": "scenario",
+    "state": "manual",
+    "input": "keyboard",
+    "reason": "Requires an observed signed-in drive HWND; run explicitly with -Hwnd",
+    "entry": "actl flow-run --file skills/actl/workflows/quark-search.yml --inputs values.json --id RUN_ID"
+  },
+  {
+    "id": "input-target",
+    "suite": "system",
+    "state": "ready",
+    "input": "keyboard",
+    "reason": "Native fixture migrated; old evidence retained, new real-application acceptance pending.",
+    "entry": "fixture input-target"
+  },
   {
     "id": "flow-evaluation",
     "unattended": true,
-    "script": "fixtures/flow-evaluation.ps1",
     "suite": "flow",
     "state": "ready",
     "input": "none",
-    "reason": "Isolated read-only workflow recovery evaluation"
+    "reason": "Isolated read-only workflow recovery evaluation",
+    "entry": "fixture flow-evaluation"
   },
   {
     "id": "golden-task-2",
-    "script": "fixtures/golden-task-2.ps1",
     "suite": "system",
     "state": "ready",
     "input": "keyboard",
-    "reason": "Owned test document: edit, save and disk verification"
+    "reason": "Native fixture migrated; old evidence retained, new real-application acceptance pending.",
+    "entry": "fixture golden-task-2"
   },
   {
     "id": "golden-task-1",
-    "script": "fixtures/golden-task-1.ps1",
     "suite": "system",
     "state": "ready",
     "input": "uia",
-    "reason": "Owned window, structured assertions and retained per-call evidence; live acceptance pending"
+    "reason": "Native fixture migrated; old evidence retained, new real-application acceptance pending.",
+    "entry": "fixture golden-task-1"
   },
   {
     "id": "us1-cross-app",
-    "script": "fixtures/us1-cross-app.sh",
     "suite": "system",
     "state": "blocked",
     "input": "keyboard",
-    "reason": "Pending owned windows and portable document paths"
+    "reason": "Unsafe legacy script retired. Replacement end-to-end acceptance remains pending; see docs/61.",
+    "entry": null
   },
   {
     "id": "virtualized-list",
-    "script": "fixtures/virtualized-list.ps1",
     "suite": "system",
     "state": "ready",
     "input": "none",
-    "reason": "Owned window, structured assertions and retained per-call evidence; live acceptance pending"
+    "reason": "Native fixture migrated; old evidence retained, new real-application acceptance pending.",
+    "entry": "fixture virtualized-list"
   },
   {
     "id": "win32-table-extract",
-    "script": "fixtures/win32-table-extract.ps1",
     "suite": "system",
     "state": "ready",
     "input": "none",
-    "reason": "Owned window, structured assertions and retained per-call evidence; live acceptance pending"
+    "reason": "Native fixture migrated; old evidence retained, new real-application acceptance pending.",
+    "entry": "fixture win32-table-extract"
   },
   {
     "id": "edge-deep-tree",
-    "script": "fixtures/edge-deep-tree.ps1",
     "suite": "system",
     "state": "ready",
     "input": "uia",
-    "reason": "Isolated profile and local page; live acceptance and owned-tab cleanup passed (docs/24)"
+    "reason": "Native fixture migrated; old evidence retained, new real-application acceptance pending.",
+    "entry": "fixture edge-deep-tree"
   },
   {
     "id": "edge-content-view",
-    "script": "fixtures/edge-content-view.ps1",
     "suite": "system",
     "state": "ready",
     "input": "uia",
-    "reason": "Isolated profile and local page; live acceptance and owned-tab cleanup passed (docs/24)"
+    "reason": "Native fixture migrated; old evidence retained, new real-application acceptance pending.",
+    "entry": "fixture edge-content-view"
   },
   {
     "id": "coord-click",
-    "script": "fixtures/coord-click.sh",
     "suite": "system",
     "state": "blocked",
     "input": "physical",
-    "reason": "Pending owned document; currently targets existing Notepad"
+    "reason": "Unsafe legacy script retired. Replacement end-to-end acceptance remains pending; see docs/61.",
+    "entry": null
   },
   {
     "id": "xhs-deep2",
-    "script": "fixtures/xhs-deep2.sh",
     "suite": "scenario",
-    "state": "manual",
+    "state": "blocked",
     "input": "keyboard",
-    "reason": "Requires a real account and dynamic content; not a system fixture"
+    "reason": "Unsafe legacy script retired. Replacement end-to-end acceptance remains pending; see docs/61.",
+    "entry": null
   },
   {
     "id": "chrome-content-view",
-    "script": "scenarios/chrome-content-view.ps1",
     "suite": "scenario",
     "state": "ready",
     "input": "uia",
-    "reason": "Installed Chrome; isolated private profile and local page (not a CI dependency)"
+    "reason": "Native fixture migrated; old evidence retained, new real-application acceptance pending.",
+    "entry": "fixture chrome-content-view"
   },
   {
     "id": "observe-cloudmusic",
-    "script": "scenarios/app-observe.ps1",
     "suite": "scenario",
     "state": "manual",
     "input": "none",
-    "reason": "Local app observation; invoke with -App cloudmusic -Program installed-executable; see docs/24"
+    "reason": "Read an explicitly selected window; application launch uses workflows.",
+    "entry": "diagnose app-observe --hwnd HWND"
   },
   {
     "id": "observe-zotero",
-    "script": "scenarios/app-observe.ps1",
     "suite": "scenario",
     "state": "manual",
     "input": "none",
-    "reason": "Local app observation; invoke with -App zotero -Program installed-executable; see docs/24"
+    "reason": "Read an explicitly selected window; application launch uses workflows.",
+    "entry": "diagnose app-observe --hwnd HWND"
   },
   {
     "id": "observe-meeting",
-    "script": "scenarios/app-observe.ps1",
     "suite": "scenario",
     "state": "manual",
     "input": "none",
-    "reason": "Local app observation; invoke with -App meeting -Program installed-executable; see docs/24"
+    "reason": "Read an explicitly selected window; application launch uses workflows.",
+    "entry": "diagnose app-observe --hwnd HWND"
   },
   {
     "id": "observe-vscode",
-    "script": "scenarios/app-observe.ps1",
     "suite": "scenario",
     "state": "manual",
     "input": "none",
-    "reason": "Local app observation; invoke with -App vscode -Program installed-executable; see docs/24"
+    "reason": "Read an explicitly selected window; application launch uses workflows.",
+    "entry": "diagnose app-observe --hwnd HWND"
+  },
+  {
+    "id": "signal-display",
+    "suite": "system",
+    "state": "manual",
+    "input": "physical",
+    "entry": "fixture signal-display --hwnd HWND --physical",
+    "reason": "Explicit test window required; preserves caller-owned window."
+  },
+  {
+    "id": "display-readiness",
+    "suite": "system",
+    "state": "manual",
+    "input": "uia",
+    "entry": "fixture display-readiness --hwnd HWND",
+    "reason": "Explicit test window required; preserves caller-owned window."
   }
 ]

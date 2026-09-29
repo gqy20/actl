@@ -1,3 +1,4 @@
+# 2026-09-29：关联 PS 已迁入 workflow；新模板协议预检通过，真实写入复验待完成。
 # 2026-09-29 静态维护：修改过的路线标为 manual，待新版真机复验；verified_date 保留历史日期。
 # 来源: docs/27-batch1-deep-tests.md、docs/28-meeting-quark-visual-deep.md；输入身份与焦点更新见 docs/31。
 pack_format: 1
@@ -54,7 +55,7 @@ routes:
   - id: search_drive
     description: Ctrl+F 后按 Edit 角色查找搜网盘，用当次 snapshot_id 绑定 ref；本轮网页输入路径通过，其他状态若焦点不符应重新观察
     status: verified
-    verify: type 完整值读回、Document 路由 keyword 和实际结果三者一致；空结果场景 scenarios/quark-search.ps1 同时核对 0 项及暂无搜索内容。部分匹配存在，不能由查询词外观推断结果数。
+    verify: type 完整值读回、Document 路由 keyword 和实际结果三者一致；空结果场景 workflows/quark-search.yml 同时核对 0 项及暂无搜索内容。部分匹配存在，不能由查询词外观推断结果数。
     steps:
       - ["press", "ctrl+f", "--app", "{window}"]
       - ["find", "--role", "Edit", "--name", "搜网盘", "--app", "{window}"]

@@ -21,6 +21,7 @@ fn main() -> ExitCode {
         Some("gate") => gate(),
         Some("fmt") => code(run(&["fmt", "--all"])),
         Some("regress") => regress(),
+        Some("fixture" | "diagnose" | "package") => devtools(),
         Some("lint-packs") => lint_packs(std::env::args().nth(2).as_deref()),
         Some(_) | None => {
             eprintln!(
@@ -28,7 +29,8 @@ fn main() -> ExitCode {
                  cargo xtask setup   install git hooks + activate pinned toolchain (run once after clone)\n  \
                  cargo xtask gate    quality gate: file-lines + fmt --check + clippy -D warnings + tests (= pre-push = CI)\n  \
                  cargo xtask fmt     format all code
-                 cargo xtask regress [--list | --suite flow|system|scenario | --case ID] [--unattended] (PowerShell 7)
+                 cargo xtask fixture CASE | diagnose KIND | package [OPTIONS]
+                 cargo xtask regress [--list | --suite flow|system|scenario | --case ID] [--unattended] (native Rust)
   \n                 cargo xtask lint-packs [dir] validate app packs against the CLI schema\n                 \
                  (default skills/actl/apps; pass a dir to lint out-of-repo private packs)"
             );
@@ -76,19 +78,7 @@ fn gate() -> ExitCode {
     if lint_packs(None) != ExitCode::SUCCESS {
         return ExitCode::FAILURE;
     }
-    let tests = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/regress.Tests.ps1");
-    if !step("pwsh", &["-NoProfile", "-File", &tests.to_string_lossy()]) {
-        return ExitCode::FAILURE;
-    }
-    let tests = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/uia-compare.Tests.ps1");
-    if !step("pwsh", &["-NoProfile", "-File", &tests.to_string_lossy()]) {
-        return ExitCode::FAILURE;
-    }
-    let tests = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/release-package.Tests.ps1");
-    if !step("pwsh", &["-NoProfile", "-File", &tests.to_string_lossy()]) {
-        return ExitCode::FAILURE;
-    }
-    eprintln!("✓ gate passed (file-lines + fmt + clippy + test + lint-packs + regression harness)");
+    eprintln!("✓ gate passed (file-lines + fmt + clippy + workspace tests + lint-packs)");
     ExitCode::SUCCESS
 }
 
@@ -191,22 +181,16 @@ fn regress() -> ExitCode {
     if !args.iter().any(|arg| arg == "--list") && !build_pair() {
         return ExitCode::FAILURE;
     }
-    let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("regress.ps1");
-    let mut command = Command::new("pwsh");
-    command.args(["-NoProfile", "-File"]).arg(script);
-    for arg in args {
-        command.arg(match arg.as_str() {
-            "--list" => "-List".to_string(),
-            "--unattended" => "-Unattended".to_string(),
-            "--suite" => "-Suite".to_string(),
-            "--case" => "-Case".to_string(),
-            _ => arg,
-        });
-    }
+    devtools()
+}
+fn devtools() -> ExitCode {
+    let mut command = Command::new("cargo");
+    command.args(["run", "--quiet", "-p", "actl-devtools", "--"]);
+    command.args(std::env::args().skip(1));
     match command.status() {
-        Ok(status) => code(status.success()),
+        Ok(status) => ExitCode::from(status.code().unwrap_or(1).clamp(0, 255) as u8),
         Err(error) => {
-            eprintln!("regress requires PowerShell 7 (pwsh): {error}");
+            eprintln!("devtools: {error}");
             ExitCode::FAILURE
         }
     }

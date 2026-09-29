@@ -28,6 +28,12 @@
 
 ## Phase 2 · M2 v0.2.0 剩余工作
 
+### 原生迁移后待验收
+
+- [ ] 对新 Rust 夹具复验 Calculator、Notepad、Explorer、msinfo32、Edge/Chrome 及显示端；验证身份、单次写入、失败保留和优雅清理，不能沿用旧 PS 的通过记录。
+- [ ] 在已确认现场复验 cloudmusic-playback、quark-search、tencent-meeting-draft/date 与 app-launch-observe；保持同一 flow ID，补逐调用、文件哈希与清理证据。
+- [ ] 重建已退役的跨应用搬运、坐标输入、动态网站深测和参数扫描验收。旧脚本依赖硬编码 ref、既有用户窗口或盲重试，清理不表示能力已验收。范围与替代入口见 [61](61-native-tooling-migration.md)。
+
 ### 2026-09-29 执行顺序
 
 1. 先验证已有交接、急停、目标身份和恢复，再逐项复验应用 YAML。

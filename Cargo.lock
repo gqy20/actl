@@ -23,6 +23,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "actl-devtools"
+version = "0.1.6"
+dependencies = [
+ "actl-core",
+ "actl-flow",
+ "actl-uia",
+ "serde_json",
+ "zip",
+]
+
+[[package]]
 name = "actl-flow"
 version = "0.1.6"
 dependencies = [

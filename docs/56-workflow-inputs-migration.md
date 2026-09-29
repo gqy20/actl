@@ -1,5 +1,7 @@
 # 可复用 workflow 与迁移记录
 
+> 历史记录：文中的 PS/Bash 入口已退役。当前原生/workflow 入口与未验收事项见 [迁移清单](61-native-tooling-migration.md)；本页原始实测结论保留。
+
 日期：2026-09-29。关联 [暂停恢复](55-resumable-desktop-tasks.md)、[误让行](54-repeated-handoff.md)。
 
 ## 本轮实现

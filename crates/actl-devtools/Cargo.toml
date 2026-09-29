@@ -1,0 +1,17 @@
+[package]
+name = "actl-devtools"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+actl-core = { path = "../actl-core" }
+actl-flow = { path = "../actl-flow" }
+actl-uia = { path = "../actl-uia" }
+serde_json.workspace = true
+zip.workspace = true
+
+[lints]
+workspace = true

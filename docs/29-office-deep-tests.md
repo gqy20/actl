@@ -1,5 +1,7 @@
 # 第二轮应用实现：Excel 与 Word
 
+> 历史记录：文中的 PS/Bash 入口已退役。当前原生/workflow 入口与未验收事项见 [迁移清单](61-native-tooling-migration.md)；本页原始实测结论保留。
+
 ## 范围和环境
 
 2026-09-28，Windows 10.0.26200.0 中文交互桌面，Excel/Word 文件版本均为

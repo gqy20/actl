@@ -91,7 +91,7 @@ actl verify --value <target> "<期望>" --app <app> # 确认:立即断言
 容器必须唯一，根节点深度为 0；检查 truncated/truncation_reasons，不把截断解释为不存在。
 局部 ref 从 @e1 重新编号，后续命令必须传同次返回的 `--snapshot <snapshot_id>`；不要混用全窗口或其他局部快照的编号。
 容器变化后重新观察；没有唯一容器时先 find/inspect，不用扩大输出代替定位。此功能不保证降低总扫描耗时。
-验收输出削减使用仓库 `scenarios/local-observation.ps1`：传已核对的 HWND 和严格容器选择器。
+验收输出削减使用仓库 `cargo xtask diagnose local-observation --hwnd HWND --within SELECTOR`：传已核对的 HWND 和严格容器选择器。
 只在完整/局部观察均未截断、前后内容和身份稳定时比较；分别检查 elements 与完整 envelope 字节，
 不把字节等同 token。深树定位优先提供精确 id/name：由原生查询完整候选再核验唯一性。
 已知 role 可走原生候选查询；只有 name_contains 等宽泛查询仍有遍历预算；原生候选超限或 provider 失败须保留错误，不能按首个候选继续。

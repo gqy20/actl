@@ -175,7 +175,7 @@ Edge/Chrome 双验证,xhs/bili/douyin 登录态深度闭环实测;场景结论�
 
 无人值守时可运行 `cargo xtask regress --unattended`：仅执行明确登记的无输入用例，
 其余写入报告为 skipped；`complete` 只表示所选用例全部通过，退出成功不代表整套 Phase 2 验收通过。
-只读性能与观察采样使用 `pwsh -NoProfile -File scenarios/phase2-readonly.ps1`；
+只读性能与观察采样使用 `cargo xtask diagnose phase2-readonly`；
 指定本次观察到的 HWND 可追加快照对照，不启动或关闭应用。人工验收及遗留见
 [Phase 2 验收记录](https://github.com/gqy20/actl/blob/main/docs/44-phase2-acceptance.md)。
 

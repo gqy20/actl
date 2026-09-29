@@ -1,5 +1,7 @@
 # 37 · UIA 读取状态与 winapp 对照采样
 
+> 历史记录：文中的 PS/Bash 入口已退役。当前原生/workflow 入口与未验收事项见 [迁移清单](61-native-tooling-migration.md)；本页原始实测结论保留。
+
 日期：2026-09-28。承接 [36](36-winapp-uia-diagnostics.md) 的第一批实现。
 
 ## 读取契约

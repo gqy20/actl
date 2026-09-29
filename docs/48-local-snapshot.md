@@ -1,5 +1,7 @@
 # 容器局部快照
 
+> 历史记录：文中的 PS/Bash 入口已退役。当前原生/workflow 入口与未验收事项见 [迁移清单](61-native-tooling-migration.md)；本页原始实测结论保留。
+
 日期：2026-09-29。协议见 [06](06-design-blueprint.md)，待办见 [ROADMAP](ROADMAP.md)。
 
 ## 本批范围

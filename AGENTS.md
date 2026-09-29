@@ -31,7 +31,7 @@
 
 ## 仓库地图(分层细节见 docs/TECH_STACK.md §2)
 
-`crates/actl-core`=协议(纯逻辑) · `crates/actl-uia`=UIA/COM(唯一 unsafe 豁免) · `crates/actl-physical`=物理兜底 · `crates/actl-flow`=顺序流程与恢复 · `crates/actl-cli`=入口 · `fixtures/`=系统集成测试 · `scenarios/`=真实应用场景 · `hooks/`=git hooks · `docs/`=全部决策文档 · `skills/actl`=agent skill 与应用档案 pack(`apps/*.yml`,契约见 skills/actl/PACKS.md,应用知识不进核心;lint-packs 已入 gate)
+`crates/actl-core`=协议(纯逻辑) · `crates/actl-uia`=UIA/COM(唯一 unsafe 豁免) · `crates/actl-physical`=物理兜底 · `crates/actl-flow`=顺序流程与恢复 · `crates/actl-cli`=入口 · `crates/actl-devtools`=原生诊断/夹具/回归/打包（xtask 转发） · `fixtures/`=系统集成测试 · `scenarios/`=真实应用场景 · `hooks/`=git hooks · `docs/`=全部决策文档 · `skills/actl`=agent skill 与应用档案 pack(`apps/*.yml`,契约见 skills/actl/PACKS.md,应用知识不进核心;lint-packs 已入 gate)
 
 业务流程统一维护在 `skills/actl/workflows/`，仍由单一 actl 技能入口引导；应用知识放 `apps/`，引擎测试放 `fixtures/flows/`。目录与维护规范见 [流程索引](skills/actl/workflows/README.md)。
 

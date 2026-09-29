@@ -11,7 +11,7 @@
 | `skills/actl/apps/` | 单个应用的定位知识、操作路线与已知限制，供 agent 阅读 |
 | `skills/actl/workflows/<slug>.yml` | 一个完整业务目标的执行计划，可涉及一个或多个应用 |
 | `fixtures/flows/` | 流程引擎的最小测试用例，不作为业务流程目录 |
-| `scenarios/` | 真实应用验收脚本和辅助代码 |
+| `scenarios/` | 真实应用验收入口说明；执行实现位于 actl-devtools |
 | `skills/actl/references/` | 随技能分发的使用说明 |
 | 仓库 `docs/` | 完整协议、设计与验收证据，不随技能分发 |
 | `target/` | 本地测试输入、日志与证据，已被 Git 忽略 |
@@ -75,3 +75,19 @@ actl flow-run --file skills/actl/workflows/vscode-edit.yml --id vscode-001
 资源根目录为本机 actl 状态目录下的 flow-resources/<ID>。预检不创建资源；执行前完整预检通过才新建资源，已有同名目录拒绝覆盖。恢复不重建初始文件，也不重读模板。
 
 这些完整验证流程会修改任务文件、剪贴板，并关闭核实归属的任务窗口。详细覆盖和限制见开发仓库 docs/57-application-workflow-migration.md；预检不代表真实软件验收通过。
+
+## 2026-09-29 新迁移流程
+
+以下模板已通过协议预检，真实软件写入复验待完成；此前脚本的实测结果不能直接沿用。
+所有流程使用 once_per_run，同一任务恢复沿用原 ID。暂停、人工接管及结果不确定仍按引擎处理。
+
+| 模板 | 必需输入/现场 | 核验 |
+|---|---|---|
+| [cloudmusic-playback](cloudmusic-playback.yml) | app=已观察的网易云 HWND；默认基线 play，若基线 pause，须同时交换 baseline/alternate 及对应 name= 谓词 | 4 轮 UIA/键盘切换并恢复，每一步核验控件名称；失败不盲目切回 |
+| [quark-search](quark-search.yml) | app=已登录网盘页面的 HWND；query 为预期无结果的非空词 | 精确输入读回、解码 keyword、0 项与空结果文案、截图；不关闭已有窗口 |
+| [tencent-meeting-draft](tencent-meeting-draft.yml) | app=已观察的 WeMeetApp 预定会议窗口；topic、expected_date | 主题与日期读回、截图；不提交会议 |
+| [tencent-meeting-draft-date](tencent-meeting-draft-date.yml) | 同上，另给 date（yyyy/M/d） | 整组日期替换后核验，不把单段日期修改当成功 |
+| [app-launch-observe](app-launch-observe.yml) | program=明确可执行文件，app=唯一标题；先确认无重复窗口 | 启动后等待窗口并观察；保留窗口。隔离编辑任务使用对应应用专用模板 |
+
+输入文件是普通 JSON/YAML，例如 `{"app":"hwnd:123","topic":"测试草稿","expected_date":"2026/9/29"}`。
+数字 HWND 仅示例，执行前重新观察并确认应用/进程/窗口类型。使用 flow-validate --file 模板 --inputs 输入预检，再 flow-run；无需额外 PS。

@@ -1,5 +1,7 @@
 # 第一批深测：网易云、Zotero、VS Code、腾讯会议与夸克
 
+> 历史记录：文中的 PS/Bash 入口已退役。当前原生/workflow 入口与未验收事项见 [迁移清单](61-native-tooling-migration.md)；本页原始实测结论保留。
+
 后续已补测腾讯会议时间/时长点击，以及夸克搜索、筛选、详情、预览和目录导航，见 [视觉深测](28-meeting-quark-visual-deep.md)。本篇保留初轮记录。
 
 ## 环境与顺序

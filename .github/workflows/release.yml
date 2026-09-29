@@ -100,7 +100,7 @@ jobs:
           ./target/release/actl.exe status
           ./target/release/actl.exe commands
 
-          pwsh -NoProfile -File crates/xtask/package-release.ps1 -Version "$VERSION" -BinaryDir target/release -OutputDir dist
+          cargo xtask package --version "$VERSION" --binary-dir target/release --output dist
 
       # 产物归档(best-effort,永不阻塞):配额充足时归档供 workflow_dispatch
       # 演练下载核对;配额不足(账号级共享、删后 6-12h 才重算)自动跳过。

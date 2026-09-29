@@ -1,3 +1,4 @@
+# 2026-09-29：关联 PS 已迁入 workflow；新模板协议预检通过，真实写入复验待完成。
 # 2026-09-29 静态维护：修改过的路线标为 manual，待新版真机复验；verified_date 保留历史日期。
 # 来源: docs/26-tencent-meeting-interactions.md；单人开会、预定/取消、云录制播放/下载真机闭环。
 pack_format: 1
@@ -40,7 +41,7 @@ routes:
       - ["list-windows"]
       - ["screenshot", "--app", "hwnd:{meeting_hwnd}"]
   - id: prepare_schedule
-    description: 首页视觉打开预定窗口后，用 UIA 填主题并读回日期；scenarios/tencent-meeting-draft.ps1 留存检查和耗时；其他字段需截图核验
+    description: 首页视觉打开预定窗口后，用 UIA 填主题并读回日期；workflows/tencent-meeting-draft.yml 与 tencent-meeting-draft-date.yml 留存检查和耗时；其他字段需截图核验
     status: verified
     verify: 主题精确匹配，日期等于预期；截图核对时间、时长、时区、重复、日历及空邀请，单独决定是否提交。
     steps:

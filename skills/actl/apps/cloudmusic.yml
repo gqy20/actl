@@ -1,3 +1,4 @@
+# 2026-09-29：关联 PS 已迁入 workflow；新模板协议预检通过，真实写入复验待完成。
 # 2026-09-29 静态维护：修改过的路线标为 manual，待新版真机复验；verified_date 保留历史日期。
 # 来源: docs/24；docs/27-batch1-deep-tests.md；搜索、播放切换与队列真机验证。
 pack_format: 1
@@ -42,7 +43,7 @@ routes:
       - ["press", "enter", "--app", "{window}", "--target", "{search_ref}", "--snapshot", "{search_snapshot_id}"]
       - ["snapshot", "--app", "{window}"]
   - id: toggle_playback
-    description: Ctrl+P 切换播放状态；scenarios/cloudmusic-playback.ps1 交替比较键盘与 UIA，每轮恢复初始状态
+    description: Ctrl+P 切换播放状态；workflows/cloudmusic-playback.yml 交替比较键盘与 UIA，每轮恢复初始状态
     status: verified
     verify: get 的 name 必须从 play 变 pause 或反向变化；仅证明应用报告的播放状态，不证明扬声器输出。脚本本轮 8 次切换全部通过。
     steps:

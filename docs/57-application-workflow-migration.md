@@ -1,5 +1,7 @@
 # 应用验证脚本迁移到 workflow
 
+> 历史记录：文中的 PS/Bash 入口已退役。当前原生/workflow 入口与未验收事项见 [迁移清单](61-native-tooling-migration.md)；本页原始实测结论保留。
+
 日期：2026-09-29。范围为前轮讨论的 VS Code、Word、Excel、Zotero 四个应用及整批入口。通用性能采样、UIA 对照工具和其他应用场景不在这一批。
 
 ## 入口
