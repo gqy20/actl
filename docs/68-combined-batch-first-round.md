@@ -92,3 +92,38 @@ journal 的 consent_decision 记录了 4 组 `external_input → user_start → 
 
 1. 三项路线修正（本轮已实现，gate + 提交后）以**新任务**重跑四软件整批验收。
 2. verify-file 的 NOT_ACTIONABLE 错误信息在 step 证据中仅留 code（synthetic），未保留 "native evidence unavailable: 共享冲突" 原文——执行器应保留子命令错误消息，改进项。
+
+---
+
+# 第三至五轮追加记录（同夜，修复后重跑）
+
+## 第三轮（apps-verify3-20260929）：共享桌面竞争全灭，作废
+
+四段几乎同时死在第一步（vscode 抢前台 `foreground_not_acquired`、excel 冷启动观察 STALE_REF、word insert 中断、zotero wait INTERNAL），4/68。诊断三段法第一条命中：用户正在活跃使用桌面（前台锁在用户终端）。**非路线缺陷**。现场全部优雅清理。副产品：确认 Zotero `-datadir` 反斜杠修复生效（data2 目录落盘齐全、主窗口出现、按标题优雅关闭全进程树退出）。
+
+## 第四轮（apps-verify4-20260929）：57/68，Word 首次全过
+
+53+4 completed / 2 uncertain / 9 skipped，期间两次显示端触发续跑（signal_control）。
+
+- **VS Code 26/26**；**Word 段 20 步全部通过**（insert 的 UIA 正文核验修复生效，close 亦通过）——Word 路线首次整段验收。
+- Excel：close-before-reopen ✓（verify-window absent 修复生效）、reopen ✓、reopened-owner ✓、reopened-content ✓（xlsx 打开期间共享读可用的对照实证）；死于 **reopen-cell-readback**：verify-clipboard NOT_ACTIONABLE——该步仍是旧路线（set-value 名称框直写 + 单元格定向 ctrl+c，即第一轮 copy-range 已证不提交的同族缺陷，当轮修复漏了这步）。已镜像 copy-range 修正（type --verify-value + 窗口级 ctrl+c，commit 51c8841）。
+- 中途一次人工让行（excel close 执行中用户输入到达，动作 action_started 后被拒）→ 3 秒后续跑，续跑按设计复活同段 skipped 步骤。
+- Zotero：open 首次执行被外来输入打断（见第五轮同因分析），后续跑未再执行该步即终局化——**引擎语义：每次续跑只复活最新 uncertain 步**，旧 uncertain 步保持失败记录。行为符合设计，记录为使用要点。
+
+## 第五轮（apps-verify5-20260929）：zotero 推进至导入前置，随后多波续跑
+
+- 开局又遇前台竞争（vscode-initial-foreground 失败 → 段隔离跳过，本轮注定无法整批全过）。
+- 多波续跑后：excel 段在 paste 重放处 ASSERTION_FAILED（xlsx subset 差异——被打断的 paste 重放后的内容状态，**未定案**，需复现诊断）；zotero 段 open/ownership 通过（路线修复完全生效），死于 **zotero-search-import 的 before**：verify-rows 前置断言空库，但全新空库下 `item-tree-main-default` 条目树**不存在**（实测快照：仅 collection-tree/我的文库 等），前置 NOT_ACTIONABLE → precondition_failed 暂停。fail-closed 正确；路线需适配（空库就绪检查应改为 collection-tree 存在性，或去掉对隔离新库冗余的前置）。
+- 终态 paused:precondition_failed；现场清理（VS Code 正常关闭，其余进程已退）。
+
+## 让行触发澄清（用户实测反馈：未操作键鼠仍让行）
+
+journal consent_decision 证据：撤销时刻 `hook_foreign_injected_events` 0→2——触发源是**其他程序注入的 2 个键盘事件**（Windows injected 标记、非本工具标记），非用户物理输入。docs/32 设计如此（外来注入也算外部输入，防自动化互搏）。赦免未生效原因：注入为键盘类，属永不赦免类（保守正确）。**改进项已记 ROADMAP**：让行卡/consent 事件应区分「人工物理输入」与「外来程序注入」。
+
+## 遗留与待办
+
+1. 整批四段全过仍未达成（本夜被桌面竞争反复打断）；路线层面四段各自均已单独通过过。
+2. cell-readback 修正（51c8841）待真机验证。
+3. zotero import 前置适配（空库无 item-tree）待修。
+4. excel paste 中断重放后的 xlsx 差异未定案（复现优先）。
+5. 显示端续跑执行器的 journal 未完整并入任务时间线（第五轮 525 事件止于首执行器，续跑波次的步骤事件缺失）——诊断工具链缺口，待查。

@@ -831,7 +831,7 @@ fn after_help_for(name: &str) -> Option<&'static str> {
             "Example:\n  actl verify-closed --hwnd 123 --pid 456 --instance 2026-09-29T00:00:00Z\nReads native windows and process creation time. Window disappearance alone never proves closure. Known running state is re-read for up to a 5-second settle window.\nErrors: PROTOCOL invalid HWND | ASSERTION_FAILED original instance remains | NOT_ACTIONABLE process observation failed"
         }
         "verify-window" => {
-            "Example:\n  actl verify-window --app Chrome --state foreground\nReads native window state without activating it. Zero matches is false for exists/foreground/minimized/visible, true for absent. Multiple matches are ambiguous.\nErrors: PROTOCOL invalid app/state | ASSERTION_FAILED known state mismatch | AMBIGUOUS multiple windows | INTERNAL/NOT_ACTIONABLE observation failed"
+            "Example:\n  actl verify-window --app Chrome --state foreground\nReads native window state without activating it. Zero matches is false for exists/foreground/minimized/visible, true for absent. Multiple matches are ambiguous. State mismatches re-read for up to a 15-second settle window (loaded Office teardown trails the close action).\nErrors: PROTOCOL invalid app/state | ASSERTION_FAILED known state mismatch | AMBIGUOUS multiple windows | INTERNAL/NOT_ACTIONABLE observation failed"
         }
         "verify-clipboard" => {
             "Example:\n  actl verify-clipboard --expected 'Exact text' --normalize-lines\nRead-only exact text assertion. Optional normalization converts CRLF to LF and trims trailing LF.\nErrors: ASSERTION_FAILED text differs | NOT_ACTIONABLE unavailable clipboard | INTERNAL read failure"

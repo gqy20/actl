@@ -62,7 +62,7 @@
   验收：短暂失败可恢复；持续失败有界退出；未知不走否定分支；暂停/停止阻止派发；重启/继续不静默刷新预算；不确定动作不重放；保留每次观察、恢复措施及退出原因。
 - [ ] 简单条件模板逐应用验收：窗口复用/启动、可选控件关闭、已有值跳过；代码与参数预检不代替业务验收，见 [63](63-simple-workflow-conditions.md)。
 
-- [ ] 从 resources 入口复验四软件整批：单软件复验见 [66](66-application-readiness.md)、[67](67-vscode-navigation-controls.md)。首轮（apps-verify-20260929）与第二轮（apps-verify2-20260929）记录见 [68](68-combined-batch-first-round.md)：第二轮 VS Code 26/26、copy-range 修复生效、段隔离生效，三处新失败全部定案并已修复（Word docx 打开期锁→UIA 核验；Excel XLMAIN 壳→verify-window absent；Zotero -datadir 反斜杠→${run.dir_native}，Zotero 路由已真机单验）——以新任务重跑整批验收，四段全部通过并核对资源隔离、恢复保留编辑结果与正常收尾后本项方可关闭。
+- [ ] 从 resources 入口复验四软件整批：单软件复验见 [66](66-application-readiness.md)、[67](67-vscode-navigation-controls.md)。一至五轮记录见 [68](68-combined-batch-first-round.md)。路线层：Word 段第四轮 20 步全过（docx 打开期锁→UIA 核验生效）；Excel close/reopen 链第四轮通过（XLMAIN 壳→verify-window absent 生效），cell-readback 旧路线第五轮暴露并已修（51c8841，待真机验证）；Zotero -datadir 反斜杠（${run.dir_native}）第三/五轮启动与归属通过，卡在 import 前置（空库无 item-tree，待适配）。第三/五轮整批被桌面竞争反复打断（含外来程序注入触发让行）。四段全过 + 资源隔离核对 + 恢复保留编辑结果 + 正常收尾后方可关闭。
 
 - [ ] 完成四个已迁移应用 workflow 的真机复验，核对一次交接、组内暂停、不确定结果、独立文件核验及进程归属，见 [57](57-application-workflow-migration.md)。VS Code 已有独立可恢复验证入口，真机状态及边界见 [55](55-resumable-desktop-tasks.md)；旧脚本退出不具备自动续跑能力。
 
@@ -98,6 +98,13 @@
 - [ ] 流程执行器在步骤失败证据中保留子命令错误原文（现仅留错误码 + synthetic 结构，
   docs/68 第二轮 Word 锁文件的 NOT_ACTIONABLE 原因需靠手工复现取得）；同理评估
   verify-file 对 IO 失败的可区分报错（共享冲突 vs 内容不符）。
+- [ ] 交接来源可区分：consent_decision 与让行卡区分「人工物理输入」与「外来程序注入」
+  （docs/68 第五轮实测：用户未操作仍让行，journal 证实 foreign_injected 0→2）。
+- [ ] 显示端触发续跑的执行器 journal 未完整并入任务时间线（docs/68 第五轮 525 事件止于
+  首执行器，续跑波次缺失）——先定位写入路径再补齐合并。
+- [ ] zotero-search import 前置适配：全新空库无 item-tree-main-default，verify-rows 前置
+  结构性 NOT_ACTIONABLE（docs/68 第五轮）；改为 collection-tree 就绪检查或去除对新库
+  冗余的前置。excel paste 中断重放后的 xlsx subset 差异未定案，复现优先。
 - [ ] 深化 Edge、Chrome、夸克网盘、Zotero、腾讯会议、VS Code、网易云和 Office 的业务闭环。
   以现有场景记录及 pack 为起点，只补尚未覆盖或受新护栏影响的路径；微信暂不优先。
   按 [应用档案同步记录](45-app-pack-refresh.md) 逐条复验本次改为 manual 的路线，核对新版焦点与快照绑定后再恢复 verified，不以静态检查更新真机日期。

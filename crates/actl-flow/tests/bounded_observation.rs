@@ -50,6 +50,8 @@ fn matrix(error: CtlError, timeout: u64, stop: bool) -> (Plan, Store, Run, Matri
 fn transient_errors_recover_but_ambiguity_and_truncation_do_not_retry() {
     for (error, retries) in [
         (CtlError::new(ErrorCode::StaleRef, "transient"), 1),
+        // Internal 与 StaleRef 同族(docs/65 观察瞬态),冷启动窗口上的 UIA 查询抖动
+        (CtlError::new(ErrorCode::Internal, "observation blip"), 1),
         (CtlError::new(ErrorCode::Ambiguous, "ambiguous"), 0),
         (
             CtlError::with_evidence(

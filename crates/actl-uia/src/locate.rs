@@ -565,11 +565,16 @@ pub fn wait_element(app: Option<&str>, target: &Target, timeout_ms: u64) -> Resu
 }
 
 /// wait --gone:轮询直到目标**不再**可解析(消失;TIMEOUT 语义)。
+/// 观察失败(如窗口拆除期 STALE_REF)视作"尚未消失"继续轮询——耐心命令
+/// 不被瞬态观察错误打断,超时仍如实失败。
 pub fn wait_gone(app: Option<&str>, target: &Target, timeout_ms: u64) -> Result<(), CtlError> {
     let deadline = std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
     loop {
-        if poll(app, target)?.is_none() {
-            return Ok(());
+        match poll(app, target) {
+            Ok(None) => return Ok(()),
+            Ok(Some(_)) => {}
+            Err(_) if std::time::Instant::now() < deadline => {}
+            Err(error) => return Err(error),
         }
         if std::time::Instant::now() >= deadline {
             return Err(CtlError::new(

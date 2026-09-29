@@ -75,9 +75,12 @@ fn retryable(error: &CtlError, call: &Invocation) -> bool {
     {
         return false;
     }
+    // Internal 与 StaleRef/Timeout/NotFound 同属观察通道瞬态(docs/65):
+    // 冷启动窗口/垂死窗口上的 UIA COM 查询会抖出 INTERNAL,动作实际已生效。
+    // 有界重试(默认 3 次/15 秒)内不吞真错误——超限仍如实失败。
     matches!(
         error.code,
-        ErrorCode::StaleRef | ErrorCode::Timeout | ErrorCode::NotFound
+        ErrorCode::StaleRef | ErrorCode::Timeout | ErrorCode::NotFound | ErrorCode::Internal
     )
 }
 fn elapsed(progress: &Progress, now: u64) -> u64 {

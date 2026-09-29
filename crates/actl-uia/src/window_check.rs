@@ -4,12 +4,26 @@ use serde_json::{Value, json};
 
 pub fn verify_window(app: &str, state: &str) -> Result<Value, CtlError> {
     validate(app, state)?;
-    let rows = if let Some(raw) = app.strip_prefix("hwnd:") {
-        crate::native_window(crate::parse_hwnd(raw)?)?
-    } else {
-        crate::native_windows()?
-    };
-    evaluate(&rows, app, state)
+    // 窗口创建/拆除滞后于动作送达(如 WM_CLOSE 后带加载项的 Excel 拆窗实测可超 5 秒),
+    // 断言失败在 15 秒内重读——与 verify-closed/verify-rows/verify-file 的 settle
+    // 同款耐心;歧义与观察错误仍立即失败。
+    let start = std::time::Instant::now();
+    loop {
+        let rows = if let Some(raw) = app.strip_prefix("hwnd:") {
+            crate::native_window(crate::parse_hwnd(raw)?)?
+        } else {
+            crate::native_windows()?
+        };
+        match evaluate(&rows, app, state) {
+            Err(error)
+                if error.code == ErrorCode::AssertionFailed
+                    && start.elapsed().as_millis() < 15000 =>
+            {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            result => return result,
+        }
+    }
 }
 pub fn validate(app: &str, state: &str) -> Result<(), CtlError> {
     if app.trim().is_empty()
