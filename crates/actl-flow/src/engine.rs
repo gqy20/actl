@@ -211,6 +211,10 @@ pub fn execute(
                 return Ok(());
             }
         };
+        let reuse_scene_check = resuming
+            && run.steps[i].status == StepStatus::Pending
+            && step.resume_check.is_some()
+            && step.resume_check == step.before;
         if resuming
             && let Some(check) = &step.resume_check
             && let Err(error) =
@@ -287,7 +291,8 @@ pub fn execute(
             run.save(store, host)?;
             return Ok(());
         }
-        if let Some(before) = &step.before
+        if !reuse_scene_check
+            && let Some(before) = &step.before
             && let Err(error) =
                 crate::recovery::observe((plan, &step, i), run, store, host, "before", before)
         {

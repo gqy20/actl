@@ -42,6 +42,47 @@ fn setup(p: &Plan) -> (std::path::PathBuf, Store, Run) {
     (root, store, run)
 }
 #[test]
+fn resumed_pending_step_reuses_only_an_identical_immediate_scene_check() {
+    for (extra_arg, expected_checks) in [("", 1), (", args: [different]", 2)] {
+        let p = plan(&format!(
+            "   resume_check: {{command: scene}}\n   before: {{command: scene{extra_arg}}}\n"
+        ));
+        let (root, store, mut run) = setup(&p);
+        run.status = Status::Paused;
+        let mut host = Fake::default();
+        execute(&p, &mut run, &store, &mut host, None).unwrap();
+        assert_eq!(run.status, Status::Completed);
+        let golden: serde_json::Value =
+            serde_json::from_str(include_str!("golden/check_reuse_v1.json")).unwrap();
+        let case = if extra_arg.is_empty() {
+            "identical"
+        } else {
+            "different"
+        };
+        assert_eq!(serde_json::json!(host.calls), golden[case]);
+        assert_eq!(
+            host.calls.iter().filter(|c| *c == "scene").count(),
+            expected_checks
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+}
+
+#[test]
+fn uncertain_step_keeps_before_after_result_verification() {
+    let p = plan("   resume_check: {command: scene}\n   before: {command: scene}\n");
+    let (root, store, mut run) = setup(&p);
+    run.status = Status::Paused;
+    run.steps[0].status = StepStatus::Uncertain;
+    let mut host = Fake {
+        errors: vec![ErrorCode::AssertionFailed],
+        ..Default::default()
+    };
+    execute(&p, &mut run, &store, &mut host, Some("a")).unwrap();
+    assert_eq!(host.calls, ["scene", "check", "scene", "write", "check"]);
+    std::fs::remove_dir_all(root).unwrap();
+}
+#[test]
 fn explicit_retry_does_not_replay_when_result_observation_is_unknown() {
     let p = plan("");
     let (root, store, mut run) = setup(&p);

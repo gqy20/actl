@@ -3,9 +3,14 @@ $ErrorActionPreference='Stop'
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
 try {
  $request=[Console]::In.ReadToEnd()|ConvertFrom-Json
- if($request.kind -eq 'process'){
+ if($request.kind -in @('process','process-identity')){
   $process=Get-CimInstance Win32_Process -Filter ('ProcessId='+[uint32]$request.path)
   if(-not $process){[Console]::Write('{"state":"absent"}');exit 0}
+  if($request.kind -eq 'process-identity'){
+   if(-not $process.CreationDate){throw 'process identity unavailable'}
+   [Console]::Write((@{start=$process.CreationDate.ToUniversalTime().ToString('o')}|ConvertTo-Json -Compress))
+   exit 0
+  }
   if(-not $process.ExecutablePath -or -not $process.CommandLine -or -not $process.CreationDate){throw 'process unavailable'}
   [Console]::Write((@{program=$process.ExecutablePath;command_line=$process.CommandLine;start=$process.CreationDate.ToUniversalTime().ToString('o')}|ConvertTo-Json -Compress))
   exit 0

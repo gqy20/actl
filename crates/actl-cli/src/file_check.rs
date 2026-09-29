@@ -111,8 +111,9 @@ pub fn closed(hwnd: &str, pid: u32, instance: &str) -> Result<Value, CtlError> {
 }
 fn closed_once(hwnd: &str, pid: u32, instance: &str) -> Result<Value, CtlError> {
     let hwnd = actl_uia::parse_hwnd(hwnd)?;
+    let process = inspect_office(&pid.to_string(), "process-identity")?;
+    // Query windows after the slower process read, not before a possible exit.
     let windows = actl_uia::native_windows()?;
-    let process = inspect_office(&pid.to_string(), "process")?;
     let absent = process["state"] == "absent";
     if absent && windows.iter().any(|w| w.hwnd == Some(hwnd) && w.pid == pid) {
         return Err(CtlError::new(
@@ -380,6 +381,38 @@ fn inspect_office(path: &str, kind: &str) -> Result<Value, CtlError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn closing_process_identity_does_not_require_command_line() {
+        let script = format!(
+            "function Get-CimInstance {{ [pscustomobject]@{{CreationDate=[datetime]'2026-09-29T00:00:00Z';ExecutablePath=$null;CommandLine=$null}} }}\n{}",
+            include_str!("file_inspect.ps1")
+        );
+        for (kind, success) in [("process-identity", true), ("process", false)] {
+            let mut child = Command::new("powershell.exe")
+                .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .spawn()
+                .unwrap();
+            child
+                .stdin
+                .take()
+                .unwrap()
+                .write_all(
+                    serde_json::to_string(&json!({"path":"1","kind":kind}))
+                        .unwrap()
+                        .as_bytes(),
+                )
+                .unwrap();
+            let output = child.wait_with_output().unwrap();
+            assert_eq!(output.status.success(), success, "{kind}");
+            if success {
+                assert!(
+                    serde_json::from_slice::<Value>(&output.stdout).unwrap()["start"].is_string()
+                );
+            }
+        }
+    }
     #[test]
     fn ownership_requires_a_complete_path_argument() {
         assert!(command_has_path(
