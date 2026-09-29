@@ -244,11 +244,8 @@ unsafe fn raster(view: &View, hovered: bool, dpi: u32) -> Result<Vec<u8>> {
     brush.SetColor(&color(status_color));
     target.FillRoundedRectangle(&rounded(10., 11., 12., 12., 6.), &brush);
     let pending = matches!(view.mode, Mode::StopRequested | Mode::Stopped);
-    let label = if hovered && view.mode != Mode::Preparing {
-        view.control.label()
-    } else {
-        &view.label
-    };
+    // Hover highlights only the control; progress must remain visible after a click.
+    let label = &view.label;
     let text_right = if view.effects.keyboard
         || view.effects.focus
         || view.effects.pointer
@@ -534,6 +531,23 @@ pub unsafe fn draw_popup(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn hovering_control_preserves_status_text_during_pause_transitions() {
+        let mut view = super::super::model::view(&[], 0, None, Some(false));
+        for label in ["正在暂停", "已暂停", "正在运行", "待核对"] {
+            view.label = label.into();
+            let normal = unsafe { raster(&view, false, 96) }.unwrap();
+            let hovered = unsafe { raster(&view, true, 96) }.unwrap();
+            for row in 0..HEIGHT as usize {
+                let start = row * WIDTH as usize * 4;
+                assert_eq!(
+                    &normal[start..start + 240 * 4],
+                    &hovered[start..start + 240 * 4],
+                    "hover hides {label}"
+                );
+            }
+        }
+    }
     #[test]
     fn popup_raster_is_opaque_inside_and_clipped_at_corners() {
         for menu in [false, true] {
