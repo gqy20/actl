@@ -109,20 +109,15 @@
 
 ### P1 补 · 诊断与证据体系（复盘背景见 [70](70-debug-playbook.md)）
 
-- [ ] 流程执行器在步骤失败证据中保留子命令错误原文（现仅留错误码 + synthetic 结构，
-  docs/68 第二轮 Word 锁文件的 NOT_ACTIONABLE 原因需靠手工复现取得）；同理评估
-  verify-file 对 IO 失败的可区分报错（共享冲突 vs 内容不符）。
+- [ ] verify-file 对 IO 失败的可区分报错（共享冲突 vs 内容不符——失败证据的 message
+  已保留原文，此项仅剩 IO 错误细分）。
 - [ ] 交接来源可区分：consent_decision 与让行卡区分「人工物理输入」与「外来程序注入」
   （docs/68 第五轮实测：用户未操作仍让行，journal 证实 foreign_injected 0→2）。
 - [ ] 显示端触发续跑的执行器 journal 未完整并入任务时间线（docs/68 第五轮 525 事件止于
   首执行器，续跑波次缺失）——先定位写入路径再补齐合并。
-- [ ] 核验耐心家族补齐：`verify --value`（element_text）与 `verify-clipboard` 仍为单发
-  判定（无 settle），元素重渲染/剪贴板写入竞态下会假阴性（docs/70 §2 对照表）。
 - [ ] verify-owner 支持进程树归属：保存/下载/打印等对话框常跑在 contentproc 等子进程，
   命令行不含任务令牌（zotero 保存对话框实证），当前只能删除该类核验；评估 token
   匹配扩展到父子链。
-- [ ] 步骤失败自动落屏：失败瞬间截图到 flow-resources/<task>/evidence/——本轮用户
-  截图两次成为决定性证据，事后现场常已变样。
 - [ ] flow-status 陈旧计划提示：计划冻结时间与模板文件 mtime/hash 比对，提示
   "模板已改，重试仍跑旧路线"——防止对冻结计划验证新修复（本轮废了两次重试）。
 - [ ] Excel 残壳根治试验：File→退出（菜单路线）替代 WM_CLOSE，观察是否全进程退出
@@ -130,17 +125,11 @@
   excel pack teardown_patience）；重启后复测一轮确认壳数不无限增长。
   另：excel paste 中断重放后盘上仍为种子、xlsx subset 断言失败（docs/68 第五轮），
   重放恢复路径复现优先。
-- [ ] 整批工作流 idle 门评估：`wait --idle` 已实现但无 workflow 使用；组合整批开局
-  死于桌面竞争/锁屏三轮（docs/68），评估验收批加前置 idle 门作为无人值守约定。
 - [ ] 诊断脚本沉淀入 devtools：窗口标题监视器、close→gone 计时器、隔离应用实验台
   （本轮以 ad-hoc 脚本反复手写）。
-- [ ] verify-rows 双义拆分评估：「行树缺失」现报 NOT_ACTIONABLE（不可重试），与
-  「歧义」混在一码；缺失实为"可能未出现"（可重试观察，应报 NOT_FOUND）。
 - [ ] 选择器纪律盘点：剩余 name_contains 位置（vscode-edit 13、组合 18、zotero-search 5）
   逐一核对动态同名插入风险（本轮三个实证：集合树行、弹出 List 自身、首启通知条）；
   新选择器默认 role+精确 name 或 automation_id。
-- [ ] bash 工具链转义纪律入 AGENTS：内联命令禁反斜杠路径与 $ 变量（X:/.xlsx 事故），
-  与中文 GBK 规则并列（docs/70 §4）。
 
 ### P2 · 发布验收
 

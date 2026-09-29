@@ -21,12 +21,12 @@
 
 | 命令 | 耐心 | 说明 |
 |---|---|---|
-| verify-file / verify-rows / verify-closed | settle 5s | 家族基准 |
+| verify-file / verify-rows / verify-closed | settle 5s | 家族基准（verify-rows 缺失报 NOT_Found 可沉降，歧义立即失败） |
 | verify-window | settle 15s | 拆窗实测 3-15s（Office 负载相关，孤立 2.8-4.2s） |
 | wait --gone | 60s 预算，观察期错误视为"仍在" | 垂死窗口的 UIA 查询会抖 STALE_REF/INTERNAL |
 | wait --element/--stable | 轮询至超时 | 天生耐心 |
-| **verify --value（element_text）** | **无（单发）** | 元素重渲染期可能假阴性 |
-| **verify-clipboard** | **无（单发）** | ctrl+c 送达与剪贴板可读之间有竞态 |
+| verify --value（element_text） | settle 5s | 重渲染期读到旧值表现为内容不符 |
+| verify-clipboard | settle 5s（空/旧内容均重读） | ctrl+c 送达与剪贴板可读之间的竞态 |
 
 引擎侧：观察恢复（recovery 预算）的 retryable 集合 = StaleRef/Timeout/NotFound/**Internal**
 （Internal 纳入是 2026-09-30 实证：冷启动窗口 UIA 抖动，有界 3 次/15s 不吞真错误）。
