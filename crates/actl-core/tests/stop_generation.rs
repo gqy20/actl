@@ -95,7 +95,9 @@ fn status_is_one_consistent_snapshot_during_concurrent_stop_and_recovery() {
     let start = barrier.clone();
     let thread = std::thread::spawn(move || {
         start.wait();
-        for _ in 0..100 {
+        // 30 轮 stop/recover 已足以与 1000 次采样竞争出混合快照;更多轮只
+        // 增加 Windows 下归档重命名的文件 IO 耗时(100 轮曾把本文件拖到 ~5s)
+        for _ in 0..30 {
             writer.request_stop().unwrap();
             writer.recover_execution().unwrap();
         }
