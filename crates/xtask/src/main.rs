@@ -62,24 +62,40 @@ fn setup() -> ExitCode {
 
 /// 质量门禁(唯一定义点):顺序执行,首个失败即停。行数检查在最前(纯本地、最快失败);
 /// pack 校验在最后(需先构建 release actl,失败成本最高故放末位)。
+/// 各步耗时随 `· <step> Nms` 打进 stderr(观测先行:慢环节按 AGENTS 性能纪律头内比较)。
 fn gate() -> ExitCode {
-    if !file_lines_gate() {
+    let gate_started = std::time::Instant::now();
+    if !timed("file-lines", file_lines_gate) {
         return ExitCode::FAILURE;
     }
-    for args in [
-        &["fmt", "--all", "--", "--check"][..],
-        &["clippy", "--all-targets", "--", "-D", "warnings"][..],
-        &["test", "--workspace"][..],
+    for (label, args) in [
+        ("fmt", &["fmt", "--all", "--", "--check"][..]),
+        (
+            "clippy",
+            &["clippy", "--all-targets", "--", "-D", "warnings"][..],
+        ),
+        ("test", &["test", "--workspace"][..]),
     ] {
-        if !run(args) {
+        if !timed(label, || run(args)) {
             return ExitCode::FAILURE;
         }
     }
-    if lint_packs(None) != ExitCode::SUCCESS {
+    if !timed("lint-packs", || lint_packs(None) == ExitCode::SUCCESS) {
         return ExitCode::FAILURE;
     }
-    eprintln!("✓ gate passed (file-lines + fmt + clippy + workspace tests + lint-packs)");
+    eprintln!(
+        "✓ gate passed (file-lines + fmt + clippy + workspace tests + lint-packs) in {:.1}s",
+        gate_started.elapsed().as_secs_f32()
+    );
     ExitCode::SUCCESS
+}
+
+/// 步级计时:执行门禁单步并输出耗时(仅诊断,不影响结果)。
+fn timed(label: &str, step: impl FnOnce() -> bool) -> bool {
+    let started = std::time::Instant::now();
+    let ok = step();
+    eprintln!("· {label} took {} ms", started.elapsed().as_millis());
+    ok
 }
 
 /// 行数门禁:crates/*/src 下全部 .rs 文件逐个计数,超限按 WARN/DENY 分级上报。
