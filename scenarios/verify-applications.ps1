@@ -1,41 +1,36 @@
-param([string]$Actl="$PSScriptRoot/../target/release/actl.exe")
+# Resource preparation and plan composition only. All desktop calls run in one flow.
+param([string]$Actl="$PSScriptRoot/../target/validation/release/actl.exe",[switch]$PrepareOnly)
 $ErrorActionPreference='Stop'
-$previousTask=$env:ACTL_TASK_ID
-$previousConfig=$env:ACTL_TASK_CONFIG
-$previousDir=$env:ACTL_TEST_DIR
-$env:ACTL_TASK_ID='verification-'+[guid]::NewGuid().ToString('N')
-$env:ACTL_TASK_CONFIG=(Resolve-Path "$PSScriptRoot/verification-task.yml").Path
-$env:ACTL_TEST_DIR=Join-Path (Resolve-Path "$PSScriptRoot/../target").Path $env:ACTL_TASK_ID
-New-Item -ItemType Directory $env:ACTL_TEST_DIR|Out-Null
-$binary=(Resolve-Path $Actl).Path
-$runs=[Collections.Generic.List[object]]::new()
-try {
-    @{task=$env:ACTL_TASK_ID;config=$env:ACTL_TASK_CONFIG;binary=$binary;sha256=(Get-FileHash $binary).Hash;started=[DateTime]::Now.ToString('o')}|
-        ConvertTo-Json|Set-Content "$env:ACTL_TEST_DIR/environment.json" -Encoding utf8
-    foreach($scenario in @('vscode-edit','excel-table','word-edit','zotero-search')) {
-        & pwsh -NoProfile -File "$PSScriptRoot/$scenario.ps1" -Actl $binary *> "$env:ACTL_TEST_DIR/$scenario.log"
-        $runs.Add(@{scenario=$scenario;exit_code=$LASTEXITCODE})
-        # An interrupted desktop handoff ends this batch; never repeatedly prompt.
-        $reports=@(Get-ChildItem $env:ACTL_TEST_DIR -Directory -Filter "$scenario-*"|ForEach-Object {
-            $path=Join-Path $_.FullName result.json
-            if(Test-Path $path){Get-Content $path -Raw|ConvertFrom-Json}
-        })
-        if($reports.Count -ne 1){break}
-        $report=$reports[0]
-        $blocked=$false
-        foreach($call in $report.calls){
-            if(Test-Path $call.stdout){
-                $result=Get-Content $call.stdout -Raw|ConvertFrom-Json
-                if(-not $result.ok -and ($result.error.code -eq 'ABORTED' -or $result.error.evidence.stage -eq 'handoff')){$blocked=$true}
-            }
-        }
-        if($blocked -or $report.cleanup -like 'retained*'){break}
-    }
-}finally {
-    $runs.ToArray()|ConvertTo-Json|Set-Content "$env:ACTL_TEST_DIR/summary.json" -Encoding utf8
-    Write-Output "Evidence: $env:ACTL_TEST_DIR"
-    $env:ACTL_TASK_ID=$previousTask
-    $env:ACTL_TASK_CONFIG=$previousConfig
-    $env:ACTL_TEST_DIR=$previousDir
+$binary=(Resolve-Path -LiteralPath $Actl).Path
+$id='applications-'+[guid]::NewGuid().ToString('N')
+$root=Join-Path "$PSScriptRoot/../target" $id
+$null=New-Item -ItemType Directory -Path $root
+$root=(Resolve-Path -LiteralPath $root).Path
+$steps=[Collections.Generic.List[object]]::new()
+$resources=[Collections.Generic.List[object]]::new()
+foreach($scenario in @('vscode-edit','excel-table','word-edit','zotero-search')){
+ $prepared=& "$PSScriptRoot/prepare-workflow.ps1" -Scenario $scenario -Actl $binary -PrepareOnly|ConvertFrom-Json
+ $resources.Add($prepared)
+ $raw=& $binary flow-validate --file $prepared.template --inputs $prepared.inputs --emit-plan
+ if($LASTEXITCODE -ne 0){throw "Cannot prepare $scenario"}
+ $result=$raw|ConvertFrom-Json -AsHashtable
+ foreach($step in $result.data.plan.steps){
+  $step.id="$scenario-$($step.id)"
+  foreach($phase in @('run','before','verify','resume_check')){
+   $call=$step[$phase]
+   if($call -and $call.bind){foreach($key in @($call.bind.Keys)){$call.bind[$key]="$scenario-$($call.bind[$key])"}}
+  }
+  $steps.Add($step)
+ }
 }
-if(@($runs|Where-Object exit_code -NE 0).Count){exit 1}
+$plan=Join-Path $root 'plan.yml'
+@{version=1;name='Application verification';handoff=@{approval='once_per_run'};steps=$steps.ToArray()}|ConvertTo-Json -Depth 30|Set-Content $plan -Encoding utf8
+& $binary flow-validate --file $plan > "$root/validate.json"
+if($LASTEXITCODE -ne 0){throw 'Combined workflow preflight failed'}
+if(-not $PrepareOnly){
+ & $binary flow-run --file $plan --id $id --paused > "$root/start.json"
+ if($LASTEXITCODE -ne 0){throw 'Combined workflow registration failed'}
+}
+$context=@{id=$id;plan=$plan;registered=(-not $PrepareOnly);steps=$steps.Count;resources=$resources.ToArray();binary=$binary;sha256=(Get-FileHash $binary).Hash;live_acceptance='pending'}
+$context|ConvertTo-Json -Depth 10|Set-Content "$root/context.json" -Encoding utf8
+$context|ConvertTo-Json -Depth 10 -Compress

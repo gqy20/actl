@@ -78,11 +78,8 @@ Write-Output 'Regression selection, stream capture, exit classification and exis
 & "$PSScriptRoot/system-fixture.Tests.ps1"
 & "$PSScriptRoot/fixture-stream.Tests.ps1"
 & "$PSScriptRoot/browser-probe.Tests.ps1"
-& "$PSScriptRoot/office-package.Tests.ps1"
 
 & "$PSScriptRoot/input-target.Tests.ps1"
 & "$PSScriptRoot/phase2-readonly.Tests.ps1"
 & "$PSScriptRoot/local-observation.Tests.ps1"
-& "$PSScriptRoot/vscode-bindings.Tests.ps1"
 & "$PSScriptRoot/close-race.Tests.ps1"
-& "$PSScriptRoot/office-close-race.Tests.ps1"

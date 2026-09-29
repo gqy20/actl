@@ -46,7 +46,7 @@
 
 ### P0 · 人机协作与恢复验收
 
-- [ ] 将其余应用验证从普通脚本迁移为持久化 flow，验收点击继续后重新观察、核验不确定步骤及不重复写入。VS Code 已迁入可参数化 YAML，后续 Word/Excel/Zotero 仍需落盘内容/集合精确断言与资源归属适配，见 [56](56-workflow-inputs-migration.md)。VS Code 已有独立可恢复验证入口，真机状态及边界见 [55](55-resumable-desktop-tasks.md)；旧脚本退出不具备自动续跑能力。
+- [ ] 完成四个已迁移应用 workflow 的真机复验，核对一次交接、组内暂停、不确定结果、独立文件核验及进程归属，见 [57](57-application-workflow-migration.md)。VS Code 已有独立可恢复验证入口，真机状态及边界见 [55](55-resumable-desktop-tasks.md)；旧脚本退出不具备自动续跑能力。
 
 - [ ] once_per_run 真机确认次数与失效原因验收：跨软件及长等待只确认一次，人工接管后停止，不自动恢复；实现与本轮限制见 [任务交接策略](52-task-handoff-policy.md)。
 

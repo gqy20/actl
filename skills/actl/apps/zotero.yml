@@ -9,6 +9,8 @@ app_version: "10.0.3"
 verified_date: 2026-09-28
 verified_env: Windows 10.0.26200.0 zh-cn
 quirks:
+  - id: workflow_migration_20260929
+    note: 完整业务步骤已迁入 workflows，统一通过 prepare-workflow.ps1 -Scenario 准备资源并登记流程；独立文件及窗口进程归属核验已接入。新版真机复验待执行，保留历史结论，见 docs/57；旧入口与对照脚本已删除，历史证据保留。
   - id: import_readback_correction
     note: docs/53 只读数据库核对证明 2026-09-29 首轮两条 RIS 文献已正确落库；失败在界面未暴露预期条目行，不能重放导入，须核对列表视图与截图。搜索导出仍未验收。
   - id: revalidation_20260929
@@ -35,7 +37,7 @@ routes:
     description: 独立测试库中选中已核对的合成条目，find 出版物/Edit 后必须再按 name 精确等于出版物过滤，排除我的出版物
     # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
     status: manual
-    verify: Tab 提交后通过 UI 导出 CSL JSON，核对唯一条目的 title、container-title 和 author；不把旧 ref 读回作为落库证据。完整脚本 scenarios/zotero-search.ps1。
+    verify: Tab 提交后通过 UI 导出 CSL JSON，核对唯一条目的 title、container-title 和 author；不把旧 ref 读回作为落库证据。完整脚本 workflows/zotero-search.yml。
     steps:
       - ["find", "--name", "出版物", "--role", "Edit", "--app", "{window}"]
       - ["type", "{publication_ref}", "{publication}", "--paste", "--app", "{window}", "--snapshot", "{publication_snapshot_id}", "--verify-value", "{publication}"]
@@ -67,7 +69,7 @@ routes:
     description: 独立测试库中搜索；从刚执行的 find 取唯一 search_ref，初始搜索须为空
     # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
     status: manual
-    verify: 搜索后核对条目 TreeItem 集合，再重新 find 并核对搜索框名称、角色与 text；清空后原始条目集合必须恢复。完整脚本 scenarios/zotero-search.ps1
+    verify: 搜索后核对条目 TreeItem 集合，再重新 find 并核对搜索框名称、角色与 text；清空后原始条目集合必须恢复。完整脚本 workflows/zotero-search.yml
     steps:
       - ["find", "--name", "快速搜索", "--role", "Edit", "--app", "{window}"]
       - ["type", "{search_ref}", "{query}", "--paste", "--app", "{window}", "--snapshot", "{search_snapshot_id}", "--verify-value", "{query}"]

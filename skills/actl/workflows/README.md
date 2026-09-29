@@ -52,3 +52,16 @@
 “读取最近音乐 → 整理消息 → 定位好友 → 发送与核验”仍是候选验收场景;音乐窗口标题随曲目变化,
 v1 无插值且公共文件禁固定 HWND,静态计划无法锚定,待 M3 契约扩展后再交付。仍需消息整理、
 接收人消歧、数据时效核验及应用验证,不能将其视为现成可运行流程。
+
+### 完整应用验证流程
+
+| 流程 | 必需信息与前提 | 校验状态 |
+|---|---|---|
+| [vscode-edit.yml](vscode-edit.yml) | 独立 profile、两个任务文件、程序路径及现场选择器 | 预检通过；新流程真机待复验 |
+| [word-edit.yml](word-edit.yml) | 独立 DOCX、程序路径、正文选择器及每阶段预期文本 | 预检及合成文件断言通过；新流程真机待复验 |
+| [excel-table.yml](excel-table.yml) | 独立 XLSX、程序路径、名称框及区域数据/公式预期 | 预检及合成文件断言通过；新流程真机待复验 |
+| [zotero-search.yml](zotero-search.yml) | 独立 profile/data、RIS、导出路径及条目预期 | 预检通过；新流程真机待复验 |
+
+全部输入在各文件的 inputs 中声明。开发仓库 scenarios/prepare-workflow.ps1 可生成隔离资源及 inputs.json；通过 -Scenario 选择四个流程，桌面动作由 YAML 执行。scenarios/verify-applications.ps1 将四份已解析计划合并为一个 flow，整批使用同一任务 ID 和 once_per_run。首次仍需用户点击开始；暂停恢复显示继续，并先核验现场。旧同名入口及对照脚本已删除；历史验收结论保留在文档和 Git 历史。
+
+这些完整验证流程会修改任务文件、剪贴板，并关闭核实归属的任务窗口。详细覆盖和限制见开发仓库 docs/57-application-workflow-migration.md；预检不代表真实软件验收通过。

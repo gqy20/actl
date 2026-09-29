@@ -35,3 +35,5 @@
 - Windows 10.0.26200.0；完整环境和逐调用输出在 `target/workflow-migration-evidence/`。
 - 新模板直接登记任务 `vscode-resume-58c97ae540214a5b85cf5bf1b7484382`，独立 profile/file，等待用户点击继续；登记时三步 attempts=0。恢复沿用该 ID，不重复新建任务。
 - 真实写入及改动后的窗口激活尚未取得本轮通过证据；暂停任务保留。
+
+后续实现：四个完整场景及整批入口已迁移，文件断言和归属断言已补齐；本页保留当时的验收记录，最新范围及待验收项见 [57](57-application-workflow-migration.md)。

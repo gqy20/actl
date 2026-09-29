@@ -9,6 +9,8 @@ app_version: "1.139.0"
 verified_date: 2026-09-28
 verified_env: Windows 10.0.26200.0 zh-cn; independent user-data-dir; extensions disabled; force-renderer-accessibility
 quirks:
+  - id: workflow_migration_20260929
+    note: 完整业务步骤已迁入 workflows，统一通过 prepare-workflow.ps1 -Scenario 准备资源并登记流程；独立文件及窗口进程归属核验已接入。新版真机复验待执行，保留历史结论，见 docs/57；旧入口与对照脚本已删除，历史证据保留。
   - id: resumable_verification
     note: 2026-09-29，VS Code 1.139.1 的 scenarios/vscode-resume.ps1 持久化任务通过打开、单次输入与完整 TextPattern 读回；暂停后使用同一 flow ID 继续，不重跑准备脚本。此结论不覆盖磁盘保存和关闭，见 docs/55。新增 workflows/vscode-resume.yml 已承接桌面步骤，PS 仅准备隔离资源；通用 verify-text.yml 本轮只读全文核验通过，新模板写入复验另见 docs/56。
   - id: empty_text_pattern
@@ -22,13 +24,13 @@ quirks:
   - id: insertion_not_replacement
     note: type --paste 在当前选区或光标位置插入，不能假设覆盖全文。本轮在新打开临时文件的开头插入后保存，磁盘全文核验通过；会使用剪贴板。
   - id: edit_regression
-    note: scenarios/vscode-edit.ps1 使用独立 profile 和临时文件，覆盖三轮中英文/符号输入、Ctrl+Z 撤销、Ctrl+Y 重做、Ctrl+A 全文替换和关闭重开。每次保存均核验磁盘全文，重开另验编辑器 TextPattern；不能用文件标题作为保存证据。
+    note: workflows/vscode-edit.yml 使用独立 profile 和临时文件，覆盖三轮中英文/符号输入、Ctrl+Z 撤销、Ctrl+Y 重做、Ctrl+A 全文替换和关闭重开。每次保存均核验磁盘全文，重开另验编辑器 TextPattern；不能用文件标题作为保存证据。
 routes:
   - id: navigate_by_command
     description: 中文界面 F1 命令面板搜索转到行或转到文件，逐步取唯一 ref；Ctrl+G 本轮未生效
     # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
     status: manual
-    verify: 行号输入后在第二行插入标记并核验磁盘；文件路径输入后读取目标编辑器 TextPattern。scenarios/vscode-edit.ps1 共 15 项通过。
+    verify: 行号输入后在第二行插入标记并核验磁盘；文件路径输入后读取目标编辑器 TextPattern。旧脚本曾有 15 项通过记录；workflow 整轮待复验。
     steps:
       - ["press", "f1", "--app", "{window}"]
       - ["find", "--name", "键入要运行的命令的名称。", "--role", "Edit", "--app", "{window}"]

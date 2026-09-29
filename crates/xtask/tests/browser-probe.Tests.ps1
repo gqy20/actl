@@ -22,19 +22,7 @@ try {
         $report=Get-Content "$testRoot/observe/$app/report.json" -Raw | ConvertFrom-Json
         if($report.calls.Count -ne 0 -or -not $report.failure){throw 'App observation launched despite stop'}
     }
-    $env:ACTL_TEST_DIR=Join-Path $testRoot 'vscode-edit'
-    & "$root/scenarios/vscode-edit.ps1" -Actl (Get-Process -Id $PID).Path
-    if($LASTEXITCODE -ne 77){throw 'VS Code edit ignored stop'}
-    $file=Get-ChildItem $env:ACTL_TEST_DIR -Recurse -Filter result.json|Select-Object -First 1
-    $report=Get-Content $file.FullName -Raw|ConvertFrom-Json
-    if($report.calls.Count -ne 0 -or $report.passed){throw 'VS Code edit launched despite stop'}
-    $env:ACTL_TEST_DIR=Join-Path $testRoot 'zotero-search'
-    & "$root/scenarios/zotero-search.ps1" -Actl (Get-Process -Id $PID).Path
-    if($LASTEXITCODE -ne 77){throw 'Zotero search ignored stop'}
-    $file=Get-ChildItem $env:ACTL_TEST_DIR -Recurse -Filter result.json|Select-Object -First 1
-    $report=Get-Content $file.FullName -Raw|ConvertFrom-Json
-    if($report.calls.Count -ne 0 -or $report.passed){throw 'Zotero search launched despite stop'}
-    foreach($scenario in @('cloudmusic-playback','tencent-meeting-draft','excel-table','word-edit','quark-search')){
+    foreach($scenario in @('cloudmusic-playback','tencent-meeting-draft','quark-search')){
         $env:ACTL_TEST_DIR=Join-Path $testRoot $scenario
         $parameters=@{Actl=(Get-Process -Id $PID).Path}
         if($scenario -in @('cloudmusic-playback','quark-search')){$parameters.Hwnd=1}
@@ -64,3 +52,10 @@ $extra=@($elements[0..2])+@([pscustomobject]@{depth=2;role='TabItem';name='user-
 $rejected=$false
 try{Assert-BrowserOwnedTab $extra 'owned-page'}catch{$rejected=$true}
 Assert-Fixture $rejected 'Extra browser tab was accepted'
+
+# Browser refs still require the snapshot from which they were observed.
+foreach($line in Get-Content "$root/fixtures/browser-probe.ps1"){
+ if($line -match 'Invoke-FixtureCli' -and $line -match '\.ref' -and $line -notmatch '--snapshot'){
+  throw "Browser scenario replays an unbound ref: $line"
+ }
+}
