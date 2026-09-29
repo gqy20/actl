@@ -265,7 +265,10 @@ pub(crate) fn window(auto: &UIAutomation, app: Option<&str>) -> Result<UIElement
     }
     let pattern = app.ok_or_else(|| CtlError::internal("missing window query"))?;
     // 与 find_window 同源的桌面根枚举瞬态重试;此前此处把枚举失败误映射为 Internal
-    let windows = crate::observation::desktop_children(auto)?;
+    let windows = match crate::native_windows::title_elements(auto, pattern)? {
+        Some(windows) => windows,
+        None => crate::observation::desktop_children(auto)?,
+    };
     let mut matched = Vec::new();
     for element in windows {
         let _t = actl_core::trace::scope("window.candidate_properties");

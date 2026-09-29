@@ -699,7 +699,7 @@ pub(crate) enum Command {
         property: Option<String>,
         /// Wait until --element settles: its observed sample (text > value > name
         /// channel) stops changing across consecutive polls (scroll/navigation
-        /// load detection; sample interval settle_ms, stable window ~500ms)
+        /// load detection; two samples separated by settle_ms (default 250ms))
         #[arg(long, requires = "element", conflicts_with = "property")]
         stable: bool,
         /// Substring semantics for the value/name predicate (exact by default)

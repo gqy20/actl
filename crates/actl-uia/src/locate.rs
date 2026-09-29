@@ -652,7 +652,7 @@ pub struct StableOutcome {
 }
 
 /// wait --stable:settle 谓词——轮询直到元素可解析且观测样本连续两次不变
-/// (采样间隔 settle_ms,默认 250ms → 稳定窗 500ms)。样本通道:text 优先、
+/// (采样间隔 settle_ms,默认 250ms，跨一个采样间隔)。样本通道:text 优先、
 /// value 次之、name 兜底(Chromium Document 的 Value=URL 对内容 settle 无
 /// 意义,正文只能走 TextPattern,与 get 的 text/value 分工一致)。元素消失
 /// 期间稳定计数清零(隐含存在性);超时 TIMEOUT 附 samples/changes evidence。

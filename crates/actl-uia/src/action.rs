@@ -44,29 +44,45 @@ pub fn click(
 ) -> Result<(Located, &'static str), CtlError> {
     let loc = locate(app, target, near)?;
     let _t = actl_core::trace::scope("click.pattern");
-    if let Ok(invoke) = loc.element.get_pattern::<UIInvokePattern>() {
+    if loc.element.get_pattern::<UIInvokePattern>().is_ok() {
         crate::feedback::semantic("click", &loc.element, &loc.window_title, || {
-            invoke.invoke().map_err(internal)
+            loc.element
+                .get_pattern::<UIInvokePattern>()
+                .map_err(internal)?
+                .invoke()
+                .map_err(internal)
         })?;
         return Ok((loc, "invoke"));
     }
-    if let Ok(sel) = loc.element.get_pattern::<UISelectionItemPattern>() {
+    if loc.element.get_pattern::<UISelectionItemPattern>().is_ok() {
         crate::feedback::semantic("select", &loc.element, &loc.window_title, || {
-            sel.select().map_err(internal)
+            loc.element
+                .get_pattern::<UISelectionItemPattern>()
+                .map_err(internal)?
+                .select()
+                .map_err(internal)
         })?;
         return Ok((loc, "selection-item"));
     }
     // 复选框/开关:点击语义 = Toggle(状态翻转)
-    if let Ok(toggle) = loc.element.get_pattern::<UITogglePattern>() {
+    if loc.element.get_pattern::<UITogglePattern>().is_ok() {
         crate::feedback::semantic("toggle", &loc.element, &loc.window_title, || {
-            toggle.toggle().map_err(internal)
+            loc.element
+                .get_pattern::<UITogglePattern>()
+                .map_err(internal)?
+                .toggle()
+                .map_err(internal)
         })?;
         return Ok((loc, "toggle"));
     }
     // 折叠面板/树节点:点击语义 = ExpandCollapse
-    if let Ok(exp) = loc.element.get_pattern::<UIExpandCollapsePattern>() {
+    if loc.element.get_pattern::<UIExpandCollapsePattern>().is_ok() {
         crate::feedback::semantic("expand", &loc.element, &loc.window_title, || {
-            exp.expand().map_err(internal)
+            loc.element
+                .get_pattern::<UIExpandCollapsePattern>()
+                .map_err(internal)?
+                .expand()
+                .map_err(internal)
         })?;
         return Ok((loc, "expand-collapse"));
     }
@@ -361,7 +377,7 @@ pub fn set_value(
     near: Option<&str>,
 ) -> Result<InputResult, CtlError> {
     let loc = locate(app, target, near)?;
-    let pattern = loc.element.get_pattern::<UIValuePattern>().map_err(|_| {
+    loc.element.get_pattern::<UIValuePattern>().map_err(|_| {
         CtlError::new(
             ErrorCode::NotActionable,
             format!(
@@ -372,7 +388,11 @@ pub fn set_value(
         )
     })?;
     crate::feedback::semantic("set-value", &loc.element, &loc.window_title, || {
-        pattern.set_value(value).map_err(internal)
+        loc.element
+            .get_pattern::<UIValuePattern>()
+            .map_err(internal)?
+            .set_value(value)
+            .map_err(internal)
     })?;
     Ok((&loc).into())
 }
@@ -494,7 +514,11 @@ pub fn toggle_element(
         )
     })?;
     crate::feedback::semantic("toggle", &loc.element, &loc.window_title, || {
-        pattern.toggle().map_err(internal)
+        loc.element
+            .get_pattern::<UITogglePattern>()
+            .map_err(internal)?
+            .toggle()
+            .map_err(internal)
     })?;
     let state = pattern
         .get_toggle_state()

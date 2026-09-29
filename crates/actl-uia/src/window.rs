@@ -315,7 +315,10 @@ pub(crate) fn find_window(
         return crate::scoped_locate::window(auto, Some(pattern));
     }
     // 桌面根整批枚举对无关窗口的创建/销毁竞态敏感,重试吸收瞬态(见 observation::desktop_children)
-    let hosts = crate::observation::desktop_children(auto)?;
+    let hosts = match crate::native_windows::title_elements(auto, pattern)? {
+        Some(windows) => windows,
+        None => crate::observation::desktop_children(auto)?,
+    };
     let mut matches = Vec::new();
     for w in &hosts {
         if native_hwnd(w).is_some_and(crate::display_support::is_display_window) {

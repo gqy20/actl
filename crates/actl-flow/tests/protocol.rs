@@ -67,6 +67,23 @@ fn recovery_metadata_preserves_safe_delivery_facts_only() {
         serde_json::json!({"redacted":true})
     );
 }
+
+#[test]
+fn semantic_rejection_metadata_contract() {
+    let error = CtlError::with_evidence(
+        ErrorCode::NotActionable,
+        "target changed",
+        serde_json::json!({"reason":"target_identity_changed","action_started":false,
+            "target":"PRIVATE", "enabled":true}),
+    );
+    assert_eq!(
+        failure_evidence(EvidencePolicy::Metadata, &error).unwrap(),
+        serde_json::from_str::<serde_json::Value>(include_str!(
+            "golden/semantic_rejection_v1.json"
+        ))
+        .unwrap()
+    );
+}
 fn setup(plan: &Plan) -> (std::path::PathBuf, Store, Run) {
     let root = std::env::temp_dir().join(format!(
         "actl-flow-{}",

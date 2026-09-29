@@ -73,7 +73,8 @@ pub(crate) fn window_action(
     focus: bool,
 ) -> Result<ActionGuard, CtlError> {
     let _dpi = crate::capture::Pmv2Guard::enter();
-    let title = win.get_name().unwrap_or_default();
+    let identity = crate::identity::observed_identity(win)?;
+    let title = win.get_name().map_err(crate::internal)?;
     let before = target(win, &title);
     let mut action = prepare(
         kind,
@@ -83,7 +84,7 @@ pub(crate) fn window_action(
         },
         before.clone(),
     )?;
-    if target(win, &title).bounds != before.bounds || win.get_name().is_err() {
+    if !crate::identity::same_instance(&identity, &crate::identity::observed_identity(win)?) {
         return Err(CtlError::new(
             ErrorCode::NotActionable,
             "window changed during action preparation",
@@ -159,7 +160,7 @@ pub(crate) fn check_foreground(expected: &str) -> Result<(), CtlError> {
     Ok(())
 }
 
-/// UIA actions use a rectangle, never a fictitious mouse click.
+/// Bounds describe the preview. Semantic actions bind to component identity.
 pub(crate) fn semantic<T>(
     kind: &str,
     elem: &UIElement,
@@ -167,17 +168,89 @@ pub(crate) fn semantic<T>(
     execute: impl FnOnce() -> Result<T, CtlError>,
 ) -> Result<T, CtlError> {
     let _dpi = crate::capture::Pmv2Guard::enter();
-    let before = target(elem, window);
-    let mut action = prepare(kind, InputEffects::default(), before.clone())?;
-    if target(elem, window).bounds != before.bounds || !elem.is_enabled().unwrap_or(false) {
-        return Err(CtlError::new(
-            ErrorCode::NotActionable,
-            "target changed during action preparation",
-        ));
-    }
+    let before = semantic_identity(elem)?;
+    let mut action = prepare(kind, InputEffects::default(), target(elem, window))?;
+    let after = semantic_identity(elem)?;
+    let enabled = elem.is_enabled().map_err(crate::internal)?;
+    validate_semantic(&before, &after, enabled)?;
     check_stop()?;
     action.executing();
     let value = execute()?;
     action.delivered();
     Ok(value)
+}
+
+fn semantic_identity(elem: &UIElement) -> Result<serde_json::Value, CtlError> {
+    let identity = crate::identity::observed_identity(elem)?;
+    let auto = uiautomation::UIAutomation::new().map_err(crate::internal)?;
+    let walker = auto.get_raw_view_walker().map_err(crate::internal)?;
+    let mut current = elem.clone();
+    for _ in 0..128 {
+        let handle = current
+            .get_native_window_handle()
+            .map_err(|e| crate::read_channel::failure("semantic.host_handle", e))?;
+        if !handle.is_invalid() {
+            let host = crate::identity::observed_identity(&current)?;
+            return Ok(serde_json::json!({"target":identity,
+                "host":{"runtime_id":host["runtime_id"], "pid":host["pid"]}}));
+        }
+        current = crate::observation::parent(&walker, &current)?.ok_or_else(|| {
+            CtlError::new(
+                ErrorCode::NotActionable,
+                "semantic target has no native host",
+            )
+        })?;
+    }
+    Err(CtlError::new(
+        ErrorCode::NotActionable,
+        "semantic host ancestry exceeds limit",
+    ))
+}
+
+fn validate_semantic(
+    before: &serde_json::Value,
+    after: &serde_json::Value,
+    enabled: bool,
+) -> Result<(), CtlError> {
+    let same =
+        crate::identity::same_instance(&before["target"], &after["target"]) && before == after;
+    if !same || !enabled {
+        return Err(CtlError::with_evidence(
+            ErrorCode::NotActionable,
+            "target changed during action preparation",
+            serde_json::json!({
+                "reason": if !enabled { "target_disabled" } else { "target_identity_changed" },
+                "enabled": enabled, "action_started": false,
+            }),
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn semantic_target_rejects_replacement_reparenting_and_disable() {
+        let before = json!({"target":{"runtime_id":[42,7],"pid":123,
+            "role":"Edit","automation_id":"line","name":"Go to line."},
+            "host":{"runtime_id":[42,1],"pid":123}});
+        // Bounds intentionally belong only to presentation, not this action identity.
+        assert!(validate_semantic(&before, &before, true).is_ok());
+        for field in ["runtime_id", "pid", "role", "automation_id", "name"] {
+            let mut replaced = before.clone();
+            replaced["target"][field] = json!("changed");
+            assert!(
+                validate_semantic(&before, &replaced, true).is_err(),
+                "{field}"
+            );
+        }
+        let mut reparented = before.clone();
+        reparented["host"]["runtime_id"] = json!([42, 2]);
+        assert!(validate_semantic(&before, &reparented, true).is_err());
+        let error = validate_semantic(&before, &before, false).unwrap_err();
+        assert_eq!(error.code, ErrorCode::NotActionable);
+    }
 }

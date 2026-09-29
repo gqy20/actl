@@ -153,6 +153,8 @@ pub fn failure_evidence(policy: EvidencePolicy, error: &CtlError) -> Option<serd
                 | "user_deferred"
                 | "user_paused"
                 | "pattern_unsupported"
+                | "target_identity_changed"
+                | "target_disabled"
         )
     }) {
         value["reason"] = source["reason"].clone();

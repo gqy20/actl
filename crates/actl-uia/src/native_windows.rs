@@ -52,6 +52,46 @@ pub fn native_window(handle: isize) -> Result<Vec<WindowEntry>, CtlError> {
         .collect())
 }
 
+/// Resolve native title candidates before touching any accessibility provider.
+/// None preserves the existing UIA fallback for virtual/non-native windows.
+pub(crate) fn title_elements(
+    auto: &uiautomation::UIAutomation,
+    pattern: &str,
+) -> Result<Option<Vec<uiautomation::UIElement>>, CtlError> {
+    let _trace = actl_core::trace::scope("window.native_title_candidates");
+    let candidates: Vec<_> = native_windows()?
+        .into_iter()
+        .filter(|w| w.visible && w.title.contains(pattern))
+        .collect();
+    if candidates.is_empty() {
+        return Ok(None);
+    }
+    candidates
+        .into_iter()
+        .map(|w| {
+            let hwnd = w
+                .hwnd
+                .ok_or_else(|| crate::internal("native HWND missing"))?;
+            let element = auto
+                .element_from_handle(uiautomation::types::Handle::from(hwnd))
+                .map_err(crate::internal)?;
+            if element.get_process_id().map_err(crate::internal)? != w.pid
+                || !element
+                    .get_name()
+                    .map_err(crate::internal)?
+                    .contains(pattern)
+            {
+                return Err(actl_core::CtlError::new(
+                    actl_core::ErrorCode::StaleRef,
+                    "native window identity changed during UIA resolution",
+                ));
+            }
+            Ok(element)
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map(Some)
+}
+
 fn read_window(hwnd: HWND, foreground: HWND) -> Result<Option<WindowEntry>, CtlError> {
     let mut pid = 0;
     unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };

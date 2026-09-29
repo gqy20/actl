@@ -160,6 +160,8 @@ actl find --target 'uia:{"match":{"role":"Button","name":"确定"},"within":{"id
   HWND 对应窗口存在但 UIA provider 读取失败，保留 INTERNAL；不会声称窗口已消失。
 - 最终目标也必须唯一：零命中 NOT_FOUND，多命中 AMBIGUOUS；evidence 含 phase=within|match、
   count、最多 20 个 candidates 及 truncated（窗口标题歧义时 phase=window）。候选仅含属性，不伪造 snapshot ref。
+  标题发现先筛选可见原生窗口，仅读取匹配候选的 UIA provider 并复核 PID/标题；没有原生候选时保留 UIA 虚拟窗口发现。目标 provider 失败仍返回错误，不能转为不存在。
+
 - 组合查询不执行模糊、序号、距离锚点或 ItemContainer 虚拟化回退，也不自动展开控件。
   不能与 --near/--snear/--to-near 混用，也不能作为这些锚点参数。未物化控件需调用方先显式操作并重新观察。
 - provider 枚举或必要属性读取失败返回 INTERNAL，不能证明不存在。每个查询阶段最多 5000 节点、40 层；
@@ -248,9 +250,9 @@ list-notifications              # 系统通知读取
 ```
 wait --element @e3 [--timeout 5000]                # 等元素可解析(存在性)
 wait --element @e3 --property value="OK" [--contains]   # 谓词等待:value/name/checked
-wait --element @e3 --stable                        # settle 等待:观测样本(text>value>name
-                                                     # 通道)连续两次采样不变(settle_ms,
-                                                     # 默认 250ms→稳定窗 500ms)→ 内容就绪;
+wait --element @e3 --stable                        # settle 等待:text>value>name 通道内容
+                                                     # 连续两次采样不变
+                                                     # (settle_ms 默认 250ms，至少跨一个采样间隔);
                                                      # 滚动/导航后的加载判定,evidence 带
                                                      # samples/changes;与 --property 互斥
 wait --window "保存" | --gone @e3                        # 等窗口出现 | 等元素消失
@@ -783,3 +785,9 @@ expected: 预期完整文本
 ### 紧邻检查复用（2026-09-29）
 
 恢复执行时，只有仍为 pending 的步骤，且解析后的 resume_check 与 before 完全相同时，成功的恢复检查才直接满足此次前置检查。两者之间仍检查暂停/停止；不跨步骤、跨暂停或跨执行器缓存。uncertain/running/verifying 步骤仍先核验结果，显式重试前重新执行 before。不同参数或不同命令不合并。
+
+### UIA 语义动作的执行前复核
+
+click（Invoke/SelectionItem/Toggle/ExpandCollapse）、set-value、select、toggle 在预览前后核对组件 RuntimeId、PID、角色、AutomationId、名称，以及最近原生宿主的 RuntimeId/PID。祖先查询有界，provider 错误保留；无法确认宿主则拒绝。矩形只服务预览，布局移动不单独阻止语义操作。窗口语义动作复核窗口实例，不以矩形不变为条件。
+
+执行前重新获取已选 Pattern，不因能力变化切换到其他动作或物理点击。组件禁用或身份改变返回 NOT_ACTIONABLE，evidence.reason 分别为 target_disabled / target_identity_changed，action_started=false；metadata 保留原因与送达事实，不包含组件正文。组件重建后需重新观察，不自动重放写入。键盘动作仍核验实际焦点，物理动作仍核验位置与遮挡。wait --stable 只证明连续内容样本一致，不证明可写或业务完成；动作后仍需业务后置核验。
