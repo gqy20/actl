@@ -37,9 +37,16 @@ pub fn locate(app: Option<&str>, target: &Target, near: Option<&str>) -> Result<
             target.describe()
         )));
     }
-    let auto = UIAutomation::new().map_err(internal)?;
+    let auto = {
+        let _t = actl_core::trace::scope("locate.initialize");
+        UIAutomation::new().map_err(internal)?
+    };
     if let Target::Uia(selector) = target {
-        let root = crate::scoped_locate::window(&auto, app)?;
+        let root = {
+            let _t = actl_core::trace::scope("locate.uia.window");
+            crate::scoped_locate::window(&auto, app)?
+        };
+        let _t = actl_core::trace::scope("locate.uia.selector");
         return crate::scoped_locate::locate(&auto, &root, selector);
     }
     let walker = auto.create_tree_walker().map_err(internal)?;

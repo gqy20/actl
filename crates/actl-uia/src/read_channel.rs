@@ -54,6 +54,7 @@ pub(crate) fn available(
 }
 
 pub(crate) fn value(element: &UIElement) -> Result<Option<String>, CtlError> {
+    let _t = actl_core::trace::scope("read.value_pattern");
     supported(
         available(
             element,

@@ -319,7 +319,7 @@ L2  actl commands     机器 schema:全命令+参数的 JSON(agent 自发现入�
 诊断旁路两条,均不碰 stdout:① 结构化字段随 envelope 返回(`duration_ms`/`wake_ms`/
 `waited_ms`/`resolved_by`/`via`/`input_effects`/batch `steps[]`——机器消费的常态数据);
 ② `ACTL_TRACE=1` 时引擎阶段耗时打点(`[actl-trace] locate.window 2036ms` 形态,stderr,
-人类诊断按需启用;慢环境把命令总耗时分解到窗口解析/唤醒/树遍历/L4/pattern 各段)。
+人类诊断按需启用;慢环境把命令总耗时分解到窗口解析/唤醒/树遍历/L4/pattern 各段)。scope 进入时先输出 `<stage> begin`，阻塞未返回时仍可辨认当前阶段；组合选择器额外区分桌面枚举、HWND 转换、候选查询与属性读取，详见 docs/65。
 
 ### 成功 envelope
 

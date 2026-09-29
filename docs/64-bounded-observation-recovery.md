@@ -31,3 +31,5 @@ StepRecord 增加可选 recovery，含 retries、started_ms 和最近观察事�
 最终 `cargo xtask gate` 通过，日志为 `target/recovery-final-gate.log`。该门禁生成的 release CLI 与显示端已同步安装，显示端正常替换后 `display-status` 确认 ready/responsive。安装文件 SHA256 记录在上述真机证据目录的 `installed-final-binaries.json`。前述桌面实测使用 debug 构建；发布版此次确认安装和显示端就绪，未重新执行整轮桌面验收。
 
 条件判断与界面操作之间仍可能发生变化。此实现不包含自动收集歧义候选、自动选择父容器、登录/验证码自动处理，也不增加 shell、表达式或补偿逻辑。已有候选预览可供 agent 在确认目标后使用；自动连接到 workflow 的候选纠正仍需独立身份与冻结计划协议。
+
+60 秒慢调用后续排查见 [65](65-observation-blocking-diagnosis.md)：已补阶段开始/耗时打点，本轮未复现，原始慢调用结论保持未解决。

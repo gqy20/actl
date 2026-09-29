@@ -144,6 +144,7 @@ pub(crate) fn with_transient_retry<T>(
 
 /// 桌面根的直接子窗口(带瞬态重试);标题定位与 uia: 作用域解析共用。
 pub(crate) fn desktop_children(auto: &UIAutomation) -> Result<Vec<UIElement>, CtlError> {
+    let _t = actl_core::trace::scope("window.desktop_children");
     with_transient_retry(|| {
         let root = auto.get_root_element().map_err(crate::internal)?;
         children(&root)

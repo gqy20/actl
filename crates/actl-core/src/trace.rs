@@ -34,6 +34,9 @@ pub struct TraceScope {
 }
 
 pub fn scope(stage: &'static str) -> TraceScope {
+    if enabled() {
+        eprintln!("[actl-trace] {stage} begin");
+    }
     TraceScope {
         stage,
         started: Instant::now(),

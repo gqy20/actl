@@ -13,6 +13,8 @@ app_version: "Edge 1xx / Chrome 1xx(Chromium 系)"
 verified_date: 2026-09-27
 verified_env: Win11 zh-cn(Edge + Chrome 双实证,docs/16)
 quirks:
+  - id: observation_latency_diagnosis
+    note: 2026-09-29 隔离页未成功前置时曾只有空的网页 Document，前置后输入框可见；NOT_FOUND 不足以证明页面已就绪。组合查询排障启用 ACTL_TRACE=1 并保留 stderr，区分窗口枚举、控件查询和读值。经身份核验的 HWND 可减少桌面枚举开销，但本轮未复现历史 60 秒阻塞，见 docs/65。
   - id: isolated_startup_profile
     note: Chrome 隔离启动使用单个参数 --user-data-dir=<绝对目录>，不要将目录拆成独立参数；否则可能被打开为网页。启动成功后单独确认目标窗口并前置，激活失败不重复启动。2026-09-29 本地页面热/冷启动、前台及输入目标核验通过；远端页面不据此记通过，见 docs/64。
   - id: foreground_handoff

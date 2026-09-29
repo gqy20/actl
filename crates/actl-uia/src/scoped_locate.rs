@@ -76,6 +76,7 @@ impl Tree for Node {
         };
         // RawView cache and the complete provider result preserve scope/uniqueness.
         // Failure must never fall through to DFS or become an empty result.
+        let _t = actl_core::trace::scope("selector.find_all_build_cache");
         self.element
             .find_all_build_cache(native_scope, &condition, &self.cache)
             .map(|hits| {
@@ -107,6 +108,7 @@ impl Tree for Node {
             .map_err(internal)
     }
     fn matches(&self, filter: &Filter) -> Result<bool, CtlError> {
+        let _t = actl_core::trace::scope("selector.match_properties");
         // A failed required property read is unknown, not an absent match.
         let role = filter
             .role
@@ -256,6 +258,7 @@ pub(crate) fn window(auto: &UIAutomation, app: Option<&str>) -> Result<UIElement
             ));
         }
         // An existing native window with an unavailable provider is unknown, not absent.
+        let _t = actl_core::trace::scope("window.element_from_handle");
         return auto
             .element_from_handle(uiautomation::types::Handle::from(handle))
             .map_err(internal);
@@ -265,6 +268,7 @@ pub(crate) fn window(auto: &UIAutomation, app: Option<&str>) -> Result<UIElement
     let windows = crate::observation::desktop_children(auto)?;
     let mut matched = Vec::new();
     for element in windows {
+        let _t = actl_core::trace::scope("window.candidate_properties");
         if let Some(hwnd) = crate::window::native_hwnd(&element)
             && crate::display_support::is_display_window(hwnd)
         {
@@ -317,6 +321,7 @@ pub(crate) fn locate(
         cache,
     };
     let hit = resolve(&node, selector)?;
+    let _t = actl_core::trace::scope("selector.result_properties");
     Ok(Located {
         window_title: root.get_name().map_err(internal)?,
         role: format!("{:?}", hit.element.get_control_type().map_err(internal)?),
