@@ -46,3 +46,49 @@ journal 的 consent_decision 记录了 4 组 `external_input → user_start → 
 1. 修正 excel-table copy-range 路线：名称框直写不可用，需改为可提交的通道（如点击名称框后键盘输入，或改用表格区域选择），`excel-table.yml` 与 `verify-applications.yml` 同步；按纪律先写复现测试再修，gate 后提交。
 2. 修正后以**新任务**重跑四软件整批（不改写本任务冻结计划），Word/Zotero 段仍属未验收。
 3. 共享桌面导致的核验瞬态与多次交接在无人值守轮复核是否复现。
+
+---
+
+# 第二轮（apps-verify2-20260929，新二进制 + 失败隔离）
+
+时间：2026-09-29 晚；二进制 actl.exe a7ea9759 / actl-signal.exe 215ea91c（target/validation/release 安装）；批前新建隔离资源与任务 ID。结果：**35 completed / 3 uncertain / 30 skipped，needs_review（section_failure:zotero-search-open）**。
+
+- VS Code 段 26/26 全通过；quick-open-second 出现 1 次 NOT_ACTIONABLE → retry_reserved 恢复（observation recovery 预算机制首次真机生效）。
+- Excel copy-range **修复生效**（type --verify-value + 窗口级 ctrl+c 路线通过，第一轮根因关闭）。
+- 三处 section 失败各自独立、被 skip_section 隔离，后续 section 正常执行——失败隔离机制真机生效。
+- 三处 uncertain 的 attempt_errors/synthetic evidence 均按设计落账。
+
+## 三处失败根因（全部定案，均有直接证据）
+
+### 1. word-edit-insert：verify-file 读被锁 docx → NOT_ACTIONABLE
+
+- `before`（保存前、新开状态）verify-file 种子检查**通过**；ctrl+s 保存后同命令失败。失败后数分钟、Word 仍打开期间，PowerShell ZipFile.OpenRead 同样报共享冲突；Word 退出后立即可读。**Word 保存后对 docx 持排他句柄，打开期间任何共享读不可用**（IO 失败统一映射 NOT_ACTIONABLE "native evidence unavailable"）。
+- 动作实际全部成功：UIA 正文 `role:Document` 归一化精确匹配 "ACTL prefix ACTL seed"；文件 22:44:23 重写为 12147 字节；Word 退出后直读 document.xml 正文恰为 "ACTL prefix ACTL seed"。失败纯在核验通道。
+- 修正：打开期间的正文核验改走 UIA text（--normalize-lines），磁盘核验只在 reopen 后（reopened-content 兼查 bold:true）。`word-edit.yml` 6 处 verify 与 `verify-applications.yml` 镜像同步。
+
+### 2. excel-table-close-before-reopen：verify-closed 断言进程消失 → ASSERTION_FAILED
+
+- close-window --hwnd 关掉工作簿窗口后，**原 HWND 存活为隐藏 XLMAIN 空壳**（标题变 "Excel"；枚举实证 pid 48636 同 hwnd 657574，全部窗口隐藏）。Excel（Office 后台常驻/加载项，含 HardwareMonitorWindow、CFD File Open Message Window）收到 WM_CLOSE 不退出。
+- 壳不锁 xlsx（文件可读实证）、不影响 /x 新实例；但 verify-closed 的"进程实例消失"断言对 Excel 结构性不可满足。
+- 修正：close 断言改 `verify-window --app {app} --state absent`（工作簿窗口消失；zotero-search-close 原设计即此形态，先例一致）。`excel-table.yml` 两处 + 组合镜像。
+- 遗留：真机清理对隐藏壳 close-window --hwnd 可送达 WM_CLOSE（ok:true）但三个壳进程（48636 本轮；39992/32072 为上午本人验证沙箱残留，命令行归属核对后处置）均未退出——记录为已知限制，未 taskkill。
+
+### 3. zotero-search-open：-datadir 拒绝正斜杠路径 → 无主窗口 → verify TIMEOUT
+
+- 用户截图（报错对话框原文）：标题「错误」（Zotero 图标），正文 **"-datadir requires an absolute path or 'profile' ('C:/Users/.../zotero-search/data' given)"**，按钮 检查更新/退出。ShareX 文件名 WINWORD_* 仅因截图时 Word 在前台。
+- 引擎 ${run.dir} 统一正斜杠 → Zotero 10 的 -datadir 校验拒绝；启动只弹错误框、无主窗口，verify 20s 超时。佐证：隔离 profile 已半初始化（.startup-incomplete、prefs.js 等）、**data/ 目录完全空**、crashes 存储为空（无崩溃）、22:48 用户关对话框后进程全部退出。
+- 修正：新增输入占位符 `${run.dir_native}`（保留反斜杠，resources.rs fail-closed 语义不变），zotero data 默认值改用之；app 输入收紧「我的文库 - Zotero」。
+- 修正后路由真机验证：全新隔离 profile2/data2 反斜杠启动，主窗口出现且 data2 落盘齐全（zotero.sqlite/storage/translators）；按标题优雅关闭全进程树退出。
+- 附带发现：--app "Zotero" 会歧义命中浏览器内 Zotero 网页签（Chrome「Zotero | Your personal research assistant - Google Chrome」实测），标题收紧后消除。
+
+## 收尾
+
+- Word（pid 42640）：内容核验 + 落盘确认后 close-window 优雅关闭，进程退出。
+- Zotero：用户关对话框后自退；本节修正验证用实例（route-test）按标题关闭，进程树清零。
+- Excel 三壳：WM_CLOSE 送达但不退，保留并记录（见上）。
+- 用户剪贴板：word insert 的 --paste 通道在 22:44 覆写过剪贴板；本轮未留轮前快照，事后核对发现用户已自行复制新内容（当前为其自有路径），无需还原。后续整批运行前应留存轮前快照。
+
+## 待办
+
+1. 三项路线修正（本轮已实现，gate + 提交后）以**新任务**重跑四软件整批验收。
+2. verify-file 的 NOT_ACTIONABLE 错误信息在 step 证据中仅留 code（synthetic），未保留 "native evidence unavailable: 共享冲突" 原文——执行器应保留子命令错误消息，改进项。

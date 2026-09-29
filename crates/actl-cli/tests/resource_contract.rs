@@ -166,6 +166,8 @@ fn combined_template_matches_individual_steps_and_resources() {
                     .as_str()
                     .unwrap()
                     .replace("${run.dir}", &format!("${{run.dir}}/{name}"))
+                    // run.dir_native 变体保留反斜杠,子目录连接同样用反斜杠
+                    .replace("${run.dir_native}", &format!("${{run.dir_native}}\\{name}"))
                     .replace("${run.id}", &format!("${{run.id}}-{name}"))
             );
             expected["inputs"][format!("{name}-{key}")] = decl;

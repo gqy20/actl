@@ -12,10 +12,10 @@
       "default": "${run.dir}/profile"
     },
     "data": {
-      "default": "${run.dir}/data"
+      "default": "${run.dir_native}\\data"
     },
     "app": {
-      "default": "Zotero"
+      "default": "我的文库 - Zotero"
     },
     "export": {
       "default": "${run.dir}/export.json"

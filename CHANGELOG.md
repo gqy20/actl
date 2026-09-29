@@ -9,6 +9,8 @@
 
 ## [Unreleased]
 
+- **四软件三处路线缺陷修复（docs/68 第二轮定案）**：① Word 保存后对 docx 持排他句柄、打开期间共享读不可用——word-edit 打开期间的正文核验从 verify-file 改走 UIA `role:Document` text（--normalize-lines），磁盘核验只在重开后（reopened-content 兼查 bold）。② Excel 关最后工作簿后 XLMAIN 空壳常驻、verify-closed 的进程消失断言结构性不可满足——close 断言改 `verify-window --state absent`（工作簿窗口消失；壳不锁文件、不碍 /x 新实例，真机优雅关闭不退已记录为已知限制）。③ Zotero 10 `-datadir` 拒绝正斜杠绝对路径——新增输入占位符 `${run.dir_native}`（保留反斜杠，仅 input default 可用，资源路径保持 fail-closed），zotero data 默认值改用之；app 选择器收紧「我的文库 - Zotero」消除浏览器网页签歧义。三项均单应用与整批模板同步，契约测试（组合合成含 run.dir_native 重写）随同更新；路由级真机验证（Zotero 反斜杠启动/落盘/优雅关闭）已做，整批新任务重跑待做。
+
 - **误触自动恢复（显示协议）**：授权被纯鼠标移动类外部输入撤销时，静默窗（默认 4 秒）内无新输入且前台未变，显示端在每任务预算（默认 2 次）内自动重新授权，不需要用户点击；`handoff_pending` 暂停的流程满足同样条件时自动发起续跑。任何键盘事件、点击、滚轮永不赦免；键盘通道动作（type/press 等，种类未知同样按键盘处理）不自动恢复；用户暂停、检查点、待核对与停止状态永不自动继续。策略经 YAML `handoff.pardon_input` 逐流程覆盖全局默认（enabled/quiet_ms/budget/require_foreground/keyboard_safe_only），`ACTL_HANDOFF_PARDON=0` 全局停用。每次赦免记录 consent_decision（reason=input_pardoned）。决策纯函数与预算单测在 actl-core/actl-signal；真机模拟误触验收待做。设计边界见 [32](docs/32-desktop-handoff.md)。
 
 - **步骤失败隔离（流程协议）**：步骤新增 `section` 字段与 `on_failure: skip_section`。失败时保留该步证据，同段其余 pending 步骤标为新增的 `skipped` 状态，继续执行后续段；整轮以 needs_review、reason=`section_failure:<step>` 收束。显式 `--retry-step` 成功后同段 skipped 步骤还原重跑。四软件整批模板按应用分段启用，一段确定性失败不再堵死其余应用。协议与边界见 [20](docs/20-yaml-workflow-protocol.md)。

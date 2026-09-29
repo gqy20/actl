@@ -57,10 +57,10 @@
       "default": "${run.dir}/zotero-search/profile"
     },
     "zotero-search-data": {
-      "default": "${run.dir}/zotero-search/data"
+      "default": "${run.dir_native}\\zotero-search\\data"
     },
     "zotero-search-app": {
-      "default": "Zotero"
+      "default": "我的文库 - Zotero"
     },
     "zotero-search-export": {
       "default": "${run.dir}/zotero-search/export.json"
@@ -3141,20 +3141,15 @@
       "section": "excel-table",
       "on_failure": "skip_section",
       "verify": {
-        "command": "verify-closed",
+        "command": "verify-window",
         "args": [
-          "--hwnd",
-          "1",
-          "--pid",
-          "1",
-          "--instance",
-          "pending"
-        ],
-        "bind": {
-          "5": "excel-table-ownership.start",
-          "1": "excel-table-ownership.hwnd",
-          "3": "excel-table-ownership.pid"
-        }
+          "--app",
+          {
+            "input": "excel-table-app"
+          },
+          "--state",
+          "absent"
+        ]
       },
       "before": {
         "args": [
@@ -3388,20 +3383,15 @@
       "section": "excel-table",
       "on_failure": "skip_section",
       "verify": {
-        "command": "verify-closed",
+        "command": "verify-window",
         "args": [
-          "--hwnd",
-          "1",
-          "--pid",
-          "1",
-          "--instance",
-          "pending"
-        ],
-        "bind": {
-          "5": "excel-table-reopened-owner.start",
-          "1": "excel-table-reopened-owner.hwnd",
-          "3": "excel-table-reopened-owner.pid"
-        }
+          "--app",
+          {
+            "input": "excel-table-app"
+          },
+          "--state",
+          "absent"
+        ]
       },
       "before": {
         "args": [
@@ -3578,17 +3568,18 @@
         ]
       },
       "verify": {
-        "command": "verify-file",
+        "command": "verify",
         "args": [
-          "--path",
+          "--value",
+          "role:Document",
+          "ACTL prefix ACTL seed",
+          "--property",
+          "text",
+          "--normalize-lines",
+          "--app",
           {
-            "input": "word-edit-file"
-          },
-          "--kind",
-          "docx",
-          "--expected",
-          "{\"text\":\"ACTL prefix ACTL seed\"}",
-          "--subset"
+            "input": "word-edit-app"
+          }
         ]
       }
     },
@@ -3676,17 +3667,18 @@
         ]
       },
       "verify": {
-        "command": "verify-file",
+        "command": "verify",
         "args": [
-          "--path",
+          "--value",
+          "role:Document",
+          "ACTL report 2026\n第一段 中文 12345\nSecond paragraph 67890",
+          "--property",
+          "text",
+          "--normalize-lines",
+          "--app",
           {
-            "input": "word-edit-file"
-          },
-          "--kind",
-          "docx",
-          "--expected",
-          "{\"text\":\"ACTL report 2026\\n第一段 中文 12345\\nSecond paragraph 67890\"}",
-          "--subset"
+            "input": "word-edit-app"
+          }
         ]
       }
     },
@@ -3774,17 +3766,18 @@
         ]
       },
       "verify": {
-        "command": "verify-file",
+        "command": "verify",
         "args": [
-          "--path",
+          "--value",
+          "role:Document",
+          "ACTL report 2026\n第一段 中文 12345\nSecond paragraph 67890\nAppend 中文 Ω 24680",
+          "--property",
+          "text",
+          "--normalize-lines",
+          "--app",
           {
-            "input": "word-edit-file"
-          },
-          "--kind",
-          "docx",
-          "--expected",
-          "{\"text\":\"ACTL report 2026\\n第一段 中文 12345\\nSecond paragraph 67890\\nAppend 中文 Ω 24680\"}",
-          "--subset"
+            "input": "word-edit-app"
+          }
         ]
       }
     },
@@ -3860,17 +3853,18 @@
         ]
       },
       "verify": {
-        "command": "verify-file",
+        "command": "verify",
         "args": [
-          "--path",
+          "--value",
+          "role:Document",
+          "ACTL report 2026\n第一段 中文 12345\nSecond paragraph 67890",
+          "--property",
+          "text",
+          "--normalize-lines",
+          "--app",
           {
-            "input": "word-edit-file"
-          },
-          "--kind",
-          "docx",
-          "--expected",
-          "{\"text\":\"ACTL report 2026\\n第一段 中文 12345\\nSecond paragraph 67890\"}",
-          "--subset"
+            "input": "word-edit-app"
+          }
         ]
       }
     },
@@ -3946,17 +3940,18 @@
         ]
       },
       "verify": {
-        "command": "verify-file",
+        "command": "verify",
         "args": [
-          "--path",
+          "--value",
+          "role:Document",
+          "ACTL report 2026\n第一段 中文 12345\nSecond paragraph 67890\nAppend 中文 Ω 24680",
+          "--property",
+          "text",
+          "--normalize-lines",
+          "--app",
           {
-            "input": "word-edit-file"
-          },
-          "--kind",
-          "docx",
-          "--expected",
-          "{\"text\":\"ACTL report 2026\\n第一段 中文 12345\\nSecond paragraph 67890\\nAppend 中文 Ω 24680\"}",
-          "--subset"
+            "input": "word-edit-app"
+          }
         ]
       }
     },
@@ -4044,16 +4039,18 @@
         ]
       },
       "verify": {
-        "command": "verify-file",
+        "command": "verify",
         "args": [
-          "--path",
+          "--value",
+          "role:Document",
+          "ACTL report 2026\n第一段 中文 12345\nSecond paragraph 67890\nAppend 中文 Ω 24680",
+          "--property",
+          "text",
+          "--normalize-lines",
+          "--app",
           {
-            "input": "word-edit-file"
-          },
-          "--kind",
-          "docx",
-          "--expected",
-          "{\"text\":\"ACTL report 2026\\n第一段 中文 12345\\nSecond paragraph 67890\\nAppend 中文 Ω 24680\",\"bold\":true}"
+            "input": "word-edit-app"
+          }
         ]
       }
     },

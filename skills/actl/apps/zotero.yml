@@ -9,6 +9,10 @@ app_version: "10.0.3"
 verified_date: 2026-09-28
 verified_env: Windows 10.0.26200.0 zh-cn
 quirks:
+  - id: datadir_backslash_required
+    note: 2026-09-29 实证（docs/68 第二轮）：Zotero 10 的 -datadir 只接受反斜杠绝对路径或字面量 profile，正斜杠路径（引擎 ${run.dir} 默认正斜杠）会弹「错误」对话框（-datadir requires an absolute path or 'profile'）且不建主窗口；隔离启动因此 20s 超时。workflow 用 ${run.dir_native} 反斜杠变体后真机验证通过（data 目录正常落盘）。-profile 不受影响，正斜杠可用。
+  - id: window_title_disambiguation
+    note: --app "Zotero" 会被浏览器内 Zotero 网页签（如「Zotero | Your personal research assistant - Google Chrome」）歧义命中；workflow 的 app 输入收紧为「我的文库 - Zotero」（全新隔离 profile 的主窗口标题）。用户同时开着真实 Zotero 时仍会歧义，届时护栏会如实报 AMBIGUOUS，不静默选错。
   - id: workflow_migration_20260929
     note: 业务步骤及隔离资源声明均在 workflows；直接 flow-run --file 对应模板 --id 新任务ID，无需准备脚本或输入文件。独立文件及进程归属核验已接入；新资源入口真机待复验，历史证据保留，见 docs/60。
   - id: import_readback_correction

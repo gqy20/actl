@@ -155,17 +155,18 @@
         ]
       },
       "verify": {
-        "command": "verify-file",
+        "command": "verify",
         "args": [
-          "--path",
+          "--value",
+          "role:Document",
+          "ACTL prefix ACTL seed",
+          "--property",
+          "text",
+          "--normalize-lines",
+          "--app",
           {
-            "input": "file"
-          },
-          "--kind",
-          "docx",
-          "--expected",
-          "{\"text\":\"ACTL prefix ACTL seed\"}",
-          "--subset"
+            "input": "app"
+          }
         ]
       }
     },
@@ -249,17 +250,18 @@
         ]
       },
       "verify": {
-        "command": "verify-file",
+        "command": "verify",
         "args": [
-          "--path",
+          "--value",
+          "role:Document",
+          "ACTL report 2026\n第一段 中文 12345\nSecond paragraph 67890",
+          "--property",
+          "text",
+          "--normalize-lines",
+          "--app",
           {
-            "input": "file"
-          },
-          "--kind",
-          "docx",
-          "--expected",
-          "{\"text\":\"ACTL report 2026\\n第一段 中文 12345\\nSecond paragraph 67890\"}",
-          "--subset"
+            "input": "app"
+          }
         ]
       }
     },
@@ -343,17 +345,18 @@
         ]
       },
       "verify": {
-        "command": "verify-file",
+        "command": "verify",
         "args": [
-          "--path",
+          "--value",
+          "role:Document",
+          "ACTL report 2026\n第一段 中文 12345\nSecond paragraph 67890\nAppend 中文 Ω 24680",
+          "--property",
+          "text",
+          "--normalize-lines",
+          "--app",
           {
-            "input": "file"
-          },
-          "--kind",
-          "docx",
-          "--expected",
-          "{\"text\":\"ACTL report 2026\\n第一段 中文 12345\\nSecond paragraph 67890\\nAppend 中文 Ω 24680\"}",
-          "--subset"
+            "input": "app"
+          }
         ]
       }
     },
@@ -425,17 +428,18 @@
         ]
       },
       "verify": {
-        "command": "verify-file",
+        "command": "verify",
         "args": [
-          "--path",
+          "--value",
+          "role:Document",
+          "ACTL report 2026\n第一段 中文 12345\nSecond paragraph 67890",
+          "--property",
+          "text",
+          "--normalize-lines",
+          "--app",
           {
-            "input": "file"
-          },
-          "--kind",
-          "docx",
-          "--expected",
-          "{\"text\":\"ACTL report 2026\\n第一段 中文 12345\\nSecond paragraph 67890\"}",
-          "--subset"
+            "input": "app"
+          }
         ]
       }
     },
@@ -507,17 +511,18 @@
         ]
       },
       "verify": {
-        "command": "verify-file",
+        "command": "verify",
         "args": [
-          "--path",
+          "--value",
+          "role:Document",
+          "ACTL report 2026\n第一段 中文 12345\nSecond paragraph 67890\nAppend 中文 Ω 24680",
+          "--property",
+          "text",
+          "--normalize-lines",
+          "--app",
           {
-            "input": "file"
-          },
-          "--kind",
-          "docx",
-          "--expected",
-          "{\"text\":\"ACTL report 2026\\n第一段 中文 12345\\nSecond paragraph 67890\\nAppend 中文 Ω 24680\"}",
-          "--subset"
+            "input": "app"
+          }
         ]
       }
     },
@@ -601,16 +606,18 @@
         ]
       },
       "verify": {
-        "command": "verify-file",
+        "command": "verify",
         "args": [
-          "--path",
+          "--value",
+          "role:Document",
+          "ACTL report 2026\n第一段 中文 12345\nSecond paragraph 67890\nAppend 中文 Ω 24680",
+          "--property",
+          "text",
+          "--normalize-lines",
+          "--app",
           {
-            "input": "file"
-          },
-          "--kind",
-          "docx",
-          "--expected",
-          "{\"text\":\"ACTL report 2026\\n第一段 中文 12345\\nSecond paragraph 67890\\nAppend 中文 Ω 24680\",\"bold\":true}"
+            "input": "app"
+          }
         ]
       }
     },

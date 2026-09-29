@@ -9,6 +9,10 @@ app_version: "16.0.20326.20158"
 verified_date: 2026-09-28
 verified_env: "Windows 10.0.26200.0 zh-CN；独立合成 DOCX，兼容性模式"
 quirks:
+  - id: docx_locked_while_open
+    note: 2026-09-29 实证（docs/68 第二轮）：ctrl+s 保存后 Word 对 docx 持排他句柄，打开期间任何共享读（含 verify-file）报 NOT_ACTIONABLE；关闭后立即可读；保存前新开状态可读（before 检查可用）。workflow 打开期间的正文核验一律走 UIA role:Document text（--normalize-lines），磁盘核验只在 reopen 后（reopened-content 兼查 bold）。
+  - id: zotero_addin_dialog
+    note: 本机 Word 装有 Zotero 加载项，启动/保存时可能弹 Zotero 相关错误框（2026-09-29 用户截图实证一次）；流程中断时先分辨对话框归属再处置，不当作 Word 拒绝。
   - id: workflow_migration_20260929
     note: 业务步骤及隔离资源声明均在 workflows；直接 flow-run --file 对应模板 --id 新任务ID，无需准备脚本或输入文件。独立文件及进程归属核验已接入；新资源入口真机待复验，历史证据保留，见 docs/60。
   - id: revalidation_20260929

@@ -62,7 +62,7 @@
   验收：短暂失败可恢复；持续失败有界退出；未知不走否定分支；暂停/停止阻止派发；重启/继续不静默刷新预算；不确定动作不重放；保留每次观察、恢复措施及退出原因。
 - [ ] 简单条件模板逐应用验收：窗口复用/启动、可选控件关闭、已有值跳过；代码与参数预检不代替业务验收，见 [63](63-simple-workflow-conditions.md)。
 
-- [ ] 从 resources 入口复验四软件整批：单软件复验见 [66](66-application-readiness.md)、[67](67-vscode-navigation-controls.md)。整批首轮（apps-verify-20260929，2026-09-29 晚）VS Code 段 26/26 完成，excel-table-copy-range 三次确定性失败，Word/Zotero 段未执行，失败记录保留见 [68](68-combined-batch-first-round.md)。复制路线已修复（type --verify-value + 窗口级 ctrl+c，契约同步；引擎新增段隔离 skip_section、失败分级 route_defect_suspected、验证步 recovery 预算，见 CHANGELOG Unreleased）——以新任务重跑整批验收，四段全部通过并核对资源隔离、恢复保留编辑结果与正常收尾后本项方可关闭。
+- [ ] 从 resources 入口复验四软件整批：单软件复验见 [66](66-application-readiness.md)、[67](67-vscode-navigation-controls.md)。首轮（apps-verify-20260929）与第二轮（apps-verify2-20260929）记录见 [68](68-combined-batch-first-round.md)：第二轮 VS Code 26/26、copy-range 修复生效、段隔离生效，三处新失败全部定案并已修复（Word docx 打开期锁→UIA 核验；Excel XLMAIN 壳→verify-window absent；Zotero -datadir 反斜杠→${run.dir_native}，Zotero 路由已真机单验）——以新任务重跑整批验收，四段全部通过并核对资源隔离、恢复保留编辑结果与正常收尾后本项方可关闭。
 
 - [ ] 完成四个已迁移应用 workflow 的真机复验，核对一次交接、组内暂停、不确定结果、独立文件核验及进程归属，见 [57](57-application-workflow-migration.md)。VS Code 已有独立可恢复验证入口，真机状态及边界见 [55](55-resumable-desktop-tasks.md)；旧脚本退出不具备自动续跑能力。
 
@@ -95,6 +95,9 @@
 
 - [ ] 结合新的交接、控件身份和焦点校验，补跑系统应用、记事本及 Office 的待验收脚本；
   分别记录通过、受阻和失败，不能用离线脚本测试代替真机结果。
+- [ ] 流程执行器在步骤失败证据中保留子命令错误原文（现仅留错误码 + synthetic 结构，
+  docs/68 第二轮 Word 锁文件的 NOT_ACTIONABLE 原因需靠手工复现取得）；同理评估
+  verify-file 对 IO 失败的可区分报错（共享冲突 vs 内容不符）。
 - [ ] 深化 Edge、Chrome、夸克网盘、Zotero、腾讯会议、VS Code、网易云和 Office 的业务闭环。
   以现有场景记录及 pack 为起点，只补尚未覆盖或受新护栏影响的路径；微信暂不优先。
   按 [应用档案同步记录](45-app-pack-refresh.md) 逐条复验本次改为 manual 的路线，核对新版焦点与快照绑定后再恢复 verified，不以静态检查更新真机日期。

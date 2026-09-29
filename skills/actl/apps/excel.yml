@@ -10,6 +10,8 @@ app_version: "16.0.20326.20158"
 verified_date: 2026-09-28
 verified_env: "Windows 10.0.26200.0 zh-CN；真实 Office 用户配置；独立合成 XLSX"
 quirks:
+  - id: xlmain_shell_persists
+    note: 2026-09-29 实证（docs/68 第二轮）：close-window --hwnd 关掉最后一个工作簿窗口后，原 HWND 存活为隐藏 XLMAIN 空壳（标题变"Excel"，Office 后台常驻/加载项持有），WM_CLOSE 不退出、不锁 xlsx、不影响 /x 新实例。verify-closed 的进程消失断言对 Excel 永远失败；workflow 关闭断言改用 verify-window --state absent（工作簿窗口消失）。真机清理时对隐藏壳 close-window --hwnd 可送达但进程不退，如实记录，不 taskkill。
   - id: workflow_migration_20260929
     note: 业务步骤及隔离资源声明均在 workflows；直接 flow-run --file 对应模板 --id 新任务ID，无需准备脚本或输入文件。独立文件及进程归属核验已接入；新资源入口真机待复验，历史证据保留，见 docs/60。
   - id: revalidation_20260929
