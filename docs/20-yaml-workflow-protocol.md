@@ -364,7 +364,7 @@ resources:
     - {path: 'document.docx', copy: 'assets/seed.docx'}
 ```
 
-仅在 resources 存在时，inputs 的字符串 default 支持 ${run.id}、${run.dir} 与 ${env:NAME}。环境白名单为 LOCALAPPDATA、APPDATA、ProgramFiles、ProgramFiles(x86)、USERPROFILE；缺失或未知 token 拒绝。资源目标 path、directories 和 text 只支持 ${run.id}。copy 不展开 token；外部 --inputs 和步骤字符串不插值，不执行 shell 或递归展开变量。
+仅在 resources 存在时，inputs 的字符串 default 支持 ${run.id}、${run.dir}、${run.dir_native} 与 ${env:NAME}。${run.dir} 统一正斜杠；${run.dir_native} 保留 Windows 反斜杠，供 Firefox 系应用（如 Zotero -datadir）这类拒绝正斜杠绝对路径的启动参数使用，其后缀分隔符须一并写反斜杠。环境白名单为 LOCALAPPDATA、APPDATA、ProgramFiles、ProgramFiles(x86)、USERPROFILE；缺失或未知 token 拒绝。资源目标 path、directories 和 text 只支持 ${run.id}。copy 不展开 token；外部 --inputs 和步骤字符串不插值，不执行 shell 或递归展开变量。
 
 run.dir 固定为 actl 状态目录/flow-resources/<ID>；资源目标路径必须相对、使用斜杠、长度不超过 240 字符，禁止空段、点段、父级穿越、盘符/ADS、Windows 保留名与尾随点/空格。大小写不敏感的重名和文件作为其他目标的父路径都拒绝。
 

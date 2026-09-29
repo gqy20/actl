@@ -81,6 +81,9 @@ fn expand(value: &str, id: &str, root: &Path, environment: bool) -> Result<Strin
         match key {
             "run.id" => result.push_str(id),
             "run.dir" if environment => result.push_str(&root.to_string_lossy().replace('\\', "/")),
+            // Firefox 系应用(如 Zotero)的 -datadir 校验拒绝正斜杠绝对路径,
+            // 需要保留原生分隔符的变体;其余路径继续统一正斜杠以便跨平台记录。
+            "run.dir_native" if environment => result.push_str(&root.to_string_lossy()),
             _ if environment && key.starts_with("env:") => {
                 let name = &key[4..];
                 if ![
@@ -249,5 +252,26 @@ impl Prepared {
             output.sync_all().map_err(io)?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn run_dir_native_preserves_windows_separators() {
+        let root = Path::new(r"C:\task\dir");
+        assert_eq!(
+            expand("${run.dir}/data", "t", root, true).unwrap(),
+            "C:/task/dir/data"
+        );
+        // 占位符外的后缀是字面量:需要原生分隔符时后缀也写反斜杠。
+        assert_eq!(
+            expand("${run.dir_native}\\data", "t", root, true).unwrap(),
+            "C:\\task\\dir\\data",
+        );
+        // 资源路径与文本不支持环境占位符,保持 fail-closed。
+        assert!(expand("${run.dir_native}/data", "t", root, false).is_err());
     }
 }
