@@ -28,6 +28,32 @@ flow 在顶层设置 handoff；普通脚本设置 `ACTL_TASK_CONFIG` 指向含 v
 `skills/actl/workflows/verify-applications.yml` 将应用流程组织为同一 flow，共用 once_per_run 交接策略；出现交接中断后暂停并保留现场。
 现有 `--physical` 显式要求不变；点击交接按钮不代替 `--physical`。
 
+### 误触自动恢复（pardon_input，2026-09-29）
+
+外部输入撤销授权后，若撤销源及其后所有输入都是**纯鼠标移动**（无任何按键、点击、滚轮），
+且静默窗内无新输入、前台窗口与出卡时一致，显示端在预算内自动重新授权，不需要用户点击。
+任何键盘事件永远不赦免——单个按键完全可能是真人接管的开始，自动恢复的失败方向必须
+是"多停一次"而不是"在人还在场时注入"。待执行动作为键盘通道（type/press/key-down/key-up/paste，
+种类未知同样按键盘处理）时不自动恢复。因交接暂停（reason=handoff_pending）且执行器已退出的
+流程满足同样条件时自动发起续跑；用户暂停、检查点、待核对与停止状态永不自动继续。
+
+策略在 YAML 的 handoff 块配置，逐流程优先于全局默认：
+
+```yaml
+handoff:
+  approval: once_per_run
+  pardon_input:
+    enabled: true          # 缺省 true
+    quiet_ms: 4000         # 静默窗 1000..=10000，缺省 4000
+    budget: 2              # 每任务自动恢复次数 1..=5，缺省 2；耗尽回到显式确认
+    require_foreground: true   # 恢复前核验前台未变，缺省 true
+    keyboard_safe_only: true   # 键盘通道动作永不自动恢复，缺省 true
+```
+
+每次自动授权记录 consent_decision（reason=input_pardoned），预算按任务计、不跨任务共享；
+`ACTL_HANDOFF_PARDON=0` 环境变量可全局停用（紧急回退，优先于 YAML）。
+预算与策略在显示端内存中维护，显示端重启后预算重新计数（journal 保留历史记录）。
+
 ## 人工接管
 
 显示端在独立消息线程安装 WH_KEYBOARD_LL / WH_MOUSE_LL，避免绘制和文件 IO 阻塞回调，被动统计输入序号，不拦截输入，

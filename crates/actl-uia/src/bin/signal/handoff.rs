@@ -57,6 +57,7 @@ struct Service {
     failed_call: Option<String>,
     paused_call: Option<String>,
     foreground_call: Option<String>,
+    pardon: super::pardon::State,
 }
 thread_local! { static SERVICE: RefCell<Service> = RefCell::new(Service::default()); }
 
@@ -184,6 +185,7 @@ unsafe extern "system" fn keyboard(code: i32, wp: WPARAM, lp: LPARAM) -> LRESULT
         super::input_diagnostics::hook(event.flags.contains(LLKHF_INJECTED), event.dwExtraInfo);
         if external_input(event.flags.contains(LLKHF_INJECTED), event.dwExtraInfo) {
             INPUT_SEQ.fetch_add(1, Ordering::SeqCst);
+            super::pardon::note_input(true);
         }
     }
     CallNextHookEx(None, code, wp, lp)
@@ -194,6 +196,8 @@ unsafe extern "system" fn mouse(code: i32, wp: WPARAM, lp: LPARAM) -> LRESULT {
         super::input_diagnostics::hook(event.flags & LLMHF_INJECTED != 0, event.dwExtraInfo);
         if external_input(event.flags & LLMHF_INJECTED != 0, event.dwExtraInfo) {
             INPUT_SEQ.fetch_add(1, Ordering::SeqCst);
+            // 误触赦免只认纯鼠标移动；任何按键、点击或滚轮都是硬输入。
+            super::pardon::note_input(wp.0 != WM_MOUSEMOVE as usize);
         }
     }
     CallNextHookEx(None, code, wp, lp)
@@ -330,6 +334,7 @@ unsafe fn tick_with(paths: &SignalPaths, healthy: bool) {
                     if let Some((_, request)) = &s.request {
                         audit(request, "shown", s.consent.reason());
                     }
+                    s.pardon.on_card();
                     s.panel = Some(hwnd);
                 }
                 Err(e) => {
@@ -337,6 +342,35 @@ unsafe fn tick_with(paths: &SignalPaths, healthy: bool) {
                     s.failed_call = s.request.take().map(|(_, r)| r.call);
                 }
             }
+        }
+        if s.request.is_some()
+            && s.panel.is_some()
+            && let Some((pid, request)) = s.request.clone()
+            && super::pardon::consider_card(&mut s.pardon, paths, &request, |expected| {
+                expected != 0 && (unsafe { GetForegroundWindow() }.0 as isize) == expected
+            })
+        {
+            // 误触自动恢复：条件与 decide(start=true) 相同，仅授权来源不同。
+            let fresh = read_request(paths, pid).is_some_and(|now| now.call == request.call);
+            if fresh
+                && WATCH_RUNNING.load(Ordering::SeqCst)
+                && super::input_watch::healthy()
+                && paths.acknowledge_stop(&request.generation).is_ok()
+            {
+                s.consent
+                    .allow_with_policy(&request.task, activity(), unix_ms(), request.approval);
+                audit(&request, "granted", "input_pardoned");
+                super::foreground::transfer(pid, &request);
+                s.foreground_call = Some(request.call.clone());
+                s.active_request = Some(request.clone());
+                s.active = Some((pid, request.call.clone(), request.task.clone()));
+                super::pardon::mark_pardoned(&mut s.pardon);
+                s.request = None;
+                close_panel(&mut s);
+            }
+        }
+        if s.request.is_none() && s.panel.is_none() {
+            super::pardon::consider_flow_resume(&mut s.pardon, paths, &generation);
         }
     });
 }

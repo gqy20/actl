@@ -8,10 +8,91 @@ pub enum Approval {
     Expiring,
     OncePerRun,
 }
+/// 误触自动恢复（pardon）：授权被外部输入撤销后，若撤销源与后续输入均为
+/// "良性"（纯鼠标移动，无任何按键/点击/滚轮），静默窗内无新输入且前台未变，
+/// 显示端可自动重新授权，预算内不需要用户点击。任何键盘事件永久不赦免。
+/// 流程可在 handoff.pardon_input 覆盖全局默认（逐流程优先）。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct PardonPolicy {
+    pub enabled: bool,
+    /// 静默窗：最后一次外部输入后需安静的毫秒数（1000..=10000）。
+    pub quiet_ms: u64,
+    /// 每任务自动恢复次数（1..=5）；耗尽后回到显式确认。
+    pub budget: u32,
+    /// 恢复前要求前台窗口与出卡时一致。
+    pub require_foreground: bool,
+    /// 仅当待执行动作非键盘通道时赦免（type/press 等注入键盘的动作永不自动恢复）。
+    pub keyboard_safe_only: bool,
+}
+impl Default for PardonPolicy {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            quiet_ms: 4000,
+            budget: 2,
+            require_foreground: true,
+            keyboard_safe_only: true,
+        }
+    }
+}
+impl PardonPolicy {
+    pub fn valid(&self) -> bool {
+        (1000..=10000).contains(&self.quiet_ms) && (1..=5).contains(&self.budget)
+    }
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PardonInputs {
+    pub now_ms: u64,
+    /// 撤销授权的那次输入是否为按键/点击/滚轮（硬输入）。
+    pub revoker_hard: bool,
+    /// 最后一次外部输入时间；无输入则 None。
+    pub last_input_ms: Option<u64>,
+    /// 撤销之后是否出现过硬输入；有则永不赦免。
+    pub hard_input_after_revoke: bool,
+    /// 前台窗口与出卡时是否一致。
+    pub foreground_same: bool,
+    /// 待执行动作是否为键盘通道。
+    pub keyboard_action: bool,
+    pub budget_left: u32,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PardonDecision {
+    /// 条件满足，自动重新授权。
+    Pardon,
+    /// 条件未满足但可继续等待（静默窗未满等）。
+    Wait,
+    /// 结构性不满足：出卡等显式确认，本任务不再自动恢复。
+    Never,
+}
+pub fn pardon_decision(inputs: PardonInputs, policy: &PardonPolicy) -> PardonDecision {
+    if !policy.enabled || inputs.revoker_hard || inputs.hard_input_after_revoke {
+        return PardonDecision::Never;
+    }
+    if policy.keyboard_safe_only && inputs.keyboard_action {
+        return PardonDecision::Never;
+    }
+    if inputs.budget_left == 0 {
+        return PardonDecision::Never;
+    }
+    if policy.require_foreground && !inputs.foreground_same {
+        return PardonDecision::Never;
+    }
+    match inputs.last_input_ms {
+        None => PardonDecision::Wait,
+        Some(last) if inputs.now_ms.saturating_sub(last) < policy.quiet_ms => PardonDecision::Wait,
+        Some(_) => PardonDecision::Pardon,
+    }
+}
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Policy {
     pub approval: Approval,
+    #[serde(default, skip_serializing_if = "PardonPolicy::is_default")]
+    pub pardon_input: PardonPolicy,
 }
 thread_local! { static POLICY: std::cell::Cell<Approval> = const { std::cell::Cell::new(Approval::Expiring) }; }
 pub fn configure(policy: Approval) {
@@ -43,6 +124,9 @@ pub struct Request {
     pub task: String,
     pub target: String,
     pub ts_ms: u64,
+    /// 动作种类（click/type/press…）；旧执行器请求缺失时按未知处理。
+    #[serde(default)]
+    pub action: String,
 }
 impl Request {
     pub fn fresh(&self, now: u64) -> bool {
@@ -226,5 +310,109 @@ mod tests {
         }
         assert!(!c.check("a", 0, 600_100));
         assert!(!Consent::default().check("a", 0, 101));
+    }
+
+    fn inputs(now: u64, last: Option<u64>) -> PardonInputs {
+        PardonInputs {
+            now_ms: now,
+            revoker_hard: false,
+            last_input_ms: last,
+            hard_input_after_revoke: false,
+            foreground_same: true,
+            keyboard_action: false,
+            budget_left: 2,
+        }
+    }
+    #[test]
+    fn pardon_waits_for_quiet_then_recovers_within_budget() {
+        let policy = PardonPolicy::default();
+        assert_eq!(
+            pardon_decision(inputs(10_000, Some(9_000)), &policy),
+            PardonDecision::Wait
+        );
+        assert_eq!(
+            pardon_decision(inputs(10_000, Some(10_000 - policy.quiet_ms)), &policy),
+            PardonDecision::Pardon
+        );
+        let drained = PardonInputs {
+            budget_left: 0,
+            ..inputs(10_000, Some(0))
+        };
+        assert_eq!(pardon_decision(drained, &policy), PardonDecision::Never);
+    }
+    #[test]
+    fn hard_input_keyboards_and_focus_change_never_pardon() {
+        let policy = PardonPolicy::default();
+        let hard_revoker = PardonInputs {
+            revoker_hard: true,
+            ..inputs(10_000, Some(0))
+        };
+        assert_eq!(
+            pardon_decision(hard_revoker, &policy),
+            PardonDecision::Never
+        );
+        let hard_after = PardonInputs {
+            hard_input_after_revoke: true,
+            ..inputs(10_000, Some(0))
+        };
+        assert_eq!(pardon_decision(hard_after, &policy), PardonDecision::Never);
+        let typing = PardonInputs {
+            keyboard_action: true,
+            ..inputs(10_000, Some(0))
+        };
+        assert_eq!(pardon_decision(typing, &policy), PardonDecision::Never);
+        let moved_focus = PardonInputs {
+            foreground_same: false,
+            ..inputs(10_000, Some(0))
+        };
+        assert_eq!(pardon_decision(moved_focus, &policy), PardonDecision::Never);
+        let relaxed = PardonPolicy {
+            require_foreground: false,
+            keyboard_safe_only: false,
+            ..policy
+        };
+        assert_eq!(
+            pardon_decision(
+                PardonInputs {
+                    keyboard_action: true,
+                    foreground_same: false,
+                    ..inputs(10_000, Some(0))
+                },
+                &relaxed
+            ),
+            PardonDecision::Pardon
+        );
+    }
+    #[test]
+    fn disabled_policy_and_unknown_ranges_fail_closed() {
+        assert!(
+            !PardonPolicy {
+                quiet_ms: 999,
+                ..PardonPolicy::default()
+            }
+            .valid()
+        );
+        assert!(
+            !PardonPolicy {
+                budget: 0,
+                ..PardonPolicy::default()
+            }
+            .valid()
+        );
+        let off = PardonPolicy {
+            enabled: false,
+            ..PardonPolicy::default()
+        };
+        assert_eq!(
+            pardon_decision(inputs(10_000, Some(0)), &off),
+            PardonDecision::Never
+        );
+        assert_eq!(
+            serde_json::from_str::<Policy>("{\"approval\":\"once_per_run\"}").unwrap(),
+            Policy {
+                approval: Approval::OncePerRun,
+                pardon_input: PardonPolicy::default()
+            }
+        );
     }
 }

@@ -132,11 +132,11 @@ pub(crate) fn check() -> Result<(), CtlError> {
     }
     Ok(())
 }
-pub(crate) fn prepare(target: &str) -> Result<(), CtlError> {
+pub(crate) fn prepare(target: &str, action: &str) -> Result<(), CtlError> {
     if ACTIVE.with(Cell::get) {
         return check();
     }
-    request(target).map_err(|mut error| {
+    request(target, action).map_err(|mut error| {
         if let Some(evidence) = error.evidence.as_mut()
             && evidence["stage"] == "handoff"
         {
@@ -145,7 +145,7 @@ pub(crate) fn prepare(target: &str) -> Result<(), CtlError> {
         error
     })
 }
-fn request(target: &str) -> Result<(), CtlError> {
+fn request(target: &str, action: &str) -> Result<(), CtlError> {
     let (call, task) =
         actl_core::signal_session::handoff_identity().ok_or_else(|| failure("missing_session"))?;
     let paths = SignalPaths::default();
@@ -164,6 +164,7 @@ fn request(target: &str) -> Result<(), CtlError> {
         task,
         target: target.chars().take(180).collect(),
         ts_ms: unix_ms(),
+        action: action.chars().take(32).collect(),
     };
     let mut waiting = false;
     let start = Instant::now();

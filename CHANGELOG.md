@@ -9,6 +9,8 @@
 
 ## [Unreleased]
 
+- **误触自动恢复（显示协议）**：授权被纯鼠标移动类外部输入撤销时，静默窗（默认 4 秒）内无新输入且前台未变，显示端在每任务预算（默认 2 次）内自动重新授权，不需要用户点击；`handoff_pending` 暂停的流程满足同样条件时自动发起续跑。任何键盘事件、点击、滚轮永不赦免；键盘通道动作（type/press 等，种类未知同样按键盘处理）不自动恢复；用户暂停、检查点、待核对与停止状态永不自动继续。策略经 YAML `handoff.pardon_input` 逐流程覆盖全局默认（enabled/quiet_ms/budget/require_foreground/keyboard_safe_only），`ACTL_HANDOFF_PARDON=0` 全局停用。每次赦免记录 consent_decision（reason=input_pardoned）。决策纯函数与预算单测在 actl-core/actl-signal；真机模拟误触验收待做。设计边界见 [32](docs/32-desktop-handoff.md)。
+
 - **步骤失败隔离（流程协议）**：步骤新增 `section` 字段与 `on_failure: skip_section`。失败时保留该步证据，同段其余 pending 步骤标为新增的 `skipped` 状态，继续执行后续段；整轮以 needs_review、reason=`section_failure:<step>` 收束。显式 `--retry-step` 成功后同段 skipped 步骤还原重跑。四软件整批模板按应用分段启用，一段确定性失败不再堵死其余应用。协议与边界见 [20](docs/20-yaml-workflow-protocol.md)。
 
 - **失败分级与证据合成**：步骤记录 `attempt_errors`（最近 8 次错误码）；同一步骤最后 3 次错误相同即视为路线缺陷，暂停 reason 追加 `route_defect_suspected`，提示不应盲目重试。失败无源证据时合成 `{phase,command,synthetic}` 最小结构化证据，不再出现裸错误码。docs/68 首轮的 copy-range 三次同错即属该类。

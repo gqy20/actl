@@ -34,6 +34,8 @@ mod panel;
 #[cfg(test)]
 #[path = "signal/panel_preview.rs"]
 mod panel_preview;
+#[path = "signal/pardon.rs"]
+mod pardon;
 #[path = "signal/perimeter.rs"]
 mod perimeter;
 #[path = "signal/popup.rs"]

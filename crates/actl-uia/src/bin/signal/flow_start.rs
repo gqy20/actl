@@ -36,6 +36,7 @@ pub fn allow(id: &str) -> Result<String, String> {
         task: id.into(),
         target: "flow continue".into(),
         ts_ms: unix_ms(),
+        action: String::new(),
     };
     let filename = format!("flow-start-{}.json", std::process::id());
     paths

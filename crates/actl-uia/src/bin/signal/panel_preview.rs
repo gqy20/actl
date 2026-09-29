@@ -80,6 +80,7 @@ fn export_panel_previews() {
             task: "preview".into(),
             target: "记事本 · 本周会议纪要.txt".into(),
             ts_ms: 0,
+            action: "click".into(),
         };
         let handoff = super::handoff::build_panel_with(Some(&request), &paths).unwrap();
         export(handoff, "handoff");

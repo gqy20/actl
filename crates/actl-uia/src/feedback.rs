@@ -137,7 +137,7 @@ pub(crate) fn prepare(
 ) -> Result<ActionGuard, CtlError> {
     check_stop()?;
     let lease = crate::display_gate::ensure()?;
-    crate::handoff::prepare(target.window.as_deref().unwrap_or(kind))?;
+    crate::handoff::prepare(target.window.as_deref().unwrap_or(kind), kind)?;
     let foreground = crate::handoff::foreground_lease()?;
     let guard = ActionGuard {
         inner: CoreActionGuard::begin(kind, effects, target),

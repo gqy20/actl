@@ -241,6 +241,15 @@ pub fn parse(text: &str) -> Result<Plan, CtlError> {
         }
     }
     let mut ids = std::collections::HashSet::new();
+    if let Some(handoff) = &plan.handoff
+        && !handoff.pardon_input.valid()
+    {
+        return Err(schema::error(
+            "handoff.pardon_input",
+            None,
+            "pardon_input requires quiet_ms 1000..=10000 and budget 1..=5",
+        ));
+    }
     for (index, step) in plan.steps.iter().enumerate() {
         let base = format!("steps[{index}]");
         if !actl_core::history::valid_id(&step.id) || !ids.insert(&step.id) {

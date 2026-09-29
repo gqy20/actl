@@ -60,6 +60,9 @@ steps:
 ```
 
 必填：version=1、name、steps；每步 id/title/run，run.command 与可选 args。
+顶层可选 `handoff`（如 `handoff: {approval: once_per_run}`）及误触自动恢复策略
+`handoff.pardon_input`（enabled/quiet_ms/budget/require_foreground/keyboard_safe_only，
+逐流程覆盖全局默认，语义与安全边界见 [32](32-desktop-handoff.md)）。
 name/title 最多 256 字节；1–256 步；id 使用历史协议的 1–80 位 ASCII ID 规则且不得重复。
 输入文件和规范化计划各最多 256 KiB；每命令最多 128 参数，单参数最多 16 KiB，不含 NUL。
 可选 before/verify/resume_check 只能调用 verify 或 wait；before 在进入 run 阶段前执行。

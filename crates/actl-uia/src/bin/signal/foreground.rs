@@ -110,6 +110,7 @@ mod tests {
             task: "t".into(),
             target: "browser".into(),
             ts_ms: 0,
+            action: String::new(),
         };
         assert!(eligible(42, &request, &alias, &path));
     }
@@ -122,6 +123,7 @@ mod tests {
             task: "t".into(),
             target: "browser".into(),
             ts_ms: 0,
+            action: String::new(),
         };
         let path = std::path::Path::new("C:/actl/actl.exe");
         assert!(eligible(42, &request, path, path));
