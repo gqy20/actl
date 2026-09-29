@@ -114,6 +114,16 @@ pub fn element_text(
     app: Option<&str>,
     near: Option<&str>,
 ) -> Result<Value, CtlError> {
+    // 元素重渲染期读到旧值表现为内容不符(断言失败),与 verify-file 家族同款 5 秒沉降。
+    settle(|| element_text_once(target, expected, property, app, near))
+}
+fn element_text_once(
+    target: &str,
+    expected: &str,
+    property: &str,
+    app: Option<&str>,
+    near: Option<&str>,
+) -> Result<Value, CtlError> {
     let result = crate::query::get(target, Some(property), app, near, None)?.data;
     let actual = result["properties"][property]
         .as_str()
@@ -228,6 +238,24 @@ fn closed_once(hwnd: &str, pid: u32, instance: &str) -> Result<Value, CtlError> 
     Ok(json!({"verified":true,"original_instance_gone":true}))
 }
 pub fn clipboard(expected: &str, normalize_lines: bool) -> Result<Value, CtlError> {
+    // 复制送达与剪贴板可读之间有竞态:空剪贴板表现为 NOT_ACTIONABLE、旧内容为
+    // 断言失败,两者都在 5 秒内重读(剪贴板只读,重试无副作用)。
+    let start = std::time::Instant::now();
+    loop {
+        match clipboard_once(expected, normalize_lines) {
+            Err(error)
+                if matches!(
+                    error.code,
+                    ErrorCode::AssertionFailed | ErrorCode::NotActionable
+                ) && start.elapsed().as_millis() < 5000 =>
+            {
+                std::thread::sleep(std::time::Duration::from_millis(100))
+            }
+            result => return result,
+        }
+    }
+}
+fn clipboard_once(expected: &str, normalize_lines: bool) -> Result<Value, CtlError> {
     let result = crate::dispatch(&crate::cli::Command::GetClipboard)?.data;
     let actual = result["text"]
         .as_str()
@@ -259,7 +287,19 @@ pub fn rows_expected(prefix: &str, expected: &str) -> Result<Vec<String>, CtlErr
         .map_err(|_| CtlError::protocol("rows expectation must be a string array"))
 }
 pub fn rows(app: &str, prefix: &str, expected: &str) -> Result<Value, CtlError> {
-    settle(|| rows_once(app, prefix, expected))
+    // 行树缺失(渲染未完成)与内容不符同为可沉降瞬态;歧义立即失败。
+    let start = std::time::Instant::now();
+    loop {
+        match rows_once(app, prefix, expected) {
+            Err(error)
+                if matches!(error.code, ErrorCode::AssertionFailed | ErrorCode::NotFound)
+                    && start.elapsed().as_millis() < 5000 =>
+            {
+                std::thread::sleep(std::time::Duration::from_millis(100))
+            }
+            result => return result,
+        }
+    }
 }
 fn rows_once(app: &str, prefix: &str, expected: &str) -> Result<Value, CtlError> {
     use clap::Parser;
@@ -284,11 +324,24 @@ fn rows_once(app: &str, prefix: &str, expected: &str) -> Result<Value, CtlError>
         .iter()
         .filter(|item| item["automation_id"] == parent)
         .count()
-        != 1
+        == 0
+    {
+        // 缺失与歧义分码:缺失可能是"尚未渲染"(NOT_FOUND,可重试观察);
+        // 歧义是既成事实(NOT_ACTIONABLE,重试无意义)。
+        return Err(CtlError::new(
+            ErrorCode::NotFound,
+            "row parent tree not present",
+        ));
+    }
+    if elements
+        .iter()
+        .filter(|item| item["automation_id"] == parent)
+        .count()
+        > 1
     {
         return Err(CtlError::new(
             ErrorCode::NotActionable,
-            "row parent tree missing or ambiguous",
+            "row parent tree ambiguous",
         ));
     }
     let mut actual = elements
