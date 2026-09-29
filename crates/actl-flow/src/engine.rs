@@ -22,6 +22,8 @@ pub enum StepStatus {
     Completed,
     Uncertain,
     Failed,
+    /// Isolated by a `skip_section` failure elsewhere in this section; never executed.
+    Skipped,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -34,6 +36,9 @@ pub struct StepRecord {
     pub error_code: Option<ErrorCode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error_evidence: Option<serde_json::Value>,
+    /// Error codes of the last failed attempts, oldest first (bounded to 8).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attempt_errors: Vec<ErrorCode>,
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub outputs: std::collections::BTreeMap<String, serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -74,6 +79,7 @@ impl Run {
                     verified: false,
                     error_code: None,
                     error_evidence: None,
+                    attempt_errors: Vec::new(),
                     outputs: Default::default(),
                     outputs_captured_ms: None,
                     observation_retries: vec![],
@@ -143,6 +149,44 @@ fn boundary(run: &mut Run, store: &Store, host: &mut impl Host) -> Result<bool, 
     }
     Ok(true)
 }
+/// Steps sharing the failing step's section value are one isolation scope.
+fn same_section(plan: &crate::Plan, index: usize, other: usize) -> bool {
+    plan.steps[index]
+        .section
+        .as_deref()
+        .is_some_and(|scope| plan.steps[other].section.as_deref() == Some(scope))
+}
+/// Mark the not-yet-started steps of the section as skipped; the run continues
+/// with the first step outside it. Already-recorded results are never rewritten.
+fn skip_section(plan: &crate::Plan, run: &mut Run, index: usize) {
+    for other in (index + 1)..plan.steps.len() {
+        if same_section(plan, index, other) && run.steps[other].status == StepStatus::Pending {
+            run.steps[other].status = StepStatus::Skipped;
+        }
+    }
+}
+/// A later authorized retry that clears the uncertainty may run its section again.
+fn restore_section(plan: &crate::Plan, run: &mut Run, index: usize) {
+    for other in (index + 1)..plan.steps.len() {
+        if same_section(plan, index, other) && run.steps[other].status == StepStatus::Skipped {
+            run.steps[other].status = StepStatus::Pending;
+        }
+    }
+}
+fn record_attempt_error(run: &mut Run, index: usize, code: ErrorCode) {
+    let record = &mut run.steps[index];
+    record.attempt_errors.push(code);
+    if record.attempt_errors.len() > 8 {
+        record.attempt_errors.remove(0);
+    }
+}
+fn failure_reason(base: &str, run: &Run, index: usize) -> String {
+    if crate::route_defect(&run.steps[index]) {
+        format!("{base};route_defect_suspected")
+    } else {
+        base.to_owned()
+    }
+}
 /// Host must hold both execution locks; resumption never changes the saved plan.
 pub fn execute(
     plan: &Plan,
@@ -199,11 +243,15 @@ pub fn execute(
         ));
     }
     let resuming = run.status != Status::Ready;
+    let mut section_reason: Option<String> = None;
     run.status = Status::Running;
     run.reason = None;
     run.save(store, host)?;
-    for (i, step) in plan.steps.iter().enumerate() {
-        if run.steps[i].status == StepStatus::Completed {
+    'steps: for (i, step) in plan.steps.iter().enumerate() {
+        if matches!(
+            run.steps[i].status,
+            StepStatus::Completed | StepStatus::Skipped
+        ) {
             continue;
         }
         if boundary(run, store, host)? {
@@ -220,13 +268,24 @@ pub fn execute(
             Ok(step) => step,
             Err(error) => {
                 run.steps[i].error_code = Some(error.code);
-                run.steps[i].error_evidence = crate::failure_evidence(step.evidence, &error);
+                run.steps[i].error_evidence =
+                    crate::step_failure_evidence(step, &error, "bind", "resolve");
+                record_attempt_error(run, i, error.code);
+                if step.on_failure == crate::Failure::SkipSection {
+                    skip_section(plan, run, i);
+                    let reason = failure_reason(&format!("section_failure:{}", step.id), run, i);
+                    section_reason = Some(reason.clone());
+                    run.status = Status::Running;
+                    run.reason = Some(reason);
+                    run.save(store, host)?;
+                    continue;
+                }
                 run.status = if step.on_failure == Failure::Fail {
                     Status::Failed
                 } else {
                     Status::Paused
                 };
-                run.reason = Some("binding_validation_failed".into());
+                run.reason = Some(failure_reason("binding_validation_failed", run, i));
                 run.save(store, host)?;
                 return Ok(());
             }
@@ -242,15 +301,26 @@ pub fn execute(
                 crate::recovery::observe((plan, &step, i), run, store, host, "resume_check", check)
         {
             run.steps[i].error_code = Some(error.code);
-            run.steps[i].error_evidence = crate::failure_evidence(step.evidence, &error);
+            run.steps[i].error_evidence =
+                crate::step_failure_evidence(&step, &error, "resume_check", &check.command);
+            record_attempt_error(run, i, error.code);
             if boundary(run, store, host)? {
                 return Ok(());
+            }
+            if step.on_failure == crate::Failure::SkipSection {
+                skip_section(plan, run, i);
+                let reason = failure_reason(&format!("section_failure:{}", step.id), run, i);
+                section_reason = Some(reason.clone());
+                run.status = Status::Running;
+                run.reason = Some(reason);
+                run.save(store, host)?;
+                continue;
             }
             run.status = Status::Paused;
             if step.on_failure == Failure::Fail {
                 run.status = Status::Failed;
             }
-            run.reason = Some("resume_check_failed".into());
+            run.reason = Some(failure_reason("resume_check_failed", run, i));
             run.save(store, host)?;
             return Ok(());
         }
@@ -273,6 +343,7 @@ pub fn execute(
                         run.steps[i].verified = true;
                         run.steps[i].error_code = None;
                         run.steps[i].error_evidence = None;
+                        restore_section(plan, run, i);
                         run.save(store, host)?;
                         continue;
                     }
@@ -280,8 +351,9 @@ pub fn execute(
                     Err(error) => {
                         replay_confirmed = error.code == ErrorCode::AssertionFailed;
                         run.steps[i].error_evidence =
-                            crate::failure_evidence(step.evidence, &error);
+                            crate::step_failure_evidence(&step, &error, "verify", &verify.command);
                         run.steps[i].error_code = Some(error.code);
+                        record_attempt_error(run, i, error.code);
                     }
                 }
             }
@@ -292,15 +364,25 @@ pub fn execute(
                 && (retry_step != Some(step.id.as_str()) || !replay_confirmed)
             {
                 run.steps[i].status = StepStatus::Uncertain;
+                if step.on_failure == crate::Failure::SkipSection {
+                    skip_section(plan, run, i);
+                    let reason = failure_reason(&format!("section_failure:{}", step.id), run, i);
+                    section_reason = Some(reason.clone());
+                    run.status = Status::Running;
+                    run.reason = Some(reason);
+                    run.save(store, host)?;
+                    continue;
+                }
                 run.status = Status::NeedsReview;
-                run.reason = Some(
+                run.reason = Some(failure_reason(
                     if replay_confirmed {
                         "result_unconfirmed; inspect before authorizing --retry-step"
                     } else {
                         "result_observation_failed"
-                    }
-                    .into(),
-                );
+                    },
+                    run,
+                    i,
+                ));
                 run.save(store, host)?;
                 return Ok(());
             }
@@ -409,13 +491,15 @@ pub fn execute(
                     run.save(store, host)?;
                     return Ok(());
                 }
-                run.steps[i].error_evidence = crate::failure_evidence(step.evidence, &error);
+                run.steps[i].error_evidence =
+                    crate::step_failure_evidence(&step, &error, "run", &step.run.command);
                 run.steps[i].error_code = Some(error.code);
                 run.steps[i].status = if host.read_only(&step.run) {
                     StepStatus::Failed
                 } else {
                     StepStatus::Uncertain
                 };
+                record_attempt_error(run, i, error.code);
                 run.save(store, host)?;
                 if boundary(run, store, host)? {
                     return Ok(());
@@ -427,12 +511,21 @@ pub fn execute(
                     }
                     continue;
                 }
+                if step.on_failure == crate::Failure::SkipSection {
+                    skip_section(plan, run, i);
+                    let reason = failure_reason(&format!("section_failure:{}", step.id), run, i);
+                    section_reason = Some(reason.clone());
+                    run.status = Status::Running;
+                    run.reason = Some(reason);
+                    run.save(store, host)?;
+                    continue 'steps;
+                }
                 run.status = if step.on_failure == Failure::Fail {
                     Status::Failed
                 } else {
                     Status::Paused
                 };
-                run.reason = Some("action_failed".into());
+                run.reason = Some(failure_reason("action_failed", run, i));
                 run.save(store, host)?;
                 return Ok(());
             }
@@ -453,6 +546,7 @@ pub fn execute(
                     Ok(_) => {
                         run.steps[i].status = StepStatus::Completed;
                         run.steps[i].verified = true;
+                        restore_section(plan, run, i);
                     }
                     Err(error) => {
                         if error.code == ErrorCode::Aborted
@@ -463,18 +557,29 @@ pub fn execute(
                             return Ok(());
                         }
                         run.steps[i].error_evidence =
-                            crate::failure_evidence(step.evidence, &error);
+                            crate::step_failure_evidence(&step, &error, "verify", &verify.command);
                         run.steps[i].error_code = Some(error.code);
                         run.steps[i].status = StepStatus::Uncertain;
+                        record_attempt_error(run, i, error.code);
                         if boundary(run, store, host)? {
                             return Ok(());
+                        }
+                        if step.on_failure == crate::Failure::SkipSection {
+                            skip_section(plan, run, i);
+                            let reason =
+                                failure_reason(&format!("section_failure:{}", step.id), run, i);
+                            section_reason = Some(reason.clone());
+                            run.status = Status::Running;
+                            run.reason = Some(reason);
+                            run.save(store, host)?;
+                            continue 'steps;
                         }
                         run.status = if step.on_failure == Failure::Fail {
                             Status::Failed
                         } else {
                             Status::NeedsReview
                         };
-                        run.reason = Some("verification_failed".into());
+                        run.reason = Some(failure_reason("verification_failed", run, i));
                         run.save(store, host)?;
                         return Ok(());
                     }
@@ -484,7 +589,12 @@ pub fn execute(
             break;
         }
     }
-    run.status = Status::Completed;
-    run.reason = None;
+    if let Some(reason) = section_reason.filter(|r| !r.is_empty()) {
+        run.status = Status::NeedsReview;
+        run.reason = Some(reason);
+    } else {
+        run.status = Status::Completed;
+        run.reason = None;
+    }
     run.save(store, host)
 }

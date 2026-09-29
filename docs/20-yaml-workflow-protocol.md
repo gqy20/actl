@@ -67,7 +67,14 @@ name/title 最多 256 字节；1–256 步；id 使用历史协议的 1–80 位
 
 retry 默认为 never；read_only 仅适用于观察命令，最多尝试 3 次，间隔 200ms。
 stale_read 仅对只读调用的 STALE_REF 做有界重新定位，规则见 §9；不会重试写调用。
-on_failure 默认 pause，可设 fail。pause_before 默认 false，首次到达该步骤时暂停，继续后不重复暂停。
+on_failure 默认 pause，可设 fail；2026-09-29 起新增 skip_section（要求该步声明 section 字段）：
+失败时保留该步 uncertain/failed 与证据，把同 section 内其余 pending 步骤标为 skipped，
+继续执行后续段；整轮以 needs_review、reason=`section_failure:<step>` 收束，不记为 completed。
+显式 --retry-step 成功后，同段 skipped 步骤还原为 pending 重新执行。
+section 为 1–80 位 ASCII ID；跨段 bind 引用被跳过产出时会按绑定校验失败处理，分段模板应自包含。
+pause_before 默认 false，首次到达该步骤时暂停，继续后不重复暂停。
+步骤失败记录 attempt_errors（最近 8 次错误码）；同一步骤最后 3 次错误码相同时，
+暂停/待核对 reason 追加 `;route_defect_suspected`，提示这是路线缺陷而非瞬态，不应盲目重试。
 写操作（包括 launch、截图输出）必须有 verify，retry 只能是 never 或 stale_read。verify 的业务充分性由流程作者负责，
 例如“窗口存在”不能作为“提交成功”的有效证据；程序只判断给定断言是否成立。
 
@@ -101,8 +108,9 @@ run/resume 同步运行，返回时为完成、暂停、需核对、失败或停
 ## 4. 状态与恢复
 
 运行状态：ready/running/paused/needs_review/stopped/completed/failed。
-步骤状态：pending/running/verifying/completed/uncertain/failed，附 attempts、checkpoint_passed、
-verified、error_code。verified 只表示该步骤的给定后置断言通过。
+步骤状态：pending/running/verifying/completed/uncertain/failed/skipped，附 attempts、checkpoint_passed、
+verified、error_code、attempt_errors。skipped 仅由段隔离产生，从未执行也不计尝试；
+verified 只表示该步骤的给定后置断言通过。
 
 流程暂停流程：
 

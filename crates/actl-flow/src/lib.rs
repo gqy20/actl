@@ -39,6 +39,8 @@ pub struct Step {
     pub verify: Option<Invocation>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resume_check: Option<Invocation>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub section: Option<String>,
     #[serde(default)]
     pub pause_before: bool,
     #[serde(default)]
@@ -184,6 +186,38 @@ pub enum Failure {
     #[default]
     Pause,
     Fail,
+    /// Isolate the failure: mark the step, skip the rest of its section and keep
+    /// executing later sections. The run ends `needs_review`, never `completed`.
+    SkipSection,
+}
+
+/// Route-defect classification: the same non-read-only step failing with the same
+/// error code on its last three recorded attempts is a broken route, not a transient.
+pub fn route_defect(record: &engine::StepRecord) -> bool {
+    let history = &record.attempt_errors;
+    history.len() >= 3
+        && record.error_code.is_some_and(|code| {
+            history[history.len() - 3..]
+                .iter()
+                .all(|observed| *observed == code)
+        })
+}
+
+/// Redacted failure evidence, or a minimal structured synthesis when the source
+/// error carries none: the phase, the failing command name and the attempt count.
+pub fn step_failure_evidence(
+    step: &Step,
+    error: &CtlError,
+    phase: &str,
+    command: &str,
+) -> Option<serde_json::Value> {
+    failure_evidence(step.evidence, error).or_else(|| {
+        Some(serde_json::json!({
+            "phase": phase,
+            "command": command,
+            "synthetic": true,
+        }))
+    })
 }
 
 pub fn parse(text: &str) -> Result<Plan, CtlError> {
@@ -221,6 +255,22 @@ pub fn parse(text: &str) -> Result<Plan, CtlError> {
                 &format!("{base}.title"),
                 Some(&step.id),
                 "title requires 1-256 UTF-8 bytes",
+            ));
+        }
+        if let Some(section) = &step.section
+            && !actl_core::history::valid_id(section)
+        {
+            return Err(schema::error(
+                &format!("{base}.section"),
+                Some(&step.id),
+                "section must be a valid identifier",
+            ));
+        }
+        if step.on_failure == Failure::SkipSection && step.section.is_none() {
+            return Err(schema::error(
+                &format!("{base}.on_failure"),
+                Some(&step.id),
+                "skip_section requires the step to declare a section",
             ));
         }
         for (phase, call) in [

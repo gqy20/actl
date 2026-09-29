@@ -31,6 +31,7 @@ pub fn decode(raw: Value) -> Result<super::Plan, CtlError> {
                 "before",
                 "verify",
                 "resume_check",
+                "section",
                 "pause_before",
                 "retry",
                 "recovery",
@@ -103,7 +104,7 @@ pub fn decode(raw: Value) -> Result<super::Plan, CtlError> {
         }
         for (key, allowed) in [
             ("retry", &["never", "read_only", "stale_read"][..]),
-            ("on_failure", &["pause", "fail"][..]),
+            ("on_failure", &["pause", "fail", "skip_section"][..]),
             ("evidence", &["metadata", "full"][..]),
         ] {
             if let Some(v) = step.get(key)
