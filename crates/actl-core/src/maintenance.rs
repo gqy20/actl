@@ -7,7 +7,12 @@ pub(crate) fn periodic(
     now: u64,
     work: impl FnOnce() -> std::io::Result<()>,
 ) -> std::io::Result<()> {
-    periodic_with_interval(dir, now, 60_000, work)
+    periodic_with_interval(
+        dir,
+        now,
+        crate::history::RETENTION_INTERVAL.as_millis() as u64,
+        work,
+    )
 }
 
 pub(crate) fn periodic_with_interval(
@@ -50,7 +55,7 @@ mod tests {
         let dir = std::env::temp_dir().join(crate::new_snapshot_id());
         std::fs::create_dir(&dir).unwrap();
         let calls = std::cell::Cell::new(0);
-        for now in [100_000, 100_001] {
+        for now in [100_000, 100_001, 100_000 + 3_600_000 - 1] {
             periodic(&dir, now, || {
                 calls.set(calls.get() + 1);
                 Ok(())
@@ -67,7 +72,7 @@ mod tests {
         std::fs::create_dir(&dir).unwrap();
         assert!(periodic(&dir, 100_000, || Err(std::io::Error::other("failed"))).is_err());
         let calls = std::cell::Cell::new(0);
-        for now in [100_001, 99_000, 159_000] {
+        for now in [100_001, 99_000, 99_000 + 3_600_000] {
             periodic(&dir, now, || {
                 calls.set(calls.get() + 1);
                 Ok(())

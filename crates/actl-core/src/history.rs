@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 
 const DAY: u64 = 86_400_000;
 const CALL_LIMIT: u64 = 1024 * 1024;
+pub const RETENTION_INTERVAL: std::time::Duration = std::time::Duration::from_secs(60 * 60);
 
 pub fn valid_id(id: &str) -> bool {
     !id.is_empty()
@@ -44,7 +45,28 @@ pub struct Journal {
 }
 impl Journal {
     pub fn open(root: &Path, call: &str, task: Option<String>) -> std::io::Result<Self> {
-        let result = Self::open_inner(root, call, task.clone());
+        Self::open_with_retention(root, call, task, true)
+    }
+    /// For latency-sensitive callers that schedule retention on a separate worker.
+    pub fn open_without_retention(
+        root: &Path,
+        call: &str,
+        task: Option<String>,
+    ) -> std::io::Result<Self> {
+        Self::open_with_retention(root, call, task, false)
+    }
+    fn open_with_retention(
+        root: &Path,
+        call: &str,
+        task: Option<String>,
+        retain: bool,
+    ) -> std::io::Result<Self> {
+        let result = (|| {
+            if retain {
+                maintain(root)?;
+            }
+            Self::open_inner(root, call, task.clone())
+        })();
         if let Err(error) = &result {
             crate::log_health::failure(root, call, task.as_deref(), "journal_open", 0, error);
         }
@@ -56,9 +78,6 @@ impl Journal {
         }
         let dir = root.join("history");
         fs::create_dir_all(&dir)?;
-        crate::maintenance::periodic(&dir, crate::state::unix_ms(), || {
-            cleanup(&dir, 7 * DAY, 64 * 1024 * 1024)
-        })?;
         let file = OpenOptions::new()
             .write(true)
             .create_new(true)
@@ -135,6 +154,16 @@ impl Journal {
             self.failure_error = Some(e);
         }
     }
+}
+
+/// Run the existing cross-process-throttled retention policy outside UI callbacks.
+pub fn maintain(root: &Path) -> std::io::Result<()> {
+    let dir = root.join("history");
+    fs::create_dir_all(&dir)?;
+    let _trace = crate::trace::scope("history.retention");
+    crate::maintenance::periodic(&dir, crate::state::unix_ms(), || {
+        cleanup(&dir, 7 * DAY, 64 * 1024 * 1024)
+    })
 }
 
 /// Only this directory's regular files are eligible. Desktop recovery records are separate.

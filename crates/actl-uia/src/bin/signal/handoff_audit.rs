@@ -8,9 +8,11 @@ pub(super) fn record(
 ) {
     let paths = actl_core::state::SignalPaths::default();
     let call = format!("consent-{}", actl_core::snapshot::new_snapshot_id());
-    if let Ok(mut journal) =
-        actl_core::history::Journal::open(&paths.dir, &call, Some(request.task.clone()))
-    {
+    if let Ok(mut journal) = actl_core::history::Journal::open_without_retention(
+        &paths.dir,
+        &call,
+        Some(request.task.clone()),
+    ) {
         journal.record(
             "consent_decision",
             serde_json::json!({

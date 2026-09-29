@@ -25,9 +25,11 @@ pub fn transfer(pid: u32, request: &Request) {
     let result = transfer_checked(pid, request);
     let paths = actl_core::state::SignalPaths::default();
     let call = format!("foreground-{}", actl_core::snapshot::new_snapshot_id());
-    if let Ok(mut journal) =
-        actl_core::history::Journal::open(&paths.dir, &call, Some(request.task.clone()))
-    {
+    if let Ok(mut journal) = actl_core::history::Journal::open_without_retention(
+        &paths.dir,
+        &call,
+        Some(request.task.clone()),
+    ) {
         journal.record(
             "call_started",
             serde_json::json!({"command":"foreground-transfer"}),

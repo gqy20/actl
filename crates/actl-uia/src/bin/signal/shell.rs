@@ -84,6 +84,20 @@ fn call_snapshot() -> Vec<actl_core::state::SessionState> {
         let cache = std::sync::Arc::new(Mutex::new(vec![]));
         let output = cache.clone();
         if std::thread::Builder::new()
+            .name("signal-history-retention".into())
+            .spawn(|| {
+                loop {
+                    if let Err(error) = actl_core::history::maintain(&SignalPaths::default().dir) {
+                        eprintln!("INTERNAL: display history retention failed: {error}");
+                    }
+                    std::thread::sleep(actl_core::history::RETENTION_INTERVAL);
+                }
+            })
+            .is_err()
+        {
+            eprintln!("INTERNAL: cannot start display history retention");
+        }
+        if std::thread::Builder::new()
             .name("signal-state-reader".into())
             .spawn(move || {
                 loop {
