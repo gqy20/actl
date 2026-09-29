@@ -42,6 +42,7 @@
 
 - 新命令:单测 + envelope 契约 golden 最低配,且 **help 四要素齐备**(Usage/参数/Example/Errors,进 cli.rs 的 after_help 表);fixtures 只用系统自带应用(计算器/记事本/ms-settings);
 - **双轨纪律**:CI fixture 轨(系统应用,可复现)与场景实测轨(真实应用,docs/ 场景记录,不进 CI)分开;场景实测结论落 docs 并同步 pack;
+- **内环按层选测试**:改 core/flow/uia 只跑本 crate(`cargo test -p actl-core|actl-flow|actl-uia`,uia 交互用例默认 ignore 不占门禁);改 cli 只跑对应契约文件(`cargo test -p actl-cli --test <名>`);涉协议/golden/跨层才跑全量。全量验证交给 pre-push 的 `cargo xtask gate`,不为单文件改动反复跑整套;gate 各步耗时在 stderr(`· <step> Nms`),慢环节按 timing 纪律头内比较;
 - 修 bug:**先写复现测试再修**,同 PR;
 - golden 变更只能随 `spec`/`test` 提交,禁止顺手改;
 - **GUI 应用禁 taskkill**(会话复活:记事本 TabState+云同步、计算器僵尸框架)——清理一律优雅关闭(close-window --pid/--hwnd),fixture 用 finally/trap EXIT 进入收尾判定;仅在无停止/人工接管且资源归属已核实时关闭,否则保留现场并记录原因;

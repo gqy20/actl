@@ -9,6 +9,8 @@
 
 ## [Unreleased]
 
+- 测试清理与门禁计时：旧 cli.rs 契约用例并入 cli_contract.rs（去除 6 项重复、删除恒真断言、合并同调用的两个 batch 断言）；停止代际并发一致性测试写者循环 100→30 轮，去除纯归档 IO 耗时；gate 各步耗时随 stderr 输出，慢环节可头内比较。核查中确认 `--physical --with <键名>` 缺白名单校验、未知键名静默映射为 Win 键，已登记 ROADMAP 待修。
+
 - UIA 语义动作预览后按 RuntimeId、PID、角色、名称、AutomationId 和原生宿主身份复核目标；布局移动不再误报不可操作。动作重新获取所选 Pattern，控件禁用或身份变化仍拒绝；键盘焦点与物理命中护栏保留。workflow 的 metadata 证据保留 target_identity_changed / target_disabled 原因。
 
 - VS Code workflow 使用状态栏按钮跳转行、快速访问按钮切换文件和菜单执行保存/撤销/恢复/替换，减少快捷键注入；动态输入框与结果项等待稳定，跳转后等待目标行列出现再核验。组合模板同步；新版独立 workflow 真机 26/26 通过，主文件与第二文件精确核验及正常关闭通过；实测与限制见 docs/67。
