@@ -25,6 +25,7 @@ pub const INPUT_TAG: usize = 0x4143544c;
 pub const REQUEST_MESSAGE: u32 = 0x8000 + 46;
 pub const CHECK_MESSAGE: u32 = 0x8000 + 47;
 pub const RECOVER_MESSAGE: u32 = 0x8000 + 48;
+pub const FOREGROUND_MESSAGE: u32 = 0x8000 + 51;
 pub const PENDING: usize = 1;
 pub const ALLOWED: usize = 2;
 pub const DEFERRED: usize = 3;

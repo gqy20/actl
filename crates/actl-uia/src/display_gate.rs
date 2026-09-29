@@ -29,10 +29,7 @@ pub fn recover_execution() -> Result<serde_json::Value, CtlError> {
     paths.recover_execution()
 }
 
-pub fn prepare_action(
-    kind: &str,
-    target: &str,
-) -> Result<actl_core::signal_session::ActionGuard, CtlError> {
+pub fn prepare_action(kind: &str, target: &str) -> Result<crate::feedback::ActionGuard, CtlError> {
     crate::feedback::prepare(
         kind,
         actl_core::activity::InputEffects {

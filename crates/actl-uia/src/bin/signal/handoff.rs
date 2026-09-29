@@ -56,6 +56,7 @@ struct Service {
     panel: Option<HWND>,
     failed_call: Option<String>,
     paused_call: Option<String>,
+    foreground_call: Option<String>,
 }
 thread_local! { static SERVICE: RefCell<Service> = RefCell::new(Service::default()); }
 
@@ -75,6 +76,7 @@ impl Service {
         self.active_request = None;
         self.request = None;
         self.generation = None;
+        self.foreground_call = None;
         unsafe {
             close_panel(self);
         }
@@ -228,7 +230,7 @@ pub fn message(msg: u32, pid: u32) -> usize {
         };
         s.observe_generation(&generation);
         let seq = activity();
-        if msg == CHECK_MESSAGE {
+        if msg == CHECK_MESSAGE || msg == FOREGROUND_MESSAGE {
             if paths.stop_requested() {
                 s.consent.revoke();
                 return CANCELLED;
@@ -240,6 +242,12 @@ pub fn message(msg: u32, pid: u32) -> usize {
                 return USER_PAUSED;
             }
             return if owner == pid && s.consent.check(&task, seq, unix_ms()) {
+                if msg == FOREGROUND_MESSAGE
+                    && let Some(mut request) = s.active_request.clone()
+                {
+                    request.ts_ms = unix_ms();
+                    super::foreground::transfer(pid, &request);
+                }
                 ALLOWED
             } else {
                 let reason = s.consent.reason();
@@ -263,6 +271,10 @@ pub fn message(msg: u32, pid: u32) -> usize {
             return DEFERRED;
         }
         if !paths.stop_requested() && s.consent.check_policy(&r.task, seq, unix_ms(), r.approval) {
+            if s.foreground_call.as_deref() != Some(&r.call) {
+                super::foreground::transfer(pid, &r);
+                s.foreground_call = Some(r.call.clone());
+            }
             audit(&r, "reused", "allowed");
             s.active_request = Some(r.clone());
             s.active = Some((pid, r.call, r.task));
@@ -617,6 +629,8 @@ unsafe fn decide(_hwnd: HWND, start: bool) {
                 s.consent
                     .allow_with_policy(&r.task, activity(), unix_ms(), r.approval);
                 audit(&r, "granted", "user_start");
+                super::foreground::transfer(pid, &r);
+                s.foreground_call = Some(r.call.clone());
             } else {
                 s.deferred = Some(r.call);
             }

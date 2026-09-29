@@ -28,6 +28,8 @@
 
 ## Phase 2 · M2 v0.2.0 剩余工作
 
+- [ ] 补齐前台交接 v9 的人工接管、进程内嵌套动作及多窗口真机矩阵；保留 Windows 拒绝激活时的可恢复提示。证据与边界见 [62](62-foreground-handoff.md)。
+
 ### 原生迁移后待验收
 
 - [ ] 对新 Rust 夹具复验 Calculator、Notepad、Explorer、msinfo32、Edge/Chrome 及显示端；验证身份、单次写入、失败保留和优雅清理，不能沿用旧 PS 的通过记录。

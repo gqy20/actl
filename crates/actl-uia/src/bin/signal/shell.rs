@@ -533,7 +533,9 @@ unsafe fn place(hwnd: HWND) {
 unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
     match msg {
         super::flow_start::MESSAGE => LRESULT(isize::from(super::flow_start::receive(wp.0 as u32))),
-        actl_core::handoff::REQUEST_MESSAGE | actl_core::handoff::CHECK_MESSAGE => {
+        actl_core::handoff::REQUEST_MESSAGE
+        | actl_core::handoff::CHECK_MESSAGE
+        | actl_core::handoff::FOREGROUND_MESSAGE => {
             LRESULT(super::handoff::message(msg, wp.0 as u32) as isize)
         }
         actl_core::handoff::RECOVER_MESSAGE => {

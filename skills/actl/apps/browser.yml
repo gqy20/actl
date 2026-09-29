@@ -13,6 +13,8 @@ app_version: "Edge 1xx / Chrome 1xx(Chromium 系)"
 verified_date: 2026-09-27
 verified_env: Win11 zh-cn(Edge + Chrome 双实证,docs/16)
 quirks:
+  - id: foreground_handoff
+    note: 前台失败先核对 window_prepare 的 activation_returned/foreground_before 和同 request_call 的 foreground_transfer/foreground_return；任务授权不等于 Windows 前台资格。2026-09-29 协议 v9 六步跨应用切窗、最小化恢复通过，开始一次；不外推到导航或小红书采集。禁止据前台失败重复启动或重放导航，见 docs/62-foreground-handoff.md。
   - id: revalidation_20260929
     note: 2026-09-29：隔离 profile 的 Edge/Chrome 本地动态页面均通过稳定等待、歧义拒绝、中英文读取与四种投影，并核验关闭；不外推到地址栏导航、远端业务或局部容器验收，见 docs/51。
   - id: current_execution_contract

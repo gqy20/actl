@@ -1,8 +1,24 @@
 //! Resolved execution feedback. Uses only local action facts, never key/text contents.
 use actl_core::activity::{ActionTarget, ClipboardEffect, InputEffects};
-use actl_core::signal_session::ActionGuard;
+use actl_core::signal_session::ActionGuard as CoreActionGuard;
 use actl_core::{CtlError, ErrorCode};
 use uiautomation::UIElement;
+
+pub struct ActionGuard {
+    inner: CoreActionGuard,
+    _foreground: Option<crate::handoff::ForegroundLease>,
+}
+impl std::ops::Deref for ActionGuard {
+    type Target = CoreActionGuard;
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+impl std::ops::DerefMut for ActionGuard {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
 
 thread_local! { static KEYBOARD_ANCHOR: std::cell::Cell<Option<(usize,usize)>> = const { std::cell::Cell::new(None) }; }
 fn physical_focus() -> Result<(usize, usize), CtlError> {
@@ -121,7 +137,11 @@ pub(crate) fn prepare(
     check_stop()?;
     let lease = crate::display_gate::ensure()?;
     crate::handoff::prepare(target.window.as_deref().unwrap_or(kind))?;
-    let guard = ActionGuard::begin(kind, effects, target);
+    let foreground = crate::handoff::foreground_lease()?;
+    let guard = ActionGuard {
+        inner: CoreActionGuard::begin(kind, effects, target),
+        _foreground: foreground,
+    };
     if guard.is_recording() {
         crate::display_gate::wait_presented(&guard, &lease.epoch)?;
     }

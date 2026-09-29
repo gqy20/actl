@@ -9,6 +9,8 @@ mod flow_display;
 mod flow_start;
 #[path = "signal/flow_ui.rs"]
 mod flow_ui;
+#[path = "signal/foreground.rs"]
+mod foreground;
 #[path = "signal/frame.rs"]
 mod frame;
 #[path = "signal/handoff.rs"]

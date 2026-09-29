@@ -16,6 +16,62 @@ use windows::{
     core::w,
 };
 thread_local! { static ACTIVE: Cell<bool> = const { Cell::new(false) }; }
+thread_local! { static FOREGROUND_READY: Cell<bool> = const { Cell::new(false) }; }
+thread_local! { static FOREGROUND_DEPTH: Cell<usize> = const { Cell::new(0) }; }
+
+/// Return eligibility to the companion before this short-lived caller exits.
+pub(crate) struct ForegroundLease(u32);
+fn release_outermost(depth: &Cell<usize>, release: impl FnOnce()) {
+    let previous = depth.get();
+    depth.set(previous.saturating_sub(1));
+    if previous == 1 {
+        release();
+    }
+}
+impl Drop for ForegroundLease {
+    fn drop(&mut self) {
+        FOREGROUND_DEPTH.with(|depth| {
+            release_outermost(depth, || {
+                let result = unsafe { AllowSetForegroundWindow(self.0) };
+                actl_core::signal_session::flow_event(
+                    "foreground_return",
+                    serde_json::json!({
+                        "companion_pid":self.0,"accepted":result.is_ok(),
+                        "failure":result.err().map(|e|e.to_string())
+                    }),
+                );
+            })
+        });
+    }
+}
+
+pub(crate) fn foreground_lease() -> Result<Option<ForegroundLease>, CtlError> {
+    if !ACTIVE.with(Cell::get) {
+        return Ok(None);
+    }
+    check()?;
+    if FOREGROUND_DEPTH.with(Cell::get) == 0
+        && !FOREGROUND_READY.with(|ready| ready.replace(false))
+        && query(FOREGROUND_MESSAGE)? != ALLOWED
+    {
+        return Err(failure("foreground_handoff_revoked"));
+    }
+    let hwnd = unsafe { FindWindowW(w!("actl_signal_window"), None) }
+        .map_err(|_| failure("companion_missing"))?;
+    let mut pid = 0;
+    unsafe {
+        GetWindowThreadProcessId(hwnd, Some(&mut pid));
+    }
+    if pid == 0
+        || SignalPaths::default()
+            .display_lease()
+            .is_none_or(|lease| lease.pid != pid || !lease.compatible(unix_ms()))
+    {
+        return Err(failure("companion_identity_changed"));
+    }
+    FOREGROUND_DEPTH.with(|depth| depth.set(depth.get() + 1));
+    Ok(Some(ForegroundLease(pid)))
+}
 
 fn failure(reason: &str) -> CtlError {
     actl_core::signal_session::handoff_event(reason);
@@ -26,7 +82,7 @@ fn query(message: u32) -> Result<usize, CtlError> {
     let hwnd = unsafe { FindWindowW(w!("actl_signal_window"), None) }
         .map_err(|_| failure("companion_missing"))?;
     let mut result = 0;
-    let sent = unsafe {
+    let send = |result: &mut usize| unsafe {
         SendMessageTimeoutW(
             hwnd,
             message,
@@ -34,11 +90,28 @@ fn query(message: u32) -> Result<usize, CtlError> {
             LPARAM(0),
             SMTO_ABORTIFHUNG | SMTO_BLOCK,
             500,
-            Some(&mut result),
+            Some(result),
         )
     };
+    let mut sent = send(&mut result);
+    // Re-query consent once after a slow renderer response, never replay an action.
+    if sent.0 == 0 && message == CHECK_MESSAGE {
+        actl_core::stop::check_current()?;
+        actl_core::signal_session::flow_event(
+            "handoff_query_retry",
+            serde_json::json!({"message":message,"timeout_ms":500}),
+        );
+        result = 0;
+        sent = send(&mut result);
+    }
     if sent.0 == 0 || result == 0 {
-        return Err(failure("companion_unresponsive"));
+        let mut error = failure("companion_unresponsive");
+        if let Some(evidence) = error.evidence.as_mut() {
+            evidence["query_message"] = message.into();
+            evidence["query_timeout_ms"] = 500.into();
+            evidence["query_return"] = result.into();
+        }
+        return Err(error);
     }
     Ok(result)
 }
@@ -104,6 +177,7 @@ fn request(target: &str) -> Result<(), CtlError> {
             ALLOWED => {
                 actl_core::signal_session::handoff_event("allowed");
                 ACTIVE.with(|a| a.set(true));
+                FOREGROUND_READY.with(|ready| ready.set(true));
                 return Ok(());
             }
             PANEL_UNAVAILABLE => return Err(failure("handoff_panel_unavailable")),
@@ -127,4 +201,22 @@ fn request(target: &str) -> Result<(), CtlError> {
         }
     }
     Err(failure("handoff_pending"))
+}
+
+#[cfg(test)]
+mod foreground_tests {
+    use super::*;
+    #[test]
+    fn nested_actions_return_eligibility_only_at_outer_boundary() {
+        let depth = Cell::new(2);
+        let returns = Cell::new(0);
+        release_outermost(&depth, || returns.set(returns.get() + 1));
+        assert_eq!(returns.get(), 0);
+        release_outermost(&depth, || returns.set(returns.get() + 1));
+        assert_eq!(returns.get(), 1);
+        release_outermost(&depth, || panic!("no lease to return"));
+        depth.set(1); // Next action in the same process gets its own lease.
+        release_outermost(&depth, || returns.set(returns.get() + 1));
+        assert_eq!(returns.get(), 2);
+    }
 }

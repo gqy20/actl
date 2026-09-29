@@ -9,6 +9,8 @@
 
 ## [Unreleased]
 
+- 显示协议 v9 补齐前台资格转交与动作结束归还，覆盖连续 CLI、最小化及失败路径；旧显示端需正常替换。不扩大到所有进程，不改变暂停/停止判断。历史记录增加转交/归还结果，窗口失败附原生返回值；慢响应只重查一次授权状态，不重放动作。Chrome/ZCode 六步真机通过，开始一次，见 docs/62。
+
 - 全量移除剩余 41 个 PowerShell 文件：业务动作迁入 workflow，诊断、回归调度、夹具和发布打包迁入 actl-devtools，经 cargo xtask 调用。门禁改跑 Rust 测试；移除 17 个 Bash 包装/过时实验入口，未替代的历史实验保留待办。
 - verify-file/verify-owner/verify-closed 改用原生 ZIP/XML/Win32/WMI，删除运行时解释器；补连续 WinRT 调用、DTD/膨胀限制和进程身份测试。新增 verify --url-query，用于夸克搜索的精确解码核验。
 - 新增网易云播放、夸克搜索、腾讯会议草稿及日期修改、通用启动观察 workflow；均按 once_per_run 交接，恢复先核验结果。模板预检通过不代表真实软件验收通过。迁移清单及测试证据见 docs/61。

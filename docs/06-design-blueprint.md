@@ -641,6 +641,11 @@ flow 因交接中断保存 paused，写步骤 uncertain，恢复先验证而不�
 分段注入失败保留 delivered_before_error（已确认的前缀）及 failed_segment_size。
 
 focus-window 成功须验证原生前台根 HWND；错误按 window_prepare 阶段报告具体 reason，
+前台激活超时附 `foreground_before`、`activation_requested`、`activation_returned`（未请求时为 null）、`caller_pid`、`waited_ms`。
+`activation_returned` 是 SetForegroundWindow 的原始布尔结果，不等于最终前台核验结果；不读取该 API 未定义的 LastError。
+显示端只在任务授权通过后向同目录 actl.exe 的当前调用 PID 请求 AllowSetForegroundWindow；每调用一次，失败不伪装成拒绝任务授权或成功激活。history 的 foreground_transfer 记录 request_call/caller_pid/accepted/failure，可与调用关联。Windows 前台资格可随输入失效，不能据 once_per_run 推定永久可激活。
+显示协议 v9：动作 guard 在最外层退出时（包括失败路径）向核验过的显示端 PID 归还前台资格，history 记 foreground_return。进程内下一动作通过 FOREGROUND_MESSAGE 重新检查当前任务授权并领取；嵌套动作不提前归还。旧显示端必须正常替换，不能混用。
+CHECK_MESSAGE 查询超时允许在复核停止代次后对同一显示窗口重查一次，每次上限 500ms，记 handoff_query_retry；不重试开始请求、资格请求或任何桌面动作。最终失败 evidence 附 query_message/query_timeout_ms/query_return。
 前台不匹配属于 NOT_ACTIONABLE，不代表权限不足。
 launch 新增 --wait-window <标题子串> 与 --timeout <1..60000 毫秒>（默认 5000，要求前者），
 选项置于程序之前。默认结果新增 window_ready:false；等待成功新增 window 对象

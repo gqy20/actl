@@ -4,10 +4,21 @@ use std::time::{Duration, Instant};
 use windows::Win32::UI::Input::KeyboardAndMouse::IsWindowEnabled;
 use windows::Win32::{Foundation::*, UI::WindowsAndMessaging::*};
 
-fn request_activation(mut is_foreground: impl FnMut() -> bool, request: impl FnOnce()) {
-    if !is_foreground() {
-        request();
-    }
+fn request_activation<T>(
+    mut is_foreground: impl FnMut() -> bool,
+    request: impl FnOnce() -> T,
+) -> Option<T> {
+    (!is_foreground()).then(request)
+}
+
+fn activation_evidence(
+    before: isize,
+    requested: Option<bool>,
+    pid: u32,
+    waited_ms: u64,
+) -> serde_json::Value {
+    serde_json::json!({"foreground_before":before,"activation_requested":requested.is_some(),
+        "activation_returned":requested,"caller_pid":pid,"waited_ms":waited_ms})
 }
 
 pub(crate) fn activate(win: &uiautomation::UIElement) -> Result<(), CtlError> {
@@ -73,12 +84,13 @@ pub(crate) fn activate(win: &uiautomation::UIElement) -> Result<(), CtlError> {
     crate::feedback::check_stop()?;
     // Request native foreground once, without invoking a provider's SetFocus on
     // the window root. Child input focus is still checked by the input guard.
-    request_activation(
+    let foreground_before = unsafe { GetForegroundWindow() }.0 as isize;
+    let requested = request_activation(
         || unsafe { GetForegroundWindow() } == root,
         || {
             // SAFETY: root was checked above; Windows can reject this request and
             // the bounded foreground observation below remains authoritative.
-            let _ = unsafe { SetForegroundWindow(root) };
+            unsafe { SetForegroundWindow(root).as_bool() }
         },
     );
     let start = Instant::now();
@@ -89,7 +101,18 @@ pub(crate) fn activate(win: &uiautomation::UIElement) -> Result<(), CtlError> {
         }
         std::thread::sleep(Duration::from_millis(crate::timing().fast_poll_ms));
     }
-    Err(failure("foreground_not_acquired"))
+    let mut error = failure("foreground_not_acquired");
+    if let Some(serde_json::Value::Object(evidence)) = error.evidence.as_mut()
+        && let serde_json::Value::Object(details) = activation_evidence(
+            foreground_before,
+            requested,
+            std::process::id(),
+            start.elapsed().as_millis() as u64,
+        )
+    {
+        evidence.extend(details);
+    }
+    Err(error)
 }
 
 /// Match explicitly supplied window title. Process launchers may hand off to an
@@ -144,5 +167,24 @@ mod tests {
         let mut requests = 0;
         request_activation(|| false, || requests += 1);
         assert_eq!(requests, 1);
+    }
+
+    #[test]
+    fn rejected_activation_is_preserved_for_diagnostics() {
+        assert_eq!(request_activation(|| false, || false), Some(false));
+        assert_eq!(
+            request_activation(|| true, || panic!("already foreground")),
+            None
+        );
+    }
+
+    #[test]
+    fn foreground_diagnostics_contract() {
+        let actual = super::activation_evidence(985468, Some(false), 42, 1000);
+        let golden: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/golden/foreground_activation.json"))
+                .unwrap();
+        assert_eq!(actual, golden);
+        assert!(super::activation_evidence(1, None, 42, 1000)["activation_returned"].is_null());
     }
 }
