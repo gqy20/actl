@@ -313,11 +313,13 @@ impl Host for Adapter<'_> {
             json!({"step_id":step_id,"observation":event}),
         );
     }
-    fn capture_failure(&mut self, step_id: &str, phase: &str) {
-        // 失败瞬间整屏留证到 flow-resources/<id>/evidence/:归因依赖现场
-        // (docs/68 两次靠用户手快截图定位)。诊断动作只吞错,绝不影响流程;
-        // 文件名按 步骤-相位 固定,同步重试覆盖旧图,不无限堆积。
-        let name = format!("{}-{}.png", step_id.replace(['/', '\\', ':'], "_"), phase);
+    fn capture_failure(&mut self, step_id: &str, phase: &str, call: Option<&Invocation>) {
+        // 失败瞬间三路留证到 flow-resources/<id>/evidence/:归因依赖现场
+        // (docs/68 实证:截图给「人看到的」,窗口清单给「原生实况」,
+        // UIA 快照给「自动化看到的」——Zotero 空库树缺失、X:/.xlsx 对话框
+        // 原文都靠后者定位)。诊断只吞错,绝不影响流程;文件名按 步骤-相位
+        // 固定,同步重试覆盖旧文件,不无限堆积。
+        let stem = format!("{}-{}", step_id.replace(['/', '\\', ':'], "_"), phase);
         let Some(root) = self
             .store
             .dir
@@ -331,16 +333,76 @@ impl Host for Adapter<'_> {
             return;
         };
         let dir = root.join(id).join("evidence");
-        let path = dir.join(name);
-        let result = std::fs::create_dir_all(&dir)
+        let shot = std::fs::create_dir_all(&dir)
             .map_err(|e| e.to_string())
             .and_then(|_| {
-                actl_uia::screenshot_screen(Some(&path.to_string_lossy()))
-                    .map(|_| ())
-                    .map_err(|e| e.to_string())
+                actl_uia::screenshot_screen(Some(
+                    &dir.join(format!("{stem}.png")).to_string_lossy(),
+                ))
+                .map(|_| ())
+                .map_err(|e| e.to_string())
             });
-        if let Err(error) = result {
+        if let Err(error) = shot {
             eprintln!("INTERNAL: failure screenshot unavailable for {step_id}/{phase}: {error}");
+        }
+        // 原生窗口清单:锁屏/隐藏壳/歧义窗口/对话框归属一眼可见。
+        let windows = actl_uia::native_windows().map(|rows| {
+            let items: Vec<Value> = rows
+                .iter()
+                .map(|w| {
+                    json!({
+                        "title": w.title, "class": w.class, "pid": w.pid,
+                        "hwnd": w.hwnd, "visible": w.visible, "foreground": w.foreground,
+                        "minimized": w.minimized, "topmost": w.topmost,
+                    })
+                })
+                .collect();
+            json!({"windows": items})
+        });
+        match windows {
+            Ok(value) => {
+                if let Err(error) = std::fs::write(
+                    dir.join(format!("{stem}.windows.json")),
+                    serde_json::to_vec(&value).unwrap_or_default(),
+                ) {
+                    eprintln!("INTERNAL: window inventory write failed: {error}");
+                }
+            }
+            Err(error) => {
+                eprintln!("INTERNAL: window inventory unavailable for {step_id}/{phase}: {error}");
+            }
+        }
+        // UIA 快照:按失败调用的 --app 定向;窗口垂死/缺失时如实跳过
+        // (截屏与窗口清单已兜底)。
+        if let Some(app) = call.and_then(app_context) {
+            let command =
+                crate::cli::Cli::try_parse_from(["actl", "snapshot", "--app", app.as_str()])
+                    .map_err(|e| e.to_string())
+                    .and_then(|parsed| match parsed.command {
+                        crate::cli::Command::Snapshot { .. } => Ok(parsed.command),
+                        _ => Err("unexpected parse".to_string()),
+                    });
+            match command {
+                Ok(command) => match crate::dispatch(&command) {
+                    Ok(output) => {
+                        if let Err(error) = std::fs::write(
+                            dir.join(format!("{stem}.uia.json")),
+                            serde_json::to_vec(&output.data).unwrap_or_default(),
+                        ) {
+                            eprintln!("INTERNAL: UIA snapshot write failed: {error}");
+                        }
+                    }
+                    Err(error) => {
+                        // 失败现场本来就可能是窗口垂死/缺失——如实记录错误码即可。
+                        eprintln!(
+                            "INTERNAL: UIA snapshot unavailable for {step_id}/{phase}: {error}"
+                        );
+                    }
+                },
+                Err(error) => {
+                    eprintln!("INTERNAL: snapshot command build failed: {error}");
+                }
+            }
         }
     }
     fn condition(&mut self, call: &Invocation) -> Result<bool, CtlError> {
@@ -617,5 +679,58 @@ fn outcome(store: &Store, run: &Run) -> Result<Value, CtlError> {
         Err(CtlError::with_evidence(code, "workflow halted", value))
     } else {
         Ok(value)
+    }
+}
+
+/// 从失败调用里提取 --app 窗口上下文,供失败瞬间的定向 UIA 快照。
+/// 覆盖两种形态:顶层参数("--app", 值)与序列 JSON 内嵌("\"--app\",\"值\"")。
+fn app_context(call: &Invocation) -> Option<String> {
+    for (index, arg) in call.args.iter().enumerate() {
+        if arg == "--app" {
+            return call.args.get(index + 1).cloned().filter(|v| !v.is_empty());
+        }
+        if arg.contains("\"--app\"") {
+            // 序列参数是子调用的 JSON 串;取 "--app" 后的下一个 JSON 字符串值。
+            let tail = arg.split("\"--app\"").nth(1)?;
+            let value = tail.trim_start().trim_start_matches(',').trim_start();
+            let value = value.strip_prefix('"')?;
+            let end = value.find(['"', '\\'])?;
+            let text = &value[..end];
+            if !text.is_empty() && !text.starts_with("--") {
+                return Some(text.replace("\\\\", "\\"));
+            }
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+mod failure_evidence_tests {
+    use super::*;
+
+    fn call(args: &[&str]) -> Invocation {
+        Invocation {
+            command: "workflow-sequence".into(),
+            args: args.iter().map(|s| s.to_string()).collect(),
+            bind: Default::default(),
+        }
+    }
+
+    #[test]
+    fn app_context_reads_top_level_and_embedded_sequence_forms() {
+        assert_eq!(
+            app_context(&call(&["--app", "我的文库 - Zotero"])),
+            Some("我的文库 - Zotero".into())
+        );
+        let embedded =
+            call(&["{\"args\":[\"--app\",\"apps-verify1-excel-table\"],\"command\":\"wait\"}"]);
+        assert_eq!(
+            app_context(&embedded),
+            Some("apps-verify1-excel-table".into())
+        );
+        assert_eq!(app_context(&call(&["--value", "x"])), None);
+        // 内嵌值本身是旗标形态(--app 后紧跟另一个旗)时不误取。
+        let flag_next = call(&["{\"args\":[\"--app\",\"--timeout\"],\"command\":\"wait\"}"]);
+        assert_eq!(app_context(&flag_next), None);
     }
 }

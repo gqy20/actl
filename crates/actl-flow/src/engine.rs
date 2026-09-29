@@ -98,9 +98,10 @@ impl Run {
 }
 pub trait Host {
     fn recovery_event(&mut self, _step_id: &str, _event: &crate::bounded::Event) {}
-    /// 步骤失败留证钩子(默认无操作):实现方在失败瞬间落屏等取证。
-    /// 只读诊断,失败不得影响流程走向;实现自行吞错并限频。
-    fn capture_failure(&mut self, _step_id: &str, _phase: &str) {}
+    /// 步骤失败留证钩子(默认无操作):实现方在失败瞬间截屏、记录窗口清单与
+    /// UIA 快照等取证。只读诊断,失败不得影响流程走向;实现自行吞错并限频。
+    /// call 携带失败的调用(含其 --app 上下文)供定向取证;bind 失败无调用。
+    fn capture_failure(&mut self, _step_id: &str, _phase: &str, _call: Option<&Invocation>) {}
     fn sleep_ms(&mut self, ms: u64) {
         std::thread::sleep(std::time::Duration::from_millis(ms));
     }
@@ -273,7 +274,7 @@ pub fn execute(
                 run.steps[i].error_code = Some(error.code);
                 run.steps[i].error_evidence =
                     crate::step_failure_evidence(step, &error, "bind", "resolve");
-                host.capture_failure(&step.id, "bind");
+                host.capture_failure(&step.id, "bind", None);
                 record_attempt_error(run, i, error.code);
                 if step.on_failure == crate::Failure::SkipSection {
                     skip_section(plan, run, i);
@@ -307,7 +308,7 @@ pub fn execute(
             run.steps[i].error_code = Some(error.code);
             run.steps[i].error_evidence =
                 crate::step_failure_evidence(&step, &error, "resume_check", &check.command);
-            host.capture_failure(&step.id, "resume_check");
+            host.capture_failure(&step.id, "resume_check", Some(check));
             record_attempt_error(run, i, error.code);
             if boundary(run, store, host)? {
                 return Ok(());
@@ -357,7 +358,7 @@ pub fn execute(
                         replay_confirmed = error.code == ErrorCode::AssertionFailed;
                         run.steps[i].error_evidence =
                             crate::step_failure_evidence(&step, &error, "verify", &verify.command);
-                        host.capture_failure(&step.id, "verify");
+                        host.capture_failure(&step.id, "verify", Some(verify));
                         run.steps[i].error_code = Some(error.code);
                         record_attempt_error(run, i, error.code);
                     }
@@ -413,7 +414,7 @@ pub fn execute(
                 return Ok(());
             }
             run.steps[i].error_evidence = crate::failure_evidence(step.evidence, &error);
-            host.capture_failure(&step.id, "before");
+            host.capture_failure(&step.id, "before", Some(before));
             run.steps[i].error_code = Some(error.code);
             if boundary(run, store, host)? {
                 return Ok(());
@@ -500,7 +501,7 @@ pub fn execute(
                 }
                 run.steps[i].error_evidence =
                     crate::step_failure_evidence(&step, &error, "run", &step.run.command);
-                host.capture_failure(&step.id, "run");
+                host.capture_failure(&step.id, "run", Some(&step.run));
                 run.steps[i].error_code = Some(error.code);
                 run.steps[i].status = if host.read_only(&step.run) {
                     StepStatus::Failed
@@ -566,7 +567,7 @@ pub fn execute(
                         }
                         run.steps[i].error_evidence =
                             crate::step_failure_evidence(&step, &error, "verify", &verify.command);
-                        host.capture_failure(&step.id, "verify");
+                        host.capture_failure(&step.id, "verify", Some(verify));
                         run.steps[i].error_code = Some(error.code);
                         run.steps[i].status = StepStatus::Uncertain;
                         record_attempt_error(run, i, error.code);
