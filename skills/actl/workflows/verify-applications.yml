@@ -3273,14 +3273,16 @@
       "run": {
         "sequence": [
           {
-            "command": "set-value",
+            "command": "type",
             "args": [
               "id:1001",
               "D4",
               "--app",
               {
                 "input": "excel-table-app"
-              }
+              },
+              "--verify-value",
+              "D4"
             ]
           },
           {
@@ -3299,20 +3301,6 @@
             "command": "press",
             "args": [
               "ctrl+c",
-              "--target",
-              "uia:{\"match\":{\"name\":\"D4\"}}",
-              "--app",
-              {
-                "input": "excel-table-app"
-              }
-            ]
-          },
-          {
-            "command": "press",
-            "args": [
-              "esc",
-              "--target",
-              "uia:{\"match\":{\"name\":\"D4\"}}",
               "--app",
               {
                 "input": "excel-table-app"
