@@ -310,7 +310,7 @@ expected: 预期完整文本
 
 运行前解析并保存具体 plan，保存内容没有 inputs 或绑定对象；恢复不重读模板/参数文件。
 参数仍会进入本地运行计划，不能因错误证据脱敏而认为计划也已脱敏。
-独立测试文件、Office 种子文档及 profile 的准备仍由验收工具负责；引擎不执行任意 PS。
+独立测试文件、Office 模板及 profile 可通过 resources 声明准备；引擎不执行任意 PS。
 
 ## 可恢复操作组与独立结果核验（2026-09-29）
 
@@ -330,3 +330,29 @@ expected: 预期完整文本
 - `verify --value ... --property text --normalize-lines`：全文比较前转换 CRLF/CR 为 LF、去除尾部 LF，与 contains 互斥；供 Word TextPattern 行结束符差异使用。
 
 文件/行集合/关闭断言对已知不匹配在 5 秒观察窗口内复查，未知错误不转为空或成功。文件内容上限 4 MiB、单个 XML part 上限 4 MiB、expected 参数上限 16 KiB。OOXML 与进程元数据使用编译进二进制的固定 Windows PowerShell/.NET 只读检查器；请求仅通过 stdin JSON 传递，不拼接用户代码、不接受脚本路径、不使用 Office COM。XML 禁用 DTD/外部实体；单次检查器执行 20 秒上限，因此不是整个断言的 5 秒硬实时保证。无新增 Rust 依赖。
+
+### 紧邻检查复用（2026-09-29）
+
+资源初始化协议见下节；恢复不再次执行资源准备。
+
+恢复执行时，只有仍为 pending 的步骤，且解析后的 resume_check 与 before 完全相同时，成功的恢复检查才直接满足此次前置检查。两者之间仍检查暂停/停止；不跨步骤、跨暂停或跨执行器缓存。uncertain/running/verifying 步骤仍先核验结果，显式重试前重新执行 before。不同参数或不同命令不合并。
+
+## 声明式资源初始化（2026-09-29）
+
+顶层可选 resources，严格拒绝未知字段：directories 为相对目录字符串数组，files 为 {path, text} 或 {path, copy} 数组，text/copy 必须且只能有一个。copy 相对于模板目录，规范化后仍须在该目录内；仅复制普通文件。目录与文件合计最多 128 项，每文件最多 1 MiB，总内容最多 4 MiB。文本仍受原 YAML 256 KiB 限制。
+
+```yaml
+inputs:
+  file: {default: '${run.dir}/${run.id}.txt'}
+resources:
+  directories: [profile]
+  files:
+    - {path: '${run.id}.txt', text: 'Initial text'}
+    - {path: 'document.docx', copy: 'assets/seed.docx'}
+```
+
+仅在 resources 存在时，inputs 的字符串 default 支持 ${run.id}、${run.dir} 与 ${env:NAME}。环境白名单为 LOCALAPPDATA、APPDATA、ProgramFiles、ProgramFiles(x86)、USERPROFILE；缺失或未知 token 拒绝。资源目标 path、directories 和 text 只支持 ${run.id}。copy 不展开 token；外部 --inputs 和步骤字符串不插值，不执行 shell 或递归展开变量。
+
+run.dir 固定为 actl 状态目录/flow-resources/<ID>；资源目标路径必须相对、使用斜杠、长度不超过 240 字符，禁止空段、点段、父级穿越、盘符/ADS、Windows 保留名与尾随点/空格。大小写不敏感的重名和文件作为其他目标的父路径都拒绝。
+
+flow-validate 使用 validation-preview ID，只读取复制源，不创建目录或 flow。含资源时 data.resources 返回 root、directories、files（每项 path/bytes）；emit-plan 的路径仅供预检，未初始化。flow-run 使用真实 ID，完整命令预检后独占创建资源目录和文件，再登记冻结计划。复用 ID、已有资源目录拒绝覆盖；初始化中断保留现场，不自动补写。--paused 也会初始化资源，但不执行步骤。flow-resume 不重读资源声明、默认值或复制源。覆盖默认文件路径不会重定向资源写入，外部输入资源由调用方准备。

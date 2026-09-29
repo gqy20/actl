@@ -9,7 +9,11 @@
 
 ## [Unreleased]
 
-- 四个应用验证统一使用 prepare-workflow 准备资源，整批入口合并为单一 flow；移除旧逐调用脚本、同名兼容入口、旧交接配置及 Office 重复读取/收尾代码。新 workflow 真机验收待完成。
+- 修复 VS Code Quick Input 导航：直接写 ValuePattern 并在 quickInput_list 内激活唯一结果，核验行号/文件内容；关闭核验只读取进程实例身份，避免要求退出阶段的命令行元数据，窗口观察放到进程读取之后。
+
+- 修复悬停暂停/继续按钮时主状态文字被操作提示覆盖；pending 步骤恢复时复用紧邻且完全相同的现场/前置检查，减少重复进程探查，不合并不确定步骤的结果核验。
+
+- 四个应用验证可直接使用 flow-run：YAML 声明隔离目录、初始文本与随包 Office 模板，运行上下文生成默认输入；预检不创建资源，恢复不重新初始化。整批入口为 verify-applications.yml，删除 prepare-workflow.ps1、verify-applications.ps1 和 office-package.ps1；新 workflow 真机验收待完成。
 
 - 新增 workflow 连续操作组、文件/行集合/剪贴板/进程归属/关闭断言及规范化全文比较，提供四个完整应用 YAML；操作组中断后核验结果，不自动重放。
 

@@ -5,9 +5,15 @@
     "approval": "once_per_run"
   },
   "inputs": {
-    "program": {},
-    "file": {},
-    "app": {}
+    "program": {
+      "default": "${env:ProgramFiles}/Microsoft Office/Root/Office16/EXCEL.EXE"
+    },
+    "file": {
+      "default": "${run.dir}/${run.id}.xlsx"
+    },
+    "app": {
+      "default": "${run.id}"
+    }
   },
   "steps": [
     {
@@ -832,5 +838,14 @@
       },
       "title": "Close only the verified task process"
     }
-  ]
+  ],
+  "resources": {
+    "directories": [],
+    "files": [
+      {
+        "path": "${run.id}.xlsx",
+        "copy": "assets/seed.xlsx"
+      }
+    ]
+  }
 }

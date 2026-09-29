@@ -9,10 +9,12 @@ app_version: "1.139.0"
 verified_date: 2026-09-28
 verified_env: Windows 10.0.26200.0 zh-cn; independent user-data-dir; extensions disabled; force-renderer-accessibility
 quirks:
+  - id: workflow_live_20260929
+    note: 新 workflow 首轮完成 17/22；关闭后首次核验 NOT_ACTIONABLE，恢复后通过；转到行输入在 type 阶段失败并停在待核对，未重放写入。不能视为整轮通过，见 docs/58。
   - id: workflow_migration_20260929
-    note: 完整业务步骤已迁入 workflows，统一通过 prepare-workflow.ps1 -Scenario 准备资源并登记流程；独立文件及窗口进程归属核验已接入。新版真机复验待执行，保留历史结论，见 docs/57；旧入口与对照脚本已删除，历史证据保留。
+    note: 业务步骤及隔离资源声明均在 workflows；直接 flow-run --file 对应模板 --id 新任务ID，无需准备脚本或输入文件。独立文件及进程归属核验已接入；新资源入口真机待复验，历史证据保留，见 docs/60。
   - id: resumable_verification
-    note: 2026-09-29，VS Code 1.139.1 的 scenarios/vscode-resume.ps1 持久化任务通过打开、单次输入与完整 TextPattern 读回；暂停后使用同一 flow ID 继续，不重跑准备脚本。此结论不覆盖磁盘保存和关闭，见 docs/55。新增 workflows/vscode-resume.yml 已承接桌面步骤，PS 仅准备隔离资源；通用 verify-text.yml 本轮只读全文核验通过，新模板写入复验另见 docs/56。
+    note: 2026-09-29，VS Code 1.139.1 的 scenarios/vscode-resume.ps1 持久化任务通过打开、单次输入与完整 TextPattern 读回；暂停后使用同一 flow ID 继续，不重跑准备脚本。此结论不覆盖磁盘保存和关闭，见 docs/55。workflows/vscode-resume.yml 现已承接桌面步骤和资源初始化，旧 PS 已删除；通用 verify-text.yml 本轮只读全文核验通过，新模板写入复验另见 docs/56。
   - id: empty_text_pattern
     note: 本机空编辑器 TextPattern 返回一个换行；不能据此推断非空文本也有附加换行。核验应先观察实际通道行为并精确比较完整结果，不使用包含匹配掩盖部分输入。
   - id: revalidation_20260929
@@ -27,19 +29,18 @@ quirks:
     note: workflows/vscode-edit.yml 使用独立 profile 和临时文件，覆盖三轮中英文/符号输入、Ctrl+Z 撤销、Ctrl+Y 重做、Ctrl+A 全文替换和关闭重开。每次保存均核验磁盘全文，重开另验编辑器 TextPattern；不能用文件标题作为保存证据。
 routes:
   - id: navigate_by_command
-    description: 中文界面 F1 命令面板搜索转到行或转到文件，逐步取唯一 ref；Ctrl+G 本轮未生效
-    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
+    description: F1 命令与行号/文件 Quick Input 使用 ValuePattern 写值，限定 quickInput_list 激活唯一结果
     status: manual
-    verify: 行号输入后在第二行插入标记并核验磁盘；文件路径输入后读取目标编辑器 TextPattern。旧脚本曾有 15 项通过记录；workflow 整轮待复验。
+    verify: 组件探查已验证行号 2 定位和独立第二文件全文；22 步整轮另记。输入与候选焦点身份不同，不能用 type/Enter 放宽护栏，详见 docs/59。
     steps:
       - ["press", "f1", "--app", "{window}"]
-      - ["find", "--name", "键入要运行的命令的名称。", "--role", "Edit", "--app", "{window}"]
-      - ["type", "{command_input_ref}", "{command_query}", "--paste", "--app", "{window}", "--snapshot", "{command_input_snapshot_id}"]
-      - ["find", "--name", "{command_prefix}", "--role", "ListItem", "--app", "{window}"]
-      - ["click", "{command_ref}", "--app", "{window}", "--snapshot", "{command_snapshot_id}"]
-      - ["find", "--name", "{input_name}", "--role", "Edit", "--app", "{window}"]
-      - ["type", "{input_ref}", "{line_or_owned_path}", "--paste", "--app", "{window}", "--snapshot", "{input_snapshot_id}"]
-      - ["press", "enter", "--app", "{window}", "--target", "{input_ref}", "--snapshot", "{input_snapshot_id}"]
+      - ["set-value", "{command_input_selector}", "{command_query}", "--app", "{window}"]
+      - ["wait", "--element", "{scoped_command_result}", "--app", "{window}"]
+      - ["click", "{scoped_command_result}", "--app", "{window}"]
+      - ["set-value", "{quick_input_selector}", "{line_or_owned_path}", "--app", "{window}"]
+      - ["verify", "--value", "{quick_input_selector}", "{line_or_owned_path}", "--property", "value", "--app", "{window}"]
+      - ["wait", "--element", "{scoped_result_selector}", "--app", "{window}"]
+      - ["click", "{scoped_result_selector}", "--app", "{window}"]
   - id: replace_owned_text
     description: 仅在归属明确的测试文件中替换；Ctrl+F 后 Esc 未能可靠返回待替换选区，改用显式替换面板
     # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。

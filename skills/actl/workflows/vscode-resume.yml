@@ -2,13 +2,17 @@ version: 1
 name: VS Code 暂停与继续验证
 handoff: {approval: once_per_run}
 inputs:
-  program: {}
-  profile: {}
-  file: {}
-  app: {}
-  target: {}
+  program: {default: '${env:LOCALAPPDATA}/Programs/Microsoft VS Code/Code.exe'}
+  profile: {default: '${run.dir}/profile'}
+  file: {default: '${run.dir}/${run.id}.txt'}
+  app: {default: '${run.id}'}
+  target: {default: 'uia:{"match":{"role":"Edit","name_contains":"${run.id}.txt"}}'}
   text: {default: 'ACTL resumable input verified.'}
   empty: {default: "\n"}
+resources:
+  directories: [profile]
+  files:
+    - {path: '${run.id}.txt', text: ''}
 steps:
   - id: open
     title: 打开隔离测试文件

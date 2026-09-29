@@ -41,15 +41,15 @@ fn migrated_assertion_commands_have_a_stable_surface() {
 #[test]
 fn office_inspector_reads_synthetic_packages_without_office() {
     let s = Sandbox::new();
-    let helper =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scenarios/office-package.ps1");
-    let output=Command::new("pwsh").args(["-NoProfile","-NonInteractive","-Command", ". $env:ACTL_OFFICE_HELPER; New-OfficeSeed (Join-Path $env:ACTL_FIXTURE_ROOT 'test.docx') word; New-OfficeSeed (Join-Path $env:ACTL_FIXTURE_ROOT 'test.xlsx') excel"])
-        .env("ACTL_OFFICE_HELPER",helper).env("ACTL_FIXTURE_ROOT",&s.root).output().unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    let assets =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../skills/actl/workflows/assets");
+    for ext in ["docx", "xlsx"] {
+        std::fs::copy(
+            assets.join(format!("seed.{ext}")),
+            s.root.join(format!("test.{ext}")),
+        )
+        .unwrap();
+    }
     for (file, kind, expected) in [
         ("test.docx", "docx", r#"{"text":"ACTL seed","bold":false}"#),
         (
@@ -142,7 +142,7 @@ fn reusable_workflows_preflight_without_desktop_actions() {
         ),
         (
             "vscode-edit",
-            "program: 'C:/test/Code.exe'\nprofile: 'C:/test/profile'\nfile: 'C:/test/task.txt'\napp: unique\neditor: 'id:editor'\nsecond: 'C:/test/second.txt'\nsecond_editor: 'id:second'",
+            "program: 'C:/test/Code.exe'\nprofile: 'C:/test/profile'\nfile: 'C:/test/task.txt'\napp: unique\neditor: 'id:editor'\nsecond: 'C:/test/second.txt'\nsecond_editor: 'id:second'\nfile_result: 'uia:{\"match\":{\"role\":\"ListItem\"},\"within\":{\"id\":\"quickInput_list\"}}'\nsecond_result: 'uia:{\"match\":{\"role\":\"ListItem\"},\"within\":{\"id\":\"quickInput_list\"}}'",
         ),
         (
             "zotero-search",
@@ -175,6 +175,34 @@ fn reusable_workflows_preflight_without_desktop_actions() {
         ]);
         assert_eq!(code, 0, "{name}: {result}");
         let plan: actl_flow::Plan = serde_json::from_value(result["data"]["plan"].clone()).unwrap();
+        if name == "vscode-edit" {
+            for step in plan.steps.iter().filter(|s| {
+                matches!(
+                    s.id.as_str(),
+                    "goto-line" | "quick-open-second" | "quick-open-file"
+                )
+            }) {
+                let calls = actl_flow::sequence::decode(&step.run).unwrap().unwrap();
+                for call in calls {
+                    if call.command == "type" {
+                        assert_eq!(
+                            call.args[0], "id:editor",
+                            "Quick Input must use ValuePattern"
+                        );
+                    }
+                    if call.command == "click" {
+                        assert!(
+                            call.args[0].contains("quickInput_list"),
+                            "result clicks must be container scoped"
+                        );
+                    }
+                    assert!(
+                        !(call.command == "press" && call.args[0] == "enter"),
+                        "activate the verified result instead of injecting into a virtual-focus input"
+                    );
+                }
+            }
+        }
         if matches!(name, "word-edit" | "excel-table") {
             for step in &plan.steps {
                 let calls = actl_flow::sequence::decode(&step.run)

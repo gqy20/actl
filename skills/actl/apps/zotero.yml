@@ -10,7 +10,7 @@ verified_date: 2026-09-28
 verified_env: Windows 10.0.26200.0 zh-cn
 quirks:
   - id: workflow_migration_20260929
-    note: 完整业务步骤已迁入 workflows，统一通过 prepare-workflow.ps1 -Scenario 准备资源并登记流程；独立文件及窗口进程归属核验已接入。新版真机复验待执行，保留历史结论，见 docs/57；旧入口与对照脚本已删除，历史证据保留。
+    note: 业务步骤及隔离资源声明均在 workflows；直接 flow-run --file 对应模板 --id 新任务ID，无需准备脚本或输入文件。独立文件及进程归属核验已接入；新资源入口真机待复验，历史证据保留，见 docs/60。
   - id: import_readback_correction
     note: docs/53 只读数据库核对证明 2026-09-29 首轮两条 RIS 文献已正确落库；失败在界面未暴露预期条目行，不能重放导入，须核对列表视图与截图。搜索导出仍未验收。
   - id: revalidation_20260929

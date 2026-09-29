@@ -32,7 +32,7 @@ actl 是统一技能入口。收到包含多步决策或跨应用操作的任务
 `display-status` 只查询。观察类命令可独立运行；改变应用/输入/剪贴板的动作由程序检查显示就绪、
 确认本次动作预告后执行，skill 不需要轮询进程。`NOT_ACTIONABLE` 且说明显示不可用时，
 检查配套版本与状态条是否被隐藏；不要绕过检查。`ABORTED` 表示本次调用不能再用，核对已完成结果后发起新调用。
-历史停止不阻断新观察；新写操作在开始/继续时由用户确认。`execution-status` 区分 stopped 与 repair_required；
+历史停止不阻断新观察；新写操作在开始/继续时确认，明确授权的 computer use 代操作边界见末尾“桌面交接”。`execution-status` 区分 stopped 与 repair_required；
 明确请求修复时使用 `execution-recover`，它归档原记录并废止旧调用，不授予权限或自动恢复任务。不要手动删停止文件。
 
 整理桌面是可选步骤，仅在任务需要或用户要求时使用：
@@ -273,7 +273,7 @@ collector 检索到结论 → actl 实时发消息回应。
 ### 桌面交接（显示 v5）
 
 开始写操作前告知用户会出现「开始 / 继续」提示，使用同一 ACTL_TASK_ID 标识当前任务。
-只允许用户点击授权，不能自动点击、写授权文件或清急停。handoff_pending / user_deferred /
+默认由用户点击；用户明确授权代操作时，可用 computer use 核对任务和目标后实际点击“开始/继续”，不用逐次询问。不得写授权文件、伪造事件或清急停；用户明确暂停、稍后、停止或接管时不得自动继续。代点击须在验收记录中注明，不能作为人工点击验收。handoff_pending / user_deferred /
 human_takeover_or_grant_expired 表示让行；停止后续输入，核对部分结果，再等用户交接。
 launch 默认只说明进程启动；可用 --wait-window（选项在程序名前），或显式等待后 focus-window。
 查看 display-status.reason 区分提示端异常；focus-window 的 foreground_not_acquired 不等于要提权。

@@ -618,7 +618,10 @@ NOT_ACTIONABLE 显示或窗口未就绪；ABORTED 用户停止；INTERNAL 持久
 
 ### 桌面交接与窗口就绪（2026-09-28，显示协议 v4）
 
+工作流资源初始化契约见 docs/20 的“声明式资源初始化”：resources 存在时展开输入默认值中的受限运行上下文，完整预检后由 flow-run 创建独占资源目录，flow-resume 不重新初始化。flow-validate 在原 envelope 的 data 中增加 resources 清单（仅资源模板返回），使用 validation-preview 上下文且不创建文件；普通模板输出不变。无新命令或任意脚本入口。
+
 任务交接策略（显示协议 v8）：flow YAML 可增加 `handoff: {approval: once_per_run}`。
+调用方若已获得用户明确的代操作授权，可通过 computer use 核对任务后实际点击可见的开始/继续，具体边界见 docs/32；这是操作者约定，不改变以下协议、授权生命周期或结果核验，也不提供程序化跳过确认参数。
 省略时保持 `expiring`（空闲 60 秒、总长 10 分钟）。once_per_run 在同任务内不因这两种超时失效，
 首次仍需用户确认，人工接管、暂停撤销、停止代次变化、显示端重启和监听故障仍撤销授权。
 策略变化必须重新确认，不能升级已有授权；窗口、焦点与物理输入参数要求不变。
@@ -760,3 +763,7 @@ expected: 预期完整文本
 - `verify --value ... --property text --normalize-lines`：全文比较前转换 CRLF/CR 为 LF、去除尾部 LF，与 contains 互斥；供 Word TextPattern 行结束符差异使用。
 
 文件/行集合/关闭断言对已知不匹配在 5 秒观察窗口内复查，未知错误不转为空或成功。文件内容上限 4 MiB、单个 XML part 上限 4 MiB、expected 参数上限 16 KiB。OOXML 与进程元数据使用编译进二进制的固定 Windows PowerShell/.NET 只读检查器；请求仅通过 stdin JSON 传递，不拼接用户代码、不接受脚本路径、不使用 Office COM。XML 禁用 DTD/外部实体；单次检查器执行 20 秒上限，因此不是整个断言的 5 秒硬实时保证。无新增 Rust 依赖。
+
+### 紧邻检查复用（2026-09-29）
+
+恢复执行时，只有仍为 pending 的步骤，且解析后的 resume_check 与 before 完全相同时，成功的恢复检查才直接满足此次前置检查。两者之间仍检查暂停/停止；不跨步骤、跨暂停或跨执行器缓存。uncertain/running/verifying 步骤仍先核验结果，显式重试前重新执行 before。不同参数或不同命令不合并。

@@ -1,0 +1,4420 @@
+{
+  "version": 1,
+  "name": "Application verification",
+  "handoff": {
+    "approval": "once_per_run"
+  },
+  "inputs": {
+    "vscode-edit-program": {
+      "default": "${env:LOCALAPPDATA}/Programs/Microsoft VS Code/Code.exe"
+    },
+    "vscode-edit-profile": {
+      "default": "${run.dir}/vscode-edit/profile"
+    },
+    "vscode-edit-file": {
+      "default": "${run.dir}/vscode-edit/${run.id}-vscode-edit.txt"
+    },
+    "vscode-edit-app": {
+      "default": "${run.id}-vscode-edit"
+    },
+    "vscode-edit-editor": {
+      "default": "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"${run.id}-vscode-edit.txt\"}}"
+    },
+    "vscode-edit-second": {
+      "default": "${run.dir}/vscode-edit/${run.id}-vscode-edit-second.txt"
+    },
+    "vscode-edit-second_editor": {
+      "default": "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"${run.id}-vscode-edit-second.txt\"}}"
+    },
+    "vscode-edit-file_result": {
+      "default": "uia:{\"match\":{\"role\":\"ListItem\",\"name_contains\":\"${run.id}-vscode-edit.txt\"},\"within\":{\"id\":\"quickInput_list\"}}"
+    },
+    "vscode-edit-second_result": {
+      "default": "uia:{\"match\":{\"role\":\"ListItem\",\"name_contains\":\"${run.id}-vscode-edit-second.txt\"},\"within\":{\"id\":\"quickInput_list\"}}"
+    },
+    "excel-table-program": {
+      "default": "${env:ProgramFiles}/Microsoft Office/Root/Office16/EXCEL.EXE"
+    },
+    "excel-table-file": {
+      "default": "${run.dir}/excel-table/${run.id}-excel-table.xlsx"
+    },
+    "excel-table-app": {
+      "default": "${run.id}-excel-table"
+    },
+    "word-edit-program": {
+      "default": "${env:ProgramFiles}/Microsoft Office/Root/Office16/WINWORD.EXE"
+    },
+    "word-edit-file": {
+      "default": "${run.dir}/word-edit/${run.id}-word-edit.docx"
+    },
+    "word-edit-app": {
+      "default": "${run.id}-word-edit"
+    },
+    "zotero-search-program": {
+      "default": "${env:ProgramFiles}/Zotero/zotero.exe"
+    },
+    "zotero-search-profile": {
+      "default": "${run.dir}/zotero-search/profile"
+    },
+    "zotero-search-data": {
+      "default": "${run.dir}/zotero-search/data"
+    },
+    "zotero-search-app": {
+      "default": "Zotero"
+    },
+    "zotero-search-export": {
+      "default": "${run.dir}/zotero-search/export.json"
+    }
+  },
+  "resources": {
+    "directories": [
+      "vscode-edit/profile",
+      "zotero-search/profile",
+      "zotero-search/data"
+    ],
+    "files": [
+      {
+        "path": "vscode-edit/${run.id}-vscode-edit.txt",
+        "text": "Original 中文 baseline 123\nSecond line\n"
+      },
+      {
+        "path": "vscode-edit/${run.id}-vscode-edit-second.txt",
+        "text": "Second owned file\n"
+      },
+      {
+        "path": "excel-table/${run.id}-excel-table.xlsx",
+        "copy": "assets/seed.xlsx"
+      },
+      {
+        "path": "word-edit/${run.id}-word-edit.docx",
+        "copy": "assets/seed.docx"
+      },
+      {
+        "path": "zotero-search/profile/user.js",
+        "text": "user_pref(\"extensions.zotero.httpServer.enabled\", false);\nuser_pref(\"extensions.zotero.sync.autoSync\", false);\nuser_pref(\"extensions.zotero.firstRun2\", false);\nuser_pref(\"extensions.zotero.firstRunGuidance\", false);\n"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "title": "Open isolated editor",
+      "run": {
+        "command": "launch",
+        "args": [
+          {
+            "input": "vscode-edit-program"
+          },
+          "--new-window",
+          "--disable-extensions",
+          "--skip-welcome",
+          "--skip-release-notes",
+          "--force-renderer-accessibility",
+          "--user-data-dir",
+          {
+            "input": "vscode-edit-profile"
+          },
+          {
+            "input": "vscode-edit-file"
+          }
+        ]
+      },
+      "verify": {
+        "command": "wait",
+        "args": [
+          "--element",
+          {
+            "input": "vscode-edit-editor"
+          },
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          },
+          "--timeout",
+          "20000"
+        ]
+      },
+      "id": "vscode-edit-open"
+    },
+    {
+      "run": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          },
+          "--program",
+          {
+            "input": "vscode-edit-program"
+          },
+          "--token",
+          {
+            "input": "vscode-edit-profile"
+          }
+        ]
+      },
+      "id": "vscode-edit-ownership",
+      "title": "Verify isolated task process",
+      "outputs": {
+        "pid": {
+          "type": "number",
+          "pointer": "/pid"
+        },
+        "hwnd": {
+          "type": "number",
+          "pointer": "/hwnd"
+        },
+        "start": {
+          "type": "string",
+          "pointer": "/process_start"
+        }
+      }
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+home",
+              "--target",
+              {
+                "input": "vscode-edit-editor"
+              },
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "type",
+            "args": [
+              {
+                "input": "vscode-edit-editor"
+              },
+              "Round 1 中文 789\n",
+              "--paste",
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+s",
+              "--target",
+              {
+                "input": "vscode-edit-editor"
+              },
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          }
+        ]
+      },
+      "title": "insert 1 and verify full file",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          },
+          "--program",
+          {
+            "input": "vscode-edit-program"
+          },
+          "--token",
+          {
+            "input": "vscode-edit-profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "vscode-edit-file"
+          },
+          "--kind",
+          "text",
+          "--expected",
+          "\"Round 1 中文 789\\nOriginal 中文 baseline 123\\nSecond line\\n\"",
+          "--subset"
+        ]
+      },
+      "id": "vscode-edit-insert-1",
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          },
+          "--program",
+          {
+            "input": "vscode-edit-program"
+          },
+          "--token",
+          {
+            "input": "vscode-edit-profile"
+          }
+        ]
+      }
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+z",
+              "--target",
+              {
+                "input": "vscode-edit-editor"
+              },
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+s",
+              "--target",
+              {
+                "input": "vscode-edit-editor"
+              },
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          }
+        ]
+      },
+      "title": "undo 1 and verify full file",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          },
+          "--program",
+          {
+            "input": "vscode-edit-program"
+          },
+          "--token",
+          {
+            "input": "vscode-edit-profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "vscode-edit-file"
+          },
+          "--kind",
+          "text",
+          "--expected",
+          "\"Original 中文 baseline 123\\nSecond line\\n\"",
+          "--subset"
+        ]
+      },
+      "id": "vscode-edit-undo-1",
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          },
+          "--program",
+          {
+            "input": "vscode-edit-program"
+          },
+          "--token",
+          {
+            "input": "vscode-edit-profile"
+          }
+        ]
+      }
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+y",
+              "--target",
+              {
+                "input": "vscode-edit-editor"
+              },
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+s",
+              "--target",
+              {
+                "input": "vscode-edit-editor"
+              },
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          }
+        ]
+      },
+      "title": "redo 1 and verify full file",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          },
+          "--program",
+          {
+            "input": "vscode-edit-program"
+          },
+          "--token",
+          {
+            "input": "vscode-edit-profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "vscode-edit-file"
+          },
+          "--kind",
+          "text",
+          "--expected",
+          "\"Round 1 中文 789\\nOriginal 中文 baseline 123\\nSecond line\\n\"",
+          "--subset"
+        ]
+      },
+      "id": "vscode-edit-redo-1",
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          },
+          "--program",
+          {
+            "input": "vscode-edit-program"
+          },
+          "--token",
+          {
+            "input": "vscode-edit-profile"
+          }
+        ]
+      }
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+home",
+              "--target",
+              {
+                "input": "vscode-edit-editor"
+              },
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "type",
+            "args": [
+              {
+                "input": "vscode-edit-editor"
+              },
+              "Round 2 spaces & symbols [] {}\n",
+              "--paste",
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+s",
+              "--target",
+              {
+                "input": "vscode-edit-editor"
+              },
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          }
+        ]
+      },
+      "title": "insert 2 and verify full file",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          },
+          "--program",
+          {
+            "input": "vscode-edit-program"
+          },
+          "--token",
+          {
+            "input": "vscode-edit-profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "vscode-edit-file"
+          },
+          "--kind",
+          "text",
+          "--expected",
+          "\"Round 2 spaces & symbols [] {}\\nRound 1 中文 789\\nOriginal 中文 baseline 123\\nSecond line\\n\"",
+          "--subset"
+        ]
+      },
+      "id": "vscode-edit-insert-2",
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          },
+          "--program",
+          {
+            "input": "vscode-edit-program"
+          },
+          "--token",
+          {
+            "input": "vscode-edit-profile"
+          }
+        ]
+      }
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+z",
+              "--target",
+              {
+                "input": "vscode-edit-editor"
+              },
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+s",
+              "--target",
+              {
+                "input": "vscode-edit-editor"
+              },
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          }
+        ]
+      },
+      "title": "undo 2 and verify full file",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          },
+          "--program",
+          {
+            "input": "vscode-edit-program"
+          },
+          "--token",
+          {
+            "input": "vscode-edit-profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "vscode-edit-file"
+          },
+          "--kind",
+          "text",
+          "--expected",
+          "\"Round 1 中文 789\\nOriginal 中文 baseline 123\\nSecond line\\n\"",
+          "--subset"
+        ]
+      },
+      "id": "vscode-edit-undo-2",
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          },
+          "--program",
+          {
+            "input": "vscode-edit-program"
+          },
+          "--token",
+          {
+            "input": "vscode-edit-profile"
+          }
+        ]
+      }
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+y",
+              "--target",
+              {
+                "input": "vscode-edit-editor"
+              },
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+s",
+              "--target",
+              {
+                "input": "vscode-edit-editor"
+              },
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          }
+        ]
+      },
+      "title": "redo 2 and verify full file",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          },
+          "--program",
+          {
+            "input": "vscode-edit-program"
+          },
+          "--token",
+          {
+            "input": "vscode-edit-profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "vscode-edit-file"
+          },
+          "--kind",
+          "text",
+          "--expected",
+          "\"Round 2 spaces & symbols [] {}\\nRound 1 中文 789\\nOriginal 中文 baseline 123\\nSecond line\\n\"",
+          "--subset"
+        ]
+      },
+      "id": "vscode-edit-redo-2",
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          },
+          "--program",
+          {
+            "input": "vscode-edit-program"
+          },
+          "--token",
+          {
+            "input": "vscode-edit-profile"
+          }
+        ]
+      }
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+home",
+              "--target",
+              {
+                "input": "vscode-edit-editor"
+              },
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "type",
+            "args": [
+              {
+                "input": "vscode-edit-editor"
+              },
+              "Round 3 多行\nUnicode Ω 12345\n",
+              "--paste",
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+s",
+              "--target",
+              {
+                "input": "vscode-edit-editor"
+              },
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          }
+        ]
+      },
+      "title": "insert 3 and verify full file",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          },
+          "--program",
+          {
+            "input": "vscode-edit-program"
+          },
+          "--token",
+          {
+            "input": "vscode-edit-profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "vscode-edit-file"
+          },
+          "--kind",
+          "text",
+          "--expected",
+          "\"Round 3 多行\\nUnicode Ω 12345\\nRound 2 spaces & symbols [] {}\\nRound 1 中文 789\\nOriginal 中文 baseline 123\\nSecond line\\n\"",
+          "--subset"
+        ]
+      },
+      "id": "vscode-edit-insert-3",
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          },
+          "--program",
+          {
+            "input": "vscode-edit-program"
+          },
+          "--token",
+          {
+            "input": "vscode-edit-profile"
+          }
+        ]
+      }
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+z",
+              "--target",
+              {
+                "input": "vscode-edit-editor"
+              },
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+s",
+              "--target",
+              {
+                "input": "vscode-edit-editor"
+              },
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          }
+        ]
+      },
+      "title": "undo 3 and verify full file",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          },
+          "--program",
+          {
+            "input": "vscode-edit-program"
+          },
+          "--token",
+          {
+            "input": "vscode-edit-profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "vscode-edit-file"
+          },
+          "--kind",
+          "text",
+          "--expected",
+          "\"Round 2 spaces & symbols [] {}\\nRound 1 中文 789\\nOriginal 中文 baseline 123\\nSecond line\\n\"",
+          "--subset"
+        ]
+      },
+      "id": "vscode-edit-undo-3",
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          },
+          "--program",
+          {
+            "input": "vscode-edit-program"
+          },
+          "--token",
+          {
+            "input": "vscode-edit-profile"
+          }
+        ]
+      }
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+y",
+              "--target",
+              {
+                "input": "vscode-edit-editor"
+              },
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+s",
+              "--target",
+              {
+                "input": "vscode-edit-editor"
+              },
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          }
+        ]
+      },
+      "title": "redo 3 and verify full file",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          },
+          "--program",
+          {
+            "input": "vscode-edit-program"
+          },
+          "--token",
+          {
+            "input": "vscode-edit-profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "vscode-edit-file"
+          },
+          "--kind",
+          "text",
+          "--expected",
+          "\"Round 3 多行\\nUnicode Ω 12345\\nRound 2 spaces & symbols [] {}\\nRound 1 中文 789\\nOriginal 中文 baseline 123\\nSecond line\\n\"",
+          "--subset"
+        ]
+      },
+      "id": "vscode-edit-redo-3",
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          },
+          "--program",
+          {
+            "input": "vscode-edit-program"
+          },
+          "--token",
+          {
+            "input": "vscode-edit-profile"
+          }
+        ]
+      }
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+a",
+              "--target",
+              {
+                "input": "vscode-edit-editor"
+              },
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "type",
+            "args": [
+              {
+                "input": "vscode-edit-editor"
+              },
+              "Replacement 中文 final\nNumber 123456789\n",
+              "--paste",
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+s",
+              "--target",
+              {
+                "input": "vscode-edit-editor"
+              },
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          }
+        ]
+      },
+      "title": "Replace entire document and verify file",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          },
+          "--program",
+          {
+            "input": "vscode-edit-program"
+          },
+          "--token",
+          {
+            "input": "vscode-edit-profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "vscode-edit-file"
+          },
+          "--kind",
+          "text",
+          "--expected",
+          "\"Replacement 中文 final\\nNumber 123456789\\n\"",
+          "--subset"
+        ]
+      },
+      "id": "vscode-edit-replace",
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          },
+          "--program",
+          {
+            "input": "vscode-edit-program"
+          },
+          "--token",
+          {
+            "input": "vscode-edit-profile"
+          }
+        ]
+      }
+    },
+    {
+      "run": {
+        "command": "close-window",
+        "args": [
+          "--hwnd",
+          "1"
+        ],
+        "bind": {
+          "1": "vscode-edit-ownership.hwnd"
+        }
+      },
+      "id": "vscode-edit-close-before-reopen",
+      "verify": {
+        "command": "verify-closed",
+        "args": [
+          "--hwnd",
+          "1",
+          "--pid",
+          "1",
+          "--instance",
+          "pending"
+        ],
+        "bind": {
+          "5": "vscode-edit-ownership.start",
+          "1": "vscode-edit-ownership.hwnd",
+          "3": "vscode-edit-ownership.pid"
+        }
+      },
+      "before": {
+        "args": [
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          },
+          "--program",
+          {
+            "input": "vscode-edit-program"
+          },
+          "--token",
+          {
+            "input": "vscode-edit-profile"
+          },
+          "--instance",
+          "pending",
+          "--hwnd",
+          "1",
+          "--pid",
+          "1"
+        ],
+        "command": "verify-owner",
+        "bind": {
+          "7": "vscode-edit-ownership.start",
+          "9": "vscode-edit-ownership.hwnd",
+          "11": "vscode-edit-ownership.pid"
+        }
+      },
+      "title": "Close only the verified task process"
+    },
+    {
+      "title": "Reopen the saved task file",
+      "run": {
+        "command": "launch",
+        "args": [
+          {
+            "input": "vscode-edit-program"
+          },
+          "--new-window",
+          "--disable-extensions",
+          "--skip-welcome",
+          "--skip-release-notes",
+          "--force-renderer-accessibility",
+          "--user-data-dir",
+          {
+            "input": "vscode-edit-profile"
+          },
+          {
+            "input": "vscode-edit-file"
+          }
+        ]
+      },
+      "verify": {
+        "command": "wait",
+        "args": [
+          "--element",
+          {
+            "input": "vscode-edit-editor"
+          },
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          },
+          "--timeout",
+          "20000"
+        ]
+      },
+      "id": "vscode-edit-reopen"
+    },
+    {
+      "run": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          },
+          "--program",
+          {
+            "input": "vscode-edit-program"
+          },
+          "--token",
+          {
+            "input": "vscode-edit-profile"
+          }
+        ]
+      },
+      "id": "vscode-edit-reopened-owner",
+      "outputs": {
+        "pid": {
+          "type": "number",
+          "pointer": "/pid"
+        },
+        "hwnd": {
+          "type": "number",
+          "pointer": "/hwnd"
+        },
+        "start": {
+          "type": "string",
+          "pointer": "/process_start"
+        }
+      },
+      "title": "Verify reopened process identity"
+    },
+    {
+      "run": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "vscode-edit-file"
+          },
+          "--kind",
+          "text",
+          "--expected",
+          "\"Replacement 中文 final\\nNumber 123456789\\n\"",
+          "--subset"
+        ]
+      },
+      "id": "vscode-edit-reopened-content",
+      "title": "Verify complete saved content after reopen"
+    },
+    {
+      "title": "Verify reopened editor text",
+      "run": {
+        "command": "verify",
+        "args": [
+          "--value",
+          {
+            "input": "vscode-edit-editor"
+          },
+          "Replacement 中文 final\nNumber 123456789\n",
+          "--property",
+          "text",
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          }
+        ]
+      },
+      "id": "vscode-edit-reopened-uia"
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "f1",
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "wait",
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"键入要运行的命令的名称。\"}}",
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              },
+              "--timeout",
+              "5000"
+            ]
+          },
+          {
+            "command": "set-value",
+            "args": [
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"键入要运行的命令的名称。\"}}",
+              ">转到行",
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "wait",
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"role\":\"ListItem\",\"name_contains\":\"转到行/列...,\"},\"within\":{\"id\":\"quickInput_list\"}}",
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              },
+              "--timeout",
+              "5000"
+            ]
+          },
+          {
+            "command": "click",
+            "args": [
+              "uia:{\"match\":{\"role\":\"ListItem\",\"name_contains\":\"转到行/列...,\"},\"within\":{\"id\":\"quickInput_list\"}}",
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "wait",
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"转到行。\"}}",
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              },
+              "--timeout",
+              "5000"
+            ]
+          },
+          {
+            "command": "set-value",
+            "args": [
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"转到行。\"}}",
+              ":2",
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "verify",
+            "args": [
+              "--value",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"转到行。\"}}",
+              ":2",
+              "--property",
+              "value",
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "wait",
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"role\":\"ListItem\",\"name\":\"转到第 2 行，第 1 列。按 Enter 键导航。\"},\"within\":{\"id\":\"quickInput_list\"}}",
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              },
+              "--timeout",
+              "5000"
+            ]
+          },
+          {
+            "command": "click",
+            "args": [
+              "uia:{\"match\":{\"role\":\"ListItem\",\"name\":\"转到第 2 行，第 1 列。按 Enter 键导航。\"},\"within\":{\"id\":\"quickInput_list\"}}",
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "verify",
+            "args": [
+              "--value",
+              "id:status.editor.selection",
+              "行 2，列 1",
+              "--property",
+              "name",
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "home",
+              "--target",
+              {
+                "input": "vscode-edit-editor"
+              },
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "type",
+            "args": [
+              {
+                "input": "vscode-edit-editor"
+              },
+              "GOTO-",
+              "--paste",
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+s",
+              "--target",
+              {
+                "input": "vscode-edit-editor"
+              },
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          }
+        ]
+      },
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          },
+          "--program",
+          {
+            "input": "vscode-edit-program"
+          },
+          "--token",
+          {
+            "input": "vscode-edit-profile"
+          }
+        ]
+      },
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          },
+          "--program",
+          {
+            "input": "vscode-edit-program"
+          },
+          "--token",
+          {
+            "input": "vscode-edit-profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "vscode-edit-file"
+          },
+          "--kind",
+          "text",
+          "--expected",
+          "\"Replacement 中文 final\\nGOTO-Number 123456789\\n\""
+        ]
+      },
+      "id": "vscode-edit-goto-line",
+      "title": "Go to line and verify inserted text"
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+h",
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "set-value",
+            "args": [
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"查找\"}}",
+              "123456789",
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "set-value",
+            "args": [
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"替换\"}}",
+              "987654321",
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "click",
+            "args": [
+              "name:全部替换 (Ctrl+Alt+Enter)",
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "click",
+            "args": [
+              "name:关闭 (Escape)",
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+s",
+              "--target",
+              {
+                "input": "vscode-edit-editor"
+              },
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          }
+        ]
+      },
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          },
+          "--program",
+          {
+            "input": "vscode-edit-program"
+          },
+          "--token",
+          {
+            "input": "vscode-edit-profile"
+          }
+        ]
+      },
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          },
+          "--program",
+          {
+            "input": "vscode-edit-program"
+          },
+          "--token",
+          {
+            "input": "vscode-edit-profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "vscode-edit-file"
+          },
+          "--kind",
+          "text",
+          "--expected",
+          "\"Replacement 中文 final\\nGOTO-Number 987654321\\n\""
+        ]
+      },
+      "id": "vscode-edit-find-replace",
+      "title": "Replace matches and verify complete saved text"
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "f1",
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "wait",
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"键入要运行的命令的名称。\"}}",
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              },
+              "--timeout",
+              "5000"
+            ]
+          },
+          {
+            "command": "set-value",
+            "args": [
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"键入要运行的命令的名称。\"}}",
+              ">转到文件",
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "wait",
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"role\":\"ListItem\",\"name_contains\":\"转到文件...,\"},\"within\":{\"id\":\"quickInput_list\"}}",
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              },
+              "--timeout",
+              "5000"
+            ]
+          },
+          {
+            "command": "click",
+            "args": [
+              "uia:{\"match\":{\"role\":\"ListItem\",\"name_contains\":\"转到文件...,\"},\"within\":{\"id\":\"quickInput_list\"}}",
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "wait",
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"按名称搜索文件\"}}",
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              },
+              "--timeout",
+              "5000"
+            ]
+          },
+          {
+            "command": "set-value",
+            "args": [
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"按名称搜索文件\"}}",
+              {
+                "input": "vscode-edit-second"
+              },
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "verify",
+            "args": [
+              "--value",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"按名称搜索文件\"}}",
+              {
+                "input": "vscode-edit-second"
+              },
+              "--property",
+              "value",
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "wait",
+            "args": [
+              "--element",
+              {
+                "input": "vscode-edit-second_result"
+              },
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              },
+              "--timeout",
+              "5000"
+            ]
+          },
+          {
+            "command": "click",
+            "args": [
+              {
+                "input": "vscode-edit-second_result"
+              },
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          }
+        ]
+      },
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          },
+          "--program",
+          {
+            "input": "vscode-edit-program"
+          },
+          "--token",
+          {
+            "input": "vscode-edit-profile"
+          }
+        ]
+      },
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          },
+          "--program",
+          {
+            "input": "vscode-edit-program"
+          },
+          "--token",
+          {
+            "input": "vscode-edit-profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify",
+        "args": [
+          "--value",
+          {
+            "input": "vscode-edit-second_editor"
+          },
+          "Second owned file\n",
+          "--property",
+          "text",
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          }
+        ]
+      },
+      "id": "vscode-edit-quick-open-second",
+      "title": "Open second and verify full editor text"
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "f1",
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "wait",
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"键入要运行的命令的名称。\"}}",
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              },
+              "--timeout",
+              "5000"
+            ]
+          },
+          {
+            "command": "set-value",
+            "args": [
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"键入要运行的命令的名称。\"}}",
+              ">转到文件",
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "wait",
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"role\":\"ListItem\",\"name_contains\":\"转到文件...,\"},\"within\":{\"id\":\"quickInput_list\"}}",
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              },
+              "--timeout",
+              "5000"
+            ]
+          },
+          {
+            "command": "click",
+            "args": [
+              "uia:{\"match\":{\"role\":\"ListItem\",\"name_contains\":\"转到文件...,\"},\"within\":{\"id\":\"quickInput_list\"}}",
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "wait",
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"按名称搜索文件\"}}",
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              },
+              "--timeout",
+              "5000"
+            ]
+          },
+          {
+            "command": "set-value",
+            "args": [
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"按名称搜索文件\"}}",
+              {
+                "input": "vscode-edit-file"
+              },
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "verify",
+            "args": [
+              "--value",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"按名称搜索文件\"}}",
+              {
+                "input": "vscode-edit-file"
+              },
+              "--property",
+              "value",
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "wait",
+            "args": [
+              "--element",
+              {
+                "input": "vscode-edit-file_result"
+              },
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              },
+              "--timeout",
+              "5000"
+            ]
+          },
+          {
+            "command": "click",
+            "args": [
+              {
+                "input": "vscode-edit-file_result"
+              },
+              "--app",
+              {
+                "input": "vscode-edit-app"
+              }
+            ]
+          }
+        ]
+      },
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          },
+          "--program",
+          {
+            "input": "vscode-edit-program"
+          },
+          "--token",
+          {
+            "input": "vscode-edit-profile"
+          }
+        ]
+      },
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          },
+          "--program",
+          {
+            "input": "vscode-edit-program"
+          },
+          "--token",
+          {
+            "input": "vscode-edit-profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify",
+        "args": [
+          "--value",
+          {
+            "input": "vscode-edit-editor"
+          },
+          "Replacement 中文 final\nGOTO-Number 987654321\n",
+          "--property",
+          "text",
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          }
+        ]
+      },
+      "id": "vscode-edit-quick-open-file",
+      "title": "Open file and verify full editor text"
+    },
+    {
+      "run": {
+        "command": "close-window",
+        "args": [
+          "--hwnd",
+          "1"
+        ],
+        "bind": {
+          "1": "vscode-edit-reopened-owner.hwnd"
+        }
+      },
+      "id": "vscode-edit-close",
+      "verify": {
+        "command": "verify-closed",
+        "args": [
+          "--hwnd",
+          "1",
+          "--pid",
+          "1",
+          "--instance",
+          "pending"
+        ],
+        "bind": {
+          "5": "vscode-edit-reopened-owner.start",
+          "1": "vscode-edit-reopened-owner.hwnd",
+          "3": "vscode-edit-reopened-owner.pid"
+        }
+      },
+      "before": {
+        "args": [
+          "--app",
+          {
+            "input": "vscode-edit-app"
+          },
+          "--program",
+          {
+            "input": "vscode-edit-program"
+          },
+          "--token",
+          {
+            "input": "vscode-edit-profile"
+          },
+          "--instance",
+          "pending",
+          "--hwnd",
+          "1",
+          "--pid",
+          "1"
+        ],
+        "command": "verify-owner",
+        "bind": {
+          "7": "vscode-edit-reopened-owner.start",
+          "9": "vscode-edit-reopened-owner.hwnd",
+          "11": "vscode-edit-reopened-owner.pid"
+        }
+      },
+      "title": "Close only the verified task process"
+    },
+    {
+      "title": "Open isolated workbook",
+      "run": {
+        "command": "launch",
+        "args": [
+          {
+            "input": "excel-table-program"
+          },
+          "/x",
+          {
+            "input": "excel-table-file"
+          }
+        ]
+      },
+      "verify": {
+        "command": "wait",
+        "args": [
+          "--element",
+          "id:1001",
+          "--app",
+          {
+            "input": "excel-table-app"
+          },
+          "--timeout",
+          "20000"
+        ]
+      },
+      "id": "excel-table-open"
+    },
+    {
+      "run": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "excel-table-app"
+          },
+          "--program",
+          {
+            "input": "excel-table-program"
+          },
+          "--token",
+          {
+            "input": "excel-table-file"
+          }
+        ]
+      },
+      "id": "excel-table-ownership",
+      "title": "Verify isolated task process",
+      "outputs": {
+        "pid": {
+          "type": "number",
+          "pointer": "/pid"
+        },
+        "hwnd": {
+          "type": "number",
+          "pointer": "/hwnd"
+        },
+        "start": {
+          "type": "string",
+          "pointer": "/process_start"
+        }
+      }
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "set-value",
+            "args": [
+              "id:1001",
+              "A1",
+              "--app",
+              {
+                "input": "excel-table-app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "enter",
+              "--target",
+              "id:1001",
+              "--app",
+              {
+                "input": "excel-table-app"
+              }
+            ]
+          },
+          {
+            "command": "type",
+            "args": [
+              "uia:{\"match\":{\"name\":\"A1\"}}",
+              "Item\tQty\tPrice\tTotal\r\nAlpha\t2\t12.5\t=B2*C2\r\n中文\t3\t7\t=B3*C3\r\nSum\t\t\t=SUM(D2:D3)",
+              "--paste",
+              "--app",
+              {
+                "input": "excel-table-app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+s",
+              "--target",
+              "uia:{\"match\":{\"name\":\"A1\"}}",
+              "--app",
+              {
+                "input": "excel-table-app"
+              }
+            ]
+          }
+        ]
+      },
+      "title": "paste and verify saved cells and formulas",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "excel-table-app"
+          },
+          "--program",
+          {
+            "input": "excel-table-program"
+          },
+          "--token",
+          {
+            "input": "excel-table-file"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "excel-table-file"
+          },
+          "--kind",
+          "xlsx",
+          "--expected",
+          "{\"D1\":{\"value\":\"Total\"},\"C3\":{\"value\":\"7\"},\"C2\":{\"value\":\"12.5\"},\"D3\":{\"value\":\"21\",\"formula\":\"B3*C3\"},\"B3\":{\"value\":\"3\"},\"A4\":{\"value\":\"Sum\"},\"D2\":{\"formula\":\"B2*C2\",\"value\":\"25\"},\"A1\":{\"value\":\"Item\"},\"C1\":{\"value\":\"Price\"},\"D4\":{\"formula\":\"SUM(D2:D3)\",\"value\":\"46\"},\"A2\":{\"value\":\"Alpha\"},\"B1\":{\"value\":\"Qty\"},\"A3\":{\"value\":\"中文\"},\"B2\":{\"value\":\"2\"}}",
+          "--subset"
+        ]
+      },
+      "id": "excel-table-paste",
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "excel-table-app"
+          },
+          "--program",
+          {
+            "input": "excel-table-program"
+          },
+          "--token",
+          {
+            "input": "excel-table-file"
+          }
+        ]
+      }
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "set-value",
+            "args": [
+              "id:1001",
+              "B2",
+              "--app",
+              {
+                "input": "excel-table-app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "enter",
+              "--target",
+              "id:1001",
+              "--app",
+              {
+                "input": "excel-table-app"
+              }
+            ]
+          },
+          {
+            "command": "type",
+            "args": [
+              "uia:{\"match\":{\"name\":\"B2\"}}",
+              "4",
+              "--paste",
+              "--app",
+              {
+                "input": "excel-table-app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+s",
+              "--target",
+              "uia:{\"match\":{\"name\":\"B2\"}}",
+              "--app",
+              {
+                "input": "excel-table-app"
+              }
+            ]
+          }
+        ]
+      },
+      "title": "recalculate and verify saved cells and formulas",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "excel-table-app"
+          },
+          "--program",
+          {
+            "input": "excel-table-program"
+          },
+          "--token",
+          {
+            "input": "excel-table-file"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "excel-table-file"
+          },
+          "--kind",
+          "xlsx",
+          "--expected",
+          "{\"D1\":{\"value\":\"Total\"},\"C3\":{\"value\":\"7\"},\"C2\":{\"value\":\"12.5\"},\"D3\":{\"value\":\"21\",\"formula\":\"B3*C3\"},\"B3\":{\"value\":\"3\"},\"A4\":{\"value\":\"Sum\"},\"D2\":{\"formula\":\"B2*C2\",\"value\":\"50\"},\"A1\":{\"value\":\"Item\"},\"C1\":{\"value\":\"Price\"},\"D4\":{\"formula\":\"SUM(D2:D3)\",\"value\":\"71\"},\"A2\":{\"value\":\"Alpha\"},\"B1\":{\"value\":\"Qty\"},\"A3\":{\"value\":\"中文\"},\"B2\":{\"value\":\"4\"}}",
+          "--subset"
+        ]
+      },
+      "id": "excel-table-recalculate",
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "excel-table-app"
+          },
+          "--program",
+          {
+            "input": "excel-table-program"
+          },
+          "--token",
+          {
+            "input": "excel-table-file"
+          }
+        ]
+      }
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+z",
+              "--target",
+              "uia:{\"match\":{\"name\":\"B2\"}}",
+              "--app",
+              {
+                "input": "excel-table-app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+s",
+              "--target",
+              "uia:{\"match\":{\"name\":\"B2\"}}",
+              "--app",
+              {
+                "input": "excel-table-app"
+              }
+            ]
+          }
+        ]
+      },
+      "title": "undo and verify saved cells and formulas",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "excel-table-app"
+          },
+          "--program",
+          {
+            "input": "excel-table-program"
+          },
+          "--token",
+          {
+            "input": "excel-table-file"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "excel-table-file"
+          },
+          "--kind",
+          "xlsx",
+          "--expected",
+          "{\"D1\":{\"value\":\"Total\"},\"C3\":{\"value\":\"7\"},\"C2\":{\"value\":\"12.5\"},\"D3\":{\"value\":\"21\",\"formula\":\"B3*C3\"},\"B3\":{\"value\":\"3\"},\"A4\":{\"value\":\"Sum\"},\"D2\":{\"formula\":\"B2*C2\",\"value\":\"25\"},\"A1\":{\"value\":\"Item\"},\"C1\":{\"value\":\"Price\"},\"D4\":{\"formula\":\"SUM(D2:D3)\",\"value\":\"46\"},\"A2\":{\"value\":\"Alpha\"},\"B1\":{\"value\":\"Qty\"},\"A3\":{\"value\":\"中文\"},\"B2\":{\"value\":\"2\"}}",
+          "--subset"
+        ]
+      },
+      "id": "excel-table-undo",
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "excel-table-app"
+          },
+          "--program",
+          {
+            "input": "excel-table-program"
+          },
+          "--token",
+          {
+            "input": "excel-table-file"
+          }
+        ]
+      }
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+y",
+              "--target",
+              "uia:{\"match\":{\"name\":\"B2\"}}",
+              "--app",
+              {
+                "input": "excel-table-app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+s",
+              "--target",
+              "uia:{\"match\":{\"name\":\"B2\"}}",
+              "--app",
+              {
+                "input": "excel-table-app"
+              }
+            ]
+          }
+        ]
+      },
+      "title": "redo and verify saved cells and formulas",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "excel-table-app"
+          },
+          "--program",
+          {
+            "input": "excel-table-program"
+          },
+          "--token",
+          {
+            "input": "excel-table-file"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "excel-table-file"
+          },
+          "--kind",
+          "xlsx",
+          "--expected",
+          "{\"D1\":{\"value\":\"Total\"},\"C3\":{\"value\":\"7\"},\"C2\":{\"value\":\"12.5\"},\"D3\":{\"value\":\"21\",\"formula\":\"B3*C3\"},\"B3\":{\"value\":\"3\"},\"A4\":{\"value\":\"Sum\"},\"D2\":{\"formula\":\"B2*C2\",\"value\":\"50\"},\"A1\":{\"value\":\"Item\"},\"C1\":{\"value\":\"Price\"},\"D4\":{\"formula\":\"SUM(D2:D3)\",\"value\":\"71\"},\"A2\":{\"value\":\"Alpha\"},\"B1\":{\"value\":\"Qty\"},\"A3\":{\"value\":\"中文\"},\"B2\":{\"value\":\"4\"}}",
+          "--subset"
+        ]
+      },
+      "id": "excel-table-redo",
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "excel-table-app"
+          },
+          "--program",
+          {
+            "input": "excel-table-program"
+          },
+          "--token",
+          {
+            "input": "excel-table-file"
+          }
+        ]
+      }
+    },
+    {
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "excel-table-app"
+          },
+          "--program",
+          {
+            "input": "excel-table-program"
+          },
+          "--token",
+          {
+            "input": "excel-table-file"
+          }
+        ]
+      },
+      "title": "Copy complete range and verify clipboard",
+      "run": {
+        "sequence": [
+          {
+            "command": "set-value",
+            "args": [
+              "id:1001",
+              "A1:D4",
+              "--app",
+              {
+                "input": "excel-table-app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "enter",
+              "--target",
+              "id:1001",
+              "--app",
+              {
+                "input": "excel-table-app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+c",
+              "--target",
+              "uia:{\"match\":{\"name\":\"A1\"}}",
+              "--app",
+              {
+                "input": "excel-table-app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "esc",
+              "--target",
+              "uia:{\"match\":{\"name\":\"A1\"}}",
+              "--app",
+              {
+                "input": "excel-table-app"
+              }
+            ]
+          }
+        ]
+      },
+      "id": "excel-table-copy-range",
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "excel-table-app"
+          },
+          "--program",
+          {
+            "input": "excel-table-program"
+          },
+          "--token",
+          {
+            "input": "excel-table-file"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-clipboard",
+        "args": [
+          "--expected",
+          "Item\tQty\tPrice\tTotal\nAlpha\t4\t12.5\t50\n中文\t3\t7\t21\nSum\t\t\t71",
+          "--normalize-lines"
+        ]
+      }
+    },
+    {
+      "run": {
+        "command": "close-window",
+        "args": [
+          "--hwnd",
+          "1"
+        ],
+        "bind": {
+          "1": "excel-table-ownership.hwnd"
+        }
+      },
+      "id": "excel-table-close-before-reopen",
+      "verify": {
+        "command": "verify-closed",
+        "args": [
+          "--hwnd",
+          "1",
+          "--pid",
+          "1",
+          "--instance",
+          "pending"
+        ],
+        "bind": {
+          "5": "excel-table-ownership.start",
+          "1": "excel-table-ownership.hwnd",
+          "3": "excel-table-ownership.pid"
+        }
+      },
+      "before": {
+        "args": [
+          "--app",
+          {
+            "input": "excel-table-app"
+          },
+          "--program",
+          {
+            "input": "excel-table-program"
+          },
+          "--token",
+          {
+            "input": "excel-table-file"
+          },
+          "--instance",
+          "pending",
+          "--hwnd",
+          "1",
+          "--pid",
+          "1"
+        ],
+        "command": "verify-owner",
+        "bind": {
+          "7": "excel-table-ownership.start",
+          "9": "excel-table-ownership.hwnd",
+          "11": "excel-table-ownership.pid"
+        }
+      },
+      "title": "Close only the verified task process"
+    },
+    {
+      "title": "Reopen the saved task file",
+      "run": {
+        "command": "launch",
+        "args": [
+          {
+            "input": "excel-table-program"
+          },
+          "/x",
+          {
+            "input": "excel-table-file"
+          }
+        ]
+      },
+      "verify": {
+        "command": "wait",
+        "args": [
+          "--element",
+          "id:1001",
+          "--app",
+          {
+            "input": "excel-table-app"
+          },
+          "--timeout",
+          "20000"
+        ]
+      },
+      "id": "excel-table-reopen"
+    },
+    {
+      "run": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "excel-table-app"
+          },
+          "--program",
+          {
+            "input": "excel-table-program"
+          },
+          "--token",
+          {
+            "input": "excel-table-file"
+          }
+        ]
+      },
+      "id": "excel-table-reopened-owner",
+      "outputs": {
+        "pid": {
+          "type": "number",
+          "pointer": "/pid"
+        },
+        "hwnd": {
+          "type": "number",
+          "pointer": "/hwnd"
+        },
+        "start": {
+          "type": "string",
+          "pointer": "/process_start"
+        }
+      },
+      "title": "Verify reopened process identity"
+    },
+    {
+      "run": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "excel-table-file"
+          },
+          "--kind",
+          "xlsx",
+          "--expected",
+          "{\"D1\":{\"value\":\"Total\"},\"C3\":{\"value\":\"7\"},\"C2\":{\"value\":\"12.5\"},\"D3\":{\"value\":\"21\",\"formula\":\"B3*C3\"},\"B3\":{\"value\":\"3\"},\"A4\":{\"value\":\"Sum\"},\"D2\":{\"formula\":\"B2*C2\",\"value\":\"50\"},\"A1\":{\"value\":\"Item\"},\"C1\":{\"value\":\"Price\"},\"D4\":{\"formula\":\"SUM(D2:D3)\",\"value\":\"71\"},\"A2\":{\"value\":\"Alpha\"},\"B1\":{\"value\":\"Qty\"},\"A3\":{\"value\":\"中文\"},\"B2\":{\"value\":\"4\"}}",
+          "--subset"
+        ]
+      },
+      "id": "excel-table-reopened-content",
+      "title": "Verify complete saved content after reopen"
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "set-value",
+            "args": [
+              "id:1001",
+              "D4",
+              "--app",
+              {
+                "input": "excel-table-app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "enter",
+              "--target",
+              "id:1001",
+              "--app",
+              {
+                "input": "excel-table-app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+c",
+              "--target",
+              "uia:{\"match\":{\"name\":\"D4\"}}",
+              "--app",
+              {
+                "input": "excel-table-app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "esc",
+              "--target",
+              "uia:{\"match\":{\"name\":\"D4\"}}",
+              "--app",
+              {
+                "input": "excel-table-app"
+              }
+            ]
+          }
+        ]
+      },
+      "id": "excel-table-reopen-cell-readback",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "excel-table-app"
+          },
+          "--program",
+          {
+            "input": "excel-table-program"
+          },
+          "--token",
+          {
+            "input": "excel-table-file"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-clipboard",
+        "args": [
+          "--expected",
+          "71",
+          "--normalize-lines"
+        ]
+      },
+      "title": "Read reopened calculation via clipboard",
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "excel-table-app"
+          },
+          "--program",
+          {
+            "input": "excel-table-program"
+          },
+          "--token",
+          {
+            "input": "excel-table-file"
+          }
+        ]
+      }
+    },
+    {
+      "run": {
+        "command": "close-window",
+        "args": [
+          "--hwnd",
+          "1"
+        ],
+        "bind": {
+          "1": "excel-table-reopened-owner.hwnd"
+        }
+      },
+      "id": "excel-table-close",
+      "verify": {
+        "command": "verify-closed",
+        "args": [
+          "--hwnd",
+          "1",
+          "--pid",
+          "1",
+          "--instance",
+          "pending"
+        ],
+        "bind": {
+          "5": "excel-table-reopened-owner.start",
+          "1": "excel-table-reopened-owner.hwnd",
+          "3": "excel-table-reopened-owner.pid"
+        }
+      },
+      "before": {
+        "args": [
+          "--app",
+          {
+            "input": "excel-table-app"
+          },
+          "--program",
+          {
+            "input": "excel-table-program"
+          },
+          "--token",
+          {
+            "input": "excel-table-file"
+          },
+          "--instance",
+          "pending",
+          "--hwnd",
+          "1",
+          "--pid",
+          "1"
+        ],
+        "command": "verify-owner",
+        "bind": {
+          "7": "excel-table-reopened-owner.start",
+          "9": "excel-table-reopened-owner.hwnd",
+          "11": "excel-table-reopened-owner.pid"
+        }
+      },
+      "title": "Close only the verified task process"
+    },
+    {
+      "id": "word-edit-open",
+      "title": "打开任务文档",
+      "run": {
+        "command": "launch",
+        "args": [
+          {
+            "input": "word-edit-program"
+          },
+          "/n",
+          {
+            "input": "word-edit-file"
+          }
+        ]
+      },
+      "verify": {
+        "command": "wait",
+        "args": [
+          "--element",
+          "role:Document",
+          "--app",
+          {
+            "input": "word-edit-app"
+          },
+          "--timeout",
+          "20000"
+        ]
+      }
+    },
+    {
+      "id": "word-edit-ownership",
+      "title": "核对任务进程归属",
+      "run": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "word-edit-app"
+          },
+          "--program",
+          {
+            "input": "word-edit-program"
+          },
+          "--token",
+          {
+            "input": "word-edit-file"
+          }
+        ]
+      },
+      "outputs": {
+        "hwnd": {
+          "pointer": "/hwnd",
+          "type": "number"
+        },
+        "pid": {
+          "pointer": "/pid",
+          "type": "number"
+        },
+        "start": {
+          "pointer": "/process_start",
+          "type": "string"
+        }
+      }
+    },
+    {
+      "id": "word-edit-insert",
+      "title": "插入前缀并核对完整磁盘正文",
+      "before": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "word-edit-file"
+          },
+          "--kind",
+          "docx",
+          "--expected",
+          "{\"text\":\"ACTL seed\"}",
+          "--subset"
+        ]
+      },
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "word-edit-app"
+          },
+          "--program",
+          {
+            "input": "word-edit-program"
+          },
+          "--token",
+          {
+            "input": "word-edit-file"
+          }
+        ]
+      },
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+home",
+              "--target",
+              "role:Document",
+              "--app",
+              {
+                "input": "word-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "type",
+            "args": [
+              "role:Document",
+              "ACTL prefix ",
+              "--paste",
+              "--app",
+              {
+                "input": "word-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+s",
+              "--target",
+              "role:Document",
+              "--app",
+              {
+                "input": "word-edit-app"
+              }
+            ]
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "word-edit-file"
+          },
+          "--kind",
+          "docx",
+          "--expected",
+          "{\"text\":\"ACTL prefix ACTL seed\"}",
+          "--subset"
+        ]
+      }
+    },
+    {
+      "id": "word-edit-uia-insert",
+      "title": "核对完整 UIA 正文",
+      "run": {
+        "command": "verify",
+        "args": [
+          "--value",
+          "role:Document",
+          "ACTL prefix ACTL seed",
+          "--property",
+          "text",
+          "--normalize-lines",
+          "--app",
+          {
+            "input": "word-edit-app"
+          }
+        ]
+      }
+    },
+    {
+      "id": "word-edit-replace",
+      "title": "替换为多段正文并核验",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "word-edit-app"
+          },
+          "--program",
+          {
+            "input": "word-edit-program"
+          },
+          "--token",
+          {
+            "input": "word-edit-file"
+          }
+        ]
+      },
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+a",
+              "--target",
+              "role:Document",
+              "--app",
+              {
+                "input": "word-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "type",
+            "args": [
+              "role:Document",
+              "ACTL report 2026\r\n第一段 中文 12345\r\nSecond paragraph 67890",
+              "--paste",
+              "--app",
+              {
+                "input": "word-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+s",
+              "--target",
+              "role:Document",
+              "--app",
+              {
+                "input": "word-edit-app"
+              }
+            ]
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "word-edit-file"
+          },
+          "--kind",
+          "docx",
+          "--expected",
+          "{\"text\":\"ACTL report 2026\\n第一段 中文 12345\\nSecond paragraph 67890\"}",
+          "--subset"
+        ]
+      }
+    },
+    {
+      "id": "word-edit-uia-replace",
+      "title": "核对完整 UIA 正文",
+      "run": {
+        "command": "verify",
+        "args": [
+          "--value",
+          "role:Document",
+          "ACTL report 2026\n第一段 中文 12345\nSecond paragraph 67890",
+          "--property",
+          "text",
+          "--normalize-lines",
+          "--app",
+          {
+            "input": "word-edit-app"
+          }
+        ]
+      }
+    },
+    {
+      "id": "word-edit-append",
+      "title": "追加正文并核验",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "word-edit-app"
+          },
+          "--program",
+          {
+            "input": "word-edit-program"
+          },
+          "--token",
+          {
+            "input": "word-edit-file"
+          }
+        ]
+      },
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+end",
+              "--target",
+              "role:Document",
+              "--app",
+              {
+                "input": "word-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "type",
+            "args": [
+              "role:Document",
+              "\r\nAppend 中文 Ω 24680",
+              "--paste",
+              "--app",
+              {
+                "input": "word-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+s",
+              "--target",
+              "role:Document",
+              "--app",
+              {
+                "input": "word-edit-app"
+              }
+            ]
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "word-edit-file"
+          },
+          "--kind",
+          "docx",
+          "--expected",
+          "{\"text\":\"ACTL report 2026\\n第一段 中文 12345\\nSecond paragraph 67890\\nAppend 中文 Ω 24680\"}",
+          "--subset"
+        ]
+      }
+    },
+    {
+      "id": "word-edit-uia-append",
+      "title": "核对完整 UIA 正文",
+      "run": {
+        "command": "verify",
+        "args": [
+          "--value",
+          "role:Document",
+          "ACTL report 2026\n第一段 中文 12345\nSecond paragraph 67890\nAppend 中文 Ω 24680",
+          "--property",
+          "text",
+          "--normalize-lines",
+          "--app",
+          {
+            "input": "word-edit-app"
+          }
+        ]
+      }
+    },
+    {
+      "id": "word-edit-undo",
+      "title": "撤销追加并核验",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "word-edit-app"
+          },
+          "--program",
+          {
+            "input": "word-edit-program"
+          },
+          "--token",
+          {
+            "input": "word-edit-file"
+          }
+        ]
+      },
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+z",
+              "--target",
+              "role:Document",
+              "--app",
+              {
+                "input": "word-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+s",
+              "--target",
+              "role:Document",
+              "--app",
+              {
+                "input": "word-edit-app"
+              }
+            ]
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "word-edit-file"
+          },
+          "--kind",
+          "docx",
+          "--expected",
+          "{\"text\":\"ACTL report 2026\\n第一段 中文 12345\\nSecond paragraph 67890\"}",
+          "--subset"
+        ]
+      }
+    },
+    {
+      "id": "word-edit-uia-undo",
+      "title": "核对完整 UIA 正文",
+      "run": {
+        "command": "verify",
+        "args": [
+          "--value",
+          "role:Document",
+          "ACTL report 2026\n第一段 中文 12345\nSecond paragraph 67890",
+          "--property",
+          "text",
+          "--normalize-lines",
+          "--app",
+          {
+            "input": "word-edit-app"
+          }
+        ]
+      }
+    },
+    {
+      "id": "word-edit-redo",
+      "title": "重做追加并核验",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "word-edit-app"
+          },
+          "--program",
+          {
+            "input": "word-edit-program"
+          },
+          "--token",
+          {
+            "input": "word-edit-file"
+          }
+        ]
+      },
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+y",
+              "--target",
+              "role:Document",
+              "--app",
+              {
+                "input": "word-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+s",
+              "--target",
+              "role:Document",
+              "--app",
+              {
+                "input": "word-edit-app"
+              }
+            ]
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "word-edit-file"
+          },
+          "--kind",
+          "docx",
+          "--expected",
+          "{\"text\":\"ACTL report 2026\\n第一段 中文 12345\\nSecond paragraph 67890\\nAppend 中文 Ω 24680\"}",
+          "--subset"
+        ]
+      }
+    },
+    {
+      "id": "word-edit-uia-redo",
+      "title": "核对完整 UIA 正文",
+      "run": {
+        "command": "verify",
+        "args": [
+          "--value",
+          "role:Document",
+          "ACTL report 2026\n第一段 中文 12345\nSecond paragraph 67890\nAppend 中文 Ω 24680",
+          "--property",
+          "text",
+          "--normalize-lines",
+          "--app",
+          {
+            "input": "word-edit-app"
+          }
+        ]
+      }
+    },
+    {
+      "id": "word-edit-bold",
+      "title": "加粗并核验正文及 XML 格式",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "word-edit-app"
+          },
+          "--program",
+          {
+            "input": "word-edit-program"
+          },
+          "--token",
+          {
+            "input": "word-edit-file"
+          }
+        ]
+      },
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+a",
+              "--target",
+              "role:Document",
+              "--app",
+              {
+                "input": "word-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+b",
+              "--target",
+              "role:Document",
+              "--app",
+              {
+                "input": "word-edit-app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+s",
+              "--target",
+              "role:Document",
+              "--app",
+              {
+                "input": "word-edit-app"
+              }
+            ]
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "word-edit-file"
+          },
+          "--kind",
+          "docx",
+          "--expected",
+          "{\"text\":\"ACTL report 2026\\n第一段 中文 12345\\nSecond paragraph 67890\\nAppend 中文 Ω 24680\",\"bold\":true}"
+        ]
+      }
+    },
+    {
+      "id": "word-edit-uia-bold",
+      "title": "核对完整 UIA 正文",
+      "run": {
+        "command": "verify",
+        "args": [
+          "--value",
+          "role:Document",
+          "ACTL report 2026\n第一段 中文 12345\nSecond paragraph 67890\nAppend 中文 Ω 24680",
+          "--property",
+          "text",
+          "--normalize-lines",
+          "--app",
+          {
+            "input": "word-edit-app"
+          }
+        ]
+      }
+    },
+    {
+      "id": "word-edit-close-before-reopen",
+      "title": "核对原进程实例后关闭",
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "word-edit-app"
+          },
+          "--program",
+          {
+            "input": "word-edit-program"
+          },
+          "--token",
+          {
+            "input": "word-edit-file"
+          },
+          "--instance",
+          "pending",
+          "--hwnd",
+          "1",
+          "--pid",
+          "1"
+        ],
+        "bind": {
+          "7": "word-edit-ownership.start",
+          "9": "word-edit-ownership.hwnd",
+          "11": "word-edit-ownership.pid"
+        }
+      },
+      "run": {
+        "command": "close-window",
+        "args": [
+          "--hwnd",
+          "1"
+        ],
+        "bind": {
+          "1": "word-edit-ownership.hwnd"
+        }
+      },
+      "verify": {
+        "command": "verify-closed",
+        "args": [
+          "--hwnd",
+          "1",
+          "--pid",
+          "1",
+          "--instance",
+          "pending"
+        ],
+        "bind": {
+          "1": "word-edit-ownership.hwnd",
+          "3": "word-edit-ownership.pid",
+          "5": "word-edit-ownership.start"
+        }
+      }
+    },
+    {
+      "id": "word-edit-reopen",
+      "title": "重开已保存的文档",
+      "run": {
+        "command": "launch",
+        "args": [
+          {
+            "input": "word-edit-program"
+          },
+          "/n",
+          {
+            "input": "word-edit-file"
+          }
+        ]
+      },
+      "verify": {
+        "command": "wait",
+        "args": [
+          "--element",
+          "role:Document",
+          "--app",
+          {
+            "input": "word-edit-app"
+          },
+          "--timeout",
+          "20000"
+        ]
+      }
+    },
+    {
+      "id": "word-edit-reopened-owner",
+      "title": "核对重开文档的进程身份",
+      "run": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "word-edit-app"
+          },
+          "--program",
+          {
+            "input": "word-edit-program"
+          },
+          "--token",
+          {
+            "input": "word-edit-file"
+          }
+        ]
+      },
+      "outputs": {
+        "hwnd": {
+          "pointer": "/hwnd",
+          "type": "number"
+        },
+        "pid": {
+          "pointer": "/pid",
+          "type": "number"
+        },
+        "start": {
+          "pointer": "/process_start",
+          "type": "string"
+        }
+      }
+    },
+    {
+      "id": "word-edit-reopened-content",
+      "title": "重开后再次核对完整正文及格式",
+      "run": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "word-edit-file"
+          },
+          "--kind",
+          "docx",
+          "--expected",
+          "{\"text\":\"ACTL report 2026\\n第一段 中文 12345\\nSecond paragraph 67890\\nAppend 中文 Ω 24680\",\"bold\":true}"
+        ]
+      }
+    },
+    {
+      "id": "word-edit-uia-reopened-content",
+      "title": "核对完整 UIA 正文",
+      "run": {
+        "command": "verify",
+        "args": [
+          "--value",
+          "role:Document",
+          "ACTL report 2026\n第一段 中文 12345\nSecond paragraph 67890\nAppend 中文 Ω 24680",
+          "--property",
+          "text",
+          "--normalize-lines",
+          "--app",
+          {
+            "input": "word-edit-app"
+          }
+        ]
+      }
+    },
+    {
+      "id": "word-edit-close",
+      "title": "关闭本任务文档并核对进程退出",
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "word-edit-app"
+          },
+          "--program",
+          {
+            "input": "word-edit-program"
+          },
+          "--token",
+          {
+            "input": "word-edit-file"
+          },
+          "--instance",
+          "pending",
+          "--hwnd",
+          "1",
+          "--pid",
+          "1"
+        ],
+        "bind": {
+          "7": "word-edit-reopened-owner.start",
+          "9": "word-edit-reopened-owner.hwnd",
+          "11": "word-edit-reopened-owner.pid"
+        }
+      },
+      "run": {
+        "command": "close-window",
+        "args": [
+          "--hwnd",
+          "1"
+        ],
+        "bind": {
+          "1": "word-edit-reopened-owner.hwnd"
+        }
+      },
+      "verify": {
+        "command": "verify-closed",
+        "args": [
+          "--hwnd",
+          "1",
+          "--pid",
+          "1",
+          "--instance",
+          "pending"
+        ],
+        "bind": {
+          "1": "word-edit-reopened-owner.hwnd",
+          "3": "word-edit-reopened-owner.pid",
+          "5": "word-edit-reopened-owner.start"
+        }
+      }
+    },
+    {
+      "title": "Open isolated Zotero profile",
+      "run": {
+        "command": "launch",
+        "args": [
+          {
+            "input": "zotero-search-program"
+          },
+          "-no-remote",
+          "-profile",
+          {
+            "input": "zotero-search-profile"
+          },
+          "-datadir",
+          {
+            "input": "zotero-search-data"
+          }
+        ]
+      },
+      "verify": {
+        "command": "wait",
+        "args": [
+          "--element",
+          "uia:{\"match\":{\"name\":\"快速搜索\",\"role\":\"Edit\"}}",
+          "--app",
+          {
+            "input": "zotero-search-app"
+          },
+          "--timeout",
+          "20000"
+        ]
+      },
+      "id": "zotero-search-open"
+    },
+    {
+      "run": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "zotero-search-app"
+          },
+          "--program",
+          {
+            "input": "zotero-search-program"
+          },
+          "--token",
+          {
+            "input": "zotero-search-profile"
+          }
+        ]
+      },
+      "id": "zotero-search-ownership",
+      "title": "Verify isolated task process",
+      "outputs": {
+        "pid": {
+          "type": "number",
+          "pointer": "/pid"
+        },
+        "hwnd": {
+          "type": "number",
+          "pointer": "/hwnd"
+        },
+        "start": {
+          "type": "string",
+          "pointer": "/process_start"
+        }
+      }
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "set-clipboard",
+            "args": [
+              "TY  - JOUR\r\nTI  - ACTL Alpha 中文测试\r\nAU  - Test, Alice\r\nPY  - 2026\r\nER  - \r\n\r\nTY  - JOUR\r\nTI  - ACTL Beta unrelated\r\nAU  - Test, Bob\r\nPY  - 2025\r\nER  - \r\n"
+            ]
+          },
+          {
+            "command": "click",
+            "args": [
+              "id:fileMenu",
+              "--app",
+              {
+                "input": "zotero-search-app"
+              }
+            ]
+          },
+          {
+            "command": "click",
+            "args": [
+              "name:从剪贴板导入",
+              "--app",
+              {
+                "input": "zotero-search-app"
+              }
+            ]
+          }
+        ]
+      },
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "zotero-search-app"
+          },
+          "--program",
+          {
+            "input": "zotero-search-program"
+          },
+          "--token",
+          {
+            "input": "zotero-search-profile"
+          }
+        ]
+      },
+      "title": "Import synthetic records and verify exact rows",
+      "before": {
+        "command": "verify-rows",
+        "args": [
+          "--app",
+          {
+            "input": "zotero-search-app"
+          },
+          "--prefix",
+          "item-tree-main-default-row-",
+          "--expected",
+          "[]"
+        ]
+      },
+      "verify": {
+        "command": "verify-rows",
+        "args": [
+          "--app",
+          {
+            "input": "zotero-search-app"
+          },
+          "--prefix",
+          "item-tree-main-default-row-",
+          "--expected",
+          "[\"ACTL Alpha 中文测试. 期刊文章. Test\",\"ACTL Beta unrelated. 期刊文章. Test\"]"
+        ]
+      },
+      "id": "zotero-search-import"
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+a",
+              "--target",
+              "uia:{\"match\":{\"name\":\"快速搜索\",\"role\":\"Edit\"}}",
+              "--app",
+              {
+                "input": "zotero-search-app"
+              }
+            ]
+          },
+          {
+            "command": "type",
+            "args": [
+              "uia:{\"match\":{\"name\":\"快速搜索\",\"role\":\"Edit\"}}",
+              "Alpha",
+              "--paste",
+              "--verify-value",
+              "Alpha",
+              "--app",
+              {
+                "input": "zotero-search-app"
+              }
+            ]
+          }
+        ]
+      },
+      "title": "Search 1 and verify exact rows",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "zotero-search-app"
+          },
+          "--program",
+          {
+            "input": "zotero-search-program"
+          },
+          "--token",
+          {
+            "input": "zotero-search-profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-rows",
+        "args": [
+          "--app",
+          {
+            "input": "zotero-search-app"
+          },
+          "--prefix",
+          "item-tree-main-default-row-",
+          "--expected",
+          "[\"ACTL Alpha 中文测试. 期刊文章. Test\"]"
+        ]
+      },
+      "id": "zotero-search-search-1",
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "zotero-search-app"
+          },
+          "--program",
+          {
+            "input": "zotero-search-program"
+          },
+          "--token",
+          {
+            "input": "zotero-search-profile"
+          }
+        ]
+      }
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+a",
+              "--target",
+              "uia:{\"match\":{\"name\":\"快速搜索\",\"role\":\"Edit\"}}",
+              "--app",
+              {
+                "input": "zotero-search-app"
+              }
+            ]
+          },
+          {
+            "command": "type",
+            "args": [
+              "uia:{\"match\":{\"name\":\"快速搜索\",\"role\":\"Edit\"}}",
+              "中文测试",
+              "--paste",
+              "--verify-value",
+              "中文测试",
+              "--app",
+              {
+                "input": "zotero-search-app"
+              }
+            ]
+          }
+        ]
+      },
+      "title": "Search 2 and verify exact rows",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "zotero-search-app"
+          },
+          "--program",
+          {
+            "input": "zotero-search-program"
+          },
+          "--token",
+          {
+            "input": "zotero-search-profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-rows",
+        "args": [
+          "--app",
+          {
+            "input": "zotero-search-app"
+          },
+          "--prefix",
+          "item-tree-main-default-row-",
+          "--expected",
+          "[\"ACTL Alpha 中文测试. 期刊文章. Test\"]"
+        ]
+      },
+      "id": "zotero-search-search-2",
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "zotero-search-app"
+          },
+          "--program",
+          {
+            "input": "zotero-search-program"
+          },
+          "--token",
+          {
+            "input": "zotero-search-profile"
+          }
+        ]
+      }
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+a",
+              "--target",
+              "uia:{\"match\":{\"name\":\"快速搜索\",\"role\":\"Edit\"}}",
+              "--app",
+              {
+                "input": "zotero-search-app"
+              }
+            ]
+          },
+          {
+            "command": "type",
+            "args": [
+              "uia:{\"match\":{\"name\":\"快速搜索\",\"role\":\"Edit\"}}",
+              "ACTL_missing_987654",
+              "--paste",
+              "--verify-value",
+              "ACTL_missing_987654",
+              "--app",
+              {
+                "input": "zotero-search-app"
+              }
+            ]
+          }
+        ]
+      },
+      "title": "Search 3 and verify exact rows",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "zotero-search-app"
+          },
+          "--program",
+          {
+            "input": "zotero-search-program"
+          },
+          "--token",
+          {
+            "input": "zotero-search-profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-rows",
+        "args": [
+          "--app",
+          {
+            "input": "zotero-search-app"
+          },
+          "--prefix",
+          "item-tree-main-default-row-",
+          "--expected",
+          "[]"
+        ]
+      },
+      "id": "zotero-search-search-3",
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "zotero-search-app"
+          },
+          "--program",
+          {
+            "input": "zotero-search-program"
+          },
+          "--token",
+          {
+            "input": "zotero-search-profile"
+          }
+        ]
+      }
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+a",
+              "--target",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"快速搜索\"}}",
+              "--app",
+              {
+                "input": "zotero-search-app"
+              }
+            ]
+          },
+          {
+            "command": "type",
+            "args": [
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"快速搜索\"}}",
+              "Alpha",
+              "--paste",
+              "--verify-value",
+              "Alpha",
+              "--app",
+              {
+                "input": "zotero-search-app"
+              }
+            ]
+          },
+          {
+            "command": "verify-rows",
+            "args": [
+              "--app",
+              {
+                "input": "zotero-search-app"
+              },
+              "--prefix",
+              "item-tree-main-default-row-",
+              "--expected",
+              "[\"ACTL Alpha 中文测试. 期刊文章. Test\"]"
+            ]
+          },
+          {
+            "command": "click",
+            "args": [
+              "id:item-tree-main-default-row-0",
+              "--app",
+              {
+                "input": "zotero-search-app"
+              }
+            ]
+          },
+          {
+            "command": "type",
+            "args": [
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"出版物\"}}",
+              "ACTL Journal 2026",
+              "--paste",
+              "--verify-value",
+              "ACTL Journal 2026",
+              "--app",
+              {
+                "input": "zotero-search-app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "tab",
+              "--target",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"出版物\"}}",
+              "--app",
+              {
+                "input": "zotero-search-app"
+              }
+            ]
+          }
+        ]
+      },
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "zotero-search-app"
+          },
+          "--program",
+          {
+            "input": "zotero-search-program"
+          },
+          "--token",
+          {
+            "input": "zotero-search-profile"
+          }
+        ]
+      },
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "zotero-search-app"
+          },
+          "--program",
+          {
+            "input": "zotero-search-program"
+          },
+          "--token",
+          {
+            "input": "zotero-search-profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify",
+        "args": [
+          "--value",
+          "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"出版物\"}}",
+          "ACTL Journal 2026",
+          "--property",
+          "text",
+          "--app",
+          {
+            "input": "zotero-search-app"
+          }
+        ]
+      },
+      "id": "zotero-search-publication",
+      "title": "Edit isolated record publication"
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "right-click",
+            "args": [
+              "id:item-tree-main-default-row-0",
+              "--app",
+              {
+                "input": "zotero-search-app"
+              }
+            ]
+          },
+          {
+            "command": "click",
+            "args": [
+              "name:导出条目",
+              "--app",
+              {
+                "input": "zotero-search-app"
+              }
+            ]
+          },
+          {
+            "command": "wait",
+            "args": [
+              "--element",
+              "id:format-menu",
+              "--app",
+              "导出",
+              "--timeout",
+              "10000"
+            ]
+          },
+          {
+            "args": [
+              "--app",
+              "导出",
+              "--program",
+              {
+                "input": "zotero-search-program"
+              },
+              "--token",
+              {
+                "input": "zotero-search-profile"
+              }
+            ],
+            "command": "verify-owner"
+          },
+          {
+            "command": "click",
+            "args": [
+              "id:format-menu",
+              "--app",
+              "导出"
+            ]
+          },
+          {
+            "command": "click",
+            "args": [
+              "name:CSL JSON",
+              "--app",
+              "导出"
+            ]
+          },
+          {
+            "command": "click",
+            "args": [
+              "name:OK",
+              "--app",
+              "导出"
+            ]
+          },
+          {
+            "command": "wait",
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"文件名:\"}}",
+              "--app",
+              "导出",
+              "--timeout",
+              "10000"
+            ]
+          },
+          {
+            "args": [
+              "--app",
+              "导出",
+              "--program",
+              {
+                "input": "zotero-search-program"
+              },
+              "--token",
+              {
+                "input": "zotero-search-profile"
+              }
+            ],
+            "command": "verify-owner"
+          },
+          {
+            "command": "set-value",
+            "args": [
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"文件名:\"}}",
+              {
+                "input": "zotero-search-export"
+              },
+              "--app",
+              "导出"
+            ]
+          },
+          {
+            "command": "click",
+            "args": [
+              "name:保存(S)",
+              "--app",
+              "导出"
+            ]
+          }
+        ]
+      },
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "zotero-search-app"
+          },
+          "--program",
+          {
+            "input": "zotero-search-program"
+          },
+          "--token",
+          {
+            "input": "zotero-search-profile"
+          }
+        ]
+      },
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "zotero-search-app"
+          },
+          "--program",
+          {
+            "input": "zotero-search-program"
+          },
+          "--token",
+          {
+            "input": "zotero-search-profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "zotero-search-export"
+          },
+          "--kind",
+          "json",
+          "--expected",
+          "[{\"title\":\"ACTL Alpha 中文测试\",\"container-title\":\"ACTL Journal 2026\",\"author\":[{\"family\":\"Test\"}]}]",
+          "--subset"
+        ]
+      },
+      "id": "zotero-search-export",
+      "title": "Export record and verify JSON content"
+    },
+    {
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "zotero-search-app"
+          },
+          "--program",
+          {
+            "input": "zotero-search-program"
+          },
+          "--token",
+          {
+            "input": "zotero-search-profile"
+          },
+          "--instance",
+          "pending",
+          "--hwnd",
+          "1",
+          "--pid",
+          "1"
+        ],
+        "bind": {
+          "7": "zotero-search-ownership.start",
+          "9": "zotero-search-ownership.hwnd",
+          "11": "zotero-search-ownership.pid"
+        }
+      },
+      "verify": {
+        "command": "verify-closed",
+        "args": [
+          "--hwnd",
+          "1",
+          "--pid",
+          "1",
+          "--instance",
+          "pending"
+        ],
+        "bind": {
+          "3": "zotero-search-ownership.pid",
+          "5": "zotero-search-ownership.start",
+          "1": "zotero-search-ownership.hwnd"
+        }
+      },
+      "title": "Close verified isolated Zotero process",
+      "run": {
+        "command": "close-window",
+        "args": [
+          "--hwnd",
+          "1"
+        ],
+        "bind": {
+          "1": "zotero-search-ownership.hwnd"
+        }
+      },
+      "id": "zotero-search-close"
+    }
+  ]
+}

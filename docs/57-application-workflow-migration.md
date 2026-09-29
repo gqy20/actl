@@ -46,3 +46,5 @@
 - Word/Excel 输入焦点约束迁入 workflow 契约测试；浏览器快照绑定检查保留；Office 种子文件由现有 CLI 文件断言测试核验。
 - 完整门禁再次通过：target/workflow-cleanup-final-gate.log。
 - 清理后的统一准备入口再次预检通过：64 步、未登记、未操作桌面，汇总 target/workflow-cleanup-preflight.json。
+
+首轮真实 workflow 结果及状态条/耗时优化见 [58](58-workflow-live-and-feedback.md)：VS Code 17/22，存在关闭核验和行号输入失败，未记整轮通过。

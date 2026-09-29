@@ -1,5 +1,13 @@
 # YAML 流程使用说明
 
+## 无准备脚本的应用流程
+
+应用验证模板现在声明 resources 和输入默认值，可直接 `actl flow-run --file skills/actl/workflows/vscode-edit.yml --id vscode-001`。每次从头运行使用新的 ID；恢复仍用 flow-resume 和旧 ID。
+
+resources.directories 声明相对目录，resources.files 每项为 {path, text} 或 {path, copy}，copy 相对 YAML 目录。资源只写入 actl 状态目录/flow-resources/<ID>，拒绝已有目录及文件覆盖。输入 default 支持 ${run.id}、${run.dir} 与有限环境变量；资源路径和 text 只支持 ${run.id}。外部 inputs 和步骤字符串不做插值。不支持脚本命令。
+
+flow-validate 只读预检，返回使用 validation-preview 的资源清单，不创建文件；emit-plan 不证明资源已准备。flow-run 完整预检通过后准备资源，--paused 也会准备；flow-resume 不重置资源或重读模板。初始化失败保留现场，不自动清理或重试。当前输入覆盖不会改变资源声明，覆盖到外部路径时须自行准备并核对文件归属。
+
 适用于 actl 0.1.6，包含编写、执行和恢复所需说明。
 现有业务流程见 [流程索引](../workflows/README.md)。
 
@@ -64,7 +72,7 @@ reason 为 output_freshness_failed。不要修改时间或从头重跑；先核�
 ## 暂停与恢复
 
 - flow-pause 只保存暂停请求；等 flow-status 显示 paused 才确认暂停，在途调用可能尚未结束。
-- resume 不解除紧急停止；不得自动清除急停或代替用户点击桌面授权。
+- resume 不解除紧急停止，不得自动清除急停。用户明确授权代操作时，可用 computer use 核对任务后点击可见的开始/继续；不得伪造授权、抵消用户暂停/停止或盲目重放不确定动作。
 - 已完成步骤跳过；running/verifying/uncertain 先核验结果，核验成功则不重做动作。
 - resume_check 用于恢复时检查会话、接收人、当前页面等业务上下文；首次运行不执行它，首次必要条件放 before。
 - needs_review 时先观察。只有明确需要重复、后置核验返回 ASSERTION_FAILED，且用户授权后，才使用 `flow-resume --id report-01 --retry-step step-id`。
@@ -100,7 +108,7 @@ expected: 预期完整文本
 
 运行前解析并保存具体 plan，保存内容没有 inputs 或绑定对象；恢复不重读模板/参数文件。
 参数仍会进入本地运行计划，不能因错误证据脱敏而认为计划也已脱敏。
-独立测试文件、Office 种子文档及 profile 的准备仍由验收工具负责；引擎不执行任意 PS。
+独立测试文件、Office 模板及 profile 可通过 resources 声明准备；引擎不执行任意 PS。
 
 ## 可恢复操作组与独立结果核验（2026-09-29）
 
@@ -120,3 +128,7 @@ expected: 预期完整文本
 - `verify --value ... --property text --normalize-lines`：全文比较前转换 CRLF/CR 为 LF、去除尾部 LF，与 contains 互斥；供 Word TextPattern 行结束符差异使用。
 
 文件/行集合/关闭断言对已知不匹配在 5 秒观察窗口内复查，未知错误不转为空或成功。文件内容上限 4 MiB、单个 XML part 上限 4 MiB、expected 参数上限 16 KiB。OOXML 与进程元数据使用编译进二进制的固定 Windows PowerShell/.NET 只读检查器；请求仅通过 stdin JSON 传递，不拼接用户代码、不接受脚本路径、不使用 Office COM。XML 禁用 DTD/外部实体；单次检查器执行 20 秒上限，因此不是整个断言的 5 秒硬实时保证。无新增 Rust 依赖。
+
+### 紧邻检查复用（2026-09-29）
+
+恢复执行时，只有仍为 pending 的步骤，且解析后的 resume_check 与 before 完全相同时，成功的恢复检查才直接满足此次前置检查。两者之间仍检查暂停/停止；不跨步骤、跨暂停或跨执行器缓存。uncertain/running/verifying 步骤仍先核验结果，显式重试前重新执行 before。不同参数或不同命令不合并。

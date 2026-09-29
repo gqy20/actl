@@ -4,6 +4,7 @@ pub mod engine;
 pub mod freshness;
 pub mod inputs;
 pub mod recovery;
+pub mod resources;
 mod schema;
 pub mod sequence;
 pub mod store;

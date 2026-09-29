@@ -57,11 +57,21 @@ v1 无插值且公共文件禁固定 HWND,静态计划无法锚定,待 M3 契约
 
 | 流程 | 必需信息与前提 | 校验状态 |
 |---|---|---|
-| [vscode-edit.yml](vscode-edit.yml) | 独立 profile、两个任务文件、程序路径及现场选择器 | 预检通过；新流程真机待复验 |
+| [vscode-edit.yml](vscode-edit.yml) | 独立 profile、两个任务文件、程序路径及现场选择器；file_result/second_result 限定 quickInput_list 内的任务文件名 | 预检及 Quick Input 组件探查通过；完整 22 步待复验 |
 | [word-edit.yml](word-edit.yml) | 独立 DOCX、程序路径、正文选择器及每阶段预期文本 | 预检及合成文件断言通过；新流程真机待复验 |
 | [excel-table.yml](excel-table.yml) | 独立 XLSX、程序路径、名称框及区域数据/公式预期 | 预检及合成文件断言通过；新流程真机待复验 |
 | [zotero-search.yml](zotero-search.yml) | 独立 profile/data、RIS、导出路径及条目预期 | 预检通过；新流程真机待复验 |
 
-全部输入在各文件的 inputs 中声明。开发仓库 scenarios/prepare-workflow.ps1 可生成隔离资源及 inputs.json；通过 -Scenario 选择四个流程，桌面动作由 YAML 执行。scenarios/verify-applications.ps1 将四份已解析计划合并为一个 flow，整批使用同一任务 ID 和 once_per_run。首次仍需用户点击开始；暂停恢复显示继续，并先核验现场。旧同名入口及对照脚本已删除；历史验收结论保留在文档和 Git 历史。
+上述四个流程及 vscode-resume.yml 的 inputs 已有运行上下文默认值，resources 声明隔离目录、初始文本和随包 Office 模板。直接运行：
+
+```powershell
+actl flow-run --file skills/actl/workflows/vscode-edit.yml --id vscode-001
+```
+
+每次从头运行使用新的 ID；无需先运行 PS 或生成 inputs.json。先只读预检可用 flow-validate --file 同一模板。可选 --inputs 仍支持覆盖默认输入；覆盖文件路径不会把资源写到该外部路径，调用方须自行提供并确认外部文件。
+
+[verify-applications.yml](verify-applications.yml) 为四软件合计 64 步整批计划，资源按软件子目录隔离，整批共用一个任务 ID 和 once_per_run；其步骤与单软件模板的一致性由测试检查。首次交接及暂停恢复遵循当前授权规则。旧准备/合并脚本已删除，历史验收保留。
+
+资源根目录为本机 actl 状态目录下的 flow-resources/<ID>。预检不创建资源；执行前完整预检通过才新建资源，已有同名目录拒绝覆盖。恢复不重建初始文件，也不重读模板。
 
 这些完整验证流程会修改任务文件、剪贴板，并关闭核实归属的任务窗口。详细覆盖和限制见开发仓库 docs/57-application-workflow-migration.md；预检不代表真实软件验收通过。

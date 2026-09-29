@@ -2,9 +2,17 @@
 
 ## 使用方式
 
+### 本仓库已授权的 computer use 代操作
+
+用户已明确允许 agent 在既定测试与排障范围内，通过 computer use 实际点击 actl 的“开始/继续”，无需每次请求用户点击。先核对显示端窗口身份、任务 ID、目标和下一步动作；点击后读取 flow/display 状态，恢复仍经过现场检查和 uncertain 核验。用户明确暂停、稍后、停止或正在接管时不自动继续；原因未知时先诊断，不反复点击。
+
+这是调用方的代操作授权，不新增 YAML 跳过确认字段，不改变显示协议、输入监听或停止代次。不能写内存/授权文件或伪造事件替代可见按钮。computer use 产生的其他输入可能触发让行，点击交接后应退出桌面操作，由 actl 执行；持续让行要查原因，不能循环抢回控制权。代点击的验收记录须注明 computer use，不计为用户亲自点击或真实人工接管验收。下文历史人工验收结论保持原样。
+
+诊断默认使用 actl 的局部观察、日志及截图；需要独立对照或上述代操作时引入 computer use。先做局部复现，再进行整轮验收。flow-validate 只预检资源声明，不创建资源或 paused flow；执行时直接 flow-run，只有确需预先登记并等待时才使用 --paused。
+
 所有经过动作反馈门禁的写操作，先向现有 actl-signal 申请桌面交接。
 提示窗口显示任务和当前目标，说明可能切换窗口、使用键鼠与剪贴板。
-用户点击「开始 / 继续」后才允许执行；点击「稍后」或 25 秒内未响应，命令返回
+用户或已获授权的 agent 实际点击「开始 / 继续」后才允许执行；点击「稍后」或 25 秒内未响应，命令返回
 `NOT_ACTIONABLE`，不执行请求的动作。弹窗使用不激活窗口样式，不主动移走当前输入焦点。
 只读查询不申请授权；观察窗口时不再隐式 ShowWindowAsync。
 
@@ -17,7 +25,7 @@
 首次提示明确说明本任务确认一次，人工输入/停止/监听异常仍撤销授权。默认 `expiring` 保持旧超时。
 flow 在顶层设置 handoff；普通脚本设置 `ACTL_TASK_CONFIG` 指向含 version: 1 和 handoff 的 YAML，
 并为整轮生成唯一 ACTL_TASK_ID，不能跨运行复用。配置只描述策略，不保存已授权状态。
-`scenarios/verify-applications.ps1` 使用 `verification-task.yml` 共用一次任务交接，出现交接中断后停止整批。
+`skills/actl/workflows/verify-applications.yml` 将应用流程组织为同一 flow，共用 once_per_run 交接策略；出现交接中断后暂停并保留现场。
 现有 `--physical` 显式要求不变；点击交接按钮不代替 `--physical`。
 
 ## 人工接管
@@ -96,7 +104,7 @@ UIA 属性调用本身受 provider 调度影响，轮询超时不等于整个 CO
 保留 pending，可直接继续到未开始的步骤。单 CLI 和 PowerShell 脚本保留现场，由调用方接续，
 当前版本不提供假继续按钮。紧急停止独立于暂停，不会自动解除。
 
-需要界面继续的验证使用 `scenarios/vscode-resume.ps1`：动作在执行前登记为持久化 flow，暂停后由绑定 run ID 的继续按钮恢复，不重新运行准备脚本。核验判据与当前迁移范围见 [55](55-resumable-desktop-tasks.md)。
+需要界面继续的验证使用 `skills/actl/workflows/vscode-resume.yml`：动作在执行前登记为持久化 flow，暂停后由绑定 run ID 的继续按钮恢复，不重新运行准备脚本。核验判据与当前迁移范围见 [55](55-resumable-desktop-tasks.md)。
 
 重复提示诊断记录在本地 history 的 consent_decision：区分实际 shown、用户 granted 与 reused，附带策略、失效原因和两路活动计数，不记录输入内容。Raw Input 只排除无设备且携带 actl 注入标记的自身事件，其余来源或解析失败仍让行。复现和验收见 [54](54-repeated-handoff.md)。
 
@@ -105,3 +113,5 @@ v5 验证：`target/cooperation-gate-final.log` 完整门禁通过；模型覆�
 正确 flow 绑定、急停禁止继续、查询不覆盖暂停、单调用不提供假恢复；引擎覆盖未开始步骤继续与
 不确定写步骤不重放。`target/cooperation-live/display-status.json` 确认新版 v5 显示端就绪。
 此次启动验收发现实际急停已开启，保留原标记；桌面点按和恢复业务软件的正向路径未继续验收。
+
+状态条悬停仅高亮右侧操作按钮，不替换主状态文字；点击暂停后鼠标停留原位仍显示正在暂停、已暂停、待核对等当前状态。按钮图标随当前可用操作变化，详细操作说明保留在详情中。

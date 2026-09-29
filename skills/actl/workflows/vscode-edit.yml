@@ -5,13 +5,33 @@
     "approval": "once_per_run"
   },
   "inputs": {
-    "program": {},
-    "profile": {},
-    "file": {},
-    "app": {},
-    "editor": {},
-    "second": {},
-    "second_editor": {}
+    "program": {
+      "default": "${env:LOCALAPPDATA}/Programs/Microsoft VS Code/Code.exe"
+    },
+    "profile": {
+      "default": "${run.dir}/profile"
+    },
+    "file": {
+      "default": "${run.dir}/${run.id}.txt"
+    },
+    "app": {
+      "default": "${run.id}"
+    },
+    "editor": {
+      "default": "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"${run.id}.txt\"}}"
+    },
+    "second": {
+      "default": "${run.dir}/${run.id}-second.txt"
+    },
+    "second_editor": {
+      "default": "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"${run.id}-second.txt\"}}"
+    },
+    "file_result": {
+      "default": "uia:{\"match\":{\"role\":\"ListItem\",\"name_contains\":\"${run.id}.txt\"},\"within\":{\"id\":\"quickInput_list\"}}"
+    },
+    "second_result": {
+      "default": "uia:{\"match\":{\"role\":\"ListItem\",\"name_contains\":\"${run.id}-second.txt\"},\"within\":{\"id\":\"quickInput_list\"}}"
+    }
   },
   "steps": [
     {
@@ -1168,6 +1188,19 @@
             ]
           },
           {
+            "command": "wait",
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"键入要运行的命令的名称。\"}}",
+              "--app",
+              {
+                "input": "app"
+              },
+              "--timeout",
+              "5000"
+            ]
+          },
+          {
             "command": "set-value",
             "args": [
               "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"键入要运行的命令的名称。\"}}",
@@ -1179,9 +1212,22 @@
             ]
           },
           {
+            "command": "wait",
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"role\":\"ListItem\",\"name_contains\":\"转到行/列...,\"},\"within\":{\"id\":\"quickInput_list\"}}",
+              "--app",
+              {
+                "input": "app"
+              },
+              "--timeout",
+              "5000"
+            ]
+          },
+          {
             "command": "click",
             "args": [
-              "uia:{\"match\":{\"role\":\"ListItem\",\"name_contains\":\"转到行/列...,\"}}",
+              "uia:{\"match\":{\"role\":\"ListItem\",\"name_contains\":\"转到行/列...,\"},\"within\":{\"id\":\"quickInput_list\"}}",
               "--app",
               {
                 "input": "app"
@@ -1189,11 +1235,23 @@
             ]
           },
           {
-            "command": "type",
+            "command": "wait",
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"转到行。\"}}",
+              "--app",
+              {
+                "input": "app"
+              },
+              "--timeout",
+              "5000"
+            ]
+          },
+          {
+            "command": "set-value",
             "args": [
               "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"转到行。\"}}",
-              "2",
-              "--paste",
+              ":2",
               "--app",
               {
                 "input": "app"
@@ -1201,11 +1259,50 @@
             ]
           },
           {
-            "command": "press",
+            "command": "verify",
             "args": [
-              "enter",
-              "--target",
+              "--value",
               "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"转到行。\"}}",
+              ":2",
+              "--property",
+              "value",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "wait",
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"role\":\"ListItem\",\"name\":\"转到第 2 行，第 1 列。按 Enter 键导航。\"},\"within\":{\"id\":\"quickInput_list\"}}",
+              "--app",
+              {
+                "input": "app"
+              },
+              "--timeout",
+              "5000"
+            ]
+          },
+          {
+            "command": "click",
+            "args": [
+              "uia:{\"match\":{\"role\":\"ListItem\",\"name\":\"转到第 2 行，第 1 列。按 Enter 键导航。\"},\"within\":{\"id\":\"quickInput_list\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "verify",
+            "args": [
+              "--value",
+              "id:status.editor.selection",
+              "行 2，列 1",
+              "--property",
+              "name",
               "--app",
               {
                 "input": "app"
@@ -1441,6 +1538,19 @@
             ]
           },
           {
+            "command": "wait",
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"键入要运行的命令的名称。\"}}",
+              "--app",
+              {
+                "input": "app"
+              },
+              "--timeout",
+              "5000"
+            ]
+          },
+          {
             "command": "set-value",
             "args": [
               "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"键入要运行的命令的名称。\"}}",
@@ -1452,9 +1562,22 @@
             ]
           },
           {
+            "command": "wait",
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"role\":\"ListItem\",\"name_contains\":\"转到文件...,\"},\"within\":{\"id\":\"quickInput_list\"}}",
+              "--app",
+              {
+                "input": "app"
+              },
+              "--timeout",
+              "5000"
+            ]
+          },
+          {
             "command": "click",
             "args": [
-              "uia:{\"match\":{\"role\":\"ListItem\",\"name_contains\":\"转到文件...,\"}}",
+              "uia:{\"match\":{\"role\":\"ListItem\",\"name_contains\":\"转到文件...,\"},\"within\":{\"id\":\"quickInput_list\"}}",
               "--app",
               {
                 "input": "app"
@@ -1462,13 +1585,25 @@
             ]
           },
           {
-            "command": "type",
+            "command": "wait",
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"按名称搜索文件\"}}",
+              "--app",
+              {
+                "input": "app"
+              },
+              "--timeout",
+              "5000"
+            ]
+          },
+          {
+            "command": "set-value",
             "args": [
               "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"按名称搜索文件\"}}",
               {
                 "input": "second"
               },
-              "--paste",
               "--app",
               {
                 "input": "app"
@@ -1476,11 +1611,42 @@
             ]
           },
           {
-            "command": "press",
+            "command": "verify",
             "args": [
-              "enter",
-              "--target",
+              "--value",
               "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"按名称搜索文件\"}}",
+              {
+                "input": "second"
+              },
+              "--property",
+              "value",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "wait",
+            "args": [
+              "--element",
+              {
+                "input": "second_result"
+              },
+              "--app",
+              {
+                "input": "app"
+              },
+              "--timeout",
+              "5000"
+            ]
+          },
+          {
+            "command": "click",
+            "args": [
+              {
+                "input": "second_result"
+              },
               "--app",
               {
                 "input": "app"
@@ -1556,6 +1722,19 @@
             ]
           },
           {
+            "command": "wait",
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"键入要运行的命令的名称。\"}}",
+              "--app",
+              {
+                "input": "app"
+              },
+              "--timeout",
+              "5000"
+            ]
+          },
+          {
             "command": "set-value",
             "args": [
               "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"键入要运行的命令的名称。\"}}",
@@ -1567,9 +1746,22 @@
             ]
           },
           {
+            "command": "wait",
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"role\":\"ListItem\",\"name_contains\":\"转到文件...,\"},\"within\":{\"id\":\"quickInput_list\"}}",
+              "--app",
+              {
+                "input": "app"
+              },
+              "--timeout",
+              "5000"
+            ]
+          },
+          {
             "command": "click",
             "args": [
-              "uia:{\"match\":{\"role\":\"ListItem\",\"name_contains\":\"转到文件...,\"}}",
+              "uia:{\"match\":{\"role\":\"ListItem\",\"name_contains\":\"转到文件...,\"},\"within\":{\"id\":\"quickInput_list\"}}",
               "--app",
               {
                 "input": "app"
@@ -1577,13 +1769,25 @@
             ]
           },
           {
-            "command": "type",
+            "command": "wait",
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"按名称搜索文件\"}}",
+              "--app",
+              {
+                "input": "app"
+              },
+              "--timeout",
+              "5000"
+            ]
+          },
+          {
+            "command": "set-value",
             "args": [
               "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"按名称搜索文件\"}}",
               {
                 "input": "file"
               },
-              "--paste",
               "--app",
               {
                 "input": "app"
@@ -1591,11 +1795,42 @@
             ]
           },
           {
-            "command": "press",
+            "command": "verify",
             "args": [
-              "enter",
-              "--target",
+              "--value",
               "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"按名称搜索文件\"}}",
+              {
+                "input": "file"
+              },
+              "--property",
+              "value",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "wait",
+            "args": [
+              "--element",
+              {
+                "input": "file_result"
+              },
+              "--app",
+              {
+                "input": "app"
+              },
+              "--timeout",
+              "5000"
+            ]
+          },
+          {
+            "command": "click",
+            "args": [
+              {
+                "input": "file_result"
+              },
               "--app",
               {
                 "input": "app"
@@ -1715,5 +1950,20 @@
       },
       "title": "Close only the verified task process"
     }
-  ]
+  ],
+  "resources": {
+    "directories": [
+      "profile"
+    ],
+    "files": [
+      {
+        "path": "${run.id}.txt",
+        "text": "Original 中文 baseline 123\nSecond line\n"
+      },
+      {
+        "path": "${run.id}-second.txt",
+        "text": "Second owned file\n"
+      }
+    ]
+  }
 }

@@ -371,13 +371,27 @@ fn state(store: &Store) -> Result<Value, CtlError> {
         json!({"run":run,"runner_active":active,"interrupted":interrupted,"pause_requested":store.pause_requested()}),
     )
 }
-fn load_plan(file: &str, inputs: &Option<String>) -> Result<Plan, CtlError> {
+fn load_plan(
+    file: &str,
+    inputs: &Option<String>,
+    root: &std::path::Path,
+    id: &str,
+) -> Result<(Plan, actl_flow::resources::Prepared), CtlError> {
     let text = actl_flow::store::read_text(std::path::Path::new(file))?;
+    let prepared = actl_flow::resources::prepare(
+        &text,
+        std::path::Path::new(file),
+        &root.join("flow-resources").join(id),
+        id,
+    )?;
     let values = inputs
         .as_ref()
         .map(|file| actl_flow::store::read_text(std::path::Path::new(file)))
         .transpose()?;
-    actl_flow::inputs::resolve(&text, values.as_deref())
+    Ok((
+        actl_flow::inputs::resolve(&prepared.text, values.as_deref())?,
+        prepared,
+    ))
 }
 
 pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
@@ -394,10 +408,13 @@ pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
             inputs,
             emit_plan,
         } => {
-            let plan = load_plan(file, inputs)?;
+            let (plan, resources) = load_plan(file, inputs, &root, "validation-preview")?;
             validate(&plan)?;
             let mut result =
                 json!({"valid":true,"version":1,"name":plan.name,"steps":plan.steps.len()});
+            if resources.enabled() {
+                result["resources"] = resources.summary();
+            }
             if *emit_plan {
                 result["plan"] =
                     serde_json::to_value(plan).map_err(|e| CtlError::internal(e.to_string()))?;
@@ -425,10 +442,17 @@ pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
             id,
             paused,
         } => {
-            let plan = load_plan(file, inputs)?;
+            let (plan, resources) = load_plan(file, inputs, &root, id)?;
             validate(&plan)?;
             let store = Store::at(&root, id)?;
             let _global = store.lock(true)?;
+            if store.dir.exists() {
+                return Err(CtlError::protocol(
+                    "run ID already exists; use flow-resume or a new ID",
+                ));
+            }
+            actl_core::stop::check_current()?;
+            resources.create()?;
             let mut run = store.create(&plan, id)?;
             let active = store.lock(false)?;
             let mut host = Adapter {
