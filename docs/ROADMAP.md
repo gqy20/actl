@@ -1,6 +1,6 @@
 # ROADMAP · 路线图
 
-更新：2026-09-29
+更新：2026-09-30
 关联：[PRD](PRD.md) · [设计蓝图](06-design-blueprint.md) · [技术选型](TECH_STACK.md)
 
 本文件只维护剩余工作、优先级与验收标准。已完成变更统一见 [CHANGELOG](../CHANGELOG.md)：
@@ -62,7 +62,7 @@
   验收：短暂失败可恢复；持续失败有界退出；未知不走否定分支；暂停/停止阻止派发；重启/继续不静默刷新预算；不确定动作不重放；保留每次观察、恢复措施及退出原因。
 - [ ] 简单条件模板逐应用验收：窗口复用/启动、可选控件关闭、已有值跳过；代码与参数预检不代替业务验收，见 [63](63-simple-workflow-conditions.md)。
 
-- [ ] 从 resources 入口复验四软件整批：单软件复验见 [66](66-application-readiness.md)、[67](67-vscode-navigation-controls.md)。一至五轮记录见 [68](68-combined-batch-first-round.md)。路线层四软件单链已全部通过（2026-09-30：Zotero 9/9 zotero-verify11、Excel 13/13 excel-verify8、Word 20/20、VS Code 26/26，见 docs/68）；组合整批第六次死于深夜锁屏（护栏正确拒绝），只差一次解锁状态下的整批运行。四段全过 + 资源隔离核对 + 恢复保留编辑结果 + 正常收尾后方可关闭。遗留：Excel 残壳优雅退出无解（WM_CLOSE/COM Quit 均无效，9 壳堆积拖慢全局，重启清）。
+- [ ] 从 resources 入口复验四软件整批：单软件复验见 [66](66-application-readiness.md)、[67](67-vscode-navigation-controls.md)，六轮全程见 [68](68-combined-batch-first-round.md)。路线层四软件单链已全部通过（Zotero 9/9、Excel 13/13、Word 20/20、VS Code 26/26）；组合整批第六次死于深夜锁屏（护栏正确拒绝）。剩余：解锁状态跑一次整批（四段全过 + 资源隔离核对 + 恢复保留编辑结果 + 正常收尾）方可关闭。Excel 残壳另见下方诊断节。
 
 - [ ] 完成四个已迁移应用 workflow 的真机复验，核对一次交接、组内暂停、不确定结果、独立文件核验及进程归属，见 [57](57-application-workflow-migration.md)。VS Code 已有独立可恢复验证入口，真机状态及边界见 [55](55-resumable-desktop-tasks.md)；旧脚本退出不具备自动续跑能力。
 
@@ -95,47 +95,6 @@
 
 - [ ] 结合新的交接、控件身份和焦点校验，补跑系统应用、记事本及 Office 的待验收脚本；
   分别记录通过、受阻和失败，不能用离线脚本测试代替真机结果。
-- [ ] 流程执行器在步骤失败证据中保留子命令错误原文（现仅留错误码 + synthetic 结构，
-  docs/68 第二轮 Word 锁文件的 NOT_ACTIONABLE 原因需靠手工复现取得）；同理评估
-  verify-file 对 IO 失败的可区分报错（共享冲突 vs 内容不符）。
-- [ ] 交接来源可区分：consent_decision 与让行卡区分「人工物理输入」与「外来程序注入」
-  （docs/68 第五轮实测：用户未操作仍让行，journal 证实 foreign_injected 0→2）。
-- [ ] 显示端触发续跑的执行器 journal 未完整并入任务时间线（docs/68 第五轮 525 事件止于
-  首执行器，续跑波次缺失）——先定位写入路径再补齐合并。
-- [ ] zotero-search import 前置适配：全新空库无 item-tree-main-default，verify-rows 前置
-  结构性 NOT_ACTIONABLE（docs/68 第五轮）；改为 collection-tree 就绪检查或去除对新库
-  冗余的前置。（已修并于 zotero-verify11 验收，此项关闭语义见 docs/68 收官节；
-  excel paste 中断重放后的 xlsx subset 差异未定案，复现优先。）
-
-## 调试体系沉淀（2026-09-30 复盘新增，背景见 [70](70-debug-playbook.md)）
-
-- [ ] 核验耐心家族补齐：`verify --value`（element_text）与 `verify-clipboard` 仍为单发
-  判定（无 settle），元素重渲染/剪贴板写入竞态下会假阴性——与本轮修掉的
-  verify-window/wait --gone 同族（docs/70 §2 对照表）。
-- [ ] verify-owner 支持进程树归属：保存/下载/打印等对话框常跑在 contentproc 等子进程，
-  其命令行不含任务令牌（zotero 保存对话框实证），当前只能删除该类核验；评估
-  token 匹配扩展到父子链。
-- [ ] 步骤失败自动落屏：失败瞬间截图到 flow-resources/<task>/evidence/——本轮用户
-  截图两次成为决定性证据（Zotero 错误框原文、X:/.xlsx），事后现场常已变样。
-- [ ] flow-status 陈旧计划提示：计划冻结时间与模板文件 mtime/hash 比对，提示
-  "模板已改，重试仍跑旧路线"——防止对冻结计划验证新修复（本轮废了两次重试）。
-- [ ] Excel 残壳根治试验：File→退出（菜单路线）替代 WM_CLOSE 关闭，观察是否
-  全进程退出（当前 9 壳堆积拖慢全局，WM_CLOSE/COM Quit 均无效，重启才能清；
-  见 docs/68 与 excel pack teardown_patience）。重启后复测一轮确认壳数不无限增长。
-- [ ] 整批工作流 idle 门评估：`wait --idle` 已实现但无 workflow 使用；组合整批
-  开局死于桌面竞争/锁屏三轮（docs/68 三/五/六轮），评估加前置 idle 门
-  （如 --idle 15000）作为验收批的无人值守约定。
-- [ ] 诊断脚本沉淀入 devtools：窗口标题监视器（500ms 轮询匹配）、close→gone
-  计时器、隔离应用实验台（flow-resources 路径 launch+就绪）——本轮以 ad-hoc
-  脚本形态反复手写（target/*.cjs）。
-- [ ] verify-rows 双义拆分评估：「行树缺失」现报 NOT_ACTIONABLE（不可重试），与
-  「歧义」混在一码；缺失实为"可能未出现"（可重试观察，应报 NOT_FOUND）——
-  本轮以改前置绕过，语义修正待评估。
-- [ ] 选择器纪律盘点：剩余 name_contains 位置（vscode-edit 13、组合 18、
-  zotero-search 5）逐一核对是否存在动态同名插入风险（本轮三个实证：集合树行、
-  弹出 List 自身、首启通知条）；新选择器默认 role+精确 name 或 automation_id。
-- [ ] bash 工具链转义纪律入 AGENTS：内联命令禁反斜杠路径与 $ 变量（本轮
-  X:/.xlsx 事故），与中文 GBK 规则并列，含症状速查（docs/70 §4）。
 - [ ] 深化 Edge、Chrome、夸克网盘、Zotero、腾讯会议、VS Code、网易云和 Office 的业务闭环。
   以现有场景记录及 pack 为起点，只补尚未覆盖或受新护栏影响的路径；微信暂不优先。
   按 [应用档案同步记录](45-app-pack-refresh.md) 逐条复验本次改为 manual 的路线，核对新版焦点与快照绑定后再恢复 verified，不以静态检查更新真机日期。
@@ -148,6 +107,41 @@
 验收：每个场景具备明确前置条件、可核对的结果、失败证据与资源归属清理；
 结论落入场景文档并同步应用 pack。真实应用场景轨与系统 fixture 的 CI 轨分别维护。
 参见 [窗口基建](30-window-infrastructure.md)、[控件身份与输入焦点](31-element-identity-input-focus.md)。
+
+### P1 补 · 诊断与证据体系（2026-09-30 复盘，背景见 [70](70-debug-playbook.md)）
+
+- [ ] 流程执行器在步骤失败证据中保留子命令错误原文（现仅留错误码 + synthetic 结构，
+  docs/68 第二轮 Word 锁文件的 NOT_ACTIONABLE 原因需靠手工复现取得）；同理评估
+  verify-file 对 IO 失败的可区分报错（共享冲突 vs 内容不符）。
+- [ ] 交接来源可区分：consent_decision 与让行卡区分「人工物理输入」与「外来程序注入」
+  （docs/68 第五轮实测：用户未操作仍让行，journal 证实 foreign_injected 0→2）。
+- [ ] 显示端触发续跑的执行器 journal 未完整并入任务时间线（docs/68 第五轮 525 事件止于
+  首执行器，续跑波次缺失）——先定位写入路径再补齐合并。
+- [ ] 核验耐心家族补齐：`verify --value`（element_text）与 `verify-clipboard` 仍为单发
+  判定（无 settle），元素重渲染/剪贴板写入竞态下会假阴性（docs/70 §2 对照表）。
+- [ ] verify-owner 支持进程树归属：保存/下载/打印等对话框常跑在 contentproc 等子进程，
+  命令行不含任务令牌（zotero 保存对话框实证），当前只能删除该类核验；评估 token
+  匹配扩展到父子链。
+- [ ] 步骤失败自动落屏：失败瞬间截图到 flow-resources/<task>/evidence/——本轮用户
+  截图两次成为决定性证据，事后现场常已变样。
+- [ ] flow-status 陈旧计划提示：计划冻结时间与模板文件 mtime/hash 比对，提示
+  "模板已改，重试仍跑旧路线"——防止对冻结计划验证新修复（本轮废了两次重试）。
+- [ ] Excel 残壳根治试验：File→退出（菜单路线）替代 WM_CLOSE，观察是否全进程退出
+  （当前 WM_CLOSE/COM Quit 均无效、9 壳堆积拖慢全局、重启才能清，见 docs/68 与
+  excel pack teardown_patience）；重启后复测一轮确认壳数不无限增长。
+  另：excel paste 中断重放后盘上仍为种子、xlsx subset 断言失败（docs/68 第五轮），
+  重放恢复路径复现优先。
+- [ ] 整批工作流 idle 门评估：`wait --idle` 已实现但无 workflow 使用；组合整批开局
+  死于桌面竞争/锁屏三轮（docs/68），评估验收批加前置 idle 门作为无人值守约定。
+- [ ] 诊断脚本沉淀入 devtools：窗口标题监视器、close→gone 计时器、隔离应用实验台
+  （本轮以 ad-hoc 脚本反复手写）。
+- [ ] verify-rows 双义拆分评估：「行树缺失」现报 NOT_ACTIONABLE（不可重试），与
+  「歧义」混在一码；缺失实为"可能未出现"（可重试观察，应报 NOT_FOUND）。
+- [ ] 选择器纪律盘点：剩余 name_contains 位置（vscode-edit 13、组合 18、zotero-search 5）
+  逐一核对动态同名插入风险（本轮三个实证：集合树行、弹出 List 自身、首启通知条）；
+  新选择器默认 role+精确 name 或 automation_id。
+- [ ] bash 工具链转义纪律入 AGENTS：内联命令禁反斜杠路径与 $ 变量（X:/.xlsx 事故），
+  与中文 GBK 规则并列（docs/70 §4）。
 
 ### P2 · 发布验收
 

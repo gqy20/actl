@@ -9,7 +9,15 @@
 
 ## [Unreleased]
 
-- **四软件三处路线缺陷修复（docs/68 第二轮定案）**：① Word 保存后对 docx 持排他句柄、打开期间共享读不可用——word-edit 打开期间的正文核验从 verify-file 改走 UIA `role:Document` text（--normalize-lines），磁盘核验只在重开后（reopened-content 兼查 bold）。② Excel 关最后工作簿后 XLMAIN 空壳常驻、verify-closed 的进程消失断言结构性不可满足——close 断言改 `verify-window --state absent`（工作簿窗口消失；壳不锁文件、不碍 /x 新实例，真机优雅关闭不退已记录为已知限制）。③ Zotero 10 `-datadir` 拒绝正斜杠绝对路径——新增输入占位符 `${run.dir_native}`（保留反斜杠，仅 input default 可用，资源路径保持 fail-closed），zotero data 默认值改用之；app 选择器收紧「我的文库 - Zotero」消除浏览器网页签歧义。三项均单应用与整批模板同步，契约测试（组合合成含 run.dir_native 重写）随同更新；路由级真机验证（Zotero 反斜杠启动/落盘/优雅关闭）已做，整批新任务重跑待做。
+- **观察判定耐心家族收口（docs/68、docs/70）**：verify-window 断言失败改为 15 秒内重读（实测带加载项的 Excel 拆窗 3-15 秒，原单发判定必撞假阴性，对齐 verify-closed/rows/file 的 settle）；`wait --gone` 把观察期错误（垂死窗口的 STALE_REF/INTERNAL）视为"尚未消失"在超时内继续轮询；观察恢复的 retryable 集合纳入 INTERNAL（冷启动窗口 UIA 查询抖动，docs/65 同族，有界 3 次/15 秒不吞真错误）。真机：excel-verify8 的 reopen 一次 INTERNAL 被 recovery 实救。
+
+- **Zotero 全链路线修复（9/9 真机通过，zotero-verify11）**：import 前置改 collection-tree 就绪检查（全新空库无 item-tree-main-default）并在导入后等行渲染再核验；快速搜索改 click 聚焦 + ctrl+a 全选 + type 替换（实测 type 为追加语义、tab 提交会清空过滤、裸 press 间歇被首启升级通知条挡）；publication 字段改精确 name 匹配（集合树「我的出版物」可编辑行使 name_contains 歧义）；导出格式列表项加 role=ListItem 限定（弹出 List 自身与选中值同名）；移除保存对话框上的 verify-owner（该对话框跑在 contentproc 子进程，命令行不含任务令牌）；导出文件名改 `${run.dir_native}`（Windows 保存对话框拒收正斜杠路径，用户截图实证「文件名无效」）。zotero 全部 9 步配 recovery 预算。
+
+- **Excel 全链路线修复（13/13 真机通过，excel-verify8）**：close 步核验从单发 verify-window 改 `wait --gone id:1001`（60 秒拆窗耐心）；reopen-cell-readback 与 copy-range 对齐（`type --verify-value` 提交跳转 + 窗口级 ctrl+c，原 set-value 名称框直写不提交、单元格定向修饰和弦无元素焦点）；excel 全部 13 步配 recovery 预算。单应用与整批模板同步。
+
+- **调试手册（docs/70）**：六轮实战沉淀——调试阶梯（单步→单链→整批 + 冻结计划铁律）、观察耐心对照表、正斜杠原生表面规则（`${run.dir_native}` 适用边界）、bash 转义纪律、共享桌面检查单与症状速查；同族风险九项登记 ROADMAP。
+
+- **四软件三处路线缺陷修复（docs/68 第二轮定案）**：① Word 保存后对 docx 持排他句柄、打开期间共享读不可用——word-edit 打开期间的正文核验从 verify-file 改走 UIA `role:Document` text（--normalize-lines），磁盘核验只在重开后（reopened-content 兼查 bold）。② Excel 关最后工作簿后 XLMAIN 空壳常驻、verify-closed 的进程消失断言结构性不可满足——close 断言改 `verify-window --state absent`（工作簿窗口消失；壳不锁文件、不碍 /x 新实例，真机优雅关闭不退已记录为已知限制）。③ Zotero 10 `-datadir` 拒绝正斜杠绝对路径——新增输入占位符 `${run.dir_native}`（保留反斜杠，仅 input default 可用，资源路径保持 fail-closed），zotero data 默认值改用之；app 选择器收紧「我的文库 - Zotero」消除浏览器网页签歧义。三项均单应用与整批模板同步，契约测试（组合合成含 run.dir_native 重写）随同更新。
 
 - **误触自动恢复（显示协议）**：授权被纯鼠标移动类外部输入撤销时，静默窗（默认 4 秒）内无新输入且前台未变，显示端在每任务预算（默认 2 次）内自动重新授权，不需要用户点击；`handoff_pending` 暂停的流程满足同样条件时自动发起续跑。任何键盘事件、点击、滚轮永不赦免；键盘通道动作（type/press 等，种类未知同样按键盘处理）不自动恢复；用户暂停、检查点、待核对与停止状态永不自动继续。策略经 YAML `handoff.pardon_input` 逐流程覆盖全局默认（enabled/quiet_ms/budget/require_foreground/keyboard_safe_only），`ACTL_HANDOFF_PARDON=0` 全局停用。每次赦免记录 consent_decision（reason=input_pardoned）。决策纯函数与预算单测在 actl-core/actl-signal；真机模拟误触验收待做。设计边界见 [32](docs/32-desktop-handoff.md)。
 
