@@ -68,6 +68,7 @@ pub(crate) fn restore(step: &mut Step, record: &StepRecord) -> Result<(), CtlErr
     Ok(())
 }
 pub(crate) fn choose(
+    plan: &crate::Plan,
     step: &mut Step,
     index: usize,
     run: &mut Run,
@@ -85,7 +86,16 @@ pub(crate) fn choose(
     // Pending actions re-observe on resume. No side effect has been dispatched yet.
     run.steps[index].branch = None;
     host.observation_event(phase, 1, "started", None);
-    let observed = host.condition(condition);
+    let observed = if step.recovery.is_some() {
+        crate::bounded::observe((plan, step, index), run, store, host, phase, condition).and_then(
+            |v| {
+                v.as_bool()
+                    .ok_or_else(|| CtlError::internal("condition result is not boolean"))
+            },
+        )
+    } else {
+        host.condition(condition)
+    };
     host.observation_event(
         phase,
         1,

@@ -296,6 +296,12 @@ struct Adapter<'a> {
     store: &'a Store,
 }
 impl Host for Adapter<'_> {
+    fn recovery_event(&mut self, step_id: &str, event: &actl_flow::bounded::Event) {
+        actl_core::signal_session::flow_event(
+            "workflow_recovery",
+            json!({"step_id":step_id,"observation":event}),
+        );
+    }
     fn condition(&mut self, call: &Invocation) -> Result<bool, CtlError> {
         let element_exists = matches!(
             parse(call)?,

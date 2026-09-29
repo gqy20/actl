@@ -205,6 +205,21 @@ pub fn details(paths: &SignalPaths, id: &str) -> String {
             if let Some(code) = step["error_code"].as_str() {
                 text.push_str(&format!(" · {code}"));
             }
+            for hint in super::ui_text::recovery_guidance(step) {
+                text.push_str(&format!("\n{hint}"));
+            }
+            if let Some(events) = step["recovery"]["events"].as_array() {
+                for event in events.iter().rev().take(5).rev() {
+                    text.push_str(&format!(
+                        "\n观察 {} · {} · 重试 {} · 耗时 {}ms · 剩余 {}ms",
+                        event["phase"].as_str().unwrap_or("—"),
+                        event["outcome"].as_str().unwrap_or("—"),
+                        event["retries"],
+                        event["elapsed_ms"],
+                        event["remaining_ms"]
+                    ));
+                }
+            }
         }
     }
     text

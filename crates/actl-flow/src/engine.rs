@@ -42,6 +42,8 @@ pub struct StepRecord {
     pub observation_retries: Vec<crate::recovery::ObservationRetry>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub branch: Option<crate::branch::Branch>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recovery: Option<crate::bounded::Progress>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -76,6 +78,7 @@ impl Run {
                     outputs_captured_ms: None,
                     observation_retries: vec![],
                     branch: None,
+                    recovery: None,
                 })
                 .collect(),
         }
@@ -88,6 +91,10 @@ impl Run {
     }
 }
 pub trait Host {
+    fn recovery_event(&mut self, _step_id: &str, _event: &crate::bounded::Event) {}
+    fn sleep_ms(&mut self, ms: u64) {
+        std::thread::sleep(std::time::Duration::from_millis(ms));
+    }
     fn condition(&mut self, call: &Invocation) -> Result<bool, CtlError> {
         match self.execute(call) {
             Ok(()) => Ok(true),
@@ -335,7 +342,7 @@ pub fn execute(
             run.steps[i].status,
             StepStatus::Running | StepStatus::Verifying | StepStatus::Uncertain
         ) {
-            match crate::branch::choose(&mut step, i, run, store, host)? {
+            match crate::branch::choose(plan, &mut step, i, run, store, host)? {
                 crate::branch::Selection::Skip => continue,
                 crate::branch::Selection::Halt => return Ok(()),
                 crate::branch::Selection::Execute => {}

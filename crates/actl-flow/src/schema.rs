@@ -33,6 +33,7 @@ pub fn decode(raw: Value) -> Result<super::Plan, CtlError> {
                 "resume_check",
                 "pause_before",
                 "retry",
+                "recovery",
                 "on_failure",
                 "evidence",
                 "outputs",

@@ -1,4 +1,5 @@
 //! Optional workflow layer. No Windows dependencies, shell evaluation or asynchronous runtime.
+pub mod bounded;
 pub mod branch;
 pub mod data;
 pub mod engine;
@@ -42,6 +43,8 @@ pub struct Step {
     pub pause_before: bool,
     #[serde(default)]
     pub retry: Retry,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recovery: Option<bounded::Policy>,
     #[serde(default)]
     pub on_failure: Failure,
     #[serde(default)]
@@ -79,6 +82,13 @@ pub fn failure_evidence(policy: EvidencePolicy, error: &CtlError) -> Option<serd
         "delivered_before_error",
         "failed_segment_size",
         "sequence_index",
+        "count",
+        "foreground_before",
+        "foreground_hwnd",
+        "hwnd",
+        "caller_pid",
+        "waited_ms",
+        "spawned_pid",
     ] {
         if let Some(v) = source.get(key).filter(|v| v.is_i64() || v.is_u64()) {
             value[key] = v.clone();
@@ -87,8 +97,52 @@ pub fn failure_evidence(policy: EvidencePolicy, error: &CtlError) -> Option<serd
     if let Some(v) = source.get("action_started").filter(|v| v.is_boolean()) {
         value["action_started"] = v.clone();
     }
-    if source["stage"] == "handoff" {
+    if let Some(v) = source.get("truncated").filter(|v| v.is_boolean()) {
+        value["truncated"] = v.clone();
+    }
+    if let Some(v) = source
+        .get("phase")
+        .filter(|v| matches!(v.as_str(), Some("match" | "within" | "window")))
+    {
+        value["phase"] = v.clone();
+    }
+    for key in [
+        "activation_requested",
+        "activation_returned",
+        "minimized",
+        "visible",
+        "process_started",
+        "relaunch",
+    ] {
+        if let Some(v) = source.get(key).filter(|v| v.is_boolean() || v.is_null()) {
+            value[key] = v.clone();
+        }
+    }
+    if matches!(
+        source["stage"].as_str(),
+        Some("handoff" | "window_prepare" | "window_discovery")
+    ) {
         value["stage"] = source["stage"].clone();
+    }
+    if matches!(
+        source["stage"].as_str(),
+        Some("window_prepare" | "window_discovery")
+    ) && let Some(reason) = source["reason"].as_str().filter(|r| {
+        matches!(
+            *r,
+            "window_gone"
+                | "window_disabled_or_modal"
+                | "window_unresponsive"
+                | "restore_rejected"
+                | "restore_timeout"
+                | "window_hidden"
+                | "bounds_unavailable"
+                | "window_offscreen"
+                | "foreground_not_acquired"
+                | "window_not_found"
+        )
+    }) {
+        value["reason"] = reason.into();
     }
     if source["reason"].as_str().is_some_and(|r| {
         matches!(

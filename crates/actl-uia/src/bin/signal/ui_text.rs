@@ -33,6 +33,7 @@ pub fn reason(reason: &str) -> &'static str {
         "user_deferred" => "本次暂不开始。",
         "stop_requested" => "上一轮执行已停止；核对结果后可继续，也可开始新任务。",
         "precondition_failed" => "操作条件未满足，请查看详细信息。",
+        "condition_observation_failed" => "暂时无法判断当前界面，已暂停；不会自动改走另一条路线。",
         "resume_check_failed" => "恢复检查未通过，请核对目标后再继续。",
         "binding_validation_failed" => "步骤输入未通过检查，请查看详细信息。",
         "action_failed" => "操作未完成，请先核对已有结果。",
@@ -87,6 +88,9 @@ pub fn summary(state: Option<&Value>, plan: Option<&Value>, stopped: bool) -> Su
             if let Some(title) = title {
                 lines.push(title.replace(['\r', '\n'], " "));
             }
+            if matches!(status, "paused" | "needs_review" | "failed") {
+                lines.extend(recovery_guidance(step));
+            }
         }
         if status == "completed" {
             let verified = steps.iter().filter(|s| s["verified"] == true).count();
@@ -116,6 +120,38 @@ pub fn summary(state: Option<&Value>, plan: Option<&Value>, stopped: bool) -> Su
     }
 }
 
+pub fn recovery_guidance(step: &Value) -> Vec<String> {
+    let mut lines = Vec::new();
+    if let Some(code) = step["error_code"].as_str() {
+        lines.push(
+            if step["error_evidence"]["truncated"] == true {
+                "观察范围不完整；请使用已确认容器缩小查询范围，不能据此判定目标不存在。"
+            } else {
+                match code {
+                    "AMBIGUOUS" => "找到多个目标；请核对父容器、名称或 ID，再选择并预览唯一目标。",
+                    "NOT_FOUND" => "暂未定位到目标；请确认应用和页面已就绪。",
+                    "STALE_REF" => "界面或控件已变化；请重新观察并核对目标。",
+                    "TIMEOUT" => "观察超时；请确认应用有响应后再继续。",
+                    "PERM_DENIED" => "当前操作受权限限制；请完成所需授权后再继续。",
+                    _ => "请核对现场与上一步结果；不会自动重放写入。",
+                }
+            }
+            .into(),
+        );
+    }
+    if let Some(count) = step["recovery"]["retries"].as_u64() {
+        lines.push(format!("已安排自动重查 {count} 次。"));
+        if step["recovery"]["events"]
+            .as_array()
+            .and_then(|events| events.last())
+            .is_some_and(|e| e["outcome"] == "budget_exhausted")
+        {
+            lines.push("自动恢复预算已用完。处理现场后点击继续，可重新核查一次；也可停止。".into());
+        }
+    }
+    lines
+}
+
 pub fn feedback(message: &str, status: Option<&str>) -> String {
     match message {
         "" | "流程状态已更新" => String::new(),
@@ -138,6 +174,19 @@ pub fn feedback(message: &str, status: Option<&str>) -> String {
 mod tests {
     use super::*;
     use serde_json::json;
+    #[test]
+    fn recovery_explains_budget_and_next_action() {
+        let step = json!({"error_code":"NOT_FOUND","recovery":{"retries":2,"events":[{"outcome":"budget_exhausted"}]}});
+        let text = recovery_guidance(&step).join("\n");
+        assert!(text.contains("自动恢复预算已用完"));
+        assert!(text.contains("重新核查一次"));
+        assert!(text.contains("2 次"));
+        let text = recovery_guidance(
+            &json!({"error_code":"NOT_FOUND","error_evidence":{"truncated":true}}),
+        )
+        .join("\n");
+        assert!(text.contains("不能据此判定目标不存在"));
+    }
     #[test]
     fn summary_uses_titles_and_does_not_claim_unverified_success() {
         let p = json!({"name":"整理会议记录", "steps":[{"id":"technical-id", "title":"写入纪要"}]});

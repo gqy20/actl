@@ -25,6 +25,9 @@ pub(crate) fn observe(
     call: &Invocation,
 ) -> Result<Value, CtlError> {
     let (plan, step, index) = context;
+    if step.recovery.is_some() && host.read_only(call) {
+        return crate::bounded::observe(context, run, store, host, phase, call);
+    }
     let limit = if step.retry == Retry::StaleRead && host.read_only(call) {
         3
     } else {

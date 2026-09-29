@@ -46,6 +46,7 @@ pub fn validate(plan: &Plan) -> Result<(), CtlError> {
     let mut known = BTreeMap::new();
     for (i, step) in plan.steps.iter().enumerate() {
         crate::branch::validate(step)?;
+        crate::bounded::validate(step)?;
         for (phase, call) in [
             ("run", Some(&step.run)),
             ("when", step.when.as_ref()),
@@ -195,6 +196,7 @@ pub fn check_saved(plan: &Plan, run: &Run) -> Result<(), CtlError> {
     let mut bytes = 0;
     for (step, record) in plan.steps.iter().zip(&run.steps) {
         crate::branch::check_saved(step, record)?;
+        crate::bounded::check_saved(step, record)?;
         for (name, value) in &record.outputs {
             let spec = step
                 .outputs

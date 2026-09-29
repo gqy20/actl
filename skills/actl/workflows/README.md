@@ -36,9 +36,9 @@
 
 | 流程 | 用途 | 校验状态 |
 |---|---|---|
-| [ensure-app-window.yml](ensure-app-window.yml) | 输入 app/program；app 为唯一标题片段，已有窗口前置，否则启动 | 参数预检；真实应用组合待验收，不提供关闭与归属证明 |
-| [dismiss-optional-control.yml](dismiss-optional-control.yml) | 输入 app/dialog/dismiss；dialog 为严格 UIA 选择器，窗口保留，存在才点击并核验消失 | 参数预检；真实弹层待验收 |
-| [ensure-element-value.yml](ensure-element-value.yml) | 输入 app/target/value；目标支持 ValuePattern，已达目标值则跳过 | 参数预检；真实写入待验收 |
+| [ensure-app-window.yml](ensure-app-window.yml) | 输入 app/program；app 为唯一标题片段，先启动或复用，再独立核对前台 | Chrome 隔离本地页组合实测通过，测试计划显式补 profile/page 启动参数；不提供关闭与归属证明 |
+| [dismiss-optional-control.yml](dismiss-optional-control.yml) | 输入 app/dialog/dismiss；dialog 为严格 UIA 选择器，窗口保留，存在才点击并核验消失 | Chrome 本地页存在/消失跳过实测通过；其他应用分别验收 |
+| [ensure-element-value.yml](ensure-element-value.yml) | 输入 app/target/value；目标支持 ValuePattern，已达目标值则跳过 | Chrome 本地页写入/读回/已达标跳过实测通过；出现一次 60 秒查询后重查成功，见 docs/64 |
 | [vscode-resume.yml](vscode-resume.yml) | 隔离文件启动、一次输入、完整文本核验；输入 program/profile/file/app/target | 参数预检测试；旧生成计划真机通过，新模板本轮待验收 |
 | [verify-text.yml](verify-text.yml) | 已打开应用的完整文本只读核验；输入 app/target/expected | 参数预检及 VS Code 真实全文只读核验通过；见 docs/56 |
 | [edit-value.yml](edit-value.yml) | 核对 previous 后 set-value，再核对 value；输入 app/target/previous/value | 参数预检测试；需要 ValuePattern，真实应用分别验收 |

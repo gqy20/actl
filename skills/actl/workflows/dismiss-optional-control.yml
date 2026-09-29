@@ -7,6 +7,7 @@ inputs:
   dismiss: {}
 steps:
   - id: dismiss
+    recovery: {max_retries: 2, timeout_ms: 3000, interval_ms: 200}
     title: 弹层存在才点击关闭
     when:
       command: verify

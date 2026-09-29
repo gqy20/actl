@@ -7,6 +7,7 @@ inputs:
   value: {}
 steps:
   - id: ensure-value
+    recovery: {max_retries: 2, timeout_ms: 3000, interval_ms: 200}
     title: 已达到目标值则跳过
     unless:
       command: verify

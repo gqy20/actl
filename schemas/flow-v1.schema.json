@@ -188,6 +188,13 @@
           ],
           "default": "never"
         },
+        "recovery": {
+          "anyOf": [{"type":"null"}, {"type":"object","additionalProperties":false,
+            "required":["max_retries","timeout_ms","interval_ms"],
+            "properties":{"max_retries":{"type":"integer","minimum":1,"maximum":10},
+              "timeout_ms":{"type":"integer","minimum":1,"maximum":60000},
+              "interval_ms":{"type":"integer","minimum":1,"maximum":60000}}}]
+        },
         "on_failure": {
           "enum": [
             "pause",
