@@ -1,9 +1,102 @@
 //! Fixed read-only file inspector. Never evaluates caller supplied code.
 use actl_core::{CtlError, ErrorCode};
 use serde_json::{Value, json};
-use std::io::{Read, Write};
-use std::process::{Command, Stdio};
+use std::io::Read;
 const LIMIT: u64 = 4 * 1024 * 1024;
+
+pub fn url_query(
+    target: &str,
+    expected: &str,
+    key: &str,
+    app: Option<&str>,
+    near: Option<&str>,
+) -> Result<Value, CtlError> {
+    if key.is_empty() {
+        return Err(CtlError::protocol("URL query key must not be empty"));
+    }
+    let value = crate::query::get(target, Some("value"), app, near, None)?.data;
+    let url = value["properties"]["value"]
+        .as_str()
+        .ok_or_else(|| CtlError::new(ErrorCode::NotActionable, "URL value unavailable"))?;
+    if decoded_query(url, key)? != expected {
+        return Err(CtlError::new(
+            ErrorCode::AssertionFailed,
+            "URL query value differs",
+        ));
+    }
+    Ok(json!({"verified":true,"channel":"value","comparison":"url_query_exact"}))
+}
+fn decoded_query(url: &str, key: &str) -> Result<String, CtlError> {
+    fn decode(text: &str) -> Result<String, CtlError> {
+        let mut bytes = Vec::new();
+        let mut source = text.bytes();
+        while let Some(byte) = source.next() {
+            if byte == b'%' {
+                let a = source.next().and_then(|b| (b as char).to_digit(16));
+                let b = source.next().and_then(|b| (b as char).to_digit(16));
+                match (a, b) {
+                    (Some(a), Some(b)) => bytes.push((a * 16 + b) as u8),
+                    _ => {
+                        return Err(CtlError::new(
+                            ErrorCode::NotActionable,
+                            "invalid URL escape",
+                        ));
+                    }
+                }
+            } else {
+                bytes.push(byte);
+            }
+        }
+        String::from_utf8(bytes)
+            .map_err(|_| CtlError::new(ErrorCode::NotActionable, "invalid URL UTF-8"))
+    }
+    let query = url
+        .split('#')
+        .next()
+        .unwrap_or("")
+        .split_once('?')
+        .map(|(_, q)| q)
+        .unwrap_or("");
+    let mut found = None;
+    for pair in query.split('&').filter(|s| !s.is_empty()) {
+        let (name, value) = pair.split_once('=').unwrap_or((pair, ""));
+        if decode(name)? == key {
+            if found.is_some() {
+                return Err(CtlError::new(
+                    ErrorCode::NotActionable,
+                    "duplicate URL query key",
+                ));
+            }
+            found = Some(decode(value)?);
+        }
+    }
+    found.ok_or_else(|| CtlError::new(ErrorCode::AssertionFailed, "URL query key missing"))
+}
+
+#[cfg(test)]
+mod url_tests {
+    use super::*;
+    #[test]
+    fn exact_decoding_and_ambiguous_refusal() {
+        assert_eq!(
+            decoded_query(
+                "uccd://cloud/path?keyword=%E4%B8%AD%20x%26y#ignored",
+                "keyword"
+            )
+            .unwrap(),
+            "中 x&y"
+        );
+        assert_eq!(decoded_query("x:?keyword=a+b", "keyword").unwrap(), "a+b");
+        for url in [
+            "x:?keyword=%FF",
+            "x:?keyword=%",
+            "x:?keyword=a&keyword=b",
+            "x:#?keyword=a",
+        ] {
+            assert!(decoded_query(url, "keyword").is_err());
+        }
+    }
+}
 
 fn command_has_path(line: &str, path: &str) -> bool {
     line.match_indices(path).any(|(index, _)| {
@@ -301,118 +394,19 @@ fn verify_once(path: &str, kind: &str, expected: &str, subset: bool) -> Result<V
     Ok(json!({"verified":true,"kind":kind,"comparison":if subset {"subset"} else {"exact"}}))
 }
 fn inspect_office(path: &str, kind: &str) -> Result<Value, CtlError> {
-    let root = std::env::var_os("SystemRoot")
-        .ok_or_else(|| CtlError::internal("SystemRoot unavailable"))?;
-    let program =
-        std::path::Path::new(&root).join("System32/WindowsPowerShell/v1.0/powershell.exe");
-    let mut cmd = Command::new(program);
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x08000000);
+    match kind {
+        "process" | "process-identity" => actl_uia::evidence::process(
+            path.parse()
+                .map_err(|_| CtlError::protocol("invalid process ID"))?,
+            kind == "process",
+        ),
+        _ => actl_uia::evidence::office(path, kind),
     }
-    let mut child = cmd
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            include_str!("file_inspect.ps1"),
-        ])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .map_err(|_| CtlError::internal("file inspector could not start"))?;
-    let input = serde_json::to_vec(&json!({"path":path,"kind":kind}))
-        .map_err(|e| CtlError::internal(e.to_string()))?;
-    let mut stdin = child
-        .stdin
-        .take()
-        .ok_or_else(|| CtlError::internal("inspector stdin unavailable"))?;
-    if stdin.write_all(&input).is_err() {
-        let _ = child.kill();
-        let _ = child.wait();
-        return Err(CtlError::internal("inspector request failed"));
-    }
-    drop(stdin);
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| CtlError::internal("inspector stdout unavailable"))?;
-    let reader = std::thread::spawn(move || {
-        let mut bytes = Vec::new();
-        stdout
-            .take(LIMIT + 1)
-            .read_to_end(&mut bytes)
-            .map(|_| bytes)
-    });
-    let start = std::time::Instant::now();
-    let status = loop {
-        if let Some(status) = child
-            .try_wait()
-            .map_err(|_| CtlError::internal("inspector wait failed"))?
-        {
-            break status;
-        }
-        if start.elapsed().as_secs() >= 20 {
-            let _ = child.kill();
-            let _ = child.wait();
-            let _ = reader.join();
-            return Err(CtlError::new(
-                ErrorCode::NotActionable,
-                "file inspection timed out",
-            ));
-        }
-        std::thread::sleep(std::time::Duration::from_millis(25));
-    };
-    let output = reader
-        .join()
-        .map_err(|_| CtlError::internal("inspector reader failed"))?
-        .map_err(|_| CtlError::internal("inspector output failed"))?;
-    if !status.success() || output.len() as u64 > LIMIT {
-        return Err(CtlError::new(
-            ErrorCode::NotActionable,
-            "Office evidence unreadable or exceeds limit",
-        ));
-    }
-    serde_json::from_slice(&output).map_err(|_| CtlError::internal("invalid inspector response"))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn closing_process_identity_does_not_require_command_line() {
-        let script = format!(
-            "function Get-CimInstance {{ [pscustomobject]@{{CreationDate=[datetime]'2026-09-29T00:00:00Z';ExecutablePath=$null;CommandLine=$null}} }}\n{}",
-            include_str!("file_inspect.ps1")
-        );
-        for (kind, success) in [("process-identity", true), ("process", false)] {
-            let mut child = Command::new("powershell.exe")
-                .args(["-NoProfile", "-NonInteractive", "-Command", &script])
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
-                .spawn()
-                .unwrap();
-            child
-                .stdin
-                .take()
-                .unwrap()
-                .write_all(
-                    serde_json::to_string(&json!({"path":"1","kind":kind}))
-                        .unwrap()
-                        .as_bytes(),
-                )
-                .unwrap();
-            let output = child.wait_with_output().unwrap();
-            assert_eq!(output.status.success(), success, "{kind}");
-            if success {
-                assert!(
-                    serde_json::from_slice::<Value>(&output.stdout).unwrap()["start"].is_string()
-                );
-            }
-        }
-    }
     #[test]
     fn ownership_requires_a_complete_path_argument() {
         assert!(command_has_path(

@@ -556,6 +556,9 @@ pub(crate) enum Command {
         /// Normalize CRLF/CR to LF and trim trailing LF for exact text assertions
         #[arg(long, requires = "value", conflicts_with = "contains")]
         normalize_lines: bool,
+        /// Compare one percent-decoded URL query parameter from the value channel
+        #[arg(long, requires = "value", conflicts_with_all = ["contains", "normalize_lines", "property"])]
+        url_query: Option<String>,
         /// Assert a toggle is On
         #[arg(long)]
         checked: Option<String>,
@@ -950,7 +953,7 @@ Errors: NOT_FOUND / AMBIGUOUS | NOT_ACTIONABLE no clickable point or occluded"
             "Example:\n  actl resize-window 记事本 --width 800 --height 600\nErrors: NOT_FOUND / AMBIGUOUS window | NOT_ACTIONABLE no native handle"
         }
         "verify" => {
-            "Example:\n  actl verify --value id:CalculatorResults '56,877' --property name --contains --app 计算器\nImmediate assertion (vs wait): fails now, not later; failure carries expected/actual/target/channel. --normalize-lines compares complete text after CRLF/CR normalization and trimming trailing LF. --property name|value|text selects an explicit channel; omitted uses Value then Text fallback.\nErrors: ASSERTION_FAILED | NOT_FOUND / AMBIGUOUS | PROTOCOL bad flags"
+            "Example:\n  actl verify --value id:CalculatorResults '56,877' --property name --contains --app 计算器\nImmediate assertion (vs wait): fails now, not later; failure carries expected/actual/target/channel. --normalize-lines compares complete text after CRLF/CR normalization and trimming trailing LF. --url-query KEY compares exactly one percent-decoded query value (literal plus, UTF-8, duplicate keys rejected); conflicts with --property/--contains/--normalize-lines. --property name|value|text selects an explicit channel; omitted uses Value then Text fallback.\nErrors: ASSERTION_FAILED | NOT_FOUND / AMBIGUOUS | PROTOCOL bad flags"
         }
         "extract" => {
             "Example:\n  actl extract role:List --app 系统信息\nGrid rows first; tree fallback only when GridPattern is unsupported (fallback_reason: grid_pattern_unsupported). Empty cells and empty grids are preserved.\nErrors: NOT_FOUND / AMBIGUOUS | NOT_ACTIONABLE no rows, budget exceeded or table changed | INTERNAL/PERM_DENIED/STALE_REF observation failed"

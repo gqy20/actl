@@ -132,6 +132,20 @@ fn file_check_contract_and_mismatch_are_read_only() {
 fn reusable_workflows_preflight_without_desktop_actions() {
     let s = Sandbox::new();
     for (name, values) in [
+        ("cloudmusic-playback", "app: 'hwnd:123'"),
+        ("quark-search", "app: 'hwnd:123'"),
+        (
+            "tencent-meeting-draft",
+            "app: 'hwnd:123'\ntopic: Test\nexpected_date: '2026/9/29'",
+        ),
+        (
+            "tencent-meeting-draft-date",
+            "app: 'hwnd:123'\ntopic: Test\nexpected_date: '2026/9/29'\ndate: '2026/9/30'",
+        ),
+        (
+            "app-launch-observe",
+            "program: 'C:/test/test.exe'\napp: Test",
+        ),
         (
             "word-edit",
             "program: 'C:/test/word.exe'\nfile: 'C:/test/task.docx'\napp: unique",
@@ -220,6 +234,34 @@ fn reusable_workflows_preflight_without_desktop_actions() {
                 }
             }
         }
+    }
+}
+
+#[test]
+fn url_query_assertion_contract() {
+    let s = Sandbox::new();
+    let (_, result) = s.invoke(&["commands"]);
+    let command = result["data"]["commands"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "verify")
+        .unwrap();
+    let names: Vec<_> = command["args"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| a["name"].clone())
+        .collect();
+    assert_eq!(
+        json!(names),
+        serde_json::from_str::<Value>(include_str!("golden/verify_query_args.json")).unwrap()
+    );
+    for extra in [", --contains", ", --normalize-lines", ", --property, value"] {
+        let file=s.file(&format!("version: 1\nname: Bad\nsteps:\n - id: check\n   title: Check\n   run: {{command: verify, args: [--value, 'id:route', expected, --url-query, keyword{extra}]}}\n"));
+        let (code, value) = s.invoke(&["flow-validate", "--file", &file]);
+        assert_ne!(code, 0);
+        assert_eq!(value["error"]["code"], "PROTOCOL");
     }
 }
 

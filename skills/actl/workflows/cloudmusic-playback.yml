@@ -1,0 +1,548 @@
+{
+  "version": 1,
+  "name": "cloudmusic-playback",
+  "handoff": {
+    "approval": "once_per_run"
+  },
+  "inputs": {
+    "app": {},
+    "baseline": {
+      "default": "play"
+    },
+    "alternate": {
+      "default": "pause"
+    },
+    "baseline_predicate": {
+      "default": "name=play"
+    },
+    "alternate_predicate": {
+      "default": "name=pause"
+    }
+  },
+  "steps": [
+    {
+      "id": "baseline",
+      "title": "baseline",
+      "run": {
+        "command": "verify",
+        "args": [
+          "--value",
+          "id:btn_pc_minibar_play",
+          {
+            "input": "baseline"
+          },
+          "--property",
+          "name",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      }
+    },
+    {
+      "id": "1-uia-toggle",
+      "title": "1 uia toggle",
+      "run": {
+        "command": "click",
+        "args": [
+          "id:btn_pc_minibar_play",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      },
+      "verify": {
+        "command": "wait",
+        "args": [
+          "--element",
+          "id:btn_pc_minibar_play",
+          "--property",
+          {
+            "input": "alternate_predicate"
+          },
+          "--timeout",
+          "5000",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      },
+      "before": {
+        "command": "verify",
+        "args": [
+          "--value",
+          "id:btn_pc_minibar_play",
+          {
+            "input": "baseline"
+          },
+          "--property",
+          "name",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      },
+      "resume_check": {
+        "command": "verify",
+        "args": [
+          "--value",
+          "id:btn_pc_minibar_play",
+          {
+            "input": "baseline"
+          },
+          "--property",
+          "name",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      }
+    },
+    {
+      "id": "1-uia-restore",
+      "title": "1 uia restore",
+      "run": {
+        "command": "click",
+        "args": [
+          "id:btn_pc_minibar_play",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      },
+      "verify": {
+        "command": "wait",
+        "args": [
+          "--element",
+          "id:btn_pc_minibar_play",
+          "--property",
+          {
+            "input": "baseline_predicate"
+          },
+          "--timeout",
+          "5000",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      },
+      "before": {
+        "command": "verify",
+        "args": [
+          "--value",
+          "id:btn_pc_minibar_play",
+          {
+            "input": "alternate"
+          },
+          "--property",
+          "name",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      },
+      "resume_check": {
+        "command": "verify",
+        "args": [
+          "--value",
+          "id:btn_pc_minibar_play",
+          {
+            "input": "alternate"
+          },
+          "--property",
+          "name",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      }
+    },
+    {
+      "id": "2-keyboard-toggle",
+      "title": "2 keyboard toggle",
+      "run": {
+        "command": "press",
+        "args": [
+          "ctrl+p",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      },
+      "verify": {
+        "command": "wait",
+        "args": [
+          "--element",
+          "id:btn_pc_minibar_play",
+          "--property",
+          {
+            "input": "alternate_predicate"
+          },
+          "--timeout",
+          "5000",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      },
+      "before": {
+        "command": "verify",
+        "args": [
+          "--value",
+          "id:btn_pc_minibar_play",
+          {
+            "input": "baseline"
+          },
+          "--property",
+          "name",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      },
+      "resume_check": {
+        "command": "verify",
+        "args": [
+          "--value",
+          "id:btn_pc_minibar_play",
+          {
+            "input": "baseline"
+          },
+          "--property",
+          "name",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      }
+    },
+    {
+      "id": "2-keyboard-restore",
+      "title": "2 keyboard restore",
+      "run": {
+        "command": "press",
+        "args": [
+          "ctrl+p",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      },
+      "verify": {
+        "command": "wait",
+        "args": [
+          "--element",
+          "id:btn_pc_minibar_play",
+          "--property",
+          {
+            "input": "baseline_predicate"
+          },
+          "--timeout",
+          "5000",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      },
+      "before": {
+        "command": "verify",
+        "args": [
+          "--value",
+          "id:btn_pc_minibar_play",
+          {
+            "input": "alternate"
+          },
+          "--property",
+          "name",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      },
+      "resume_check": {
+        "command": "verify",
+        "args": [
+          "--value",
+          "id:btn_pc_minibar_play",
+          {
+            "input": "alternate"
+          },
+          "--property",
+          "name",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      }
+    },
+    {
+      "id": "3-keyboard-toggle",
+      "title": "3 keyboard toggle",
+      "run": {
+        "command": "press",
+        "args": [
+          "ctrl+p",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      },
+      "verify": {
+        "command": "wait",
+        "args": [
+          "--element",
+          "id:btn_pc_minibar_play",
+          "--property",
+          {
+            "input": "alternate_predicate"
+          },
+          "--timeout",
+          "5000",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      },
+      "before": {
+        "command": "verify",
+        "args": [
+          "--value",
+          "id:btn_pc_minibar_play",
+          {
+            "input": "baseline"
+          },
+          "--property",
+          "name",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      },
+      "resume_check": {
+        "command": "verify",
+        "args": [
+          "--value",
+          "id:btn_pc_minibar_play",
+          {
+            "input": "baseline"
+          },
+          "--property",
+          "name",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      }
+    },
+    {
+      "id": "3-keyboard-restore",
+      "title": "3 keyboard restore",
+      "run": {
+        "command": "press",
+        "args": [
+          "ctrl+p",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      },
+      "verify": {
+        "command": "wait",
+        "args": [
+          "--element",
+          "id:btn_pc_minibar_play",
+          "--property",
+          {
+            "input": "baseline_predicate"
+          },
+          "--timeout",
+          "5000",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      },
+      "before": {
+        "command": "verify",
+        "args": [
+          "--value",
+          "id:btn_pc_minibar_play",
+          {
+            "input": "alternate"
+          },
+          "--property",
+          "name",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      },
+      "resume_check": {
+        "command": "verify",
+        "args": [
+          "--value",
+          "id:btn_pc_minibar_play",
+          {
+            "input": "alternate"
+          },
+          "--property",
+          "name",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      }
+    },
+    {
+      "id": "4-uia-toggle",
+      "title": "4 uia toggle",
+      "run": {
+        "command": "click",
+        "args": [
+          "id:btn_pc_minibar_play",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      },
+      "verify": {
+        "command": "wait",
+        "args": [
+          "--element",
+          "id:btn_pc_minibar_play",
+          "--property",
+          {
+            "input": "alternate_predicate"
+          },
+          "--timeout",
+          "5000",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      },
+      "before": {
+        "command": "verify",
+        "args": [
+          "--value",
+          "id:btn_pc_minibar_play",
+          {
+            "input": "baseline"
+          },
+          "--property",
+          "name",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      },
+      "resume_check": {
+        "command": "verify",
+        "args": [
+          "--value",
+          "id:btn_pc_minibar_play",
+          {
+            "input": "baseline"
+          },
+          "--property",
+          "name",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      }
+    },
+    {
+      "id": "4-uia-restore",
+      "title": "4 uia restore",
+      "run": {
+        "command": "click",
+        "args": [
+          "id:btn_pc_minibar_play",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      },
+      "verify": {
+        "command": "wait",
+        "args": [
+          "--element",
+          "id:btn_pc_minibar_play",
+          "--property",
+          {
+            "input": "baseline_predicate"
+          },
+          "--timeout",
+          "5000",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      },
+      "before": {
+        "command": "verify",
+        "args": [
+          "--value",
+          "id:btn_pc_minibar_play",
+          {
+            "input": "alternate"
+          },
+          "--property",
+          "name",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      },
+      "resume_check": {
+        "command": "verify",
+        "args": [
+          "--value",
+          "id:btn_pc_minibar_play",
+          {
+            "input": "alternate"
+          },
+          "--property",
+          "name",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      }
+    }
+  ]
+}

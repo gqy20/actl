@@ -45,11 +45,14 @@ serde-saphyr 与标准文件锁要求的 MSRV 已同步根 Cargo.toml；实际�
 | CLI | `clap`(derive) | 4.6 | 子命令即契约;help 文本与 `commands` schema 从 doc comment 同源生成(06 §3.5) |
 | 序列化 | `serde` + `serde_json` | 跟 stable | envelope 唯一出口 |
 | 流程 YAML | `serde-saphyr` | =1.3.0 | actl-flow；预算限制、重复键拒绝；不启用 include/robotics；实际外部直接依赖去重为 7（含 UIA 开发依赖） |
+| ZIP/OOXML | `zip` | =8.2.0 | 仅 deflate-flate2-zlib-rs；运行时检查与开发打包共用 |
 | 错误 | `thiserror` | 跟 stable | 单一 Error 枚举 → 错误码映射(ADR-004) |
 | 日志 | `tracing` + `tracing-subscriber` | 跟 stable | 仅写 **stderr**(ADR-002) |
 | 物理输入 | `enigo` | feature `actl-physical` 内 | SendInput 级 |
 | 进程/系统 | `sysinfo` | 评估 | 仅 launch/list 用;若够用则直接 windows-rs,少一个依赖 |
 | 汇总 | — | 上限以 [AGENTS.md](../AGENTS.md) 硬规则 6 为准 | 本表是新增依赖的**唯一登记处** |
+
+2026-09-29 全量 PowerShell 迁移登记：新增唯一外部直接依赖 zip 8.2.0（MIT，禁用默认特性，只开启 deflate-flate2-zlib-rs），用于 OOXML 只读检查与发布归档；外部直接依赖去重总数为 8。XML 使用既有 windows crate 的 Windows.Data.Xml.Dom，禁用 DTD/外部实体并限制深度；进程查询使用原生 Win32/WMI。相关 COM/WinRT/句柄 unsafe 仅位于 actl-uia：WMI COM 与进程句柄按 RAII 释放；WinRT 使用一个进程生命周期 MTA 租约，与 windows-rs 缓存工厂的生命周期一致，避免连续调用时缓存失效崩溃。不注入输入。开发测试工具复用 workspace 依赖，不增 async 或 shell 解释器。
 
 ## 4. 架构决策记录(ADR)
 
@@ -89,7 +92,7 @@ CI(GitHub Actions,`windows-latest`):`cargo xtask gate`(file-lines 单文件行�
 1. **手动部分**:整理 CHANGELOG(`Unreleased` → `## [X.Y.Z] - 日期`,注意吸收合并历史条目、清理被取代的中间里程碑)、bump 根 Cargo.toml 的 `version`,一个 `chore(release)` 提交;
 2. **先 push 再打 tag(顺序纪律,不许跳步)**:`git push origin main` → **等 CI 在该 commit 上全绿**(`gh run watch` 或 Actions 页确认)→ 才 `git tag vX.Y.Z && git push origin vX.Y.Z`。禁止 commit+tag 一步推:tag 指向未经 CI 验证的 commit,一旦红的就要删 tag 重打;release.yml 的 verify 段虽会重跑门禁,但那是最后防线而非流程依据;
 3. tag 推送 → workflow 三路:**verify**(与 CI 完全同门禁)→ 并行 **release**(打包+冒烟+checksums+发布同 job 直传;仅真 tag 执行 gh release,从 CHANGELOG 提取对应版本段作 notes,缺段落回退自动生成)与 **crates**(仅真 tag:CARGO_REGISTRY_TOKEN secret 经 gh 配置;版本守卫 tag==Cargo.toml 后按依赖序 publish 四 crate（core → uia → flow → cli）)——GitHub Release 与 crates.io 由同一条 tag 同步驱动;发布产物同 job 直传 Release,不走 artifact 中转(artifact 存储是账号级共享配额,删除后 6-12h 才重算,曾连续阻断 v0.1.0 发版);artifact 归档保留为 best-effort 步骤(continue-on-error,配额不足自动跳过,永不阻塞),供演练下载核对;
-4. 完整 ZIP 包含 actl.exe、actl-signal.exe、skills/、README.md 和 LICENSE；打包统一调用 `crates/xtask/package-release.ps1`，压缩后校验技能入口、skills 文件内容及内部链接，门禁用隔离假二进制覆盖打包和缺文件拒绝。技能的运行说明集中在 `skills/actl/references/`，技能内不包含 URL，设计与验收文档留在开发仓库，不打包完整 docs。技能不会随解压自动注册，安装方式见 README。产物命名对齐 zotero_cli 体系:`actl_vX.Y.Z_windows_amd64.zip` + 裸 `actl_vX.Y.Z_windows_amd64.exe` + `checksums.txt`;
+4. 完整 ZIP 包含 actl.exe、actl-signal.exe、skills/、README.md 和 LICENSE；打包统一调用 `cargo xtask package --version VERSION --binary-dir target/release --output dist`，压缩后校验技能入口、skills 文件内容及内部链接，门禁用隔离假二进制覆盖打包和缺文件拒绝。技能的运行说明集中在 `skills/actl/references/`，技能内不包含 URL，设计与验收文档留在开发仓库，不打包完整 docs。技能不会随解压自动注册，安装方式见 README。产物命名对齐 zotero_cli 体系:`actl_vX.Y.Z_windows_amd64.zip` + 裸 `actl_vX.Y.Z_windows_amd64.exe` + `checksums.txt`;
 5. **不使用 UPX 压缩**:解压开销损害冷启动(违反 PRD 冷启动 P95 < 50ms 的 NFR);
 6. 版本号单源于 Cargo.toml(`CARGO_PKG_VERSION` 编译期注入,无需 ldflags 类机制);commit/buildDate 注入 M2 需要时再加 build.rs;
 7. workflow_dispatch 可手动演练(手动运行不发布,只出 artifact)。
@@ -163,4 +166,4 @@ actl-uia/bin/signal/handoff 的 unsafe 用于原生非激活提示窗口和低�
 
 window_ready 的原生激活使用 SetForegroundWindow 单次请求并核验实际前台；已在前台不重复请求。unsafe 仍限于 actl-uia，不注入 Alt、不放宽 Windows 前台限制，输入控件焦点仍由原护栏核验。
 
-应用验证迁移：verify-file/verify-owner/verify-closed 复用 Windows 自带 PowerShell 与 .NET ZIP/XML/CIM，通过固定内嵌只读脚本和 stdin JSON 调用；不接受用户代码或脚本文件。使用 std::process 与已有 serde_json，无新增依赖或 unsafe。后台辅助进程使用 CREATE_NO_WINDOW，最多 20 秒，仅超时终止本次只读辅助进程，不终止 GUI。
+应用验证迁移：verify-file/verify-owner/verify-closed 使用 actl-uia/evidence 原生 Win32/WMI、ZIP 与 XML 实现，详见 §3 与 docs/61。开发工具集中在 actl-devtools，由 xtask 转发；gate 仍只在 xtask 定义。CLI 输出重定向到独立文件，超时只结束本次启动的 CLI 子进程，不结束 GUI；不能据超时推断动作未送达。

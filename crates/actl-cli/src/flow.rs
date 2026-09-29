@@ -119,8 +119,12 @@ fn validate_assertion(command: &Command) -> Result<(), CtlError> {
             exists,
             value,
             checked,
+            url_query,
             ..
         } => {
+            if url_query.as_ref().is_some_and(String::is_empty) {
+                return Err(CtlError::protocol("URL query key must not be empty"));
+            }
             if [exists.is_some(), value.is_some(), checked.is_some()]
                 .into_iter()
                 .filter(|v| *v)

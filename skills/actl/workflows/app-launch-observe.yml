@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "name": "app-launch-observe",
+  "handoff": {
+    "approval": "once_per_run"
+  },
+  "inputs": {
+    "program": {},
+    "app": {}
+  },
+  "steps": [
+    {
+      "id": "launch",
+      "title": "launch",
+      "run": {
+        "command": "launch",
+        "args": [
+          {
+            "input": "program"
+          }
+        ]
+      },
+      "verify": {
+        "command": "wait",
+        "args": [
+          "--element",
+          "role:Window",
+          "--timeout",
+          "20000",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      }
+    },
+    {
+      "id": "observe",
+      "title": "observe",
+      "run": {
+        "command": "snapshot",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      }
+    }
+  ]
+}

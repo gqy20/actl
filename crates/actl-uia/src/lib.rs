@@ -27,6 +27,7 @@ mod idle;
 mod input_verify;
 mod locate;
 pub use identity::ReplayGuard;
+pub mod evidence;
 mod native_windows;
 mod observation;
 mod pointer;

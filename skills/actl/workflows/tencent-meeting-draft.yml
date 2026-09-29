@@ -1,0 +1,115 @@
+{
+  "version": 1,
+  "name": "tencent-meeting-draft",
+  "handoff": {
+    "approval": "once_per_run"
+  },
+  "inputs": {
+    "app": {},
+    "topic": {},
+    "expected_date": {},
+    "screenshot": {
+      "default": "${run.dir}/result.png"
+    }
+  },
+  "steps": [
+    {
+      "id": "check-date",
+      "title": "check date",
+      "run": {
+        "command": "verify",
+        "args": [
+          "--value",
+          "name:开始日期",
+          {
+            "input": "expected_date"
+          },
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      }
+    },
+    {
+      "id": "topic",
+      "title": "topic",
+      "run": {
+        "command": "set-value",
+        "args": [
+          "name:请输入会议主题",
+          {
+            "input": "topic"
+          },
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify",
+        "args": [
+          "--value",
+          "name:请输入会议主题",
+          {
+            "input": "topic"
+          },
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      }
+    },
+    {
+      "id": "confirm-date",
+      "title": "confirm date",
+      "run": {
+        "command": "verify",
+        "args": [
+          "--value",
+          "name:开始日期",
+          {
+            "input": "expected_date"
+          },
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      }
+    },
+    {
+      "id": "evidence",
+      "title": "evidence",
+      "run": {
+        "command": "screenshot",
+        "args": [
+          "--out",
+          {
+            "input": "screenshot"
+          },
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify",
+        "args": [
+          "--value",
+          "name:请输入会议主题",
+          {
+            "input": "topic"
+          },
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      }
+    }
+  ]
+}

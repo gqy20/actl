@@ -9,6 +9,11 @@
 
 ## [Unreleased]
 
+- 全量移除剩余 41 个 PowerShell 文件：业务动作迁入 workflow，诊断、回归调度、夹具和发布打包迁入 actl-devtools，经 cargo xtask 调用。门禁改跑 Rust 测试；移除 17 个 Bash 包装/过时实验入口，未替代的历史实验保留待办。
+- verify-file/verify-owner/verify-closed 改用原生 ZIP/XML/Win32/WMI，删除运行时解释器；补连续 WinRT 调用、DTD/膨胀限制和进程身份测试。新增 verify --url-query，用于夸克搜索的精确解码核验。
+- 新增网易云播放、夸克搜索、腾讯会议草稿及日期修改、通用启动观察 workflow；均按 once_per_run 交接，恢复先核验结果。模板预检通过不代表真实软件验收通过。迁移清单及测试证据见 docs/61。
+
+
 - 修复 VS Code Quick Input 导航：直接写 ValuePattern 并在 quickInput_list 内激活唯一结果，核验行号/文件内容；关闭核验只读取进程实例身份，避免要求退出阶段的命令行元数据，窗口观察放到进程读取之后。
 
 - 修复悬停暂停/继续按钮时主状态文字被操作提示覆盖；pending 步骤恢复时复用紧邻且完全相同的现场/前置检查，减少重复进程探查，不合并不确定步骤的结果核验。

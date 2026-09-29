@@ -453,6 +453,21 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
         } => resize_window_cmd(pattern, *width, *height),
         Command::Verify {
             value,
+            expected,
+            url_query: Some(key),
+            app,
+            near,
+            ..
+        } => file_check::url_query(
+            value.as_deref().unwrap_or_default(),
+            expected.as_deref().unwrap_or_default(),
+            key,
+            app.as_deref(),
+            near.as_deref(),
+        )
+        .map(Into::into),
+        Command::Verify {
+            value,
             property,
             expected,
             normalize_lines,

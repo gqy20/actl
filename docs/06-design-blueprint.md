@@ -762,7 +762,11 @@ expected: 预期完整文本
 - `verify-clipboard --expected ... [--normalize-lines]`：精确比较剪贴板文本；显式规范化转换 CRLF 并去除尾部 LF。
 - `verify --value ... --property text --normalize-lines`：全文比较前转换 CRLF/CR 为 LF、去除尾部 LF，与 contains 互斥；供 Word TextPattern 行结束符差异使用。
 
-文件/行集合/关闭断言对已知不匹配在 5 秒观察窗口内复查，未知错误不转为空或成功。文件内容上限 4 MiB、单个 XML part 上限 4 MiB、expected 参数上限 16 KiB。OOXML 与进程元数据使用编译进二进制的固定 Windows PowerShell/.NET 只读检查器；请求仅通过 stdin JSON 传递，不拼接用户代码、不接受脚本路径、不使用 Office COM。XML 禁用 DTD/外部实体；单次检查器执行 20 秒上限，因此不是整个断言的 5 秒硬实时保证。无新增 Rust 依赖。
+文件/行集合/关闭断言对已知不匹配在 5 秒观察窗口内复查，未知错误不转为空或成功。文件内容上限 4 MiB、单个 XML part 上限 4 MiB、expected 参数上限 16 KiB。OOXML 由 zip 解压指定 XML part，再经 Windows.Data.Xml.Dom 只读解析；进程身份通过 Win32 句柄读取，完整命令行通过 WMI 读取。运行时不启动 PowerShell，不使用 Office COM。XML 禁用 DTD/外部实体，最大深度 128；拒绝重复/缺失单元格地址及越界 shared string 索引。进程退出检查不读取命令行。WMI 枚举等待上限 5 秒，但连接/COM 调用没有独立可中断的硬超时，因此整个断言仍不保证 5 秒硬实时；原检查器的 20 秒子进程超时已随脚本移除。依赖与 unsafe 登记见 TECH_STACK §3。
+
+### URL 查询参数断言（2026-09-29）
+
+`verify --value TARGET EXPECTED --url-query KEY [--app APP]` 从明确的 Value 通道读取 URL，比较指定查询参数的 UTF-8 百分号解码值。忽略 fragment，保留字面 `+`；参数缺失/值不同为 ASSERTION_FAILED，重复参数、坏转义或非 UTF-8 为 NOT_ACTIONABLE。空 KEY 为 PROTOCOL；与 --property、--contains、--normalize-lines 互斥。结果包含 verified=true、channel=value、comparison=url_query_exact。供夸克搜索核验使用，可作为流程的 before/verify/resume_check；不会发出网络请求。
 
 ### 紧邻检查复用（2026-09-29）
 

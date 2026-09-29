@@ -1,0 +1,213 @@
+{
+  "version": 1,
+  "name": "quark-search",
+  "handoff": {
+    "approval": "once_per_run"
+  },
+  "inputs": {
+    "app": {},
+    "query": {
+      "default": "qzxvkjwmpbhfytzz"
+    },
+    "screenshot": {
+      "default": "${run.dir}/result.png"
+    }
+  },
+  "steps": [
+    {
+      "id": "check-drive",
+      "title": "check drive",
+      "run": {
+        "command": "verify",
+        "args": [
+          "--value",
+          "id:RootWebArea",
+          "cloud.quark/clouddrive/",
+          "--property",
+          "value",
+          "--contains",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      }
+    },
+    {
+      "id": "search",
+      "title": "search",
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+f",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "wait",
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name\":\"搜网盘\"}}",
+              "--timeout",
+              "8000",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+a",
+              "--target",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name\":\"搜网盘\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "type",
+            "args": [
+              "uia:{\"match\":{\"role\":\"Edit\",\"name\":\"搜网盘\"}}",
+              {
+                "input": "query"
+              },
+              "--paste",
+              "--verify-value",
+              {
+                "input": "query"
+              },
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "enter",
+              "--target",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name\":\"搜网盘\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "wait",
+            "args": [
+              "--element",
+              "id:RootWebArea",
+              "--property",
+              "text=暂无搜索内容",
+              "--contains",
+              "--timeout",
+              "15000",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify",
+        "args": [
+          "--value",
+          "id:RootWebArea",
+          {
+            "input": "query"
+          },
+          "--url-query",
+          "keyword",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      }
+    },
+    {
+      "id": "empty-count",
+      "title": "empty count",
+      "run": {
+        "command": "verify",
+        "args": [
+          "--value",
+          "id:RootWebArea",
+          "相关搜索结果 0 项",
+          "--property",
+          "text",
+          "--contains",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      }
+    },
+    {
+      "id": "empty-content",
+      "title": "empty content",
+      "run": {
+        "command": "verify",
+        "args": [
+          "--value",
+          "id:RootWebArea",
+          "暂无搜索内容",
+          "--property",
+          "text",
+          "--contains",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      }
+    },
+    {
+      "id": "evidence",
+      "title": "evidence",
+      "run": {
+        "command": "screenshot",
+        "args": [
+          "--out",
+          {
+            "input": "screenshot"
+          },
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify",
+        "args": [
+          "--value",
+          "id:RootWebArea",
+          {
+            "input": "query"
+          },
+          "--url-query",
+          "keyword",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      }
+    }
+  ]
+}
