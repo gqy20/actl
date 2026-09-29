@@ -62,7 +62,7 @@
   验收：短暂失败可恢复；持续失败有界退出；未知不走否定分支；暂停/停止阻止派发；重启/继续不静默刷新预算；不确定动作不重放；保留每次观察、恢复措施及退出原因。
 - [ ] 简单条件模板逐应用验收：窗口复用/启动、可选控件关闭、已有值跳过；代码与参数预检不代替业务验收，见 [63](63-simple-workflow-conditions.md)。
 
-- [ ] 从 resources 入口复验四软件整批：新增 VS Code 就绪步骤后单软件为 26 步、组合为 68 步，首轮与后续复验见 [66](66-application-readiness.md)、[67](67-vscode-navigation-controls.md)。核对资源隔离、恢复保留编辑结果与正常收尾，不继承旧脚本的真机结论。
+- [ ] 从 resources 入口复验四软件整批：新增 VS Code 就绪步骤后单软件为 26 步、组合为 68 步，单软件复验见 [66](66-application-readiness.md)、[67](67-vscode-navigation-controls.md)。整批首轮（apps-verify-20260929，2026-09-29 晚）VS Code 段 26/26 完成，excel-table-copy-range 三次确定性失败（名称框 ValuePattern 直写不提交，选区未建立，verify-clipboard 如实报剪贴板无文本），Word/Zotero 段未执行、失败记录保留，见 [68](68-combined-batch-first-round.md)。先修正复制路线（excel-table.yml 与 verify-applications.yml 同步、先写复现测试再修）再以新任务重跑；核对资源隔离、恢复保留编辑结果与正常收尾，不继承旧脚本的真机结论。
 
 - [ ] 完成四个已迁移应用 workflow 的真机复验，核对一次交接、组内暂停、不确定结果、独立文件核验及进程归属，见 [57](57-application-workflow-migration.md)。VS Code 已有独立可恢复验证入口，真机状态及边界见 [55](55-resumable-desktop-tasks.md)；旧脚本退出不具备自动续跑能力。
 
