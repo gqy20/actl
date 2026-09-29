@@ -468,14 +468,16 @@
       "run": {
         "sequence": [
           {
-            "command": "set-value",
+            "command": "type",
             "args": [
               "id:1001",
               "A1:D4",
               "--app",
               {
                 "input": "app"
-              }
+              },
+              "--verify-value",
+              "A1:D4"
             ]
           },
           {
@@ -494,20 +496,6 @@
             "command": "press",
             "args": [
               "ctrl+c",
-              "--target",
-              "uia:{\"match\":{\"name\":\"A1\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "command": "press",
-            "args": [
-              "esc",
-              "--target",
-              "uia:{\"match\":{\"name\":\"A1\"}}",
               "--app",
               {
                 "input": "app"

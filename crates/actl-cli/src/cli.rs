@@ -39,7 +39,10 @@ pub(crate) enum DesktopCommand {
         /// Include archived reports and current local evidence availability
         #[arg(long, requires = "task")]
         reports: bool,
-        /// Maximum calls (1-100)
+        /// Merge every event of the task into one time-ordered stream instead of per-call groups
+        #[arg(long)]
+        timeline: bool,
+        /// Maximum calls (1-100); with --timeline the newest events (1-2000)
         #[arg(long, default_value_t = 20)]
         limit: usize,
     },
@@ -849,7 +852,7 @@ fn after_help_for(name: &str) -> Option<&'static str> {
             "Example:\n  actl task-archive --file report.json\nImmutable caller report, retained 30 days; never implies verified task success.\nErrors: PROTOCOL invalid report | INTERNAL file/storage failure"
         }
         "history" => {
-            "Example:\n  actl history --task report-01 --step submit --reports --limit 20\nContent-minimal events, newest calls first. integrity validates sequence, identity and boundaries; unfinished may be running or interrupted. logging_health reports recorded journal/state failures, never guarantees complete logging. Control request IDs correlate pause/resume requests without changing desktop feedback.\nErrors: PROTOCOL invalid task/limit | INTERNAL storage failure (health evidence included)"
+            "Example:\n  actl history --task report-01 --step submit --reports --limit 20\n  actl history --task report-01 --timeline --limit 500\nContent-minimal events, newest calls first. integrity validates sequence, identity and boundaries; unfinished may be running or interrupted. logging_health reports recorded journal/state failures, never guarantees complete logging. Control request IDs correlate pause/resume requests without changing desktop feedback. --timeline merges every recorded event of the task into one time-ordered stream (oldest first, newest kept when truncated), for reconstructing pauses, handoffs and step failures without joining journal files by hand.\nErrors: PROTOCOL invalid task/limit | INTERNAL storage failure (health evidence included)"
         }
         "display-status" => {
             "Example:\n  actl display-status\nReports native readiness, reason, lease, popup diagnostics, and sticky stop state; never starts the companion.\nErrors: INTERNAL unavailable state storage"

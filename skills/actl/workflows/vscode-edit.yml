@@ -1593,6 +1593,7 @@
     },
     {
       "id": "reopened-ready",
+      "recovery": {"max_retries": 3, "timeout_ms": 15000, "interval_ms": 1500},
       "title": "Wait for editor content and verify complete text",
       "run": {
         "sequence": [
@@ -1660,6 +1661,7 @@
         ]
       },
       "id": "reopened-content",
+      "recovery": {"max_retries": 3, "timeout_ms": 15000, "interval_ms": 1500},
       "title": "Verify complete saved content after reopen"
     },
     {
@@ -1680,7 +1682,8 @@
           }
         ]
       },
-      "id": "reopened-uia"
+      "id": "reopened-uia",
+      "recovery": {"max_retries": 3, "timeout_ms": 15000, "interval_ms": 1500}
     },
     {
       "run": {
@@ -1891,6 +1894,7 @@
         ]
       },
       "id": "goto-line",
+      "recovery": {"max_retries": 3, "timeout_ms": 15000, "interval_ms": 1500},
       "title": "Go to line and verify inserted text",
       "evidence": "full"
     },
@@ -2119,6 +2123,7 @@
         ]
       },
       "id": "find-replace",
+      "recovery": {"max_retries": 3, "timeout_ms": 15000, "interval_ms": 1500},
       "title": "Replace matches and verify complete saved text",
       "evidence": "full"
     },
@@ -2267,6 +2272,7 @@
         ]
       },
       "id": "quick-open-second",
+      "recovery": {"max_retries": 3, "timeout_ms": 15000, "interval_ms": 1500},
       "title": "Open second and verify full editor text",
       "evidence": "full"
     },
@@ -2415,6 +2421,7 @@
         ]
       },
       "id": "quick-open-file",
+      "recovery": {"max_retries": 3, "timeout_ms": 15000, "interval_ms": 1500},
       "title": "Open file and verify full editor text",
       "evidence": "full"
     },

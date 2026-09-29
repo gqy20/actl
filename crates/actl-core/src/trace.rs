@@ -9,20 +9,52 @@
 use std::sync::OnceLock;
 use std::time::Instant;
 
-/// 是否启用(ACTL_TRACE 存在且非 "0"/空)。
+/// 是否启用(ACTL_TRACE 存在且非 "0"/空，或设置了 ACTL_TRACE_FILE)。
 pub fn enabled() -> bool {
     static ON: OnceLock<bool> = OnceLock::new();
     *ON.get_or_init(|| {
-        std::env::var("ACTL_TRACE")
+        (std::env::var("ACTL_TRACE")
             .map(|v| !v.is_empty() && v != "0")
-            .unwrap_or(false)
+            .unwrap_or(false))
+            || file_path().is_some()
     })
+}
+
+/// 可选落盘路径(`ACTL_TRACE_FILE`)：追加写，供显示端派生的执行器保留阶段证据。
+/// stderr 输出不变；文件写失败静默忽略(诊断旁路不得影响命令结果)。
+fn file_path() -> Option<&'static std::path::Path> {
+    static PATH: OnceLock<Option<std::path::PathBuf>> = OnceLock::new();
+    PATH.get_or_init(|| {
+        std::env::var_os("ACTL_TRACE_FILE")
+            .filter(|v| !v.is_empty())
+            .map(std::path::PathBuf::from)
+    })
+    .as_deref()
+}
+
+fn emit(line: &str) {
+    if enabled() {
+        eprintln!("{line}");
+    }
+    if let Some(path) = file_path() {
+        use std::io::Write;
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+        {
+            let _ = writeln!(file, "{line}");
+        }
+    }
 }
 
 /// 打一个阶段耗时点:`[actl-trace] <stage> <ms>ms`(未启用时 no-op)。
 pub fn stage(stage: &str, started: Instant) {
-    if enabled() {
-        eprintln!("[actl-trace] {stage} {}ms", started.elapsed().as_millis());
+    if enabled() || file_path().is_some() {
+        emit(&format!(
+            "[actl-trace] {stage} {}ms",
+            started.elapsed().as_millis()
+        ));
     }
 }
 
@@ -34,8 +66,8 @@ pub struct TraceScope {
 }
 
 pub fn scope(stage: &'static str) -> TraceScope {
-    if enabled() {
-        eprintln!("[actl-trace] {stage} begin");
+    if enabled() || file_path().is_some() {
+        emit(&format!("[actl-trace] {stage} begin"));
     }
     TraceScope {
         stage,

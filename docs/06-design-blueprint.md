@@ -472,6 +472,7 @@ event 包括 `call_started`（command/version）、`step`（command/index/total�
 
 ```text
 actl history [--task <id>] [--limit <1..100>]   # 默认 20，最近写入的调用优先
+actl history --task <id> --timeline [--limit <1..2000>]  # 单一时间线，默认保留最新 20 条事件
 actl task-archive --file <report.json>          # UTF-8 JSON，最大 64 KiB
 ```
 
@@ -481,6 +482,10 @@ integrity 区分 complete、unfinished、malformed_json、empty、missing_start�
 identity_or_version_mismatch、sequence_gap_or_duplicate、invalid_boundary。
 unfinished 不证明进程仍在运行或已经崩溃。incomplete_files 统计本次扫描到的空/损坏文件及
 返回的无终态调用；过期记录可能尚未清理。非法 ID/limit 返回 PROTOCOL，读取失败返回 INTERNAL。
+`--timeline` 把任务（或全部，不建议）的 journal 事件按 ts_ms/seq 合并为单一时间线，
+data 为 `{events,total,truncated,incomplete_files}`，旧事件在前，超限时保留最新窗口；
+用于重建暂停、交接与步骤失败过程，免去手工拼接多个调用文件。显示端触发的执行器通过
+`ACTL_TRACE_FILE` 把阶段 trace 追加写入 `history/executor-<request_id>.trace`，stdout 契约不变。
 
 logging_health 包含 status、complete_logging_guaranteed（始终 false）、failure_count、truncated、failures。
 status 为 no_recorded_failure/degraded/unknown；未发现失败记录不保证没有丢日志。
@@ -663,6 +668,7 @@ launch 新增 --wait-window <标题子串> 与 --timeout <1..60000 毫秒>（默
 不自动重启、重复注入、清急停或跨权限强行激活。
 
 display-status 新增 reason/hwnd/responsive/popup，ready 同时校验真实可见窗口、进程身份及租约。
+popup 读取 popup.json，但记录的 pid 已退出时视为陈旧证据返回 null，不再把死显示端的最后状态当作现场。
 display-start 可对兼容显示端无激活恢复及位置校正；版本不符仍拒绝并保留停止状态。
 popup 是最后一次菜单/详情诊断，带 ts_ms/pid，不代表当前存在。显示 v4 租约 golden 替代 v3。
 

@@ -138,10 +138,17 @@ fn execute(id: &str, resume: bool, request_id: &str, generation: &str) -> Result
     let exe = std::env::current_exe()
         .map_err(|_| "INTERNAL：无法定位程序")?
         .with_file_name("actl.exe");
+    // The executor's stage trace lands next to the journals so display-triggered
+    // resumes keep the same evidence a CLI-invoked resume would leave behind.
+    let trace_file = actl_core::state::SignalPaths::default()
+        .dir
+        .join("history")
+        .join(format!("executor-{request_id}.trace"));
     let output = std::process::Command::new(exe)
         .env("ACTL_EXECUTION_GENERATION", generation)
         .env("ACTL_FLOW_REQUEST_SOURCE", "signal_control")
         .env("ACTL_FLOW_REQUEST_ID", request_id)
+        .env("ACTL_TRACE_FILE", &trace_file)
         .args([
             if resume { "flow-resume" } else { "flow-pause" },
             "--id",
@@ -179,6 +186,7 @@ pub fn status_name(status: &str) -> &str {
         "pending" => "待执行",
         "verifying" => "核对中",
         "uncertain" => "待核对",
+        "skipped" => "已跳过",
         _ => "状态未知",
     }
 }

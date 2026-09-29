@@ -228,7 +228,17 @@ fn reusable_workflows_preflight_without_desktop_actions() {
                     .unwrap_or_else(|| vec![step.run.clone()]);
                 for call in calls {
                     assert_ne!(call.command, "paste", "{name}: use a targeted input");
-                    if call.command == "press" {
+                    // Element-level focus is required for keys that input into the
+                    // focused control. Modifier chords (copy/save-style commands on a
+                    // window-scoped surface, e.g. Excel's grid selection) keep the
+                    // engine's physical foreground + focus-thread guard instead; grid
+                    // cells do not expose element focus (docs/68 first round).
+                    if call.command == "press"
+                        && !call
+                            .args
+                            .first()
+                            .is_some_and(|key| key.starts_with("ctrl+"))
+                    {
                         assert!(
                             call.args.iter().any(|arg| arg == "--target"),
                             "{name}: {} lacks focus assertion",

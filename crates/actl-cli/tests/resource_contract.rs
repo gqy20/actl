@@ -193,6 +193,10 @@ fn combined_template_matches_individual_steps_and_resources() {
         for step in raw["steps"].as_array_mut().unwrap() {
             step["id"] = json!(format!("{name}-{}", step["id"].as_str().unwrap()));
             bindings(step, name);
+            // The combined batch isolates each application as one section so a
+            // deterministic failure skips its own section only (docs/68).
+            step["section"] = json!(name);
+            step["on_failure"] = json!("skip_section");
             expected["steps"].as_array_mut().unwrap().push(step.clone());
         }
     }

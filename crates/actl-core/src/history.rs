@@ -275,6 +275,70 @@ pub fn read_history(
 ) -> Result<serde_json::Value, CtlError> {
     read_filtered(root, task, None, limit)
 }
+
+/// One time-ordered stream of every recorded event, across calls and files.
+/// The whole-task view that reconstructing a stop otherwise assembles by hand.
+pub fn read_timeline(
+    root: &Path,
+    task: Option<&str>,
+    limit: usize,
+) -> Result<serde_json::Value, CtlError> {
+    if !(1..=2000).contains(&limit) || task.is_some_and(|id| !valid_id(id)) {
+        return Err(CtlError::protocol(
+            "timeline requires limit 1-2000 and a valid task ID",
+        ));
+    }
+    let dir = root.join("history");
+    if !dir.exists() {
+        return Ok(
+            serde_json::json!({"events":[],"total":0,"truncated":false,"incomplete_files":0}),
+        );
+    }
+    let mut events: Vec<(u64, u64, serde_json::Value)> = Vec::new();
+    let mut incomplete = 0u32;
+    for entry in fs::read_dir(&dir).map_err(io_error)? {
+        let entry = entry.map_err(io_error)?;
+        if !entry.file_type().map_err(io_error)?.is_file()
+            || !entry.path().extension().is_some_and(|s| s == "jsonl")
+        {
+            continue;
+        }
+        use std::io::{BufRead, BufReader, Read};
+        let file = File::open(entry.path()).map_err(io_error)?;
+        for line in BufReader::new(file.take(CALL_LIMIT + 1)).lines() {
+            let Ok(line) = line else {
+                incomplete += 1;
+                break;
+            };
+            match serde_json::from_str::<serde_json::Value>(&line) {
+                Ok(event) => {
+                    if task.is_some_and(|id| event["task_id"].as_str() != Some(id)) {
+                        continue;
+                    }
+                    let ts = event["ts_ms"].as_u64().unwrap_or(0);
+                    let seq = event["seq"].as_u64().unwrap_or(0);
+                    events.push((ts, seq, event));
+                }
+                Err(_) => {
+                    incomplete += 1;
+                    break;
+                }
+            }
+        }
+    }
+    events.sort_by_key(|(ts, seq, _)| (*ts, *seq));
+    let total = events.len();
+    let truncated = total > limit;
+    if truncated {
+        events.drain(..total - limit);
+    }
+    Ok(serde_json::json!({
+        "events": events.into_iter().map(|(_, _, event)| event).collect::<Vec<_>>(),
+        "total": total,
+        "truncated": truncated,
+        "incomplete_files": incomplete
+    }))
+}
 fn read_filtered(
     root: &Path,
     task: Option<&str>,

@@ -13,6 +13,17 @@ fn history_and_task_archive_contract() {
         result,
         serde_json::from_str::<serde_json::Value>(include_str!("golden/history.json")).unwrap()
     );
+    let (code, text) = actl(&["history", "--timeline"]);
+    assert_eq!(code, 0, "{text}");
+    let mut timeline: serde_json::Value = serde_json::from_str(&text).unwrap();
+    timeline.as_object_mut().unwrap().remove("duration_ms");
+    assert_eq!(
+        timeline,
+        serde_json::json!({"version":"1","ok":true,"command":"history","data":
+            {"events":[],"total":0,"truncated":false,"incomplete_files":0}})
+    );
+    assert_eq!(actl(&["history", "--timeline", "--limit", "0"]).0, 2);
+    assert_eq!(actl(&["history", "--timeline", "--limit", "2001"]).0, 2);
     assert_eq!(actl(&["history", "--limit", "0"]).0, 2);
     assert_eq!(actl(&["history", "--task", "../bad"]).0, 2);
     let mut bad_env = support::IsolatedCommand::new();

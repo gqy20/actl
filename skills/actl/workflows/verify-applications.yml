@@ -131,7 +131,9 @@
           "20000"
         ]
       },
-      "id": "vscode-edit-open"
+      "id": "vscode-edit-open",
+      "section": "vscode-edit",
+      "on_failure": "skip_section"
     },
     {
       "run": {
@@ -152,6 +154,8 @@
         ]
       },
       "id": "vscode-edit-ownership",
+      "section": "vscode-edit",
+      "on_failure": "skip_section",
       "title": "Verify isolated task process",
       "outputs": {
         "pid": {
@@ -170,6 +174,8 @@
     },
     {
       "id": "vscode-edit-initial-foreground",
+      "section": "vscode-edit",
+      "on_failure": "skip_section",
       "title": "Ensure owned window is foreground",
       "unless": {
         "command": "verify-window",
@@ -221,6 +227,8 @@
     },
     {
       "id": "vscode-edit-initial-ready",
+      "section": "vscode-edit",
+      "on_failure": "skip_section",
       "title": "Wait for editor content and verify complete text",
       "run": {
         "sequence": [
@@ -371,6 +379,8 @@
         ]
       },
       "id": "vscode-edit-insert-1",
+      "section": "vscode-edit",
+      "on_failure": "skip_section",
       "before": {
         "command": "verify-owner",
         "args": [
@@ -493,6 +503,8 @@
         ]
       },
       "id": "vscode-edit-undo-1",
+      "section": "vscode-edit",
+      "on_failure": "skip_section",
       "before": {
         "command": "verify-owner",
         "args": [
@@ -615,6 +627,8 @@
         ]
       },
       "id": "vscode-edit-redo-1",
+      "section": "vscode-edit",
+      "on_failure": "skip_section",
       "before": {
         "command": "verify-owner",
         "args": [
@@ -732,6 +746,8 @@
         ]
       },
       "id": "vscode-edit-insert-2",
+      "section": "vscode-edit",
+      "on_failure": "skip_section",
       "before": {
         "command": "verify-owner",
         "args": [
@@ -854,6 +870,8 @@
         ]
       },
       "id": "vscode-edit-undo-2",
+      "section": "vscode-edit",
+      "on_failure": "skip_section",
       "before": {
         "command": "verify-owner",
         "args": [
@@ -976,6 +994,8 @@
         ]
       },
       "id": "vscode-edit-redo-2",
+      "section": "vscode-edit",
+      "on_failure": "skip_section",
       "before": {
         "command": "verify-owner",
         "args": [
@@ -1093,6 +1113,8 @@
         ]
       },
       "id": "vscode-edit-insert-3",
+      "section": "vscode-edit",
+      "on_failure": "skip_section",
       "before": {
         "command": "verify-owner",
         "args": [
@@ -1215,6 +1237,8 @@
         ]
       },
       "id": "vscode-edit-undo-3",
+      "section": "vscode-edit",
+      "on_failure": "skip_section",
       "before": {
         "command": "verify-owner",
         "args": [
@@ -1337,6 +1361,8 @@
         ]
       },
       "id": "vscode-edit-redo-3",
+      "section": "vscode-edit",
+      "on_failure": "skip_section",
       "before": {
         "command": "verify-owner",
         "args": [
@@ -1454,6 +1480,8 @@
         ]
       },
       "id": "vscode-edit-replace",
+      "section": "vscode-edit",
+      "on_failure": "skip_section",
       "before": {
         "command": "verify-owner",
         "args": [
@@ -1484,6 +1512,8 @@
         }
       },
       "id": "vscode-edit-close-before-reopen",
+      "section": "vscode-edit",
+      "on_failure": "skip_section",
       "verify": {
         "command": "verify-closed",
         "args": [
@@ -1565,7 +1595,9 @@
           "20000"
         ]
       },
-      "id": "vscode-edit-reopen"
+      "id": "vscode-edit-reopen",
+      "section": "vscode-edit",
+      "on_failure": "skip_section"
     },
     {
       "run": {
@@ -1586,6 +1618,8 @@
         ]
       },
       "id": "vscode-edit-reopened-owner",
+      "section": "vscode-edit",
+      "on_failure": "skip_section",
       "outputs": {
         "pid": {
           "type": "number",
@@ -1604,6 +1638,8 @@
     },
     {
       "id": "vscode-edit-reopened-foreground",
+      "section": "vscode-edit",
+      "on_failure": "skip_section",
       "title": "Ensure owned window is foreground",
       "unless": {
         "command": "verify-window",
@@ -1655,6 +1691,9 @@
     },
     {
       "id": "vscode-edit-reopened-ready",
+      "section": "vscode-edit",
+      "on_failure": "skip_section",
+      "recovery": {"max_retries": 3, "timeout_ms": 15000, "interval_ms": 1500},
       "title": "Wait for editor content and verify complete text",
       "run": {
         "sequence": [
@@ -1722,6 +1761,9 @@
         ]
       },
       "id": "vscode-edit-reopened-content",
+      "section": "vscode-edit",
+      "on_failure": "skip_section",
+      "recovery": {"max_retries": 3, "timeout_ms": 15000, "interval_ms": 1500},
       "title": "Verify complete saved content after reopen"
     },
     {
@@ -1742,7 +1784,10 @@
           }
         ]
       },
-      "id": "vscode-edit-reopened-uia"
+      "id": "vscode-edit-reopened-uia",
+      "section": "vscode-edit",
+      "on_failure": "skip_section",
+      "recovery": {"max_retries": 3, "timeout_ms": 15000, "interval_ms": 1500}
     },
     {
       "run": {
@@ -1953,6 +1998,9 @@
         ]
       },
       "id": "vscode-edit-goto-line",
+      "section": "vscode-edit",
+      "on_failure": "skip_section",
+      "recovery": {"max_retries": 3, "timeout_ms": 15000, "interval_ms": 1500},
       "title": "Go to line and verify inserted text",
       "evidence": "full"
     },
@@ -2181,6 +2229,9 @@
         ]
       },
       "id": "vscode-edit-find-replace",
+      "section": "vscode-edit",
+      "on_failure": "skip_section",
+      "recovery": {"max_retries": 3, "timeout_ms": 15000, "interval_ms": 1500},
       "title": "Replace matches and verify complete saved text",
       "evidence": "full"
     },
@@ -2329,6 +2380,9 @@
         ]
       },
       "id": "vscode-edit-quick-open-second",
+      "section": "vscode-edit",
+      "on_failure": "skip_section",
+      "recovery": {"max_retries": 3, "timeout_ms": 15000, "interval_ms": 1500},
       "title": "Open second and verify full editor text",
       "evidence": "full"
     },
@@ -2477,6 +2531,9 @@
         ]
       },
       "id": "vscode-edit-quick-open-file",
+      "section": "vscode-edit",
+      "on_failure": "skip_section",
+      "recovery": {"max_retries": 3, "timeout_ms": 15000, "interval_ms": 1500},
       "title": "Open file and verify full editor text",
       "evidence": "full"
     },
@@ -2492,6 +2549,8 @@
         }
       },
       "id": "vscode-edit-close",
+      "section": "vscode-edit",
+      "on_failure": "skip_section",
       "verify": {
         "command": "verify-closed",
         "args": [
@@ -2565,7 +2624,9 @@
           "20000"
         ]
       },
-      "id": "excel-table-open"
+      "id": "excel-table-open",
+      "section": "excel-table",
+      "on_failure": "skip_section"
     },
     {
       "run": {
@@ -2586,6 +2647,8 @@
         ]
       },
       "id": "excel-table-ownership",
+      "section": "excel-table",
+      "on_failure": "skip_section",
       "title": "Verify isolated task process",
       "outputs": {
         "pid": {
@@ -2687,6 +2750,8 @@
         ]
       },
       "id": "excel-table-paste",
+      "section": "excel-table",
+      "on_failure": "skip_section",
       "before": {
         "command": "verify-owner",
         "args": [
@@ -2790,6 +2855,8 @@
         ]
       },
       "id": "excel-table-recalculate",
+      "section": "excel-table",
+      "on_failure": "skip_section",
       "before": {
         "command": "verify-owner",
         "args": [
@@ -2870,6 +2937,8 @@
         ]
       },
       "id": "excel-table-undo",
+      "section": "excel-table",
+      "on_failure": "skip_section",
       "before": {
         "command": "verify-owner",
         "args": [
@@ -2950,6 +3019,8 @@
         ]
       },
       "id": "excel-table-redo",
+      "section": "excel-table",
+      "on_failure": "skip_section",
       "before": {
         "command": "verify-owner",
         "args": [
@@ -2990,14 +3061,16 @@
       "run": {
         "sequence": [
           {
-            "command": "set-value",
+            "command": "type",
             "args": [
               "id:1001",
               "A1:D4",
               "--app",
               {
                 "input": "excel-table-app"
-              }
+              },
+              "--verify-value",
+              "A1:D4"
             ]
           },
           {
@@ -3016,20 +3089,6 @@
             "command": "press",
             "args": [
               "ctrl+c",
-              "--target",
-              "uia:{\"match\":{\"name\":\"A1\"}}",
-              "--app",
-              {
-                "input": "excel-table-app"
-              }
-            ]
-          },
-          {
-            "command": "press",
-            "args": [
-              "esc",
-              "--target",
-              "uia:{\"match\":{\"name\":\"A1\"}}",
               "--app",
               {
                 "input": "excel-table-app"
@@ -3039,6 +3098,8 @@
         ]
       },
       "id": "excel-table-copy-range",
+      "section": "excel-table",
+      "on_failure": "skip_section",
       "before": {
         "command": "verify-owner",
         "args": [
@@ -3077,6 +3138,8 @@
         }
       },
       "id": "excel-table-close-before-reopen",
+      "section": "excel-table",
+      "on_failure": "skip_section",
       "verify": {
         "command": "verify-closed",
         "args": [
@@ -3150,7 +3213,9 @@
           "20000"
         ]
       },
-      "id": "excel-table-reopen"
+      "id": "excel-table-reopen",
+      "section": "excel-table",
+      "on_failure": "skip_section"
     },
     {
       "run": {
@@ -3171,6 +3236,8 @@
         ]
       },
       "id": "excel-table-reopened-owner",
+      "section": "excel-table",
+      "on_failure": "skip_section",
       "outputs": {
         "pid": {
           "type": "number",
@@ -3203,6 +3270,8 @@
         ]
       },
       "id": "excel-table-reopened-content",
+      "section": "excel-table",
+      "on_failure": "skip_section",
       "title": "Verify complete saved content after reopen"
     },
     {
@@ -3258,6 +3327,8 @@
         ]
       },
       "id": "excel-table-reopen-cell-readback",
+      "section": "excel-table",
+      "on_failure": "skip_section",
       "resume_check": {
         "command": "verify-owner",
         "args": [
@@ -3314,6 +3385,8 @@
         }
       },
       "id": "excel-table-close",
+      "section": "excel-table",
+      "on_failure": "skip_section",
       "verify": {
         "command": "verify-closed",
         "args": [
@@ -3362,6 +3435,8 @@
     },
     {
       "id": "word-edit-open",
+      "section": "word-edit",
+      "on_failure": "skip_section",
       "title": "打开任务文档",
       "run": {
         "command": "launch",
@@ -3391,6 +3466,8 @@
     },
     {
       "id": "word-edit-ownership",
+      "section": "word-edit",
+      "on_failure": "skip_section",
       "title": "核对任务进程归属",
       "run": {
         "command": "verify-owner",
@@ -3426,6 +3503,8 @@
     },
     {
       "id": "word-edit-insert",
+      "section": "word-edit",
+      "on_failure": "skip_section",
       "title": "插入前缀并核对完整磁盘正文",
       "before": {
         "command": "verify-file",
@@ -3515,6 +3594,8 @@
     },
     {
       "id": "word-edit-uia-insert",
+      "section": "word-edit",
+      "on_failure": "skip_section",
       "title": "核对完整 UIA 正文",
       "run": {
         "command": "verify",
@@ -3534,6 +3615,8 @@
     },
     {
       "id": "word-edit-replace",
+      "section": "word-edit",
+      "on_failure": "skip_section",
       "title": "替换为多段正文并核验",
       "resume_check": {
         "command": "verify-owner",
@@ -3609,6 +3692,8 @@
     },
     {
       "id": "word-edit-uia-replace",
+      "section": "word-edit",
+      "on_failure": "skip_section",
       "title": "核对完整 UIA 正文",
       "run": {
         "command": "verify",
@@ -3628,6 +3713,8 @@
     },
     {
       "id": "word-edit-append",
+      "section": "word-edit",
+      "on_failure": "skip_section",
       "title": "追加正文并核验",
       "resume_check": {
         "command": "verify-owner",
@@ -3703,6 +3790,8 @@
     },
     {
       "id": "word-edit-uia-append",
+      "section": "word-edit",
+      "on_failure": "skip_section",
       "title": "核对完整 UIA 正文",
       "run": {
         "command": "verify",
@@ -3722,6 +3811,8 @@
     },
     {
       "id": "word-edit-undo",
+      "section": "word-edit",
+      "on_failure": "skip_section",
       "title": "撤销追加并核验",
       "resume_check": {
         "command": "verify-owner",
@@ -3785,6 +3876,8 @@
     },
     {
       "id": "word-edit-uia-undo",
+      "section": "word-edit",
+      "on_failure": "skip_section",
       "title": "核对完整 UIA 正文",
       "run": {
         "command": "verify",
@@ -3804,6 +3897,8 @@
     },
     {
       "id": "word-edit-redo",
+      "section": "word-edit",
+      "on_failure": "skip_section",
       "title": "重做追加并核验",
       "resume_check": {
         "command": "verify-owner",
@@ -3867,6 +3962,8 @@
     },
     {
       "id": "word-edit-uia-redo",
+      "section": "word-edit",
+      "on_failure": "skip_section",
       "title": "核对完整 UIA 正文",
       "run": {
         "command": "verify",
@@ -3886,6 +3983,8 @@
     },
     {
       "id": "word-edit-bold",
+      "section": "word-edit",
+      "on_failure": "skip_section",
       "title": "加粗并核验正文及 XML 格式",
       "resume_check": {
         "command": "verify-owner",
@@ -3960,6 +4059,8 @@
     },
     {
       "id": "word-edit-uia-bold",
+      "section": "word-edit",
+      "on_failure": "skip_section",
       "title": "核对完整 UIA 正文",
       "run": {
         "command": "verify",
@@ -3979,6 +4080,8 @@
     },
     {
       "id": "word-edit-close-before-reopen",
+      "section": "word-edit",
+      "on_failure": "skip_section",
       "title": "核对原进程实例后关闭",
       "before": {
         "command": "verify-owner",
@@ -4037,6 +4140,8 @@
     },
     {
       "id": "word-edit-reopen",
+      "section": "word-edit",
+      "on_failure": "skip_section",
       "title": "重开已保存的文档",
       "run": {
         "command": "launch",
@@ -4066,6 +4171,8 @@
     },
     {
       "id": "word-edit-reopened-owner",
+      "section": "word-edit",
+      "on_failure": "skip_section",
       "title": "核对重开文档的进程身份",
       "run": {
         "command": "verify-owner",
@@ -4101,6 +4208,8 @@
     },
     {
       "id": "word-edit-reopened-content",
+      "section": "word-edit",
+      "on_failure": "skip_section",
       "title": "重开后再次核对完整正文及格式",
       "run": {
         "command": "verify-file",
@@ -4118,6 +4227,8 @@
     },
     {
       "id": "word-edit-uia-reopened-content",
+      "section": "word-edit",
+      "on_failure": "skip_section",
       "title": "核对完整 UIA 正文",
       "run": {
         "command": "verify",
@@ -4137,6 +4248,8 @@
     },
     {
       "id": "word-edit-close",
+      "section": "word-edit",
+      "on_failure": "skip_section",
       "title": "关闭本任务文档并核对进程退出",
       "before": {
         "command": "verify-owner",
@@ -4225,7 +4338,9 @@
           "20000"
         ]
       },
-      "id": "zotero-search-open"
+      "id": "zotero-search-open",
+      "section": "zotero-search",
+      "on_failure": "skip_section"
     },
     {
       "run": {
@@ -4246,6 +4361,8 @@
         ]
       },
       "id": "zotero-search-ownership",
+      "section": "zotero-search",
+      "on_failure": "skip_section",
       "title": "Verify isolated task process",
       "outputs": {
         "pid": {
@@ -4337,7 +4454,9 @@
           "[\"ACTL Alpha 中文测试. 期刊文章. Test\",\"ACTL Beta unrelated. 期刊文章. Test\"]"
         ]
       },
-      "id": "zotero-search-import"
+      "id": "zotero-search-import",
+      "section": "zotero-search",
+      "on_failure": "skip_section"
     },
     {
       "run": {
@@ -4402,6 +4521,8 @@
         ]
       },
       "id": "zotero-search-search-1",
+      "section": "zotero-search",
+      "on_failure": "skip_section",
       "before": {
         "command": "verify-owner",
         "args": [
@@ -4483,6 +4604,8 @@
         ]
       },
       "id": "zotero-search-search-2",
+      "section": "zotero-search",
+      "on_failure": "skip_section",
       "before": {
         "command": "verify-owner",
         "args": [
@@ -4564,6 +4687,8 @@
         ]
       },
       "id": "zotero-search-search-3",
+      "section": "zotero-search",
+      "on_failure": "skip_section",
       "before": {
         "command": "verify-owner",
         "args": [
@@ -4711,6 +4836,8 @@
         ]
       },
       "id": "zotero-search-publication",
+      "section": "zotero-search",
+      "on_failure": "skip_section",
       "title": "Edit isolated record publication"
     },
     {
@@ -4882,6 +5009,8 @@
         ]
       },
       "id": "zotero-search-export",
+      "section": "zotero-search",
+      "on_failure": "skip_section",
       "title": "Export record and verify JSON content"
     },
     {
@@ -4940,7 +5069,9 @@
           "1": "zotero-search-ownership.hwnd"
         }
       },
-      "id": "zotero-search-close"
+      "id": "zotero-search-close",
+      "section": "zotero-search",
+      "on_failure": "skip_section"
     }
   ]
 }

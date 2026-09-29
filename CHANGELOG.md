@@ -9,6 +9,18 @@
 
 ## [Unreleased]
 
+- **步骤失败隔离（流程协议）**：步骤新增 `section` 字段与 `on_failure: skip_section`。失败时保留该步证据，同段其余 pending 步骤标为新增的 `skipped` 状态，继续执行后续段；整轮以 needs_review、reason=`section_failure:<step>` 收束。显式 `--retry-step` 成功后同段 skipped 步骤还原重跑。四软件整批模板按应用分段启用，一段确定性失败不再堵死其余应用。协议与边界见 [20](docs/20-yaml-workflow-protocol.md)。
+
+- **失败分级与证据合成**：步骤记录 `attempt_errors`（最近 8 次错误码）；同一步骤最后 3 次错误相同即视为路线缺陷，暂停 reason 追加 `route_defect_suspected`，提示不应盲目重试。失败无源证据时合成 `{phase,command,synthetic}` 最小结构化证据，不再出现裸错误码。docs/68 首轮的 copy-range 三次同错即属该类。
+
+- **Excel 复制路线修复**：copy-range 名称框写入改为 `type --verify-value`（自带读回证明），选区复制改窗口级 `press ctrl+c`——Excel 网格单元格不持有元素级焦点上报，目标化按键在该场景结构性不可满足；契约测试同步放宽修饰和弦的元素级焦点要求，输入语义按键仍强制。excel-table.yml 与 verify-applications.yml 同步；真机重跑待做。
+
+- **模板验证收敛化**：vscode-edit.yml 与整批模板的跳转/替换/重开/切换等 7 个易瞬态验证步配置 `recovery`（3 次/15 秒/1.5 秒间隔）只读自动重查，动作已生效而观察未跟上的假阴性不再停整轮（docs/68 首轮三次中断的成因）。
+
+- **诊断时间线与执行器 trace 落盘**：`history --timeline` 把任务全部 journal 事件按时间合并为单一序列（旧在前，超限保留最新窗口），重建暂停/交接/失败过程不再手工拼文件；显示端触发的执行器经 `ACTL_TRACE_FILE` 把阶段 trace 追加到 `history/executor-<request_id>.trace`。
+
+- **display-status 陈旧 popup 过滤**：popup.json 记录的进程已退出时返回 null，不再把死显示端的最后状态当作当前现场（docs/68 首轮曾被死进程 2452 的记录误导）。显示端步骤状态渲染补 `skipped`（已跳过）。
+
 - 清理原生迁移后的陈旧 PowerShell 描述：verify-file help 与 skills/references/flows.md 改为现行原生检查器（zip + Windows.Data.Xml.Dom / Win32 / WMI，运行时不启动 PowerShell）；docs/20 旧检查器段加过时标注；docs/22 运行段更正为原生 Rust 入口、不再需要 PowerShell 7；display_gate 注释与 AGENTS 清理措辞去掉脚本时代表述。
 
 - 真机回归新增目标预览入口：`cargo xtask preview-tests` 构建 CLI 与 devtools 后串行运行 preview_window 交互用例（活动急停时整轮让行报阻塞 77；锁屏/遮挡由用例护栏拒绝并如实失败；默认跳过需人工点击的 mouse_selection_acceptance），替代此前仅存于 docs/46 的手工命令片段。flow 契约测试的 Sandbox 补清 ACTL_TASK_CONFIG，消除开发者 shell 残留该变量时的隐性污染。

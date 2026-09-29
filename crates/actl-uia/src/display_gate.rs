@@ -100,9 +100,43 @@ pub fn diagnostics() -> serde_json::Value {
     };
     let popup = std::fs::read(paths.dir.join("popup.json"))
         .ok()
-        .and_then(|data| serde_json::from_slice::<serde_json::Value>(&data).ok());
+        .and_then(|data| serde_json::from_slice::<serde_json::Value>(&data).ok())
+        // A popup record from a companion that has exited is stale evidence, not state.
+        .filter(|popup| {
+            popup["pid"]
+                .as_u64()
+                .is_some_and(|pid| process_alive(pid as u32))
+        });
     serde_json::json!({"popup":popup, "ready":reason == "ready", "reason":reason, "lease":lease,
         "hwnd":hwnd.map(|h|h.0 as isize), "responsive":responsive, "stop_requested":paths.stop_requested()})
+}
+
+/// True when `pid` names a running process. A refused handle query counts as gone.
+fn process_alive(pid: u32) -> bool {
+    use windows::Win32::{
+        Foundation::{CloseHandle, FILETIME},
+        System::Threading::{GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION},
+    };
+    if pid == 0 {
+        return false;
+    }
+    let Ok(handle) = (unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }) else {
+        return false;
+    };
+    let mut times = [FILETIME::default(); 4];
+    let queried = unsafe {
+        GetProcessTimes(
+            handle,
+            &mut times[0],
+            &mut times[1],
+            &mut times[2],
+            &mut times[3],
+        )
+    };
+    unsafe {
+        let _ = CloseHandle(handle);
+    }
+    queried.is_ok() && times[1].dwLowDateTime == 0 && times[1].dwHighDateTime == 0
 }
 pub fn ensure() -> Result<actl_core::display::DisplayLease, CtlError> {
     let paths = SignalPaths::default();

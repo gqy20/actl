@@ -195,15 +195,17 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             task,
             step,
             reports,
+            timeline,
             limit,
-        }) => actl_core::history::query(
-            &actl_core::state::SignalPaths::default().dir,
-            task.as_deref(),
-            step.as_deref(),
-            *limit,
-            *reports,
-        )
-        .map(Into::into),
+        }) => {
+            let dir = &actl_core::state::SignalPaths::default().dir;
+            if *timeline {
+                actl_core::history::read_timeline(dir, task.as_deref(), *limit).map(Into::into)
+            } else {
+                actl_core::history::query(dir, task.as_deref(), step.as_deref(), *limit, *reports)
+                    .map(Into::into)
+            }
+        }
         Command::Desktop(DesktopCommand::TaskArchive { file }) => {
             let path = actl_core::history::archive(
                 &actl_core::state::SignalPaths::default().dir,
