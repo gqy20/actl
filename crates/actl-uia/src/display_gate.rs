@@ -160,7 +160,7 @@ pub fn ensure() -> Result<actl_core::display::DisplayLease, CtlError> {
         };
         let mut child = PROCESS_INFORMATION::default();
         // Never inherit the caller's pipe handles: a resident display must not keep
-        // PowerShell's output pipeline open after actl exits.
+        // the caller's output pipeline open after actl exits.
         unsafe {
             CreateProcessW(
                 PCWSTR(path.as_ptr()),

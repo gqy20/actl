@@ -45,7 +45,7 @@
 - **内环按层选测试**:改 core/flow/uia 只跑本 crate(`cargo test -p actl-core|actl-flow|actl-uia`,uia 交互用例默认 ignore 不占门禁);改 cli 只跑对应契约文件(`cargo test -p actl-cli --test <名>`);涉协议/golden/跨层才跑全量。全量验证交给 pre-push 的 `cargo xtask gate`,不为单文件改动反复跑整套;gate 各步耗时在 stderr(`· <step> Nms`),慢环节按 timing 纪律头内比较;
 - 修 bug:**先写复现测试再修**,同 PR;
 - golden 变更只能随 `spec`/`test` 提交,禁止顺手改;
-- **GUI 应用禁 taskkill**(会话复活:记事本 TabState+云同步、计算器僵尸框架)——清理一律优雅关闭(close-window --pid/--hwnd),fixture 用 finally/trap EXIT 进入收尾判定;仅在无停止/人工接管且资源归属已核实时关闭,否则保留现场并记录原因;
+- **GUI 应用禁 taskkill**(会话复活:记事本 TabState+云同步、计算器僵尸框架)——清理一律优雅关闭(close-window --pid/--hwnd),fixture 无论成败统一进入收尾判定并记录清理状态;仅在无停止/人工接管且资源归属已核实时关闭,否则保留现场并记录原因;
 - **资源归属**:使用隔离文件/profile/数据目录;关闭前核对 HWND、PID、进程实例和任务标记。新窗口差集、标题匹配或 UIA 消失不能单独证明归属或已关闭;多标签应用只清理本任务标签。详见 [窗口基建](docs/30-window-infrastructure.md)。
 - **验收证据**:代码完成、gate 通过、真机验收分别报告;受阻不记通过,原失败记录保留,后续局部确认不能改写整轮结果。记录被测二进制路径/哈希、环境、逐调用证据及清理状态,产物留本地 target。
 - 真机回归:`cargo xtask regress`(需交互桌面;含键盘注入的 fixture 需桌面空闲)。

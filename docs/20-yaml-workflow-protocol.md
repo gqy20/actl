@@ -331,6 +331,8 @@ expected: 预期完整文本
 
 文件/行集合/关闭断言对已知不匹配在 5 秒观察窗口内复查，未知错误不转为空或成功。文件内容上限 4 MiB、单个 XML part 上限 4 MiB、expected 参数上限 16 KiB。OOXML 与进程元数据使用编译进二进制的固定 Windows PowerShell/.NET 只读检查器；请求仅通过 stdin JSON 传递，不拼接用户代码、不接受脚本路径、不使用 Office COM。XML 禁用 DTD/外部实体；单次检查器执行 20 秒上限，因此不是整个断言的 5 秒硬实时保证。无新增 Rust 依赖。
 
+> 注（2026-09-29）：本段为当批历史记录。检查器已随全量原生迁移改为 zip + Windows.Data.Xml.Dom / Win32 / WMI 实现，运行时不启动 PowerShell；现行为以 [06](06-design-blueprint.md) 与 TECH_STACK §3 为准，迁移记录见 [61](61-native-tooling-migration.md)。
+
 ### 紧邻检查复用（2026-09-29）
 
 资源初始化协议见下节；恢复不再次执行资源准备。

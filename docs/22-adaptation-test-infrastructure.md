@@ -5,7 +5,7 @@ actl-flow；不增加应用后端、流程语言或依赖。实现入口在 crat
 
 ## 运行
 
-需要 PowerShell 7（pwsh，复用 PATH）。gate 的执行器离线测试也使用它；Windows CI 已有该运行时。
+（2026-09-29 更新：执行器已按 [61](61-native-tooling-migration.md) 全部迁移为原生 Rust，**不再需要 PowerShell 7**；gate 也只跑 cargo 测试。下方命令即当前入口，本文其余 PowerShell 细节为当批历史记录。）
 
 ```powershell
 cargo xtask regress --list
