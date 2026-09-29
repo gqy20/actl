@@ -42,6 +42,11 @@ fn read_only(cmd: &Command) -> bool {
             | Command::Get { .. }
             | Command::Extract { .. }
             | Command::Verify { .. }
+            | Command::VerifyFile { .. }
+            | Command::VerifyRows { .. }
+            | Command::VerifyOwner { .. }
+            | Command::VerifyClosed { .. }
+            | Command::VerifyClipboard { .. }
             | Command::Wait { .. }
             | Command::GetClipboard
     )
@@ -49,6 +54,43 @@ fn read_only(cmd: &Command) -> bool {
 
 fn validate_assertion(command: &Command) -> Result<(), CtlError> {
     match command {
+        Command::VerifyOwner {
+            program,
+            token,
+            hwnd,
+            ..
+        } => {
+            if !std::path::Path::new(program).is_absolute()
+                || !std::path::Path::new(token).is_absolute()
+                || token.len() < 12
+            {
+                return Err(CtlError::protocol(
+                    "owner verification requires absolute executable and task paths",
+                ));
+            }
+            if let Some(hwnd) = hwnd {
+                actl_uia::parse_hwnd(hwnd)?;
+            }
+        }
+        Command::VerifyClosed { hwnd, pid, .. } => {
+            actl_uia::parse_hwnd(hwnd)?;
+            if *pid == 0 {
+                return Err(CtlError::protocol("process ID must be positive"));
+            }
+        }
+        Command::VerifyRows {
+            expected, prefix, ..
+        } => {
+            crate::file_check::rows_expected(prefix, expected)?;
+        }
+        Command::VerifyFile { expected, path, .. } => {
+            if !std::path::Path::new(path).is_absolute() {
+                return Err(CtlError::protocol(
+                    "persisted file checks require an absolute path",
+                ));
+            }
+            crate::file_check::expectation(expected)?;
+        }
         Command::Wait {
             element,
             window,
@@ -99,6 +141,24 @@ fn validate_assertion(command: &Command) -> Result<(), CtlError> {
 }
 pub fn validate(plan: &Plan) -> Result<(), CtlError> {
     for (index, step) in plan.steps.iter().enumerate() {
+        if let Some(calls) = actl_flow::sequence::decode(&step.run)? {
+            if step.verify.is_none() || !step.outputs.is_empty() || step.retry == Retry::ReadOnly {
+                return Err(CtlError::protocol(
+                    "sequence requires result verification, no outputs or read-only retry",
+                ));
+            }
+            for call in calls {
+                let mut child = step.clone();
+                child.run = call;
+                validate(&Plan {
+                    version: plan.version,
+                    name: plan.name.clone(),
+                    handoff: plan.handoff,
+                    steps: vec![child],
+                })?;
+            }
+            continue;
+        }
         let context = |field: &str, e: CtlError| {
             CtlError::with_evidence(
                 e.code,
@@ -125,7 +185,18 @@ pub fn validate(plan: &Plan) -> Result<(), CtlError> {
             crate::selector_input::validate(&command)
                 .map_err(|e| context(&format!("{field}.args"), e))?;
             validate_assertion(&command).map_err(|e| context(&format!("{field}.args"), e))?;
-            if field != "run" && !matches!(command, Command::Verify { .. } | Command::Wait { .. }) {
+            if field != "run"
+                && !matches!(
+                    command,
+                    Command::Verify { .. }
+                        | Command::Wait { .. }
+                        | Command::VerifyFile { .. }
+                        | Command::VerifyRows { .. }
+                        | Command::VerifyOwner { .. }
+                        | Command::VerifyClosed { .. }
+                        | Command::VerifyClipboard { .. }
+                )
+            {
                 return Err(context(
                     field,
                     CtlError::protocol("checks require verify or wait"),
@@ -205,6 +276,42 @@ impl Host for Adapter<'_> {
         })
     }
     fn execute_output(&mut self, call: &Invocation) -> Result<Value, CtlError> {
+        if let Some(calls) = actl_flow::sequence::decode(call)? {
+            let mut started = false;
+            for (index, child) in calls.iter().enumerate() {
+                actl_core::stop::check_current()?;
+                if self.store.pause_requested() {
+                    return Err(CtlError::with_evidence(
+                        ErrorCode::NotActionable,
+                        "sequence paused",
+                        json!({"stage":"handoff","reason":"user_paused","action_started":started,"sequence_index":index}),
+                    ));
+                }
+                let result = self.execute_output(child);
+                actl_core::signal_session::flow_event(
+                    "workflow_sequence",
+                    json!({"index":index,"command":child.command,"ok":result.is_ok(),"error_code":result.as_ref().err().map(|error|error.code)}),
+                );
+                if let Err(error) = result {
+                    if self.store.pause_requested() && !self.stopped() {
+                        let uncertain = started
+                            || (!self.read_only(child)
+                                && error
+                                    .evidence
+                                    .as_ref()
+                                    .is_none_or(|e| e["action_started"] != false));
+                        return Err(CtlError::with_evidence(
+                            ErrorCode::NotActionable,
+                            "sequence paused",
+                            json!({"stage":"handoff","reason":"user_paused","action_started":uncertain,"sequence_index":index}),
+                        ));
+                    }
+                    return Err(actl_flow::sequence::failure(error, started, index));
+                }
+                started |= !self.read_only(child);
+            }
+            return Ok(json!({"executed":calls.len()}));
+        }
         actl_core::handoff::configure(self.plan.handoff.unwrap_or_default().approval);
         let command = parse(call)?;
         let _scope = matches!(command, Command::Wait { .. })
@@ -282,10 +389,20 @@ pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
     }
     let root = actl_core::state::SignalPaths::default().dir;
     match command {
-        FlowCommand::Validate { file, inputs } => {
+        FlowCommand::Validate {
+            file,
+            inputs,
+            emit_plan,
+        } => {
             let plan = load_plan(file, inputs)?;
             validate(&plan)?;
-            Ok(json!({"valid":true,"version":1,"name":plan.name,"steps":plan.steps.len()}))
+            let mut result =
+                json!({"valid":true,"version":1,"name":plan.name,"steps":plan.steps.len()});
+            if *emit_plan {
+                result["plan"] =
+                    serde_json::to_value(plan).map_err(|e| CtlError::internal(e.to_string()))?;
+            }
+            Ok(result)
         }
         FlowCommand::Status { id } => state(&Store::at(&root, id)?),
         FlowCommand::Pause { id } => {

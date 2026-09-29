@@ -162,3 +162,5 @@ actl-uia/bin/signal/handoff 的 unsafe 用于原生非激活提示窗口和低�
 显示 v5 强制新旧两端兼容；grant 只在显示进程内存，磁盘请求不是授权。
 
 window_ready 的原生激活使用 SetForegroundWindow 单次请求并核验实际前台；已在前台不重复请求。unsafe 仍限于 actl-uia，不注入 Alt、不放宽 Windows 前台限制，输入控件焦点仍由原护栏核验。
+
+应用验证迁移：verify-file/verify-owner/verify-closed 复用 Windows 自带 PowerShell 与 .NET ZIP/XML/CIM，通过固定内嵌只读脚本和 stdin JSON 调用；不接受用户代码或脚本文件。使用 std::process 与已有 serde_json，无新增依赖或 unsafe。后台辅助进程使用 CREATE_NO_WINDOW，最多 20 秒，仅超时终止本次只读辅助进程，不终止 GUI。

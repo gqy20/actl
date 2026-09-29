@@ -6,6 +6,7 @@
 //! `interact`(操作类)与 `query`(观察/编排类);本文件只做入口、分发与 envelope 落盘。
 
 mod cli;
+mod file_check;
 mod flow;
 mod interact;
 mod query;
@@ -140,6 +141,42 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             actl_uia::preview::show(app, &target, message, *duration).map(Into::into)
         }
         Command::Flow(command) => flow::dispatch(command).map(Into::into),
+        Command::VerifyClosed {
+            hwnd,
+            pid,
+            instance,
+        } => file_check::closed(hwnd, *pid, instance).map(Into::into),
+        Command::VerifyClipboard {
+            expected,
+            normalize_lines,
+        } => file_check::clipboard(expected, *normalize_lines).map(Into::into),
+        Command::VerifyOwner {
+            app,
+            program,
+            token,
+            instance,
+            hwnd,
+            pid,
+        } => file_check::owner(
+            app,
+            program,
+            token,
+            instance.as_deref(),
+            hwnd.as_deref(),
+            *pid,
+        )
+        .map(Into::into),
+        Command::VerifyRows {
+            app,
+            prefix,
+            expected,
+        } => file_check::rows(app, prefix, expected).map(Into::into),
+        Command::VerifyFile {
+            path,
+            kind,
+            expected,
+            subset,
+        } => file_check::verify(path, kind, expected, *subset).map(Into::into),
         Command::Commands => commands().map(Into::into),
         Command::Status => status().map(Into::into),
         Command::Desktop(DesktopCommand::ExecutionStatus) => {
@@ -415,6 +452,22 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             height,
         } => resize_window_cmd(pattern, *width, *height),
         Command::Verify {
+            value,
+            property,
+            expected,
+            normalize_lines,
+            app,
+            near,
+            ..
+        } if *normalize_lines => file_check::element_text(
+            value.as_deref().unwrap_or_default(),
+            expected.as_deref().unwrap_or_default(),
+            property.as_deref().unwrap_or("text"),
+            app.as_deref(),
+            near.as_deref(),
+        )
+        .map(Into::into),
+        Command::Verify {
             exists,
             value,
             property,
@@ -423,6 +476,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             checked,
             app,
             near,
+            ..
         } => verify_cmd(
             exists.as_deref(),
             value.as_deref(),

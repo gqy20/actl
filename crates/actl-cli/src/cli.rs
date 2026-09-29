@@ -98,6 +98,9 @@ pub(crate) enum FlowCommand {
         /// UTF-8 YAML/JSON string map for declared workflow inputs
         #[arg(long)]
         inputs: Option<String>,
+        /// Include the validated concrete plan for resource-preparation tools
+        #[arg(long)]
+        emit_plan: bool,
     },
     /// Run a validated workflow and save resumable state under a unique ID
     #[command(name = "flow-run")]
@@ -482,6 +485,59 @@ pub(crate) enum Command {
         height: i32,
     },
     /// Immediate assertion (unlike wait): exists / value / checked
+    VerifyFile {
+        #[arg(long)]
+        path: String,
+        #[arg(long, value_parser = ["text", "json", "docx", "xlsx"])]
+        kind: String,
+        /// Expected JSON value; text files use a JSON string
+        #[arg(long)]
+        expected: String,
+        /// Compare only declared object keys (array lengths remain exact)
+        #[arg(long)]
+        subset: bool,
+    },
+    /// Assert the exact named rows of a complete UIA snapshot
+    VerifyRows {
+        #[arg(long)]
+        app: String,
+        #[arg(long)]
+        prefix: String,
+        #[arg(long)]
+        expected: String,
+    },
+    /// Verify a unique native window belongs to the expected executable and task path
+    VerifyOwner {
+        #[arg(long)]
+        app: String,
+        #[arg(long)]
+        program: String,
+        #[arg(long)]
+        token: String,
+        #[arg(long)]
+        instance: Option<String>,
+        #[arg(long)]
+        hwnd: Option<String>,
+        #[arg(long)]
+        pid: Option<u32>,
+    },
+    /// Verify both the owned window and its original process instance have exited
+    VerifyClosed {
+        #[arg(long)]
+        hwnd: String,
+        #[arg(long)]
+        pid: u32,
+        #[arg(long)]
+        instance: String,
+    },
+    /// Assert complete clipboard text without changing it
+    VerifyClipboard {
+        #[arg(long)]
+        expected: String,
+        #[arg(long)]
+        normalize_lines: bool,
+    },
+    /// Immediate assertion (unlike wait): exists / value / checked
     Verify {
         /// Assert the element resolves
         #[arg(long, conflicts_with_all = ["value", "checked"])]
@@ -497,6 +553,9 @@ pub(crate) enum Command {
         /// Substring match instead of exact
         #[arg(long)]
         contains: bool,
+        /// Normalize CRLF/CR to LF and trim trailing LF for exact text assertions
+        #[arg(long, requires = "value", conflicts_with = "contains")]
+        normalize_lines: bool,
         /// Assert a toggle is On
         #[arg(long)]
         checked: Option<String>,
@@ -716,6 +775,11 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
         Command::KeyUp { .. } => "key-up",
         Command::ResizeWindow { .. } => "resize-window",
         Command::Verify { .. } => "verify",
+        Command::VerifyFile { .. } => "verify-file",
+        Command::VerifyRows { .. } => "verify-rows",
+        Command::VerifyOwner { .. } => "verify-owner",
+        Command::VerifyClosed { .. } => "verify-closed",
+        Command::VerifyClipboard { .. } => "verify-clipboard",
         Command::Extract { .. } => "extract",
         Command::Select { .. } => "select",
         Command::Toggle { .. } => "toggle",
@@ -736,7 +800,22 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
 fn after_help_for(name: &str) -> Option<&'static str> {
     Some(match name {
         "flow-validate" => {
-            "Example:\n  actl flow-validate --file task.yml\nOptional --inputs values.yml resolves declared whole-argument inputs before validating every step. outputs select typed read-only data via JSON Pointer; bind replaces a whole args entry by index. Resolved CLI arguments are revalidated before execution.\nErrors: PROTOCOL invalid YAML/command/policy | INTERNAL file error"
+            "Example:\n  actl flow-validate --file task.yml\nOptional --inputs values.yml resolves declared whole-argument inputs before validating every step. --emit-plan includes the concrete plan (and its input values). run.sequence groups up to 16 prevalidated calls with one result check. outputs select typed read-only data via JSON Pointer; bind replaces a whole args entry by index. Resolved CLI arguments are revalidated before execution.\nErrors: PROTOCOL invalid YAML/command/policy | INTERNAL file error"
+        }
+        "verify-file" => {
+            "Example:\n  actl verify-file --path report.json --kind json --expected '{}'\nReads text/JSON or OOXML via a fixed read-only Windows PowerShell inspector. Text normalizes CRLF to LF; docx returns text and bold; xlsx returns cell values/formulas from sheet1. Maximum input/output 4 MiB. No user scripts or Office automation. Known mismatches are re-read in a 5-second settle window; unknown read errors stop immediately.\nErrors: PROTOCOL invalid expectation | ASSERTION_FAILED content differs | NOT_ACTIONABLE unreadable/unsupported document | INTERNAL inspector failure"
+        }
+        "verify-rows" => {
+            "Example:\n  actl verify-rows --app Task --prefix item-row- --expected '[]'\nCompares sorted names of TreeItem rows with an automation-ID prefix; rejects truncated snapshots and a missing parent tree.\nErrors: PROTOCOL invalid expected string array or prefix | ASSERTION_FAILED rows differ | NOT_ACTIONABLE incomplete observation"
+        }
+        "verify-owner" => {
+            "Example:\n  actl verify-owner --app TaskMarker --program C:/Apps/editor.exe --token C:/Tasks/unique-profile\nRequires a unique visible native window, matching process executable and an absolute task path in its command line. Reports process creation time; optional --instance/--hwnd/--pid must all match. Read-only; does not close windows or prove process exit.\nErrors: PROTOCOL invalid task path | AMBIGUOUS windows | NOT_ACTIONABLE ownership unconfirmed"
+        }
+        "verify-closed" => {
+            "Example:\n  actl verify-closed --hwnd 123 --pid 456 --instance 2026-09-29T00:00:00Z\nReads native windows and process creation time. Window disappearance alone never proves closure. Known running state is re-read for up to a 5-second settle window.\nErrors: PROTOCOL invalid HWND | ASSERTION_FAILED original instance remains | NOT_ACTIONABLE process observation failed"
+        }
+        "verify-clipboard" => {
+            "Example:\n  actl verify-clipboard --expected 'Exact text' --normalize-lines\nRead-only exact text assertion. Optional normalization converts CRLF to LF and trims trailing LF.\nErrors: ASSERTION_FAILED text differs | NOT_ACTIONABLE unavailable clipboard | INTERNAL read failure"
         }
         "flow-run" => {
             "Example:\n  actl flow-run --file task.yml --id report-01 --paused\nOptional --inputs values.yml; unique ID; saves resolved immutable plan and durable state. Resume never rereads inputs. Physical actions retain explicit authorization.\nErrors: PROTOCOL invalid/reused ID | NOT_ACTIONABLE executor busy | ABORTED stop | INTERNAL storage"
@@ -871,7 +950,7 @@ Errors: NOT_FOUND / AMBIGUOUS | NOT_ACTIONABLE no clickable point or occluded"
             "Example:\n  actl resize-window 记事本 --width 800 --height 600\nErrors: NOT_FOUND / AMBIGUOUS window | NOT_ACTIONABLE no native handle"
         }
         "verify" => {
-            "Example:\n  actl verify --value id:CalculatorResults '56,877' --property name --contains --app 计算器\nImmediate assertion (vs wait): fails now, not later; failure carries expected/actual/target/channel. --property name|value|text selects an explicit channel; omitted uses Value then Text fallback.\nErrors: ASSERTION_FAILED | NOT_FOUND / AMBIGUOUS | PROTOCOL bad flags"
+            "Example:\n  actl verify --value id:CalculatorResults '56,877' --property name --contains --app 计算器\nImmediate assertion (vs wait): fails now, not later; failure carries expected/actual/target/channel. --normalize-lines compares complete text after CRLF/CR normalization and trimming trailing LF. --property name|value|text selects an explicit channel; omitted uses Value then Text fallback.\nErrors: ASSERTION_FAILED | NOT_FOUND / AMBIGUOUS | PROTOCOL bad flags"
         }
         "extract" => {
             "Example:\n  actl extract role:List --app 系统信息\nGrid rows first; tree fallback only when GridPattern is unsupported (fallback_reason: grid_pattern_unsupported). Empty cells and empty grids are preserved.\nErrors: NOT_FOUND / AMBIGUOUS | NOT_ACTIONABLE no rows, budget exceeded or table changed | INTERNAL/PERM_DENIED/STALE_REF observation failed"

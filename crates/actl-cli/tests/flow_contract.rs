@@ -3,9 +3,151 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 #[test]
+fn migrated_assertion_commands_have_a_stable_surface() {
+    let s = Sandbox::new();
+    let (code, result) = s.invoke(&["commands"]);
+    assert_eq!(code, 0);
+    let mut commands = serde_json::Map::new();
+    for command in result["data"]["commands"].as_array().unwrap() {
+        let name = command["name"].as_str().unwrap();
+        if [
+            "verify-file",
+            "verify-rows",
+            "verify-owner",
+            "verify-closed",
+            "verify-clipboard",
+        ]
+        .contains(&name)
+        {
+            commands.insert(
+                name.into(),
+                json!(
+                    command["args"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|arg| arg["name"].clone())
+                        .collect::<Vec<_>>()
+                ),
+            );
+        }
+    }
+    assert_eq!(
+        Value::Object(commands),
+        serde_json::from_str::<Value>(include_str!("golden/workflow_assertions.json")).unwrap()
+    );
+}
+
+#[test]
+fn office_inspector_reads_synthetic_packages_without_office() {
+    let s = Sandbox::new();
+    let helper =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scenarios/office-package.ps1");
+    let output=Command::new("pwsh").args(["-NoProfile","-NonInteractive","-Command", ". $env:ACTL_OFFICE_HELPER; New-OfficeSeed (Join-Path $env:ACTL_FIXTURE_ROOT 'test.docx') word; New-OfficeSeed (Join-Path $env:ACTL_FIXTURE_ROOT 'test.xlsx') excel"])
+        .env("ACTL_OFFICE_HELPER",helper).env("ACTL_FIXTURE_ROOT",&s.root).output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    for (file, kind, expected) in [
+        ("test.docx", "docx", r#"{"text":"ACTL seed","bold":false}"#),
+        (
+            "test.xlsx",
+            "xlsx",
+            r#"{"A1":{"value":"ACTL seed","formula":""}}"#,
+        ),
+    ] {
+        let path = s.root.join(file);
+        let (code, result) = s.invoke(&[
+            "verify-file",
+            "--path",
+            path.to_str().unwrap(),
+            "--kind",
+            kind,
+            "--expected",
+            expected,
+        ]);
+        assert_eq!(code, 0, "{result}");
+        std::fs::write(&path, "broken package").unwrap();
+        let (code, result) = s.invoke(&[
+            "verify-file",
+            "--path",
+            path.to_str().unwrap(),
+            "--kind",
+            kind,
+            "--expected",
+            expected,
+        ]);
+        assert_ne!(code, 0);
+        assert_eq!(result["error"]["code"], "NOT_ACTIONABLE");
+    }
+}
+
+#[test]
+fn sequences_preflight_every_child_and_never_allow_management() {
+    let s = Sandbox::new();
+    for child in ["execution-recover", "key-down", "batch", "flow-resume"] {
+        let file=s.file(&format!("version: 1\nname: group\nsteps:\n - id: edit\n   title: Edit\n   run:\n     sequence:\n       - {{command: status}}\n       - {{command: {child}}}\n   verify: {{command: verify, args: [--exists, 'id:edit']}}\n"));
+        assert_ne!(
+            s.invoke(&["flow-validate", "--file", &file]).0,
+            0,
+            "{child}"
+        );
+    }
+}
+
+#[test]
+fn file_check_contract_and_mismatch_are_read_only() {
+    let s = Sandbox::new();
+    let path = s.root.join("data.json");
+    std::fs::write(&path, "{\"value\":\"saved\",\"extra\":1}").unwrap();
+    let args = [
+        "verify-file",
+        "--path",
+        path.to_str().unwrap(),
+        "--kind",
+        "json",
+        "--expected",
+        "{\"value\":\"saved\"}",
+        "--subset",
+    ];
+    let (code, mut result) = s.invoke(&args);
+    assert_eq!(code, 0, "{result}");
+    result.as_object_mut().unwrap().remove("duration_ms");
+    assert_eq!(
+        result,
+        serde_json::from_str::<Value>(include_str!("golden/verify_file.json")).unwrap()
+    );
+    let (code, result) = s.invoke(&args[..args.len() - 1]);
+    assert_ne!(code, 0);
+    assert_eq!(result["error"]["code"], "ASSERTION_FAILED");
+    assert_eq!(
+        std::fs::read_to_string(path).unwrap(),
+        "{\"value\":\"saved\",\"extra\":1}"
+    );
+}
+
+#[test]
 fn reusable_workflows_preflight_without_desktop_actions() {
     let s = Sandbox::new();
     for (name, values) in [
+        (
+            "word-edit",
+            "program: 'C:/test/word.exe'\nfile: 'C:/test/task.docx'\napp: unique",
+        ),
+        (
+            "excel-table",
+            "program: 'C:/test/excel.exe'\nfile: 'C:/test/task.xlsx'\napp: unique",
+        ),
+        (
+            "vscode-edit",
+            "program: 'C:/test/Code.exe'\nprofile: 'C:/test/profile'\nfile: 'C:/test/task.txt'\napp: unique\neditor: 'id:editor'\nsecond: 'C:/test/second.txt'\nsecond_editor: 'id:second'",
+        ),
+        (
+            "zotero-search",
+            "program: 'C:/test/zotero.exe'\nprofile: 'C:/test/profile'\ndata: 'C:/test/data'\napp: unique\nexport: 'C:/test/export.json'",
+        ),
         (
             "vscode-resume",
             "program: 'C:/test/Code.exe'\nprofile: 'C:/test/profile'\nfile: 'C:/test/unique.txt'\napp: unique\ntarget: 'id:editor'",
@@ -29,8 +171,27 @@ fn reusable_workflows_preflight_without_desktop_actions() {
             template.to_str().unwrap(),
             "--inputs",
             path.to_str().unwrap(),
+            "--emit-plan",
         ]);
         assert_eq!(code, 0, "{name}: {result}");
+        let plan: actl_flow::Plan = serde_json::from_value(result["data"]["plan"].clone()).unwrap();
+        if matches!(name, "word-edit" | "excel-table") {
+            for step in &plan.steps {
+                let calls = actl_flow::sequence::decode(&step.run)
+                    .unwrap()
+                    .unwrap_or_else(|| vec![step.run.clone()]);
+                for call in calls {
+                    assert_ne!(call.command, "paste", "{name}: use a targeted input");
+                    if call.command == "press" {
+                        assert!(
+                            call.args.iter().any(|arg| arg == "--target"),
+                            "{name}: {} lacks focus assertion",
+                            step.id
+                        );
+                    }
+                }
+            }
+        }
     }
 }
 

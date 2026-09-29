@@ -69,36 +69,47 @@ pub fn resolve(text: &str, inputs: Option<&str>) -> Result<super::Plan, CtlError
         }
         values.insert(name, value);
     }
-    if let Some(steps) = raw
-        .get_mut("steps")
-        .and_then(serde_json::Value::as_array_mut)
-    {
-        for (i, step) in steps.iter_mut().enumerate() {
-            for phase in ["run", "before", "verify", "resume_check"] {
-                if let Some(args) = step
-                    .get_mut(phase)
-                    .and_then(|v| v.get_mut("args"))
-                    .and_then(serde_json::Value::as_array_mut)
-                {
-                    for (j, arg) in args.iter_mut().enumerate() {
-                        if let Some(object) = arg.as_object() {
-                            let field = format!("steps[{i}].{phase}.args[{j}]");
-                            let name = object
-                                .get("input")
-                                .and_then(serde_json::Value::as_str)
-                                .filter(|_| object.len() == 1)
-                                .ok_or_else(|| {
-                                    super::schema::error(&field, None, "expected {input: name}")
-                                })?;
-                            let value = values.get(name).ok_or_else(|| {
-                                super::schema::error(&field, None, "undeclared input reference")
+    resolve_arguments(&mut raw, &values)?;
+    crate::sequence::expand(&mut raw)?;
+    super::parse(&serde_json::to_string(&raw).map_err(|e| CtlError::internal(e.to_string()))?)
+}
+
+fn resolve_arguments(
+    raw: &mut serde_json::Value,
+    values: &BTreeMap<String, String>,
+) -> Result<(), CtlError> {
+    match raw {
+        serde_json::Value::Object(object) => {
+            if let Some(args) = object
+                .get_mut("args")
+                .and_then(serde_json::Value::as_array_mut)
+            {
+                for arg in args {
+                    if let Some(binding) = arg.as_object() {
+                        let name = binding
+                            .get("input")
+                            .and_then(serde_json::Value::as_str)
+                            .filter(|_| binding.len() == 1)
+                            .ok_or_else(|| {
+                                super::schema::error("args", None, "expected {input: name}")
                             })?;
-                            *arg = serde_json::Value::String(value.clone());
-                        }
+                        let value = values.get(name).ok_or_else(|| {
+                            super::schema::error("args", None, "undeclared input reference")
+                        })?;
+                        *arg = serde_json::Value::String(value.clone());
                     }
                 }
             }
+            for child in object.values_mut() {
+                resolve_arguments(child, values)?;
+            }
         }
+        serde_json::Value::Array(items) => {
+            for child in items {
+                resolve_arguments(child, values)?;
+            }
+        }
+        _ => {}
     }
-    super::parse(&serde_json::to_string(&raw).map_err(|e| CtlError::internal(e.to_string()))?)
+    Ok(())
 }

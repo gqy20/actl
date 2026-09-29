@@ -5,6 +5,7 @@ pub mod freshness;
 pub mod inputs;
 pub mod recovery;
 mod schema;
+pub mod sequence;
 pub mod store;
 pub mod task_config;
 use actl_core::CtlError;
@@ -69,6 +70,7 @@ pub fn failure_evidence(policy: EvidencePolicy, error: &CtlError) -> Option<serd
         "native_code",
         "delivered_before_error",
         "failed_segment_size",
+        "sequence_index",
     ] {
         if let Some(v) = source.get(key).filter(|v| v.is_i64() || v.is_u64()) {
             value[key] = v.clone();

@@ -91,7 +91,7 @@
             "command": {
               "enum": [
                 "verify",
-                "wait"
+                "wait", "verify-file", "verify-rows", "verify-owner", "verify-closed", "verify-clipboard"
               ]
             }
           }
@@ -123,7 +123,11 @@
           "description": "Explicitly persist selected read-only run results. Contents are included in flow-status regardless of error evidence policy."
         },
         "run": {
-          "$ref": "#/$defs/invocation"
+          "oneOf": [
+            {"$ref": "#/$defs/invocation"},
+            {"type": "object", "additionalProperties": false, "required": ["sequence"],
+             "properties": {"sequence": {"type": "array", "minItems": 1, "maxItems": 16, "items": {"$ref": "#/$defs/invocation"}}}}
+          ]
         },
         "before": {
           "anyOf": [

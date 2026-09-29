@@ -1,0 +1,765 @@
+{
+  "version": 1,
+  "name": "zotero-search",
+  "handoff": {
+    "approval": "once_per_run"
+  },
+  "inputs": {
+    "program": {},
+    "profile": {},
+    "data": {},
+    "app": {},
+    "export": {}
+  },
+  "steps": [
+    {
+      "title": "Open isolated Zotero profile",
+      "run": {
+        "command": "launch",
+        "args": [
+          {
+            "input": "program"
+          },
+          "-no-remote",
+          "-profile",
+          {
+            "input": "profile"
+          },
+          "-datadir",
+          {
+            "input": "data"
+          }
+        ]
+      },
+      "verify": {
+        "command": "wait",
+        "args": [
+          "--element",
+          "uia:{\"match\":{\"name\":\"快速搜索\",\"role\":\"Edit\"}}",
+          "--app",
+          {
+            "input": "app"
+          },
+          "--timeout",
+          "20000"
+        ]
+      },
+      "id": "open"
+    },
+    {
+      "run": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      },
+      "id": "ownership",
+      "title": "Verify isolated task process",
+      "outputs": {
+        "pid": {
+          "type": "number",
+          "pointer": "/pid"
+        },
+        "hwnd": {
+          "type": "number",
+          "pointer": "/hwnd"
+        },
+        "start": {
+          "type": "string",
+          "pointer": "/process_start"
+        }
+      }
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "set-clipboard",
+            "args": [
+              "TY  - JOUR\r\nTI  - ACTL Alpha 中文测试\r\nAU  - Test, Alice\r\nPY  - 2026\r\nER  - \r\n\r\nTY  - JOUR\r\nTI  - ACTL Beta unrelated\r\nAU  - Test, Bob\r\nPY  - 2025\r\nER  - \r\n"
+            ]
+          },
+          {
+            "command": "click",
+            "args": [
+              "id:fileMenu",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "click",
+            "args": [
+              "name:从剪贴板导入",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          }
+        ]
+      },
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      },
+      "title": "Import synthetic records and verify exact rows",
+      "before": {
+        "command": "verify-rows",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--prefix",
+          "item-tree-main-default-row-",
+          "--expected",
+          "[]"
+        ]
+      },
+      "verify": {
+        "command": "verify-rows",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--prefix",
+          "item-tree-main-default-row-",
+          "--expected",
+          "[\"ACTL Alpha 中文测试. 期刊文章. Test\",\"ACTL Beta unrelated. 期刊文章. Test\"]"
+        ]
+      },
+      "id": "import"
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+a",
+              "--target",
+              "uia:{\"match\":{\"name\":\"快速搜索\",\"role\":\"Edit\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "type",
+            "args": [
+              "uia:{\"match\":{\"name\":\"快速搜索\",\"role\":\"Edit\"}}",
+              "Alpha",
+              "--paste",
+              "--verify-value",
+              "Alpha",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          }
+        ]
+      },
+      "title": "Search 1 and verify exact rows",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-rows",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--prefix",
+          "item-tree-main-default-row-",
+          "--expected",
+          "[\"ACTL Alpha 中文测试. 期刊文章. Test\"]"
+        ]
+      },
+      "id": "search-1",
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      }
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+a",
+              "--target",
+              "uia:{\"match\":{\"name\":\"快速搜索\",\"role\":\"Edit\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "type",
+            "args": [
+              "uia:{\"match\":{\"name\":\"快速搜索\",\"role\":\"Edit\"}}",
+              "中文测试",
+              "--paste",
+              "--verify-value",
+              "中文测试",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          }
+        ]
+      },
+      "title": "Search 2 and verify exact rows",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-rows",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--prefix",
+          "item-tree-main-default-row-",
+          "--expected",
+          "[\"ACTL Alpha 中文测试. 期刊文章. Test\"]"
+        ]
+      },
+      "id": "search-2",
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      }
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+a",
+              "--target",
+              "uia:{\"match\":{\"name\":\"快速搜索\",\"role\":\"Edit\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "type",
+            "args": [
+              "uia:{\"match\":{\"name\":\"快速搜索\",\"role\":\"Edit\"}}",
+              "ACTL_missing_987654",
+              "--paste",
+              "--verify-value",
+              "ACTL_missing_987654",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          }
+        ]
+      },
+      "title": "Search 3 and verify exact rows",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-rows",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--prefix",
+          "item-tree-main-default-row-",
+          "--expected",
+          "[]"
+        ]
+      },
+      "id": "search-3",
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      }
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+a",
+              "--target",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"快速搜索\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "type",
+            "args": [
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"快速搜索\"}}",
+              "Alpha",
+              "--paste",
+              "--verify-value",
+              "Alpha",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "verify-rows",
+            "args": [
+              "--app",
+              {
+                "input": "app"
+              },
+              "--prefix",
+              "item-tree-main-default-row-",
+              "--expected",
+              "[\"ACTL Alpha 中文测试. 期刊文章. Test\"]"
+            ]
+          },
+          {
+            "command": "click",
+            "args": [
+              "id:item-tree-main-default-row-0",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "type",
+            "args": [
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"出版物\"}}",
+              "ACTL Journal 2026",
+              "--paste",
+              "--verify-value",
+              "ACTL Journal 2026",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "tab",
+              "--target",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"出版物\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          }
+        ]
+      },
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      },
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify",
+        "args": [
+          "--value",
+          "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"出版物\"}}",
+          "ACTL Journal 2026",
+          "--property",
+          "text",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      },
+      "id": "publication",
+      "title": "Edit isolated record publication"
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "right-click",
+            "args": [
+              "id:item-tree-main-default-row-0",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "click",
+            "args": [
+              "name:导出条目",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "wait",
+            "args": [
+              "--element",
+              "id:format-menu",
+              "--app",
+              "导出",
+              "--timeout",
+              "10000"
+            ]
+          },
+          {
+            "args": [
+              "--app",
+              "导出",
+              "--program",
+              {
+                "input": "program"
+              },
+              "--token",
+              {
+                "input": "profile"
+              }
+            ],
+            "command": "verify-owner"
+          },
+          {
+            "command": "click",
+            "args": [
+              "id:format-menu",
+              "--app",
+              "导出"
+            ]
+          },
+          {
+            "command": "click",
+            "args": [
+              "name:CSL JSON",
+              "--app",
+              "导出"
+            ]
+          },
+          {
+            "command": "click",
+            "args": [
+              "name:OK",
+              "--app",
+              "导出"
+            ]
+          },
+          {
+            "command": "wait",
+            "args": [
+              "--element",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"文件名:\"}}",
+              "--app",
+              "导出",
+              "--timeout",
+              "10000"
+            ]
+          },
+          {
+            "args": [
+              "--app",
+              "导出",
+              "--program",
+              {
+                "input": "program"
+              },
+              "--token",
+              {
+                "input": "profile"
+              }
+            ],
+            "command": "verify-owner"
+          },
+          {
+            "command": "set-value",
+            "args": [
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"文件名:\"}}",
+              {
+                "input": "export"
+              },
+              "--app",
+              "导出"
+            ]
+          },
+          {
+            "command": "click",
+            "args": [
+              "name:保存(S)",
+              "--app",
+              "导出"
+            ]
+          }
+        ]
+      },
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      },
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "export"
+          },
+          "--kind",
+          "json",
+          "--expected",
+          "[{\"title\":\"ACTL Alpha 中文测试\",\"container-title\":\"ACTL Journal 2026\",\"author\":[{\"family\":\"Test\"}]}]",
+          "--subset"
+        ]
+      },
+      "id": "export",
+      "title": "Export record and verify JSON content"
+    },
+    {
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          },
+          "--instance",
+          "pending",
+          "--hwnd",
+          "1",
+          "--pid",
+          "1"
+        ],
+        "bind": {
+          "7": "ownership.start",
+          "9": "ownership.hwnd",
+          "11": "ownership.pid"
+        }
+      },
+      "verify": {
+        "command": "verify-closed",
+        "args": [
+          "--hwnd",
+          "1",
+          "--pid",
+          "1",
+          "--instance",
+          "pending"
+        ],
+        "bind": {
+          "3": "ownership.pid",
+          "5": "ownership.start",
+          "1": "ownership.hwnd"
+        }
+      },
+      "title": "Close verified isolated Zotero process",
+      "run": {
+        "command": "close-window",
+        "args": [
+          "--hwnd",
+          "1"
+        ],
+        "bind": {
+          "1": "ownership.hwnd"
+        }
+      },
+      "id": "close"
+    }
+  ]
+}

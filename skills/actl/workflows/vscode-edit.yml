@@ -1,0 +1,1719 @@
+{
+  "version": 1,
+  "name": "vscode-edit",
+  "handoff": {
+    "approval": "once_per_run"
+  },
+  "inputs": {
+    "program": {},
+    "profile": {},
+    "file": {},
+    "app": {},
+    "editor": {},
+    "second": {},
+    "second_editor": {}
+  },
+  "steps": [
+    {
+      "title": "Open isolated editor",
+      "run": {
+        "command": "launch",
+        "args": [
+          {
+            "input": "program"
+          },
+          "--new-window",
+          "--disable-extensions",
+          "--skip-welcome",
+          "--skip-release-notes",
+          "--force-renderer-accessibility",
+          "--user-data-dir",
+          {
+            "input": "profile"
+          },
+          {
+            "input": "file"
+          }
+        ]
+      },
+      "verify": {
+        "command": "wait",
+        "args": [
+          "--element",
+          {
+            "input": "editor"
+          },
+          "--app",
+          {
+            "input": "app"
+          },
+          "--timeout",
+          "20000"
+        ]
+      },
+      "id": "open"
+    },
+    {
+      "run": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      },
+      "id": "ownership",
+      "title": "Verify isolated task process",
+      "outputs": {
+        "pid": {
+          "type": "number",
+          "pointer": "/pid"
+        },
+        "hwnd": {
+          "type": "number",
+          "pointer": "/hwnd"
+        },
+        "start": {
+          "type": "string",
+          "pointer": "/process_start"
+        }
+      }
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+home",
+              "--target",
+              {
+                "input": "editor"
+              },
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "type",
+            "args": [
+              {
+                "input": "editor"
+              },
+              "Round 1 中文 789\n",
+              "--paste",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+s",
+              "--target",
+              {
+                "input": "editor"
+              },
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          }
+        ]
+      },
+      "title": "insert 1 and verify full file",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "file"
+          },
+          "--kind",
+          "text",
+          "--expected",
+          "\"Round 1 中文 789\\nOriginal 中文 baseline 123\\nSecond line\\n\"",
+          "--subset"
+        ]
+      },
+      "id": "insert-1",
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      }
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+z",
+              "--target",
+              {
+                "input": "editor"
+              },
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+s",
+              "--target",
+              {
+                "input": "editor"
+              },
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          }
+        ]
+      },
+      "title": "undo 1 and verify full file",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "file"
+          },
+          "--kind",
+          "text",
+          "--expected",
+          "\"Original 中文 baseline 123\\nSecond line\\n\"",
+          "--subset"
+        ]
+      },
+      "id": "undo-1",
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      }
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+y",
+              "--target",
+              {
+                "input": "editor"
+              },
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+s",
+              "--target",
+              {
+                "input": "editor"
+              },
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          }
+        ]
+      },
+      "title": "redo 1 and verify full file",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "file"
+          },
+          "--kind",
+          "text",
+          "--expected",
+          "\"Round 1 中文 789\\nOriginal 中文 baseline 123\\nSecond line\\n\"",
+          "--subset"
+        ]
+      },
+      "id": "redo-1",
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      }
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+home",
+              "--target",
+              {
+                "input": "editor"
+              },
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "type",
+            "args": [
+              {
+                "input": "editor"
+              },
+              "Round 2 spaces & symbols [] {}\n",
+              "--paste",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+s",
+              "--target",
+              {
+                "input": "editor"
+              },
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          }
+        ]
+      },
+      "title": "insert 2 and verify full file",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "file"
+          },
+          "--kind",
+          "text",
+          "--expected",
+          "\"Round 2 spaces & symbols [] {}\\nRound 1 中文 789\\nOriginal 中文 baseline 123\\nSecond line\\n\"",
+          "--subset"
+        ]
+      },
+      "id": "insert-2",
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      }
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+z",
+              "--target",
+              {
+                "input": "editor"
+              },
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+s",
+              "--target",
+              {
+                "input": "editor"
+              },
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          }
+        ]
+      },
+      "title": "undo 2 and verify full file",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "file"
+          },
+          "--kind",
+          "text",
+          "--expected",
+          "\"Round 1 中文 789\\nOriginal 中文 baseline 123\\nSecond line\\n\"",
+          "--subset"
+        ]
+      },
+      "id": "undo-2",
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      }
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+y",
+              "--target",
+              {
+                "input": "editor"
+              },
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+s",
+              "--target",
+              {
+                "input": "editor"
+              },
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          }
+        ]
+      },
+      "title": "redo 2 and verify full file",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "file"
+          },
+          "--kind",
+          "text",
+          "--expected",
+          "\"Round 2 spaces & symbols [] {}\\nRound 1 中文 789\\nOriginal 中文 baseline 123\\nSecond line\\n\"",
+          "--subset"
+        ]
+      },
+      "id": "redo-2",
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      }
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+home",
+              "--target",
+              {
+                "input": "editor"
+              },
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "type",
+            "args": [
+              {
+                "input": "editor"
+              },
+              "Round 3 多行\nUnicode Ω 12345\n",
+              "--paste",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+s",
+              "--target",
+              {
+                "input": "editor"
+              },
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          }
+        ]
+      },
+      "title": "insert 3 and verify full file",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "file"
+          },
+          "--kind",
+          "text",
+          "--expected",
+          "\"Round 3 多行\\nUnicode Ω 12345\\nRound 2 spaces & symbols [] {}\\nRound 1 中文 789\\nOriginal 中文 baseline 123\\nSecond line\\n\"",
+          "--subset"
+        ]
+      },
+      "id": "insert-3",
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      }
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+z",
+              "--target",
+              {
+                "input": "editor"
+              },
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+s",
+              "--target",
+              {
+                "input": "editor"
+              },
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          }
+        ]
+      },
+      "title": "undo 3 and verify full file",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "file"
+          },
+          "--kind",
+          "text",
+          "--expected",
+          "\"Round 2 spaces & symbols [] {}\\nRound 1 中文 789\\nOriginal 中文 baseline 123\\nSecond line\\n\"",
+          "--subset"
+        ]
+      },
+      "id": "undo-3",
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      }
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+y",
+              "--target",
+              {
+                "input": "editor"
+              },
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+s",
+              "--target",
+              {
+                "input": "editor"
+              },
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          }
+        ]
+      },
+      "title": "redo 3 and verify full file",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "file"
+          },
+          "--kind",
+          "text",
+          "--expected",
+          "\"Round 3 多行\\nUnicode Ω 12345\\nRound 2 spaces & symbols [] {}\\nRound 1 中文 789\\nOriginal 中文 baseline 123\\nSecond line\\n\"",
+          "--subset"
+        ]
+      },
+      "id": "redo-3",
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      }
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+a",
+              "--target",
+              {
+                "input": "editor"
+              },
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "type",
+            "args": [
+              {
+                "input": "editor"
+              },
+              "Replacement 中文 final\nNumber 123456789\n",
+              "--paste",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+s",
+              "--target",
+              {
+                "input": "editor"
+              },
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          }
+        ]
+      },
+      "title": "Replace entire document and verify file",
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "file"
+          },
+          "--kind",
+          "text",
+          "--expected",
+          "\"Replacement 中文 final\\nNumber 123456789\\n\"",
+          "--subset"
+        ]
+      },
+      "id": "replace",
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      }
+    },
+    {
+      "run": {
+        "command": "close-window",
+        "args": [
+          "--hwnd",
+          "1"
+        ],
+        "bind": {
+          "1": "ownership.hwnd"
+        }
+      },
+      "id": "close-before-reopen",
+      "verify": {
+        "command": "verify-closed",
+        "args": [
+          "--hwnd",
+          "1",
+          "--pid",
+          "1",
+          "--instance",
+          "pending"
+        ],
+        "bind": {
+          "5": "ownership.start",
+          "1": "ownership.hwnd",
+          "3": "ownership.pid"
+        }
+      },
+      "before": {
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          },
+          "--instance",
+          "pending",
+          "--hwnd",
+          "1",
+          "--pid",
+          "1"
+        ],
+        "command": "verify-owner",
+        "bind": {
+          "7": "ownership.start",
+          "9": "ownership.hwnd",
+          "11": "ownership.pid"
+        }
+      },
+      "title": "Close only the verified task process"
+    },
+    {
+      "title": "Reopen the saved task file",
+      "run": {
+        "command": "launch",
+        "args": [
+          {
+            "input": "program"
+          },
+          "--new-window",
+          "--disable-extensions",
+          "--skip-welcome",
+          "--skip-release-notes",
+          "--force-renderer-accessibility",
+          "--user-data-dir",
+          {
+            "input": "profile"
+          },
+          {
+            "input": "file"
+          }
+        ]
+      },
+      "verify": {
+        "command": "wait",
+        "args": [
+          "--element",
+          {
+            "input": "editor"
+          },
+          "--app",
+          {
+            "input": "app"
+          },
+          "--timeout",
+          "20000"
+        ]
+      },
+      "id": "reopen"
+    },
+    {
+      "run": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      },
+      "id": "reopened-owner",
+      "outputs": {
+        "pid": {
+          "type": "number",
+          "pointer": "/pid"
+        },
+        "hwnd": {
+          "type": "number",
+          "pointer": "/hwnd"
+        },
+        "start": {
+          "type": "string",
+          "pointer": "/process_start"
+        }
+      },
+      "title": "Verify reopened process identity"
+    },
+    {
+      "run": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "file"
+          },
+          "--kind",
+          "text",
+          "--expected",
+          "\"Replacement 中文 final\\nNumber 123456789\\n\"",
+          "--subset"
+        ]
+      },
+      "id": "reopened-content",
+      "title": "Verify complete saved content after reopen"
+    },
+    {
+      "title": "Verify reopened editor text",
+      "run": {
+        "command": "verify",
+        "args": [
+          "--value",
+          {
+            "input": "editor"
+          },
+          "Replacement 中文 final\nNumber 123456789\n",
+          "--property",
+          "text",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      },
+      "id": "reopened-uia"
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "f1",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "set-value",
+            "args": [
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"键入要运行的命令的名称。\"}}",
+              ">转到行",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "click",
+            "args": [
+              "uia:{\"match\":{\"role\":\"ListItem\",\"name_contains\":\"转到行/列...,\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "type",
+            "args": [
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"转到行。\"}}",
+              "2",
+              "--paste",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "enter",
+              "--target",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"转到行。\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "home",
+              "--target",
+              {
+                "input": "editor"
+              },
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "type",
+            "args": [
+              {
+                "input": "editor"
+              },
+              "GOTO-",
+              "--paste",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+s",
+              "--target",
+              {
+                "input": "editor"
+              },
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          }
+        ]
+      },
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      },
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "file"
+          },
+          "--kind",
+          "text",
+          "--expected",
+          "\"Replacement 中文 final\\nGOTO-Number 123456789\\n\""
+        ]
+      },
+      "id": "goto-line",
+      "title": "Go to line and verify inserted text"
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "ctrl+h",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "set-value",
+            "args": [
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"查找\"}}",
+              "123456789",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "set-value",
+            "args": [
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"替换\"}}",
+              "987654321",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "click",
+            "args": [
+              "name:全部替换 (Ctrl+Alt+Enter)",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "click",
+            "args": [
+              "name:关闭 (Escape)",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "ctrl+s",
+              "--target",
+              {
+                "input": "editor"
+              },
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          }
+        ]
+      },
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      },
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify-file",
+        "args": [
+          "--path",
+          {
+            "input": "file"
+          },
+          "--kind",
+          "text",
+          "--expected",
+          "\"Replacement 中文 final\\nGOTO-Number 987654321\\n\""
+        ]
+      },
+      "id": "find-replace",
+      "title": "Replace matches and verify complete saved text"
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "f1",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "set-value",
+            "args": [
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"键入要运行的命令的名称。\"}}",
+              ">转到文件",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "click",
+            "args": [
+              "uia:{\"match\":{\"role\":\"ListItem\",\"name_contains\":\"转到文件...,\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "type",
+            "args": [
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"按名称搜索文件\"}}",
+              {
+                "input": "second"
+              },
+              "--paste",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "enter",
+              "--target",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"按名称搜索文件\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          }
+        ]
+      },
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      },
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify",
+        "args": [
+          "--value",
+          {
+            "input": "second_editor"
+          },
+          "Second owned file\n",
+          "--property",
+          "text",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      },
+      "id": "quick-open-second",
+      "title": "Open second and verify full editor text"
+    },
+    {
+      "run": {
+        "sequence": [
+          {
+            "command": "press",
+            "args": [
+              "f1",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "set-value",
+            "args": [
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"键入要运行的命令的名称。\"}}",
+              ">转到文件",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "click",
+            "args": [
+              "uia:{\"match\":{\"role\":\"ListItem\",\"name_contains\":\"转到文件...,\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "type",
+            "args": [
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"按名称搜索文件\"}}",
+              {
+                "input": "file"
+              },
+              "--paste",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "press",
+            "args": [
+              "enter",
+              "--target",
+              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"按名称搜索文件\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          }
+        ]
+      },
+      "before": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      },
+      "resume_check": {
+        "command": "verify-owner",
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          }
+        ]
+      },
+      "verify": {
+        "command": "verify",
+        "args": [
+          "--value",
+          {
+            "input": "editor"
+          },
+          "Replacement 中文 final\nGOTO-Number 987654321\n",
+          "--property",
+          "text",
+          "--app",
+          {
+            "input": "app"
+          }
+        ]
+      },
+      "id": "quick-open-file",
+      "title": "Open file and verify full editor text"
+    },
+    {
+      "run": {
+        "command": "close-window",
+        "args": [
+          "--hwnd",
+          "1"
+        ],
+        "bind": {
+          "1": "reopened-owner.hwnd"
+        }
+      },
+      "id": "close",
+      "verify": {
+        "command": "verify-closed",
+        "args": [
+          "--hwnd",
+          "1",
+          "--pid",
+          "1",
+          "--instance",
+          "pending"
+        ],
+        "bind": {
+          "5": "reopened-owner.start",
+          "1": "reopened-owner.hwnd",
+          "3": "reopened-owner.pid"
+        }
+      },
+      "before": {
+        "args": [
+          "--app",
+          {
+            "input": "app"
+          },
+          "--program",
+          {
+            "input": "program"
+          },
+          "--token",
+          {
+            "input": "profile"
+          },
+          "--instance",
+          "pending",
+          "--hwnd",
+          "1",
+          "--pid",
+          "1"
+        ],
+        "command": "verify-owner",
+        "bind": {
+          "7": "reopened-owner.start",
+          "9": "reopened-owner.hwnd",
+          "11": "reopened-owner.pid"
+        }
+      },
+      "title": "Close only the verified task process"
+    }
+  ]
+}
