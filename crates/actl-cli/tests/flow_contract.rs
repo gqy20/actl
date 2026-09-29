@@ -323,7 +323,8 @@ impl Sandbox {
         cmd.env("LOCALAPPDATA", &self.root)
             .env_remove("ACTL_FLOW_REQUEST_SOURCE")
             .env_remove("ACTL_FLOW_REQUEST_ID")
-            .env_remove("ACTL_TASK_ID");
+            .env_remove("ACTL_TASK_ID")
+            .env_remove("ACTL_TASK_CONFIG");
         cmd
     }
     fn invoke(&self, args: &[&str]) -> (i32, Value) {
