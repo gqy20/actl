@@ -14,9 +14,10 @@ use std::sync::OnceLock;
 
 pub const WIDTH: i32 = 280;
 pub const HEIGHT: i32 = 34;
-/// 展开态高度:第一行锚点不变,第二行三列栅格(y 34-62)。
+/// 展开态:宽度 1.5 倍(信息更清晰)、高度两行;第二行显示最近工作流步骤链。
+pub const WIDTH_EXT: i32 = 420;
 pub const HEIGHT_EXT: i32 = 62;
-/// 展开箭头固定锚点(DIP):效果图标(≤235)与按钮(250)之间的槽位。
+/// 展开箭头固定锚点(DIP,收起态):效果图标与按钮之间的槽位;展开态右缘锚定随宽度。
 pub const CHEVRON_X: i32 = 234;
 /// 悬浮槽位(锚点即命中区;hover 卡内容按槽位由 shell 提供)。
 pub const HOVER_NONE: u8 = 0;
@@ -24,15 +25,28 @@ pub const HOVER_BUTTON: u8 = 1;
 pub const HOVER_CHEVRON: u8 = 2;
 pub const HOVER_DOT: u8 = 3;
 pub const HOVER_BODY: u8 = 4;
-/// 展开态第二行三列(列起点 31/155/208)。
-pub const HOVER_L2C1: u8 = 5;
-pub const HOVER_L2C2: u8 = 6;
-pub const HOVER_L2C3: u8 = 7;
 /// 预授权描边色(青):常驻信任的可见性补偿,文字版保留在窗口标题里。
 const STROKE_PREAUTH: u32 = 0x5FC4D4;
 static PREAUTH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 pub(super) fn set_preauth(on: bool) {
     PREAUTH.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+/// 最近绑定工作流的步骤链(展开态第二行):id + 状态;空 = 无流程,回落最近调用摘要。
+static STEPS: std::sync::Mutex<Vec<(String, String)>> = std::sync::Mutex::new(Vec::new());
+pub(super) fn set_steps(steps: Vec<(String, String)>) {
+    if let Ok(mut slot) = STEPS.lock() {
+        *slot = steps;
+    }
+}
+/// 步骤状态 → 链上字形(完成勾、进行/待核对三角、失败叉、待执行圈、跳过菱形)。
+fn step_glyph(status: &str) -> &'static str {
+    match status {
+        "completed" => "✓",
+        "running" | "verifying" | "uncertain" | "needs_review" => "▸",
+        "failed" => "✕",
+        "pending" => "○",
+        _ => "◇",
+    }
 }
 pub fn pixels(value: i32, dpi: u32) -> i32 {
     ((i64::from(value) * i64::from(dpi.max(96)) + 48) / 96) as i32
@@ -264,7 +278,8 @@ unsafe fn raster(view: &View, hover: u8, dpi: u32, expanded: bool) -> Result<Vec
     let _com = ComScope;
     let wic: IWICImagingFactory =
         CoCreateInstance(&CLSID_WICImagingFactory, None, CLSCTX_INPROC_SERVER)?;
-    let width = pixels(WIDTH, dpi) as u32;
+    let layout_w = if expanded { WIDTH_EXT } else { WIDTH };
+    let width = pixels(layout_w, dpi) as u32;
     let layout_h = if expanded { HEIGHT_EXT } else { HEIGHT };
     let height = pixels(layout_h, dpi) as u32;
     let bitmap = wic.CreateBitmap(
@@ -296,7 +311,8 @@ unsafe fn raster(view: &View, hover: u8, dpi: u32, expanded: bool) -> Result<Vec
     target.BeginDraw();
     target.Clear(Some(&D2D1_COLOR_F::default()));
     let h = layout_h as f32;
-    target.FillRoundedRectangle(&rounded(0., 0., WIDTH as f32, h, 10.), &brush);
+    let w = layout_w as f32;
+    target.FillRoundedRectangle(&rounded(0., 0., w, h, 10.), &brush);
     // 边框通道:预授权=青色常驻描边(文字版保留在窗口标题);动画态低幅呼吸,
     // "需要你"的态脉冲更明显;空闲/完成/失败静止(减少动态下静止,docs/18)。
     let preauth = PREAUTH.load(std::sync::atomic::Ordering::Relaxed);
@@ -306,16 +322,14 @@ unsafe fn raster(view: &View, hover: u8, dpi: u32, expanded: bool) -> Result<Vec
         None => 1.,
     };
     brush.SetColor(&color_a(stroke_rgb, alpha));
-    target.DrawRoundedRectangle(
-        &rounded(0.5, 0.5, WIDTH as f32 - 1., h - 1., 9.5),
-        &brush,
-        1.,
-        None,
-    );
+    target.DrawRoundedRectangle(&rounded(0.5, 0.5, w - 1., h - 1., 9.5), &brush, 1., None);
     brush.SetColor(&color(status_color(view.mode)));
     target.FillRoundedRectangle(&rounded(10., 11., 12., 12., 6.), &brush);
     let pending = matches!(view.mode, Mode::StopRequested | Mode::Stopped);
-    // Hover highlights only the control; progress must remain visible after a click.
+    // 右缘锚定簇:箭头与按钮贴右缘;标签右界收到箭头前 6 DIP——
+    // 旧值 240 越过箭头起点 234,尾部残字画进箭头底下"看不见还占着"(实测修正)。
+    let chevron_x = w - 46.;
+    let button_x = w - 30.;
     let label = &view.label;
     let text_right = if view.effects.keyboard
         || view.effects.focus
@@ -324,7 +338,7 @@ unsafe fn raster(view: &View, hover: u8, dpi: u32, expanded: bool) -> Result<Vec
     {
         181.
     } else {
-        240.
+        chevron_x - 6.
     };
     brush.SetColor(&color(0xE8EBED));
     let text_format = if has_cjk(label) { cjk } else { latin };
@@ -356,7 +370,7 @@ unsafe fn raster(view: &View, hover: u8, dpi: u32, expanded: bool) -> Result<Vec
         outline(225., 11., 10., 13., 2.);
         outline(228., 9., 4., 4., 1.);
     }
-    // 展开箭头:固定锚点(CHEVRON_X),常显提供可展开暗示;收起▸/展开▾;悬浮提亮。
+    // 展开箭头:右缘锚定簇,常显提供可展开暗示;收起▸/展开▾;悬浮提亮。
     brush.SetColor(&color(if hover == HOVER_CHEVRON {
         0xB6BDC4
     } else {
@@ -364,67 +378,76 @@ unsafe fn raster(view: &View, hover: u8, dpi: u32, expanded: bool) -> Result<Vec
     }));
     if expanded {
         for i in 0..5 {
-            let w = 9. - i as f32 * 1.6;
+            let gw = 9. - i as f32 * 1.6;
             bar(
-                CHEVRON_X as f32 + 2.5 + (9. - w) / 2.,
+                chevron_x + 2.5 + (9. - gw) / 2.,
                 14.5 + i as f32 * 1.7,
-                w,
+                gw,
                 1.,
             );
         }
     } else {
         for i in 0..6 {
             let h2 = 9. - i as f32 * 1.5;
-            bar(CHEVRON_X as f32 + 3.5 + i as f32, 17. - h2 / 2., 1., h2);
+            bar(chevron_x + 3.5 + i as f32, 17. - h2 / 2., 1., h2);
         }
     }
-    brush.SetColor(&color(if pending {
-        0x2D2F31
-    } else if hover == HOVER_BUTTON {
-        0x494D52
-    } else {
-        0x35383B
-    }));
-    target.FillRoundedRectangle(&rounded(250., 5., 26., 24., 6.), &brush);
-    brush.SetColor(&color(if pending { 0x757A80 } else { 0xC1C5C8 }));
-    match &view.control {
-        super::model::Control::Pause { .. } => {
-            bar(258., 11., 3., 12.);
-            bar(265., 11., 3., 12.);
-        }
-        super::model::Control::Continue { .. } => {
-            // A triangle formed by progressively shorter vertical strokes.
-            for i in 0..10 {
-                let h = 14. - i as f32 * 1.3;
-                bar(258. + i as f32, 17. - h / 2., 1., h);
+    // 展开态隐藏冗余的详情按钮(点横条空白即直达详情);暂停/继续保留。
+    let show_button = !(expanded && matches!(view.control, super::model::Control::Details));
+    if show_button {
+        brush.SetColor(&color(if pending {
+            0x2D2F31
+        } else if hover == HOVER_BUTTON {
+            0x494D52
+        } else {
+            0x35383B
+        }));
+        target.FillRoundedRectangle(&rounded(button_x, 5., 26., 24., 6.), &brush);
+        brush.SetColor(&color(if pending { 0x757A80 } else { 0xC1C5C8 }));
+        let glyph_x = button_x + 8.;
+        match &view.control {
+            super::model::Control::Pause { .. } => {
+                bar(glyph_x, 11., 3., 12.);
+                bar(glyph_x + 7., 11., 3., 12.);
             }
-        }
-        super::model::Control::Details => {
-            outline(258., 12., 10., 10., 5.);
-            bar(262.5, 16., 1., 4.);
+            super::model::Control::Continue { .. } => {
+                // A triangle formed by progressively shorter vertical strokes.
+                for i in 0..10 {
+                    let gh = 14. - i as f32 * 1.3;
+                    bar(glyph_x + i as f32, 17. - gh / 2., 1., gh);
+                }
+            }
+            super::model::Control::Details => {
+                outline(glyph_x, 12., 10., 10., 5.);
+                bar(glyph_x + 4.5, 16., 1., 4.);
+            }
         }
     }
     if expanded {
-        // 第二行:细分隔线 + 三列栅格,列起点固定(31/155/208),值列定宽截断
-        // (文本格式自带 NO_WRAP + 字符级省略号)。第一行锚点不受展开影响。
+        // 第二行:最近工作流的步骤链(id+状态字形,单行,尾部截断);无流程时
+        // 回落最近调用摘要(command · 相位)。分隔线随宽度。
         brush.SetColor(&color(0x2F3234));
-        target.FillRoundedRectangle(&rounded(12., 34., 256., 1., 0.5), &brush);
-        for (i, (x, w)) in [(31f32, 118f32), (155f32, 46f32), (208f32, 60f32)]
-            .iter()
-            .enumerate()
-        {
-            let text = &view.second[i];
-            brush.SetColor(&color(if i == 0 { 0xD6DADD } else { 0x9AA0A6 }));
-            let fmt = if has_cjk(text) { cjk } else { latin };
-            target.DrawText(
-                &text.encode_utf16().collect::<Vec<_>>(),
-                fmt,
-                &rect(*x, 34., *w, 28.),
-                &brush,
-                D2D1_DRAW_TEXT_OPTIONS_CLIP,
-                DWRITE_MEASURING_MODE_NATURAL,
-            );
-        }
+        target.FillRoundedRectangle(&rounded(12., 34., w - 24., 1., 0.5), &brush);
+        let steps = STEPS.lock().map(|s| s.clone()).unwrap_or_default();
+        let text = if steps.is_empty() {
+            format!("{} · {}", view.second[0], view.second[1])
+        } else {
+            steps
+                .iter()
+                .map(|(id, status)| format!("{}{}", id, step_glyph(status)))
+                .collect::<Vec<_>>()
+                .join("  ")
+        };
+        brush.SetColor(&color(0x9AA0A6));
+        let fmt = if has_cjk(&text) { cjk } else { latin };
+        target.DrawText(
+            &text.encode_utf16().collect::<Vec<_>>(),
+            fmt,
+            &rect(31., 34., w - 40. - 31., 28.),
+            &brush,
+            D2D1_DRAW_TEXT_OPTIONS_CLIP,
+            DWRITE_MEASURING_MODE_NATURAL,
+        );
     }
     target.EndDraw(None, None)?;
     let mut data = vec![0u8; width as usize * height as usize * 4];
@@ -499,8 +522,9 @@ pub unsafe fn draw(hwnd: HWND, view: &View, hover: u8, expanded: bool) -> bool {
     let _ = BeginPaint(hwnd, &mut ps);
     let dpi = GetDpiForWindow(hwnd).max(96);
     let layout_h = if expanded { HEIGHT_EXT } else { HEIGHT };
+    let layout_w = if expanded { WIDTH_EXT } else { WIDTH };
     let result = raster(view, hover, dpi, expanded)
-        .and_then(|data| present(hwnd, &data, dpi, WIDTH, layout_h));
+        .and_then(|data| present(hwnd, &data, dpi, layout_w, layout_h));
     if let Err(e) = &result {
         eprintln!("INTERNAL: display render failed: {e}");
     }
@@ -728,31 +752,54 @@ mod tests {
         assert_eq!(pixels(WIDTH, 192), 560);
     }
     #[test]
-    fn expanded_raster_doubles_rows_and_keeps_line1_anchors() {
+    fn expanded_raster_widens_doubles_rows_and_keeps_line1_anchors() {
         let view = super::super::model::view(&[], 0, None, Some(false));
         let collapsed = unsafe { raster(&view, HOVER_NONE, 96, false) }.expect("WIC render");
         let expanded = unsafe { raster(&view, HOVER_NONE, 96, true) }.expect("WIC render");
         let width = pixels(WIDTH, 96) as usize;
+        let width_ext = pixels(WIDTH_EXT, 96) as usize;
         assert_eq!(collapsed.len(), width * pixels(HEIGHT, 96) as usize * 4);
         assert_eq!(
             expanded.len(),
-            width * pixels(HEIGHT_EXT, 96) as usize * 4,
-            "expanded layout must be exactly two rows tall"
+            width_ext * pixels(HEIGHT_EXT, 96) as usize * 4,
+            "expanded layout must be 1.5x wide and two rows tall"
         );
-        // 第一行锚点不受展开影响:状态点行的像素在箭头锚点(▸↔▾ 本应变化)
-        // 与左右描边之外的区段必须逐字节一致。
-        let row_mid = |data: &[u8], y: usize| -> Vec<u8> {
-            data[y * width * 4 + 3 * 4..y * width * 4 + 230 * 4].to_vec()
+        // 第一行左段锚点不受展开影响:状态点行在箭头/按钮/描边之外的左段
+        // 必须逐字节一致(两侧位图宽度不同,各取自己的行基)。
+        let row_mid = |data: &[u8], w: usize, y: usize| -> Vec<u8> {
+            data[y * w * 4 + 3 * 4..y * w * 4 + 170 * 4].to_vec()
         };
-        assert_eq!(row_mid(&collapsed, 17), row_mid(&expanded, 17));
-        // 第二行栅格:分隔线以下必须有内容(非全透明)。
+        assert_eq!(
+            row_mid(&collapsed, width, 17),
+            row_mid(&expanded, width_ext, 17)
+        );
+        // 展开态隐藏详情按钮、保留继续按钮:同视图下两种 control 的右缘按钮区
+        // 必须不同(背景本身不透明,不能按"无像素"判定)。
+        let mut vc = view.clone();
+        vc.control = super::super::model::Control::Continue { flow: "f".into() };
+        let expanded_continue = unsafe { raster(&vc, HOVER_NONE, 96, true) }.expect("WIC render");
+        let zone = |d: &[u8]| -> Vec<u8> {
+            let x0 = (width_ext - pixels(26, 96) as usize) * 4;
+            (0..pixels(HEIGHT, 96) as usize)
+                .flat_map(|y| {
+                    let base = y * width_ext * 4 + x0;
+                    (0..pixels(26, 96) as usize * 4).map(move |o| d[base + o])
+                })
+                .collect()
+        };
+        assert_ne!(
+            zone(&expanded),
+            zone(&expanded_continue),
+            "details must hide when expanded while continue stays"
+        );
+        // 第二行(步骤链/最近调用摘要)分隔线以下必须有内容。
         assert!(
-            expanded[(pixels(48, 96) as usize) * width * 4..]
+            expanded[(pixels(48, 96) as usize) * width_ext * 4..]
                 .as_chunks::<4>()
                 .0
                 .iter()
                 .any(|p| p[3] > 0),
-            "second row must render its grid"
+            "second row must render its step chain"
         );
     }
     #[test]

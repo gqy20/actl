@@ -48,39 +48,39 @@ unsafe fn hover_slot(hwnd: HWND) -> u8 {
     }
     let dpi = windows::Win32::UI::HiDpi::GetDpiForWindow(hwnd);
     let px = |v: i32| paint::pixels(v, dpi);
-    // 展开态第二行:按三列栅格命中(列起点 31/155/208)。
-    if pointer.y >= px(paint::HEIGHT) {
-        return match pointer.x {
-            x if x >= px(31) && x < px(149) => paint::HOVER_L2C1,
-            x if x >= px(155) && x < px(201) => paint::HOVER_L2C2,
-            x if x >= px(208) && x < px(268) => paint::HOVER_L2C3,
-            _ => paint::HOVER_NONE,
-        };
+    // 右缘锚定簇随宽度移动;第二行(步骤链区)整行按空白区处理。
+    let bounds_w = bounds.right - bounds.left;
+    let expanded = bounds_w > px(paint::WIDTH + 40);
+    if expanded && pointer.y >= px(paint::HEIGHT) {
+        return paint::HOVER_BODY;
     }
     match pointer.x {
-        x if x >= px(246) => paint::HOVER_BUTTON,
-        x if x >= px(paint::CHEVRON_X) => paint::HOVER_CHEVRON,
-        x if x >= px(8) && x < px(24) => paint::HOVER_DOT,
+        x if x >= bounds_w - px(30) => paint::HOVER_BUTTON,
+        x if x >= bounds_w - px(46) => paint::HOVER_CHEVRON,
+        x if !expanded && x >= px(8) && x < px(24) => paint::HOVER_DOT,
         // 非拖拽手柄的空白区(右侧效果图标一带)承载空闲信息卡;手柄区不打扰拖拽。
         x if x >= px(181) => paint::HOVER_BODY,
         _ => paint::HOVER_NONE,
     }
 }
 
-/// 两行展开/收回:只改窗口高度与重绘,不激活不抢焦点;再次点击切换,不自动收回。
+/// 两行展开/收回:高度两行 + 宽度 1.5 倍,右缘锚定(向左扩展);不激活不抢焦点;
+/// 再次点击切换,不自动收回。
 unsafe fn set_expanded(hwnd: HWND, on: bool) {
     EXPANDED.store(on, Ordering::Relaxed);
     let dpi = windows::Win32::UI::HiDpi::GetDpiForWindow(hwnd);
     let h = paint::pixels(if on { paint::HEIGHT_EXT } else { paint::HEIGHT }, dpi);
-    let w = paint::pixels(paint::WIDTH, dpi);
+    let w = paint::pixels(if on { paint::WIDTH_EXT } else { paint::WIDTH }, dpi);
+    let mut rc = RECT::default();
+    let _ = GetWindowRect(hwnd, &mut rc);
     let _ = SetWindowPos(
         hwnd,
         None,
-        0,
-        0,
+        rc.right - w,
+        rc.top,
         w,
         h,
-        SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
+        SWP_NOZORDER | SWP_NOACTIVATE,
     );
     let _ = InvalidateRect(Some(hwnd), None, false);
 }
@@ -197,6 +197,30 @@ unsafe fn tick(hwnd: HWND) {
     v.details.push_str(&paths.stop_details());
     // 常驻预授权的可见性补偿:青色描边(paint 层)+ 窗口标题文字版;正文不再加前缀。
     super::paint::set_preauth(paths.preauthorized());
+    // 展开态第二行步骤链:当前绑定流程的步骤列表;无流程时清空(回落最近调用摘要)。
+    let bound_flow = model::selected(&states, now).and_then(|s| {
+        s.workflow
+            .as_ref()
+            .map(|f| f.run_id.clone())
+            .filter(|id| actl_core::history::valid_id(id))
+    });
+    let chain = bound_flow
+        .and_then(|id| super::flow_ui::read(&paths, &id))
+        .and_then(|state| {
+            state["steps"].as_array().map(|steps| {
+                steps
+                    .iter()
+                    .map(|s| {
+                        (
+                            s["id"].as_str().unwrap_or("—").to_string(),
+                            s["status"].as_str().unwrap_or("").to_string(),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            })
+        })
+        .unwrap_or_default();
+    super::paint::set_steps(chain);
     if matches!(
         v.mode,
         model::Mode::Running | model::Mode::Background | model::Mode::Desktop
@@ -673,7 +697,14 @@ pub(super) fn flow_action(id: &str, resume: bool) -> Result<(), String> {
 
 unsafe fn place(hwnd: HWND) {
     let dpi = windows::Win32::UI::HiDpi::GetDpiForWindow(hwnd);
-    let w = paint::pixels(paint::WIDTH, dpi);
+    let w = paint::pixels(
+        if EXPANDED.load(Ordering::Relaxed) {
+            paint::WIDTH_EXT
+        } else {
+            paint::WIDTH
+        },
+        dpi,
+    );
     let h = paint::pixels(
         if EXPANDED.load(Ordering::Relaxed) {
             paint::HEIGHT_EXT
@@ -705,8 +736,8 @@ unsafe fn place(hwnd: HWND) {
     let _ = InvalidateRect(Some(hwnd), None, false);
 }
 
-/// 悬浮卡内容:问哪答哪——状态点=状态图例,空闲空白=一站式状态卡,
-/// 展开态列=完整未截断值;按钮/箭头/手柄区不出卡。
+/// 悬浮卡内容:问哪答哪——状态点=状态图例,空白区(含展开态第二行)=空闲一站式卡
+/// 或图例;按钮/箭头/手柄区不出卡。
 fn hover_card(
     slot: u8,
     v: &model::View,
@@ -725,11 +756,6 @@ fn hover_card(
                 legend_card(v)
             },
         );
-    }
-    if (paint::HOVER_L2C1..=paint::HOVER_L2C3).contains(&slot) {
-        let idx = (slot - paint::HOVER_L2C1) as usize;
-        let name = ["主体", "进度", "备注"][idx];
-        return Some(vec![format!("{name} · 完整内容"), v.second[idx].clone()]);
     }
     None
 }
