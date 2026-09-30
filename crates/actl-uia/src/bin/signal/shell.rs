@@ -217,15 +217,27 @@ unsafe fn tick(hwnd: HWND) {
         model::Mode::Running | model::Mode::Background | model::Mode::Desktop
     ) && let Some(flow) = model::selected(&states, now).and_then(|s| s.workflow.as_ref())
         && actl_core::history::valid_id(&flow.run_id)
-        && paths
-            .dir
-            .join("flows")
-            .join(&flow.run_id)
-            .join("pause-requested")
-            .exists()
+        && let Ok(meta) = std::fs::metadata(
+            paths
+                .dir
+                .join("flows")
+                .join(&flow.run_id)
+                .join("pause-requested"),
+        )
     {
-        v.label = "正在暂停".into();
-        v.details.push_str("\n等待当前操作结束");
+        // 批次2①③:带阻塞步骤与已等待时长,超阈值(~5s)附急停教育(不自动升级,
+        // 保留用户意图);标签不带耗时,防托盘图标每秒重建。
+        let elapsed = meta
+            .modified()
+            .map_or(0, |t| t.elapsed().map_or(0, |d| d.as_secs()));
+        let (mode, label, details) = model::pause_pending_view(
+            flow.step_id.as_deref(),
+            elapsed,
+            HOTKEY.load(Ordering::Relaxed),
+        );
+        v.mode = mode;
+        v.label = label;
+        v.details.push_str(&format!("\n{details}"));
     }
     if stop.is_none() {
         DRAG_STOP.store(false, Ordering::Relaxed);

@@ -115,6 +115,32 @@ pub fn selected(states: &[SessionState], now: u64) -> Option<&SessionState> {
         )
     })
 }
+/// 暂停请求已发出、当前动作尚未到安全边界时的显示覆写(批次2①③)。
+/// 标签不带耗时(防托盘图标每秒重建);耗时与急停教育进详情(任务详情窗口
+/// 按自身节拍刷新)。超阈值(~5s)提示急停入口,纠正"不耐烦就急停"的工具倒挂——
+/// 但不自动升级,保留用户意图。
+pub fn pause_pending_view(
+    step: Option<&str>,
+    elapsed_s: u64,
+    hotkey: bool,
+) -> (Mode, String, String) {
+    let label = match step {
+        Some(id) => format!("正在暂停 · {id} · 可操作"),
+        None => "正在暂停 · 可操作".into(),
+    };
+    let mut details = format!(
+        "暂停请求已发出 {elapsed_s}s，等待当前动作在安全边界结束；已送达的部分不会重复注入"
+    );
+    if elapsed_s >= 5 {
+        details.push_str(if hotkey {
+            "\n当前动作迟迟未结束；需要立即终止请按 Ctrl+Alt+F12 急停（急停独立于暂停）"
+        } else {
+            "\n当前动作迟迟未结束；需要立即终止请右键菜单 → 紧急停止（急停独立于暂停）"
+        });
+    }
+    (Mode::Paused, label, details)
+}
+
 pub fn view(states: &[SessionState], now: u64, stop_ms: Option<u64>, busy: Option<bool>) -> View {
     let selected = selected(states, now);
     let Some(s) = selected else {
@@ -550,6 +576,26 @@ pub fn view(states: &[SessionState], now: u64, stop_ms: Option<u64>, busy: Optio
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn pause_pending_carries_step_and_escalates_to_stop_hint() {
+        // 常规:带步骤 id,标签不含耗时,详情含耗时与不重复注入承诺。
+        let (mode, label, details) = pause_pending_view(Some("cell-readback"), 2, true);
+        assert_eq!(mode, Mode::Paused);
+        assert_eq!(label, "正在暂停 · cell-readback · 可操作");
+        assert!(
+            details.contains("已发出 2s") && !label.contains('s'),
+            "{details}"
+        );
+        assert!(!details.contains("急停"), "under 5s must not nag");
+        // 超阈值:附急停教育(有热键与无热键两种文案),仍为 Paused 不是停止。
+        let (_, _, details) = pause_pending_view(None, 6, true);
+        assert!(details.contains("Ctrl+Alt+F12"), "{details}");
+        let (_, _, details) = pause_pending_view(None, 6, false);
+        assert!(
+            details.contains("右键菜单") && !details.contains("Ctrl+Alt+F12"),
+            "{details}"
+        );
+    }
     #[test]
     fn idle_stop_does_not_claim_an_operation_is_still_running() {
         let mut state = SessionState::now(1, "commands", None, None, Phase::Done);

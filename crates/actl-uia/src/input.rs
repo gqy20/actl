@@ -101,6 +101,18 @@ where
         if done > 0 && !focus_ok() {
             return Ok(done);
         }
+        // 批间观察暂停请求(批次2②):长输入不再"整体打完才停",分段即停;
+        // 已送达段数保留在证据里,引擎按 handoff/user_paused 转协作暂停。
+        if done > 0 && actl_core::wait_control::pause_pending() {
+            return Err(CtlError::with_evidence(
+                actl_core::ErrorCode::Aborted,
+                "workflow input interrupted for pause",
+                serde_json::json!({
+                    "stage":"handoff","reason":"user_paused",
+                    "action_started":true,"delivered":done
+                }),
+            ));
+        }
         if let Err(mut error) = send(seg) {
             let mut evidence = error
                 .evidence
@@ -122,6 +134,31 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn segment_boundary_observes_pause_and_keeps_delivered_count() {
+        // 批次2②:暂停标记存在时,第二批之前中断(亚秒级),已送达段数保留在证据。
+        let dir = std::env::temp_dir().join(format!(
+            "actl-pause-seg-{}",
+            actl_core::snapshot::new_snapshot_id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let marker = dir.join("pause-requested");
+        std::fs::write(&marker, b"1").unwrap();
+        let _scope = actl_core::wait_control::Scope::enter(marker.clone());
+        let items: Vec<u8> = std::iter::repeat_n(b'x', 64).collect();
+        let error = send_in_segments(&items, 32, |_| Ok(()), || true).unwrap_err();
+        assert_eq!(error.code, actl_core::ErrorCode::Aborted);
+        let evidence = error.evidence.unwrap();
+        assert_eq!(evidence["delivered"], 32, "{evidence}");
+        assert_eq!(evidence["reason"], "user_paused");
+        assert_eq!(evidence["stage"], "handoff");
+        // 无标记(普通 CLI 调用无 Scope)时全部送达。
+        std::fs::remove_file(&marker).unwrap();
+        let done = send_in_segments(&items, 32, |_| Ok(()), || true).unwrap();
+        assert_eq!(done, 64);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     #[test]
     fn lock_is_mutual_across_threads() {

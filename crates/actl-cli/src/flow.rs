@@ -477,8 +477,9 @@ impl Host for Adapter<'_> {
         }
         actl_core::handoff::configure(self.plan.handoff.unwrap_or_default().approval);
         let command = parse(call)?;
-        let _scope = matches!(command, Command::Wait { .. })
-            .then(|| actl_core::wait_control::Scope::enter(self.store.dir.join("pause-requested")));
+        // 批次2②:暂停观察点从 Wait 轮询扩展到全部命令——type 的分段间隙等
+        // 注入边界也能在亚秒内响应暂停(序列子调用间隙本就观察)。
+        let _scope = actl_core::wait_control::Scope::enter(self.store.dir.join("pause-requested"));
         crate::dispatch(&command).map(|output| output.data)
     }
     fn read_only(&self, call: &Invocation) -> bool {

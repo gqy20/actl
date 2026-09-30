@@ -30,3 +30,8 @@ pub fn check() -> Result<(), CtlError> {
         Ok(())
     })
 }
+/// 暂停请求是否待处理(仅流程 Scope 内有效;普通 CLI 调用恒 false)。
+/// 注入批间等非等待场景的观察点用,错误包装由调用方决定。
+pub fn pause_pending() -> bool {
+    PAUSE.with(|p| p.borrow().as_ref().is_some_and(|path| path.exists()))
+}
