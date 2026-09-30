@@ -88,6 +88,15 @@ fn export_panel_previews() {
         let controls = super::controls::create_window().unwrap();
         super::controls::refresh_with(controls, &paths, Some("preview"));
         export(controls, "controls");
+        let done = serde_json::json!({"status":"completed", "steps":[{"id":"read-notes", "status":"completed", "verified":true}, {"id":"write-notes", "status":"completed", "verified":false}]});
+        std::fs::write(dir.join("state.json"), serde_json::to_vec(&done).unwrap()).unwrap();
+        super::controls::refresh_with(controls, &paths, Some("preview"));
+        export(controls, "controls-completed");
+        super::controls::preview_sections(controls, &paths, true, true);
+        export(controls, "controls-expanded");
+        std::fs::write(dir.join("state.json"), serde_json::to_vec(&state).unwrap()).unwrap();
+        super::controls::refresh_with(controls, &paths, Some("preview"));
+        export(controls, "controls-paused-expanded");
         DestroyWindow(controls).unwrap();
         std::fs::remove_dir_all(paths.dir).unwrap();
         let _ = SetThreadDpiAwarenessContext(previous);

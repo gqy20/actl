@@ -244,8 +244,10 @@ pub fn details(paths: &SignalPaths, id: &str) -> String {
         }
     }
     if matches!(status, "paused" | "needs_review") {
-        lines
-            .push("继续：核对上一步结果后点「检查并继续」；重放写步骤须显式 --retry-step。".into());
+        lines.push(
+            "继续：先核对上一步结果，再使用底部的继续或核对结果按钮。\n重放写步骤须显式 --retry-step。"
+                .into(),
+        );
     } else if status == "failed" {
         lines.push("失败：查看异常步骤的原因后修正路线；直接重试不会绕过失败。".into());
     } else if status == "stopped" {

@@ -203,23 +203,15 @@ unsafe fn tick(hwnd: HWND) {
             .map(|f| f.run_id.clone())
             .filter(|id| actl_core::history::valid_id(id))
     });
-    let chain = bound_flow
-        .and_then(|id| super::flow_ui::read(&paths, &id))
-        .and_then(|state| {
-            state["steps"].as_array().map(|steps| {
-                steps
-                    .iter()
-                    .map(|s| {
-                        (
-                            s["id"].as_str().unwrap_or("—").to_string(),
-                            s["status"].as_str().unwrap_or("").to_string(),
-                        )
-                    })
-                    .collect::<Vec<_>>()
-            })
+    let progress = bound_flow
+        .map(|id| {
+            let plan = super::ui_text::plan(&paths, &id);
+            super::flow_ui::read(&paths, &id)
+                .map(|s| super::ui_text::strip_progress(&s, plan.as_ref()))
+                .unwrap_or_else(|| "步骤状态未确认".into())
         })
         .unwrap_or_default();
-    super::paint::set_steps(chain);
+    super::paint::set_progress(progress);
     if matches!(
         v.mode,
         model::Mode::Running | model::Mode::Background | model::Mode::Desktop
@@ -315,7 +307,7 @@ unsafe fn tick(hwnd: HWND) {
             if HOTKEY.load(Ordering::Relaxed) {
                 "Ctrl+Alt+F12 请求停止"
             } else {
-                "右键菜单：紧急停止"
+                "右键菜单：急停"
             }
         ));
         let n = tip.len().saturating_sub(1).min(126);
@@ -529,7 +521,7 @@ unsafe fn details(_hwnd: HWND) {
 
 unsafe fn menu(hwnd: HWND) {
     let mut lines = vec![
-        "紧急停止".into(),
+        "急停".into(),
         "修复运行状态".into(),
         "任务详情".into(),
         if IsWindowVisible(hwnd).as_bool() {
@@ -816,7 +808,7 @@ fn idle_card(
         if HOTKEY.load(Ordering::Relaxed) {
             "急停：Ctrl+Alt+F12 或右键菜单"
         } else {
-            "急停：右键菜单 → 紧急停止"
+            "急停：右键菜单 → 急停"
         }
         .into(),
     );

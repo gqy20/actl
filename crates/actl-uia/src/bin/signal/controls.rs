@@ -3,6 +3,9 @@ use super::{flow_ui, model, paint};
 use std::sync::OnceLock;
 thread_local! {
     static EXPANDED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static RECORDS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static FONT_DPI: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+    static LAST_LAYOUT: std::cell::Cell<Option<[i64; 9]>> = const { std::cell::Cell::new(None) };
     static LOCAL_ERROR: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
 }
 static BOUND_FLOW: OnceLock<Option<String>> = OnceLock::new();
@@ -23,41 +26,149 @@ use windows::{
 };
 
 const CONTROLS: &[(i32, &str, i32, i32, i32, i32)] = &[
-    // 头行:标题与状态小字同一行(小字垂直居中对齐标题行);
-    // 底行:紧急停止/修复 · 快捷键提示 · 详细信息 单行排布(2026-09-30 重排)。
-    (102, "桌面状态", 24, 20, 160, 32),
+    (102, "桌面状态", 24, 20, 412, 32),
     (16, "最小化", 448, 20, 40, 32),
     (15, "关闭", 496, 20, 40, 32),
-    (103, "正在读取状态", 192, 25, 248, 22),
-    (100, "正在读取流程状态", 24, 58, 512, 160),
+    (103, "正在读取状态", 24, 72, 512, 32),
+    (100, "正在读取流程状态", 24, 112, 512, 32),
     (101, "", 24, 272, 512, 44),
     (10, "暂停", 24, 330, 148, 32),
     (11, "继续", 24, 330, 148, 32),
-    (14, "详细信息", 388, 388, 148, 32),
+    (17, "步骤记录  ›", 24, 220, 148, 32),
+    (106, "", 24, 256, 512, 160),
+    (14, "技术详情  ›", 24, 220, 148, 32),
+    (107, "", 24, 256, 512, 160),
     (104, "Ctrl+Alt+F12", 184, 393, 200, 22),
-    (12, "紧急停止", 24, 388, 148, 32),
+    (12, "急停", 24, 388, 80, 32),
     (13, "修复运行状态", 24, 388, 148, 32),
 ];
+unsafe fn text_height(hwnd: HWND, id: i32, dpi: u32, cap: i32) -> i32 {
+    let Ok(child) = GetDlgItem(Some(hwnd), id) else {
+        return 32;
+    };
+    let mut text = vec![0u16; GetWindowTextLengthW(child).max(0) as usize + 1];
+    let len = GetWindowTextW(child, &mut text).max(0) as usize;
+    let dc = GetDC(Some(child));
+    let font = SendMessageW(child, WM_GETFONT, None, None);
+    let old = SelectObject(dc, HGDIOBJ(font.0 as *mut _));
+    let mut r = RECT {
+        right: paint::pixels(492, dpi),
+        ..Default::default()
+    };
+    DrawTextW(
+        dc,
+        &mut text[..len],
+        &mut r,
+        DT_CALCRECT | DT_WORDBREAK | DT_NOPREFIX,
+    );
+    SelectObject(dc, old);
+    ReleaseDC(Some(child), dc);
+    ((r.bottom * 96 + dpi as i32 - 1) / dpi as i32 + 8).clamp(32, cap)
+}
+unsafe fn shown(hwnd: HWND, id: i32) -> bool {
+    GetDlgItem(Some(hwnd), id)
+        .is_ok_and(|c| GetWindowLongW(c, GWL_STYLE) as u32 & WS_VISIBLE.0 != 0)
+}
 unsafe fn layout(hwnd: HWND, dpi: u32) {
     let px = |n| paint::pixels(n, dpi);
-    let compact = if EXPANDED.with(|v| v.get()) { 0 } else { 80 };
+    if FONT_DPI.with(|v| v.replace(dpi)) != dpi {
+        super::panel::fonts(hwnd, dpi, &CONTROLS.iter().map(|c| c.0).collect::<Vec<_>>());
+    }
+    let mut monitor = MONITORINFO {
+        cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+        ..Default::default()
+    };
+    let monitor_height = if GetMonitorInfoW(
+        MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST),
+        &mut monitor,
+    )
+    .as_bool()
+    {
+        (monitor.rcWork.bottom - monitor.rcWork.top) * 96 / dpi as i32 - 32
+    } else {
+        720
+    };
+    let body_height = text_height(hwnd, 100, dpi, (monitor_height - 300).clamp(32, 216));
+    let mut next = 112 + body_height + 12;
+    let feedback_y = next;
+    if has_feedback(hwnd) {
+        next += text_height(hwnd, 101, dpi, 64) + 12;
+    }
+    let has_action = shown(hwnd, 10) || shown(hwnd, 11);
+    let records_y = next;
+    next += 36;
+    let both = RECORDS.with(|v| v.get()) && EXPANDED.with(|v| v.get());
+    let budget = (monitor_height - next - 36 - 72 - 24).max(64);
+    let records_height = text_height(
+        hwnd,
+        106,
+        dpi,
+        (if both { budget / 2 } else { budget }).clamp(32, 160),
+    );
+    if RECORDS.with(|v| v.get()) {
+        next += records_height + 12;
+    }
+    let technical_y = next;
+    next += 36;
+    let technical_height = text_height(
+        hwnd,
+        107,
+        dpi,
+        (monitor_height - next - 72 - 12).clamp(32, 200),
+    );
+    if EXPANDED.with(|v| v.get()) {
+        next += technical_height + 12;
+    }
+    let footer_y = next + 16;
+    let key = [
+        hwnd.0 as i64,
+        i64::from(dpi),
+        i64::from(body_height),
+        i64::from(feedback_y),
+        i64::from(has_action),
+        i64::from(records_y),
+        i64::from(technical_y),
+        i64::from(footer_y),
+        i64::from(records_height) * 1000 + i64::from(technical_height),
+    ];
+    if LAST_LAYOUT.with(|v| v.replace(Some(key))) == Some(key) {
+        return;
+    }
     let _ = SetWindowPos(
         hwnd,
         None,
         0,
         0,
         px(560),
-        px(444 - compact),
+        px(footer_y + 56),
         SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
     );
+    super::frame::update(hwnd, dpi);
     for &(id, _, x, y, width, height) in CONTROLS {
         if let Ok(child) = GetDlgItem(Some(hwnd), id) {
-            let height = if id == 100 {
-                (if has_feedback(hwnd) { 160 } else { 216 }) - compact
-            } else {
-                height
+            let x = match id {
+                12 | 13 if has_action => 184,
+                104 => {
+                    if has_action {
+                        276
+                    } else {
+                        116
+                    }
+                }
+                _ => x,
             };
-            let y = if y >= 272 { y - compact } else { y };
+            let (y, height) = match id {
+                100 => (112, body_height),
+                101 => (feedback_y, text_height(hwnd, 101, dpi, 64)),
+                10 | 11 => (footer_y, height),
+                17 => (records_y, height),
+                106 => (records_y + 36, records_height),
+                14 => (technical_y, height),
+                107 => (technical_y + 36, technical_height),
+                12 | 13 => (footer_y, height),
+                104 => (footer_y + 5, height),
+                _ => (y, height),
+            };
             let _ = SetWindowPos(
                 child,
                 None,
@@ -67,24 +178,24 @@ unsafe fn layout(hwnd: HWND, dpi: u32) {
                 px(height),
                 SWP_NOZORDER | SWP_NOACTIVATE,
             );
+            if matches!(id, 100 | 106 | 107) {
+                let rect = RECT {
+                    left: 0,
+                    top: 0,
+                    right: px(492),
+                    bottom: px(height),
+                };
+                SendMessageW(
+                    child,
+                    windows::Win32::UI::Controls::EM_SETRECT,
+                    None,
+                    Some(LPARAM((&rect as *const RECT) as isize)),
+                );
+                super::panel::scroll(child);
+            }
         }
     }
-    super::panel::fonts(hwnd, dpi, &CONTROLS.iter().map(|c| c.0).collect::<Vec<_>>());
-    if let Ok(edit) = GetDlgItem(Some(hwnd), 100) {
-        let rect = RECT {
-            left: px(14),
-            top: px(12),
-            right: px(484),
-            bottom: px((if has_feedback(hwnd) { 148 } else { 204 }) - compact),
-        };
-        SendMessageW(
-            edit,
-            windows::Win32::UI::Controls::EM_SETRECT,
-            None,
-            Some(LPARAM((&rect as *const RECT) as isize)),
-        );
-        super::panel::scroll(edit);
-    }
+    let _ = InvalidateRect(Some(hwnd), None, true);
 }
 
 fn current() -> Option<(String, String)> {
@@ -117,12 +228,12 @@ unsafe fn set_text(hwnd: HWND, id: i32, text: &str) {
             Some(WPARAM((&mut start as *mut u32) as usize)),
             Some(LPARAM((&mut end as *mut u32) as isize)),
         );
-        if id == 100 {
+        if matches!(id, 100 | 106 | 107) {
             SendMessageW(child, WM_SETREDRAW, Some(WPARAM(0)), None);
         }
         let text = paint::wide(text);
         let _ = SetWindowTextW(child, PCWSTR(text.as_ptr()));
-        if id == 100 {
+        if matches!(id, 100 | 106 | 107) {
             SendMessageW(
                 child,
                 EM_SETSEL,
@@ -199,34 +310,50 @@ pub(super) unsafe fn refresh_with(hwnd: HWND, paths: &SignalPaths, id: Option<&s
         local_error
     };
     let feedback = super::ui_text::feedback(&message, status);
-    let had_feedback = has_feedback(hwnd);
     set_text(hwnd, 101, &feedback);
     visible(hwnd, 101, !feedback.is_empty());
-    if had_feedback != !feedback.is_empty() {
-        layout(hwnd, GetDpiForWindow(hwnd));
-    }
     set_text(hwnd, 102, &summary.title);
     set_text(hwnd, 103, &summary.status);
     let expanded = EXPANDED.with(|v| v.get());
-    let mut text = summary.body;
+    set_text(hwnd, 100, &summary.body);
+    let technical = id
+        .map(|id| flow_ui::details(paths, id))
+        .unwrap_or_else(|| control_view(paths).details);
+    let mut text = technical;
     if expanded {
-        let technical = id
-            .map(|id| flow_ui::details(paths, id))
-            .unwrap_or_else(|| control_view(paths).details);
-        text.push_str(&format!("\r\n\r\n{technical}"));
         text.push_str(&paths.stop_details());
         if !message.is_empty() {
             text.push_str(&format!("\r\n{message}"));
         }
     }
-    set_text(hwnd, 100, &text.replace("\r\n", "\n").replace('\n', "\r\n"));
+    set_text(hwnd, 107, &text.replace("\r\n", "\n").replace('\n', "\r\n"));
+    set_text(
+        hwnd,
+        106,
+        &state
+            .as_ref()
+            .map(|s| super::ui_text::step_records(s, plan.as_ref()))
+            .unwrap_or_else(|| "步骤记录暂不可读。".into()),
+    );
+    let records = RECORDS.with(|v| v.get());
+    visible(hwnd, 106, records);
+    visible(hwnd, 107, expanded);
+    set_text(
+        hwnd,
+        17,
+        if records {
+            "步骤记录  ∨"
+        } else {
+            "步骤记录  ›"
+        },
+    );
     set_text(
         hwnd,
         14,
         if expanded {
-            "收起详情"
+            "技术详情  ∨"
         } else {
-            "详细信息"
+            "技术详情  ›"
         },
     );
     let running = status == Some("running") && !stopped;
@@ -284,6 +411,7 @@ pub(super) unsafe fn refresh_with(hwnd: HWND, paths: &SignalPaths, id: Option<&s
         stopped || repair,
     );
     let _ = EnableWindow(GetDlgItem(Some(hwnd), 12).unwrap_or_default(), !stopped);
+    layout(hwnd, GetDpiForWindow(hwnd));
 }
 unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
     if let Some(result) = super::panel::message(hwnd, msg, wp, lp) {
@@ -316,9 +444,12 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
                 let _ = ShowWindow(hwnd, SW_MINIMIZE);
                 return LRESULT(0);
             }
-            if wp.0 & 0xffff == 14 {
-                EXPANDED.with(|v| v.set(!v.get()));
-                layout(hwnd, GetDpiForWindow(hwnd));
+            if matches!(wp.0 & 0xffff, 14 | 17) {
+                if wp.0 & 0xffff == 14 {
+                    EXPANDED.with(|v| v.set(!v.get()));
+                } else {
+                    RECORDS.with(|v| v.set(!v.get()));
+                }
                 refresh(hwnd);
                 return LRESULT(0);
             }
@@ -357,6 +488,9 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
 }
 pub(super) unsafe fn create_window() -> windows::core::Result<HWND> {
     EXPANDED.with(|v| v.set(false));
+    RECORDS.with(|v| v.set(false));
+    FONT_DPI.with(|v| v.set(0));
+    LAST_LAYOUT.with(|v| v.set(None));
     LOCAL_ERROR.with(|v| v.borrow_mut().clear());
     let instance = GetModuleHandleW(None)?;
     let class = w!("actl_signal_controls");
@@ -422,7 +556,7 @@ pub(super) unsafe fn create_window() -> windows::core::Result<HWND> {
             WINDOW_EX_STYLE(0),
             if button {
                 w!("BUTTON")
-            } else if id == 100 {
+            } else if matches!(id, 100 | 106 | 107) {
                 w!("EDIT")
             } else {
                 w!("STATIC")
@@ -432,7 +566,7 @@ pub(super) unsafe fn create_window() -> windows::core::Result<HWND> {
                 | WS_VISIBLE
                 | if button {
                     WS_TABSTOP | WINDOW_STYLE(BS_OWNERDRAW as u32)
-                } else if id == 100 {
+                } else if matches!(id, 100 | 106 | 107) {
                     WS_TABSTOP
                         | WS_VSCROLL
                         | WINDOW_STYLE(
@@ -489,8 +623,65 @@ pub unsafe fn run() -> windows::core::Result<()> {
 }
 
 #[cfg(test)]
+pub(super) unsafe fn preview_sections(
+    hwnd: HWND,
+    paths: &SignalPaths,
+    records: bool,
+    technical: bool,
+) {
+    RECORDS.with(|v| v.set(records));
+    EXPANDED.with(|v| v.set(technical));
+    refresh_with(hwnd, paths, Some("preview"));
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn terminal_state_reclaims_action_space_and_expanded_records_keep_footer_aligned() {
+        unsafe {
+            let paths =
+                SignalPaths::at(std::env::temp_dir().join(actl_core::snapshot::new_snapshot_id()));
+            let dir = paths.dir.join("flows").join("preview");
+            std::fs::create_dir_all(&dir).unwrap();
+            let paused =
+                serde_json::json!({"status":"paused", "steps":[{"id":"save", "status":"pending"}]});
+            let done = serde_json::json!({"status":"completed", "steps":[{"id":"save", "status":"completed"}]});
+            std::fs::write(dir.join("state.json"), serde_json::to_vec(&paused).unwrap()).unwrap();
+            let hwnd = create_window().unwrap();
+            refresh_with(hwnd, &paths, Some("preview"));
+            let bounds = |id| {
+                let mut r = RECT::default();
+                GetWindowRect(GetDlgItem(Some(hwnd), id).unwrap(), &mut r).unwrap();
+                r
+            };
+            assert!(shown(hwnd, 11));
+            assert!(!shown(hwnd, 10));
+            assert_eq!(bounds(11).top, bounds(12).top);
+            assert!(bounds(11).right < bounds(12).left);
+            assert!(bounds(12).right < bounds(104).left);
+            let mut before = RECT::default();
+            GetWindowRect(hwnd, &mut before).unwrap();
+            std::fs::write(dir.join("state.json"), serde_json::to_vec(&done).unwrap()).unwrap();
+            refresh_with(hwnd, &paths, Some("preview"));
+            assert!(!shown(hwnd, 11));
+            let mut after = RECT::default();
+            GetWindowRect(hwnd, &mut after).unwrap();
+            assert!(after.bottom - after.top <= before.bottom - before.top);
+            assert_eq!(bounds(12).left, bounds(100).left);
+            preview_sections(hwnd, &paths, true, true);
+            assert!(shown(hwnd, 106) && shown(hwnd, 107));
+            assert!(bounds(106).bottom <= bounds(14).top);
+            assert!(bounds(107).bottom < bounds(12).top);
+            let region = CreateRectRgn(0, 0, 0, 0);
+            GetWindowRgn(hwnd, region);
+            GetWindowRect(hwnd, &mut after).unwrap();
+            assert!(PtInRegion(region, 40, after.bottom - after.top - 30).as_bool());
+            let _ = DeleteObject(region.into());
+            DestroyWindow(hwnd).unwrap();
+            std::fs::remove_dir_all(paths.dir).unwrap();
+        }
+    }
     #[test]
     fn dpi_change_updates_native_control_bounds_and_font() {
         unsafe {

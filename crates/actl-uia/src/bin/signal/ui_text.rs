@@ -32,10 +32,10 @@ pub fn reason(reason: &str) -> &'static str {
         "handoff_pending" => "尚未获得桌面授权；若提示已关闭，请重新发起。",
         "user_deferred" => "本次暂不开始。",
         "stop_requested" => "上一轮执行已停止；核对结果后可继续，也可开始新任务。",
-        "precondition_failed" => "操作条件未满足，请查看详细信息。",
+        "precondition_failed" => "操作条件未满足，请查看技术详情。",
         "condition_observation_failed" => "暂时无法判断当前界面，已暂停；不会自动改走另一条路线。",
         "resume_check_failed" => "恢复检查未通过，请核对目标后再继续。",
-        "binding_validation_failed" => "步骤输入未通过检查，请查看详细信息。",
+        "binding_validation_failed" => "步骤输入未通过检查，请查看技术详情。",
         "action_failed" => "操作未完成，请先核对已有结果。",
         "verification_failed" => "结果未通过核对，不会自动重做。",
         "result_observation_failed" => "暂时无法读取上一步结果；继续仅重新核验，不会重做。",
@@ -43,7 +43,7 @@ pub fn reason(reason: &str) -> &'static str {
             "实际结果与预期不符，可能只完成了一部分；继续仅重新核验，不会重做。"
         }
         "input_monitor_unavailable" => "输入监听暂不可用，任务已暂停；恢复后点击继续重新核验。",
-        _ => "需要处理，请查看详细信息。",
+        _ => "需要处理，请查看技术详情。",
     }
 }
 pub fn summary(state: Option<&Value>, plan: Option<&Value>, stopped: bool) -> Summary {
@@ -52,7 +52,7 @@ pub fn summary(state: Option<&Value>, plan: Option<&Value>, stopped: bool) -> Su
         return Summary {
             title,
             status: if stopped {
-                "紧急停止已启用"
+                "急停已启用"
             } else {
                 "状态未确认"
             }
@@ -69,7 +69,7 @@ pub fn summary(state: Option<&Value>, plan: Option<&Value>, stopped: bool) -> Su
     let mut lines = Vec::new();
     if let Some(steps) = state["steps"].as_array().filter(|s| !s.is_empty()) {
         let completed = steps.iter().filter(|s| s["status"] == "completed").count();
-        lines.push(format!("已完成 {completed} / {} 步", steps.len()));
+        lines.push(format!("{completed} / {} 步完成", steps.len()));
         let current = steps
             .iter()
             .find(|s| {
@@ -94,7 +94,7 @@ pub fn summary(state: Option<&Value>, plan: Option<&Value>, stopped: bool) -> Su
         }
         if status == "completed" {
             let verified = steps.iter().filter(|s| s["verified"] == true).count();
-            lines.push(format!("其中 {verified} 步有核验记录。"));
+            lines[0].push_str(&format!(" · {verified} 步有核验记录"));
         }
     }
     if stopped {
@@ -106,18 +106,98 @@ pub fn summary(state: Option<&Value>, plan: Option<&Value>, stopped: bool) -> Su
     } else if status == "running" {
         lines.push("任务执行中；暂停需等待当前操作结束。".into());
     } else if matches!(status, "failed" | "stopped") {
-        lines.push("请查看详细信息，由调用方核对后接续。".into());
+        lines.push("请查看技术详情，由调用方核对后接续。".into());
     }
     Summary {
         title,
         status: if stopped {
-            "紧急停止已启用"
+            "急停已启用"
         } else {
             super::flow_ui::status_name(status)
         }
         .into(),
         body: lines.join("\r\n"),
     }
+}
+
+/// Business-facing record list. Technical identifiers stay in diagnostics.
+pub fn step_records(state: &Value, plan: Option<&Value>) -> String {
+    let Some(steps) = state["steps"].as_array() else {
+        return "步骤记录暂不可读。".into();
+    };
+    if steps.is_empty() {
+        return "暂无步骤记录。".into();
+    }
+    steps
+        .iter()
+        .enumerate()
+        .map(|(index, step)| {
+            let title = plan
+                .and_then(|p| p["steps"].as_array())
+                .and_then(|steps| steps.iter().find(|s| s["id"] == step["id"]))
+                .and_then(|s| s["title"].as_str())
+                .filter(|s| !s.trim().is_empty())
+                .map(|s| s.replace(['\r', '\n'], " "))
+                .unwrap_or_else(|| format!("步骤 {}", index + 1));
+            format!(
+                "{}. {} · {}{}",
+                index + 1,
+                title,
+                super::flow_ui::status_name(step["status"].as_str().unwrap_or("")),
+                if step["verified"] == true {
+                    " · 有核验记录"
+                } else {
+                    ""
+                }
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\r\n")
+}
+
+/// Expanded strip prioritizes the current business step over an ID chain.
+pub fn strip_progress(state: &Value, plan: Option<&Value>) -> String {
+    let Some(steps) = state["steps"].as_array().filter(|s| !s.is_empty()) else {
+        return "步骤状态未确认".into();
+    };
+    let completed = steps.iter().filter(|s| s["status"] == "completed").count();
+    if state["status"] == "completed" {
+        let verified = steps.iter().filter(|s| s["verified"] == true).count();
+        return format!(
+            "{completed} / {} 步完成 · {verified} 步有核验记录",
+            steps.len()
+        );
+    }
+    let current = steps
+        .iter()
+        .enumerate()
+        .find(|(_, s)| {
+            matches!(
+                s["status"].as_str(),
+                Some("running" | "verifying" | "uncertain" | "needs_review" | "failed")
+            )
+        })
+        .or_else(|| {
+            steps
+                .iter()
+                .enumerate()
+                .find(|(_, s)| s["status"] == "pending")
+        });
+    if let Some((index, step)) = current {
+        let title = plan
+            .and_then(|p| p["steps"].as_array())
+            .and_then(|steps| steps.iter().find(|s| s["id"] == step["id"]))
+            .and_then(|s| s["title"].as_str())
+            .filter(|s| !s.trim().is_empty());
+        let phase = super::flow_ui::status_name(step["status"].as_str().unwrap_or(""));
+        return format!(
+            "第 {} / {} 步 · {} · {phase}",
+            index + 1,
+            steps.len(),
+            title.unwrap_or("当前步骤").replace(['\r', '\n'], " ")
+        );
+    }
+    format!("{completed} / {} 步完成", steps.len())
 }
 
 pub fn recovery_guidance(step: &Value) -> Vec<String> {
@@ -164,7 +244,7 @@ pub fn feedback(message: &str, status: Option<&str>) -> String {
             "正在暂停，等待当前操作结束。".into()
         }
         _ if message.contains('：') || message.contains('\n') => {
-            "操作未完成，请展开详细信息。".into()
+            "操作未完成，请展开技术详情。".into()
         }
         _ => message.into(),
     }
@@ -174,6 +254,23 @@ pub fn feedback(message: &str, status: Option<&str>) -> String {
 mod tests {
     use super::*;
     use serde_json::json;
+    #[test]
+    fn completed_summary_is_one_line_and_records_use_business_titles() {
+        let p = json!({"steps":[{"id":"write-file", "title":"保存文件"}]});
+        let s = json!({"status":"completed", "steps":[{"id":"write-file", "status":"completed", "verified":true}]});
+        let view = summary(Some(&s), Some(&p), false);
+        assert_eq!(view.body, "1 / 1 步完成 · 1 步有核验记录");
+        let records = step_records(&s, Some(&p));
+        assert!(records.contains("保存文件"));
+        assert!(records.contains("有核验记录"));
+        assert!(!records.contains("write-file"));
+        let review =
+            json!({"status":"needs_review", "steps":[{"id":"write-file", "status":"uncertain"}]});
+        assert_eq!(
+            strip_progress(&review, Some(&p)),
+            "第 1 / 1 步 · 保存文件 · 待核对"
+        );
+    }
     #[test]
     fn recovery_explains_budget_and_next_action() {
         let step = json!({"error_code":"NOT_FOUND","recovery":{"retries":2,"events":[{"outcome":"budget_exhausted"}]}});

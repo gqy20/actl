@@ -14,7 +14,7 @@ use std::sync::OnceLock;
 
 pub const WIDTH: i32 = 280;
 pub const HEIGHT: i32 = 34;
-/// 展开态:宽度 1.5 倍(信息更清晰)、高度两行;第二行显示最近工作流步骤链。
+/// 展开态:宽度 1.5 倍、高度两行;第二行显示当前业务步骤与进度。
 /// 展开交互 = 点击横条空白(无箭头指示)。
 pub const WIDTH_EXT: i32 = 420;
 pub const HEIGHT_EXT: i32 = 62;
@@ -29,21 +29,11 @@ static PREAUTH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::n
 pub(super) fn set_preauth(on: bool) {
     PREAUTH.store(on, std::sync::atomic::Ordering::Relaxed);
 }
-/// 最近绑定工作流的步骤链(展开态第二行):id + 状态;空 = 无流程,回落最近调用摘要。
-static STEPS: std::sync::Mutex<Vec<(String, String)>> = std::sync::Mutex::new(Vec::new());
-pub(super) fn set_steps(steps: Vec<(String, String)>) {
-    if let Ok(mut slot) = STEPS.lock() {
-        *slot = steps;
-    }
-}
-/// 步骤状态 → 链上字形(完成勾、进行/待核对三角、失败叉、待执行圈、跳过菱形)。
-fn step_glyph(status: &str) -> &'static str {
-    match status {
-        "completed" => "✓",
-        "running" | "verifying" | "uncertain" | "needs_review" => "▸",
-        "failed" => "✕",
-        "pending" => "○",
-        _ => "◇",
+/// Business progress for the bound workflow; empty means no workflow.
+static PROGRESS: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
+pub(super) fn set_progress(progress: String) {
+    if let Ok(mut slot) = PROGRESS.lock() {
+        *slot = progress;
     }
 }
 pub fn pixels(value: i32, dpi: u32) -> i32 {
@@ -400,19 +390,15 @@ unsafe fn raster(view: &View, hover: u8, dpi: u32, expanded: bool) -> Result<Vec
         }
     }
     if expanded {
-        // 第二行:最近工作流的步骤链(id+状态字形,单行,尾部截断);无流程时
+        // 第二行:当前业务步骤与进度(单行,尾部截断);无流程时
         // 回落最近调用摘要(command · 相位)。分隔线随宽度。
         brush.SetColor(&color(0x2F3234));
         target.FillRoundedRectangle(&rounded(12., 34., w - 24., 1., 0.5), &brush);
-        let steps = STEPS.lock().map(|s| s.clone()).unwrap_or_default();
-        let text = if steps.is_empty() {
+        let progress = PROGRESS.lock().map(|s| s.clone()).unwrap_or_default();
+        let text = if progress.is_empty() {
             format!("{} · {}", view.second[0], view.second[1])
         } else {
-            steps
-                .iter()
-                .map(|(id, status)| format!("{}{}", id, step_glyph(status)))
-                .collect::<Vec<_>>()
-                .join("  ")
+            progress
         };
         brush.SetColor(&color(0x9AA0A6));
         let fmt = if has_cjk(&text) { cjk } else { latin };

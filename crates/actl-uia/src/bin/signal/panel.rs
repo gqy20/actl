@@ -21,11 +21,12 @@ struct Fonts {
     body: HFONT,
     title: HFONT,
     caption: HFONT,
+    result: HFONT,
 }
 impl Drop for Fonts {
     fn drop(&mut self) {
         unsafe {
-            for font in [self.body, self.title, self.caption] {
+            for font in [self.body, self.title, self.caption, self.result] {
                 let _ = DeleteObject(font.into());
             }
         }
@@ -109,15 +110,18 @@ pub unsafe fn fonts(hwnd: HWND, dpi: u32, ids: &[i32]) {
         (&dark as *const BOOL).cast(),
         std::mem::size_of::<BOOL>() as u32,
     );
+    let task_panel = GetDlgItem(Some(hwnd), 17).is_ok();
     let fonts = Box::new(Fonts {
-        body: face_font(16, dpi, BODY_FACES),
-        title: face_font(22, dpi, TITLE_FACES),
-        caption: face_font(14, dpi, BODY_FACES),
+        body: face_font(if task_panel { 14 } else { 16 }, dpi, BODY_FACES),
+        title: face_font(if task_panel { 20 } else { 22 }, dpi, TITLE_FACES),
+        caption: face_font(if task_panel { 12 } else { 14 }, dpi, BODY_FACES),
+        result: face_font(22, dpi, TITLE_FACES),
     });
     for &id in ids {
         if let Ok(child) = GetDlgItem(Some(hwnd), id) {
             let font = match id {
                 102 => fonts.title,
+                103 if task_panel => fonts.result,
                 103..=105 => fonts.caption,
                 _ => fonts.body,
             };
@@ -208,21 +212,48 @@ pub unsafe fn message(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> Option<LR
             let mut rect = RECT::default();
             let _ = GetClientRect(hwnd, &mut rect);
             fill(HDC(wp.0 as *mut _), &rect, BACKGROUND);
+            if GetDlgItem(Some(hwnd), 17).is_ok()
+                && let Ok(footer) = GetDlgItem(Some(hwnd), 12)
+            {
+                let mut r = RECT::default();
+                let _ = GetWindowRect(footer, &mut r);
+                let mut point = POINT {
+                    x: r.left,
+                    y: r.top,
+                };
+                let _ = ScreenToClient(hwnd, &mut point);
+                let inset = paint::pixels(24, GetDpiForWindow(hwnd));
+                let y = point.y - paint::pixels(12, GetDpiForWindow(hwnd));
+                fill(
+                    HDC(wp.0 as *mut _),
+                    &RECT {
+                        left: inset,
+                        right: rect.right - inset,
+                        top: y,
+                        bottom: y + 1,
+                    },
+                    0x3A3E42,
+                );
+            }
             super::frame::border(hwnd, HDC(wp.0 as *mut _), &rect);
             Some(LRESULT(1))
         }
         WM_CTLCOLORSTATIC | WM_CTLCOLOREDIT => {
             let dc = HDC(wp.0 as *mut _);
             let id = GetDlgCtrlID(HWND(lp.0 as *mut _));
-            let background = if id == 100 || id == 10 && GetDlgItem(Some(hwnd), 1).is_ok() {
-                SURFACE
-            } else {
-                BACKGROUND
-            };
+            let task_panel = GetDlgItem(Some(hwnd), 17).is_ok();
+            let background =
+                if id == 100 && !task_panel || id == 10 && GetDlgItem(Some(hwnd), 1).is_ok() {
+                    SURFACE
+                } else {
+                    BACKGROUND
+                };
             SetTextColor(
                 dc,
                 rgb(match id {
                     101 => 0xEDB88F,
+                    103 if task_panel => TEXT,
+                    100 | 106 | 107 if task_panel => MUTED,
                     103..=105 => MUTED,
                     _ => TEXT,
                 }),
@@ -241,13 +272,14 @@ pub unsafe fn message(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> Option<LR
             let primary = matches!(item.CtlID, 1 | 11);
             let danger = item.CtlID == 12;
             let window_button = matches!(item.CtlID, 15 | 16);
+            let disclosure = matches!(item.CtlID, 14 | 17) && GetDlgItem(Some(hwnd), 17).is_ok();
             let hovered = GetWindowLongPtrW(item.hwndItem, GWLP_USERDATA) != 0;
             // 轻量化(2026-09-30):次级/危险按钮从实心色块改为幽灵描边——
             // 透明底 + 1px 边框 + 悬浮微填充;主按钮保留实心(唯一强引导),
             // 色彩收敛;窗口按钮保持纯图形。状态色三元组 = (底, 字, 框)。
             let (bg, fg, border) = if disabled {
                 (BACKGROUND, 0x6A7178, 0x3A3E42)
-            } else if window_button {
+            } else if window_button || disclosure {
                 (BACKGROUND, TEXT, BACKGROUND)
             } else if primary {
                 if pressed {
@@ -315,7 +347,10 @@ pub unsafe fn message(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> Option<LR
                     dc,
                     &mut label[..len],
                     &mut text_rect,
-                    DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX,
+                    (if disclosure { DT_LEFT } else { DT_CENTER })
+                        | DT_VCENTER
+                        | DT_SINGLELINE
+                        | DT_NOPREFIX,
                 );
             }
             if item.itemState.0 & ODS_FOCUS.0 != 0 && item.itemState.0 & ODS_NOFOCUSRECT.0 == 0 {
