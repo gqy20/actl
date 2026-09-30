@@ -106,12 +106,16 @@ unsafe fn layout(hwnd: HWND, dpi: u32) {
     }
     let both = RECORDS.with(|v| v.get()) && EXPANDED.with(|v| v.get());
     let budget = (monitor_height - next - 36 - 72 - 24).max(64);
-    let records_height = text_height(
-        hwnd,
-        106,
-        dpi,
-        (if both { budget / 2 } else { budget }).clamp(32, 160),
-    );
+    let records_height = if web {
+        0
+    } else {
+        text_height(
+            hwnd,
+            106,
+            dpi,
+            (if both { budget / 2 } else { budget }).clamp(32, 160),
+        )
+    };
     if !web && RECORDS.with(|v| v.get()) {
         next += records_height + 12;
     }
@@ -119,12 +123,16 @@ unsafe fn layout(hwnd: HWND, dpi: u32) {
     if !web {
         next += 36;
     }
-    let technical_height = text_height(
-        hwnd,
-        107,
-        dpi,
-        (monitor_height - next - 72 - 12).clamp(32, 200),
-    );
+    let technical_height = if web {
+        0
+    } else {
+        text_height(
+            hwnd,
+            107,
+            dpi,
+            (monitor_height - next - 72 - 12).clamp(32, 200),
+        )
+    };
     if !web && EXPANDED.with(|v| v.get()) {
         next += technical_height + 12;
     }
@@ -163,6 +171,9 @@ unsafe fn layout(hwnd: HWND, dpi: u32) {
         },
     );
     for &(id, _, x, y, width, height) in CONTROLS {
+        if web && matches!(id, 100 | 101 | 103 | 14 | 17 | 106 | 107) {
+            continue;
+        }
         if let Ok(child) = GetDlgItem(Some(hwnd), id) {
             let x = match id {
                 12 | 13 if has_action => 184,
@@ -476,7 +487,12 @@ pub(super) unsafe fn refresh_with(hwnd: HWND, paths: &SignalPaths, id: Option<&s
 }
 unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
     if super::web_details::is_update(msg) {
-        refresh(hwnd);
+        if wp.0 == 1 {
+            super::web_details::acknowledge_layout(hwnd);
+            layout(hwnd, GetDpiForWindow(hwnd));
+        } else {
+            refresh(hwnd);
+        }
         return LRESULT(0);
     }
     if let Some(result) = super::panel::message(hwnd, msg, wp, lp) {
@@ -713,6 +729,16 @@ pub(super) unsafe fn preview_sections(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn web_height_notification_preserves_the_loaded_task_snapshot() {
+        unsafe {
+            let hwnd = create_window().unwrap();
+            set_text(hwnd, 100, "loaded snapshot must survive layout");
+            proc(hwnd, WM_APP + 61, WPARAM(1), LPARAM(0));
+            assert_eq!(text(hwnd, 100), "loaded snapshot must survive layout");
+            DestroyWindow(hwnd).unwrap();
+        }
+    }
     #[test]
     fn terminal_state_reclaims_action_space_and_expanded_records_keep_footer_aligned() {
         unsafe {

@@ -22,6 +22,8 @@ summary { cursor: pointer; list-style: none; display: flex; align-items: center;
 summary::-webkit-details-marker { display: none; }
 summary::after { content: '›'; color: #b1b8be; font-size: 18px; }
 details[open] > summary::after { transform: rotate(90deg); }
+details[data-expanded='false'] > summary::after { transform: rotate(0); }
+.disclosure-body { display: flow-root; }
 summary:hover { color: #b7d4e6; }
 summary:focus-visible, button:focus-visible { outline: 2px solid #9ec2d8; outline-offset: 4px; border-radius: 3px; }
 pre { font: inherit; font-size: 13px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; color: #aeb7bf; margin: 8px 0 12px; max-height: 200px; overflow: auto; scrollbar-width: thin; scrollbar-color: #596168 transparent; }
@@ -41,5 +43,5 @@ pre { font: inherit; font-size: 13px; line-height: 1.8; white-space: pre-wrap; o
 button:disabled { cursor: default; opacity: .65; }
 #preview-shortcut { font-size: 12px; color: #b1b8be; }
 @media (max-width: 420px) { .preview { padding: 12px; } .preview #preview-window { padding: 20px; } }
-@media (prefers-reduced-motion: no-preference) { summary::after { transition: transform 120ms ease; } }
+@media (prefers-reduced-motion: no-preference) { summary::after { transition: transform 160ms cubic-bezier(.2,.7,.2,1); } }
 @media (forced-colors: active) { summary:focus-visible, button:focus-visible { outline-color: Highlight; } }

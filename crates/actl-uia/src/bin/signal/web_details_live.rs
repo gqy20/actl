@@ -119,6 +119,53 @@ fn embedded_page_loads_updates_discloses_and_falls_back() {
             "true"
         );
         pump_until(|| height(host.0) > before);
+        script(
+            &view,
+            "document.querySelector('#records-section summary').click()",
+        );
+        pump_until(|| {
+            script(
+                &view,
+                "!document.querySelector('#records-section').open && document.getAnimations().length===0",
+            ) == "true"
+        });
+        script(
+            &view,
+            "window.__heightEvents=[]; const original=window.chrome.webview.postMessage.bind(window.chrome.webview); window.chrome.webview.postMessage=(m)=>{if(m.kind==='height')window.__heightEvents.push(m.height);original(m)}; document.querySelector('#records-section summary').click()",
+        );
+        pump_until(|| {
+            script(
+                &view,
+                "document.querySelector('#records-section').open && document.getAnimations().length===0",
+            ) == "true"
+        });
+        let notifications: usize = script(&view, "window.__heightEvents.length")
+            .parse()
+            .unwrap();
+        assert!(
+            (1..=2).contains(&notifications),
+            "animation flooded host: {notifications}"
+        );
+        script(
+            &view,
+            "window.__heightEvents=[]; const summary=document.querySelector('#records-section summary'); summary.click(); summary.click()",
+        );
+        pump_until(|| {
+            script(
+                &view,
+                "document.querySelector('#records-section').open && document.getAnimations().length===0",
+            ) == "true"
+        });
+        let notifications: usize = script(&view, "window.__heightEvents.length")
+            .parse()
+            .unwrap();
+        assert!(
+            notifications <= 2,
+            "rapid reversal flooded host: {notifications}"
+        );
+        eprintln!(
+            "Disclosure motion settled; final intent preserved; bounded height notifications."
+        );
         assert_eq!(
             script(
                 &view,

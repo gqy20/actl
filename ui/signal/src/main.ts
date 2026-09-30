@@ -1,5 +1,6 @@
 import './styles.css';
 import { parseSnapshot, summaryLines, type Snapshot } from './model.ts';
+import { disclosureMotion } from './disclosure.ts';
 
 interface NativeBridge {
   postMessage(message: { version: 1; kind: 'ready' | 'height'; height?: number }): void;
@@ -14,12 +15,20 @@ const element = <T extends HTMLElement>(id: string): T => {
 };
 const content = element('content');
 let lastHeight = 0;
-function reportHeight(): void {
-  const height = Math.ceil(content.getBoundingClientRect().height);
+function emitHeight(height: number): void {
   if (height !== lastHeight) {
     lastHeight = height;
     bridge?.postMessage({ version: 1, kind: 'height', height });
   }
+}
+const motion = disclosureMotion(content, emitHeight);
+let heightFrame = 0;
+function reportHeight(): void {
+  if (!bridge || heightFrame || motion.isAnimating()) return;
+  heightFrame = requestAnimationFrame(() => {
+    heightFrame = 0;
+    if (!motion.isAnimating()) emitHeight(Math.ceil(content.getBoundingClientRect().height));
+  });
 }
 function setText(id: string, text: string): void {
   const node = element(id);
@@ -51,7 +60,7 @@ function render(snapshot: Snapshot): void {
   primary.disabled = !snapshot.primaryEnabled;
   setText('preview-stop', snapshot.stop);
   setText('preview-shortcut', snapshot.shortcut);
-  requestAnimationFrame(reportHeight);
+  reportHeight();
 }
 new ResizeObserver(reportHeight).observe(content);
 if (bridge) {

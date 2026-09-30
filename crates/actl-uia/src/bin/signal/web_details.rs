@@ -20,6 +20,7 @@ struct State {
     error: Option<String>,
     last_json: String,
     initial_navigation: bool,
+    layout_pending: bool,
 }
 
 #[derive(Debug, PartialEq)]
@@ -95,6 +96,7 @@ pub unsafe fn start(
             error: None,
             last_json: String::new(),
             initial_navigation: true,
+            layout_pending: false,
         })
     });
     let handler =
@@ -240,15 +242,33 @@ unsafe fn setup(hwnd: HWND, controller: ICoreWebView2Controller) -> windows::cor
                 args.WebMessageAsJson(&mut json)?;
                 let json = CoTaskMemPWSTR::from(json).to_string();
                 if let Some(message) = parse_message(&source, &json) {
-                    STATE.with(|slot| {
+                    let notification = STATE.with(|slot| {
                         if let Some(state) = slot.borrow_mut().as_mut() {
                             match message {
-                                Message::Ready => state.ready = true,
-                                Message::Height(h) => state.height = h,
+                                Message::Ready => {
+                                    if state.ready {
+                                        return None;
+                                    }
+                                    state.ready = true;
+                                    return Some(0);
+                                }
+                                Message::Height(h) => {
+                                    if h == state.height {
+                                        return None;
+                                    }
+                                    state.height = h;
+                                    if !state.layout_pending {
+                                        state.layout_pending = true;
+                                        return Some(1);
+                                    }
+                                }
                             }
                         }
+                        None
                     });
-                    let _ = PostMessageW(Some(hwnd), UPDATE, WPARAM(0), LPARAM(0));
+                    if let Some(kind) = notification {
+                        let _ = PostMessageW(Some(hwnd), UPDATE, WPARAM(kind), LPARAM(0));
+                    }
                 }
             }
             Ok(())
@@ -424,6 +444,13 @@ pub unsafe fn close(hwnd: HWND) {
 }
 pub fn is_update(message: u32) -> bool {
     message == UPDATE
+}
+pub fn acknowledge_layout(hwnd: HWND) {
+    STATE.with(|slot| {
+        if let Some(state) = slot.borrow_mut().as_mut().filter(|s| s.hwnd == hwnd) {
+            state.layout_pending = false;
+        }
+    });
 }
 
 #[cfg(test)]
