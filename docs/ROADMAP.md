@@ -121,9 +121,7 @@
   匹配扩展到父子链。
 - [ ] flow-status 陈旧计划提示：计划冻结时间与模板文件 mtime/hash 比对，提示
   "模板已改，重试仍跑旧路线"——防止对冻结计划验证新修复（本轮废了两次重试）。
-- [ ] Excel 残壳根治试验：File→退出（菜单路线）替代 WM_CLOSE，观察是否全进程退出
-  （当前 WM_CLOSE/COM Quit 均无效、9 壳堆积拖慢全局、重启才能清，见 docs/68 与
-  excel pack teardown_patience）；重启后复测一轮确认壳数不无限增长。
+- [ ] Excel 关闭路线改造（残壳根治，机制已查明）：excel-table 模板 close 步从 `close-window`（WM_CLOSE：只收窗、进程常驻=生成壳）改走后台「文件→关闭」按钮路线（UIA invoke，实测关最后一本后进程 ~5s 干净退出），close 断言随之从「工作簿窗口消失」升回「进程退出」（带耐心）；单应用与整批模板同步 + 契约测试。免重启清壳配方（无 /x 路由 + 排干 + 后台关闭，ACTL_TASK_ID 共享授权）已实测可用，见 docs/68 残壳专项节。
   另：excel paste 中断重放后盘上仍为种子、xlsx subset 断言失败（docs/68 第五轮），
   重放恢复路径复现优先。
 - [ ] 诊断脚本沉淀入 devtools：窗口标题监视器、close→gone 计时器、隔离应用实验台
