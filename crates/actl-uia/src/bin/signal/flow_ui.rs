@@ -190,47 +190,77 @@ pub fn status_name(status: &str) -> &str {
         _ => "状态未知",
     }
 }
+/// 详细信息分层(2026-09-30 重排):摘要一行(状态 · 流程 · 原因)→ 步骤统计一行
+/// (完成步骤折叠为计数)→ 仅未完成/异常步骤逐条一行(错误码并进同行)→ 每步只留
+/// 最近一条恢复观察、压缩为缩进一行 → 结尾一行继续指引。不再逐项等密度罗列。
 pub fn details(paths: &SignalPaths, id: &str) -> String {
     let Some(state) = read(paths, id) else {
-        return format!("流程 · {id}\n状态暂不可读，请稍候");
+        return format!("{id} · 状态暂不可读，请稍候");
     };
     let status = state["status"].as_str().unwrap_or("");
-    let mut text = format!("流程 · {id}\n{}", status_name(status));
-    if let Some(reason) = state["reason"].as_str() {
-        let reason = super::ui_text::reason(reason);
-        text.push_str(&format!(
-            "\n{reason}\n原因标识：{}",
-            state["reason"].as_str().unwrap_or("")
-        ));
-    }
-    if let Some(steps) = state["steps"].as_array() {
-        for step in steps {
-            text.push_str(&format!(
-                "\n{} · {}",
-                step["id"].as_str().unwrap_or("—"),
-                status_name(step["status"].as_str().unwrap_or(""))
+    let reason = state["reason"].as_str().map(super::ui_text::reason);
+    let mut lines = vec![match reason {
+        Some(reason) => format!("{} · {id} · {reason}", status_name(status)),
+        None => format!("{} · {id}", status_name(status)),
+    }];
+    if let Some(steps) = state["steps"].as_array().filter(|s| !s.is_empty()) {
+        // 统计行:完成始终展示,其余仅非零项,尾附总数。
+        let count = |name: &str| steps.iter().filter(|s| s["status"] == name).count();
+        let completed = count("completed");
+        let mut stats = format!("完成 {completed}");
+        for (name, label) in [
+            ("pending", "待执行"),
+            ("running", "进行中"),
+            ("verifying", "核对中"),
+            ("uncertain", "待核对"),
+            ("needs_review", "待核对"),
+            ("failed", "失败"),
+            ("skipped", "已跳过"),
+        ] {
+            let n = count(name);
+            if n > 0 {
+                stats.push_str(&format!(" · {label} {n}"));
+            }
+        }
+        stats.push_str(&format!(" · 共 {}", steps.len()));
+        lines.push(stats);
+        for step in steps.iter().filter(|s| s["status"] != "completed") {
+            let sid = step["id"].as_str().unwrap_or("—");
+            let step_status = status_name(step["status"].as_str().unwrap_or(""));
+            let code = step["error_code"].as_str();
+            lines.push(format!(
+                "▸ {sid} · {step_status}{}",
+                code.map(|c| format!(" · {c}")).unwrap_or_default()
             ));
-            if let Some(code) = step["error_code"].as_str() {
-                text.push_str(&format!(" · {code}"));
-            }
-            for hint in super::ui_text::recovery_guidance(step) {
-                text.push_str(&format!("\n{hint}"));
-            }
-            if let Some(events) = step["recovery"]["events"].as_array() {
-                for event in events.iter().rev().take(5).rev() {
-                    text.push_str(&format!(
-                        "\n观察 {} · {} · 重试 {} · 耗时 {}ms · 剩余 {}ms",
-                        event["phase"].as_str().unwrap_or("—"),
-                        event["outcome"].as_str().unwrap_or("—"),
-                        event["retries"],
-                        event["elapsed_ms"],
-                        event["remaining_ms"]
-                    ));
-                }
+            if let Some(event) = step["recovery"]["events"].as_array().and_then(|e| e.last()) {
+                lines.push(format!(
+                    "   最后观察 {} · 重试 {} · 用时 {} · 剩余 {}",
+                    event["outcome"].as_str().unwrap_or("—"),
+                    event["retries"],
+                    fmt_secs(event["elapsed_ms"].as_u64()),
+                    fmt_secs(event["remaining_ms"].as_u64()),
+                ));
             }
         }
     }
-    text
+    if matches!(status, "paused" | "needs_review") {
+        lines
+            .push("继续：核对上一步结果后点「检查并继续」；重放写步骤须显式 --retry-step。".into());
+    } else if status == "failed" {
+        lines.push("失败：查看异常步骤的原因后修正路线；直接重试不会绕过失败。".into());
+    } else if status == "stopped" {
+        lines.push("已停止：新任务可直接发起；旧任务不会自动恢复。".into());
+    }
+    lines.join("\n")
+}
+
+/// 毫秒人性化:≥1s 显示一位小数秒,不足 1s 显示毫秒。
+fn fmt_secs(ms: Option<u64>) -> String {
+    match ms {
+        Some(ms) if ms >= 1000 => format!("{:.1}s", ms as f64 / 1000.0),
+        Some(ms) => format!("{ms}ms"),
+        None => "—".into(),
+    }
 }
 #[cfg(test)]
 mod tests {
@@ -254,6 +284,57 @@ mod tests {
             let text = details(&paths, "review");
             assert!(text.contains(expected), "{text}");
         }
+        std::fs::remove_dir_all(paths.dir).unwrap();
+    }
+    #[test]
+    fn details_are_layered_and_completed_steps_collapse_into_stats() {
+        let paths =
+            SignalPaths::at(std::env::temp_dir().join(actl_core::snapshot::new_snapshot_id()));
+        let dir = paths.dir.join("flows").join("layered");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("state.json"),
+            serde_json::json!({
+                "status":"needs_review","reason":"action_failed",
+                "steps":[
+                    {"id":"open","status":"completed"},
+                    {"id":"fill","status":"completed"},
+                    {"id":"cell-readback","status":"uncertain","error_code":"NOT_FOUND",
+                     "recovery":{"events":[{"outcome":"recovered","retries":3,"elapsed_ms":14700,"remaining_ms":300}]}},
+                    {"id":"close-frame","status":"skipped"}
+                ]
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let text = details(&paths, "layered");
+        let lines: Vec<&str> = text.lines().collect();
+        // 摘要一行:状态 · 流程 · 原因三合一。
+        assert_eq!(
+            lines[0], "待核对 · layered · 操作未完成，请先核对已有结果。",
+            "{text}"
+        );
+        // 统计行:完成折叠为计数,含总数。
+        assert!(
+            lines[1].contains("完成 2") && lines[1].contains("共 4"),
+            "{text}"
+        );
+        // completed 步骤不再单独占行。
+        assert!(
+            !text.contains("\nopen ·") && !text.contains("fill · 已完成"),
+            "{text}"
+        );
+        // 异常步骤一行合并错误码;恢复观察压缩为一行且数字人性化。
+        assert!(
+            text.contains("▸ cell-readback · 待核对 · NOT_FOUND"),
+            "{text}"
+        );
+        assert!(
+            text.contains("最后观察 recovered · 重试 3 · 用时 14.7s · 剩余 300ms"),
+            "{text}"
+        );
+        // 结尾一行继续指引。
+        assert!(text.contains("继续："), "{text}");
         std::fs::remove_dir_all(paths.dir).unwrap();
     }
     #[test]

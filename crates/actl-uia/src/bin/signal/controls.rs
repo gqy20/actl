@@ -213,7 +213,7 @@ pub(super) unsafe fn refresh_with(hwnd: HWND, paths: &SignalPaths, id: Option<&s
         let technical = id
             .map(|id| flow_ui::details(paths, id))
             .unwrap_or_else(|| control_view(paths).details);
-        text.push_str(&format!("\r\n\r\n{}\r\n{technical}", summary.title));
+        text.push_str(&format!("\r\n\r\n{technical}"));
         text.push_str(&paths.stop_details());
         if !message.is_empty() {
             text.push_str(&format!("\r\n{message}"));
