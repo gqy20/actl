@@ -9,6 +9,8 @@
 
 ## [Unreleased]
 
+- **timing 画像/扫描夹具原生落地（`cargo xtask timing profile|sweep`）**：把 [timing-2026-09](docs/timing-2026-09.md) 的 ad-hoc 方法论固化为 devtools 子命令，`ACTL_*` env 旋钮从此有固定消费者。画像复测四场景（记事本 get ×20、另存为链 ×3、计算器热点击 ×30 含内容树健康预检、设置冷快照）；扫描按旋钮切档复现三问（Q2 轮询检出开销、Q3 分批吞吐、Q5 焦点链成功率）；报告仍落 docs/timing-data/，逐调用留痕在 target/timing-*/。对旧 bash 脚本的纪律修正：清理全部改优雅关闭 + verify-closed（禁 taskkill）、记事本用标记文件隔离并核对进程归属、注入预检改用自有窗口 hwnd 定位（用不存在目标名探测会退到桌面级 UIA 枚举，docs/65 分钟级慢路径）、急停/显示端未就绪/既有记事本窗口预检让行报阻塞（77）。两个实测环境发现：本机为 Store 版记事本（system32 无 notepad.exe，夹具按 %LOCALAPPDATA% 执行别名解析）；actl 显示端窗口被明确排除在自动化目标外（focus/close 均拒，属正确护栏）。真机整轮 smoke 当前受阻于显示端表面被盖（covered_or_offscreen，暴露 actl 栏即可重跑）；预检与阻塞退出路径已真机验证（204ms 快速失败，exit 77）。
+
 - **内部时序字面量统一跟随 Timing 旋钮（默认值不变）**：desktop-prepare/restore 与 minimize/restore 的输入锁等待从硬编码 3000ms 改跟 `ACTL_LOCK_WAIT_MS`（三处）；挂起唤醒循环的再探针从硬编码 60ms 改跟 `ACTL_PROBE_MS`；verify-file/rows/clipboard/closed 与 verify-window 的沉降轮询间隔从硬编码 100ms 改跟 `ACTL_POLL_MS`。默认值全部不变，仅 env 联动生效；settle 窗口数值（5s/15s）仍按 help 契约钉死，可调化路线与 timing fixtures 已登记 ROADMAP（[PARAMETERS §9](docs/PARAMETERS.md)）。
 
 - **三份横切参考文档（docs/FALLBACK、docs/STABILITY、docs/PARAMETERS）**：把散在各编号文档与代码里的三类知识各自整理成跨子系统总览，供后续逐项完善与优化——FALLBACK 收全量兜底/降级路线（自动/显式/fail-closed 三分类 + 换路可观测字段清单）；STABILITY 按步骤生命周期（就绪→观察→身份焦点→输入→核验→流程推进→协作→失败处置）收护栏机制地图与稳定性不变量；PARAMETERS 收全部时序参数（协议常量 5 项不可 env 覆盖、`Timing` 14 内部旋钮、使用点硬编码）并登记已知不对称（desktop.rs 硬编码锁等待、唤醒再探针不跟 `probe_ms`、不可覆写硬编码清单）。README 索引同步。

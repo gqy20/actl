@@ -4,6 +4,7 @@ pub mod diagnostics;
 pub mod fixtures;
 pub mod package;
 pub mod regress;
+pub mod timing;
 use actl_core::{CtlError, ErrorCode};
 use serde_json::Value;
 use std::{

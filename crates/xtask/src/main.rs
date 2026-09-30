@@ -21,6 +21,7 @@ fn main() -> ExitCode {
         Some("gate") => gate(),
         Some("fmt") => code(run(&["fmt", "--all"])),
         Some("regress") => regress(),
+        Some("timing") => timing(),
         Some("preview-tests") => preview_tests(),
         Some("fixture" | "diagnose" | "package") => devtools(),
         Some("lint-packs") => lint_packs(std::env::args().nth(2).as_deref()),
@@ -34,6 +35,8 @@ fn main() -> ExitCode {
                  cargo xtask regress [--list | --suite flow|system|scenario | --case ID] [--unattended] (native Rust)
   \
                  cargo xtask preview-tests  serially run ignored preview_window live tests (interactive desktop)
+  \
+                 cargo xtask timing profile|sweep  latency picture / ACTL_* knob sweep (interactive desktop)
   \n                 cargo xtask lint-packs [dir] validate app packs against the CLI schema\n                 \
                  (default skills/actl/apps; pass a dir to lint out-of-repo private packs)"
             );
@@ -198,6 +201,17 @@ fn build_pair() -> bool {
 fn regress() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(2).collect();
     if !args.iter().any(|arg| arg == "--list") && !build_pair() {
+        return ExitCode::FAILURE;
+    }
+    devtools()
+}
+
+/// 时序画像/参数扫描(docs/timing-2026-09 方法论的原生固化):release 构建 + 转发
+/// actl-devtools。需交互桌面且显示端就绪(写入动作经 display gate 预告,表面被盖
+/// 即阻塞);记事本用标记文件隔离,发现既有记事本窗口/急停/锁屏/前台被占时
+/// 整轮让行报阻塞(77)。
+fn timing() -> ExitCode {
+    if !build_pair() {
         return ExitCode::FAILURE;
     }
     devtools()

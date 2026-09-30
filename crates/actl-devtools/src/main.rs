@@ -5,6 +5,12 @@ fn execute(args: &[String]) -> Result<Value> {
     match args.first().map(String::as_str) {
         Some("package") => actl_devtools::package::run(&Args::parse(&args[1..])?),
         Some("regress") => actl_devtools::regress::run(&Args::parse(&args[1..])?),
+        Some("timing") => {
+            let kind = args
+                .get(1)
+                .ok_or_else(|| CtlError::protocol("missing kind"))?;
+            actl_devtools::timing::run(kind, &Args::parse(&args[2..])?)
+        }
         Some("fixture" | "diagnose") => {
             let kind = args
                 .get(1)
@@ -17,7 +23,7 @@ fn execute(args: &[String]) -> Result<Value> {
             }
         }
         _ => Err(CtlError::protocol(
-            "expected package, regress, fixture CASE, or diagnose KIND",
+            "expected package, regress, timing KIND, fixture CASE, or diagnose KIND",
         )),
     }
 }
@@ -25,7 +31,7 @@ fn main() -> std::process::ExitCode {
     let args: Vec<_> = std::env::args().skip(1).collect();
     if args.first().is_some_and(|s| s == "--help") {
         println!(
-            "Usage: cargo xtask fixture CASE | diagnose KIND | regress | package [OPTIONS]\nOptions: --actl PATH --output NEW_DIRECTORY; regress --list --suite SUITE --case ID --unattended\nExample: cargo xtask regress --list\nErrors: PROTOCOL invalid arguments; ASSERTION_FAILED failed verification; INTERNAL capture failure"
+            "Usage: cargo xtask fixture CASE | diagnose KIND | regress | timing KIND | package [OPTIONS]\nOptions: --actl PATH --output NEW_DIRECTORY; regress --list --suite SUITE --case ID --unattended; timing profile|sweep (interactive desktop, plain-call latency)\nExample: cargo xtask regress --list; cargo xtask timing sweep\nErrors: PROTOCOL invalid arguments; ASSERTION_FAILED failed verification; NOT_ACTIONABLE preflight blocked (locked desktop / existing Notepad); INTERNAL capture failure"
         );
         return std::process::ExitCode::SUCCESS;
     }

@@ -126,9 +126,6 @@
   重放恢复路径复现优先。
 - [ ] 诊断脚本沉淀入 devtools：窗口标题监视器、close→gone 计时器、隔离应用实验台
   （本轮以 ad-hoc 脚本反复手写）。
-- [ ] timing-profile/timing-sweep fixtures 落地 devtools：`Timing` 的 `ACTL_*` env 旋钮目前没有
-  固定消费者。按 [timing-2026-09](timing-2026-09.md) 的 profile/sweep 方法做成 `cargo xtask`
-  可复现入口（隔离系统应用场景、阶段耗时、环境陷阱登记），作为"按应用自适应时序"的前置设施。
 - [ ] verify 族耐心值可调化（spec，按需推进）：verify-file/rows/clipboard/closed 5s、
   verify-window 15s、`--verify-value` 2s 已被 after_help 承诺为契约；若实际出现按应用调耐心的
   需求，走 Timing 内部旋钮 + help 措辞去具体化 + golden/docs/06/CHANGELOG 同 PR 的 spec 路线，

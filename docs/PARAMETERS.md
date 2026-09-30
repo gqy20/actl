@@ -161,6 +161,10 @@
 
 - **sweep 结论**（[timing-2026-09](timing-2026-09.md)，2026-09-26）：poll 100ms、segment 32 字符、
   焦点链 120ms×3 维持现值；环境陷阱登记（慢日/锁屏/受保护视图）。
+- **复现入口**：`cargo xtask timing profile | sweep`（原生 devtools 夹具，2026-09-30 落地）。
+  前置：交互桌面 + 显示端就绪（写入动作经 display gate 预告）+ 无既有记事本窗口；
+  产物落 `docs/timing-data/<kind>-<UTC 时间戳>.md` 与 `target/timing-*/report.json`，
+  逐调用留痕在同级 `call-*.{capture.json,stdout.json,stderr.log}`。
 - **timing 纪律**：性能数字只在同环境头内比较，慢日绝对值不跨日（AGENTS）。
 - gate 各步耗时随 stderr 输出（`· <step> Nms`），慢环节头内比较。
 - 生态对照见 [13 §4.2](13-realtime-state-maintenance.md)：poll ~100ms、窗口/元素超时 3-5s、
@@ -184,9 +188,7 @@
    族的窗口数值已被 after_help 承诺为契约（"5-second/15-second settle window"），可调化必须连
    help 措辞与契约 golden 一起改（`spec` 提交）；交接 25s 是 docs/32 的人机协议，建议保持钉死。
    已登记 ROADMAP。
-2. `timing.rs` 头注设想的 timing-profile/timing-sweep fixtures 尚未落地（env 旋钮目前主要供
-   手动实验）。已登记 ROADMAP。
-3. 引擎无步骤级超时——步骤时长上限完全由内嵌命令的等待旗标决定（设计如此，登记在此防误判为缺陷）。
+2. 引擎无步骤级超时——步骤时长上限完全由内嵌命令的等待旗标决定（设计如此，登记在此防误判为缺陷）。
 
 ## 10. 维护规则
 
