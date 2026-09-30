@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "actl-cli"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "actl-core",
  "actl-flow",
@@ -15,7 +15,7 @@ dependencies = [
 
 [[package]]
 name = "actl-core"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "serde",
  "serde_json",
@@ -24,7 +24,7 @@ dependencies = [
 
 [[package]]
 name = "actl-devtools"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "actl-core",
  "actl-flow",
@@ -35,7 +35,7 @@ dependencies = [
 
 [[package]]
 name = "actl-flow"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "actl-core",
  "serde",
@@ -45,11 +45,11 @@ dependencies = [
 
 [[package]]
 name = "actl-physical"
-version = "0.1.7"
+version = "0.1.8"
 
 [[package]]
 name = "actl-uia"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "actl-core",
  "serde_json",
@@ -847,7 +847,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "0.1.7"
+version = "0.1.8"
 
 [[package]]
 name = "zip"

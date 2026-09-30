@@ -11,7 +11,7 @@ keywords = ["windows", "uia", "automation", "accessibility"]
 categories = ["os::windows-apis"]
 
 [dependencies]
-actl-core = { path = "../actl-core", version = "0.1.7" }
+actl-core = { path = "../actl-core", version = "0.1.8" }
 # M0 评估通过,升为正式依赖(docs/spike-findings.md);版本统一由根 Cargo.toml 管理(ADR-003)
 uiautomation.workspace = true
 serde_json.workspace = true

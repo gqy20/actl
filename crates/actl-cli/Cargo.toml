@@ -11,9 +11,9 @@ keywords = ["windows", "automation", "cli", "agent", "rpa"]
 categories = ["command-line-utilities"]
 
 [dependencies]
-actl-core = { path = "../actl-core", version = "0.1.7" }
-actl-flow = { path = "../actl-flow", version = "0.1.7" }
-actl-uia = { path = "../actl-uia", version = "0.1.7" }
+actl-core = { path = "../actl-core", version = "0.1.8" }
+actl-flow = { path = "../actl-flow", version = "0.1.8" }
+actl-uia = { path = "../actl-uia", version = "0.1.8" }
 clap = { version = "4.6.7", features = ["derive"] }
 serde_json.workspace = true
 
