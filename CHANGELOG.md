@@ -7,135 +7,48 @@
 `@eN` 等 ref 语法必须置于反引号内——裸 `@` 会被 GitHub 解析为用户提及
 (v0.1.3 曾因此把无关账号 en 列进 Contributors)。
 
-## [Unreleased]
+## [0.1.7] - 2026-09-30
 
-- **timing 画像/扫描夹具原生落地（`cargo xtask timing profile|sweep`）**：把 [timing-2026-09](docs/timing-2026-09.md) 的 ad-hoc 方法论固化为 devtools 子命令，`ACTL_*` env 旋钮从此有固定消费者。画像复测四场景（记事本 get ×20、另存为链 ×3、计算器热点击 ×30 含内容树健康预检、设置冷快照）；扫描按旋钮切档复现三问（Q2 轮询检出开销、Q3 分批吞吐、Q5 焦点链成功率）；报告仍落 docs/timing-data/，逐调用留痕在 target/timing-*/。对旧 bash 脚本的纪律修正：清理全部改优雅关闭 + verify-closed（禁 taskkill）、记事本用标记文件隔离并核对进程归属、注入预检改用自有窗口 hwnd 定位（用不存在目标名探测会退到桌面级 UIA 枚举，docs/65 分钟级慢路径）、急停/显示端未就绪/既有记事本窗口预检让行报阻塞（77）。两个实测环境发现：本机为 Store 版记事本（system32 无 notepad.exe，夹具按 %LOCALAPPDATA% 执行别名解析）；actl 显示端窗口被明确排除在自动化目标外（focus/close 均拒，属正确护栏）。真机整轮 smoke 当前受阻于显示端表面被盖（covered_or_offscreen，暴露 actl 栏即可重跑）；预检与阻塞退出路径已真机验证（204ms 快速失败，exit 77）。
-
-- **内部时序字面量统一跟随 Timing 旋钮（默认值不变）**：desktop-prepare/restore 与 minimize/restore 的输入锁等待从硬编码 3000ms 改跟 `ACTL_LOCK_WAIT_MS`（三处）；挂起唤醒循环的再探针从硬编码 60ms 改跟 `ACTL_PROBE_MS`；verify-file/rows/clipboard/closed 与 verify-window 的沉降轮询间隔从硬编码 100ms 改跟 `ACTL_POLL_MS`。默认值全部不变，仅 env 联动生效；settle 窗口数值（5s/15s）仍按 help 契约钉死，可调化路线与 timing fixtures 已登记 ROADMAP（[PARAMETERS §9](docs/PARAMETERS.md)）。
-
-- **三份横切参考文档（docs/FALLBACK、docs/STABILITY、docs/PARAMETERS）**：把散在各编号文档与代码里的三类知识各自整理成跨子系统总览，供后续逐项完善与优化——FALLBACK 收全量兜底/降级路线（自动/显式/fail-closed 三分类 + 换路可观测字段清单）；STABILITY 按步骤生命周期（就绪→观察→身份焦点→输入→核验→流程推进→协作→失败处置）收护栏机制地图与稳定性不变量；PARAMETERS 收全部时序参数（协议常量 5 项不可 env 覆盖、`Timing` 14 内部旋钮、使用点硬编码）并登记已知不对称（desktop.rs 硬编码锁等待、唤醒再探针不跟 `probe_ms`、不可覆写硬编码清单）。README 索引同步。
-
-- **[spec] close-window 新增 `--system-close` + excel 模板进程收尾两步**：差分实验定案（docs/68）——Excel 在后台正确关闭文档后，裸框架对 WM_CLOSE 只隐藏不退程，但收到 WM_SYSCOMMAND/SC_CLOSE（点标题栏 X 的同一命令）后 ~5 秒干净退出；未走文档关闭的旧壳对 SC_CLOSE 也不退。据此：close-window 支持投递 SC_CLOSE（协议面小扩展，docs/06 同步）；excel-table（单应用与整批同步）在两处后台关闭后各加「close-frame/exit」步——`close-window --hwnd <ownership> --system-close` + `verify-closed`（窗口+进程双断言），Excel 流程从此任务层与进程层都真正关闭。步骤数 13→15 / 69→71，契约 golden 同步。
-
-- **Excel 关闭路线改后台文档关闭（模板）**：excel-table（单应用与整批同步）的 close/close-before-reopen 从 `close-window`（WM_CLOSE：只收起窗口，进程必驻留为隐藏空壳）改走后台关闭序列（click 文件 → NavBarMenu 内 ListItem「关闭」→ 等 NavBarMenu 消失），断言保持「工作簿窗口消失」（wait --gone id:1001）。实测定案：后台路线是正确的文档关闭，干净条件下进程 ~5 秒退出；但完整流程后 VSTO 运行时+输入法类加载项被激活会钉住进程（excel-verify9 实证），进程退出不是本机可靠后置条件，故不做任务级断言——壳归环境治理（免重启清扫配方与归因修正见 docs/68 残壳专项）。步骤数不变，模板合成一致性测试通过。
-
-- **修复整屏留证的 COM 线程模型污染（capture.rs）**：失败留证三通道的整屏 PNG 路径把执行器线程 CoInitializeEx(STA) 成功后从不释放，线程一旦走过留证即永久 STA；`uiautomation` crate 仅接受 MTA 且不容错，同线程后续一切 UIA 调用（恢复核验、快照留证）以 RPC_E_CHANGED_MODE 全体失败——combined-batch1 整批中 word-append/zotero-import 恢复核验连续 INTERNAL 的根因（也解释了此前恢复路径上零星 INTERNAL）。改为 COINIT_MULTITHREADED（与 evidence.rs/uiautomation crate 一致）+ 配对释放 + CHANGED_MODE 容忍（线程已是其他公寓时照常执行，WIC 为 Both 模型）。真机：修复后 import 恢复核验一次通过，整批 69/69（docs/68 第七轮）。
-
-- **同族风险修复波（docs/70 复盘落地）**：① 观察耐心家族收口——`verify --value`（元素重渲染旧值）与 verify-clipboard（复制送达与可读的竞态，空/旧内容均重读）补 5 秒沉降；verify-rows 行树缺失改报 NOT_FOUND 并入沉降（=尚未渲染，可重试），歧义保持 NOT_ACTIONABLE 立即失败。② **失败取证三路留证**——synthetic 失败证据附带错误原文 message（截断 200 字，脱敏路径维持原契约）；步骤失败瞬间向 flow-resources/<id>/evidence/<步骤>-<相位>.* 落三件套：整屏 PNG（人看到的）、原生窗口清单 JSON（Win32 直读，锁屏/隐藏壳/歧义窗口）、定向 UIA 快照 JSON（按失败调用 `--app`，自动化视角的树与 automation_id；窗口垂死时如实跳过）。引擎六处失败位 → Host 钩子（携带失败调用，含序列 JSON 内嵌 --app 提取，单测覆盖）→ CLI 实现，只吞错不碍流程、同名覆盖不堆积；新增 screenshot_screen 虚拟屏全域截图。③ **整批桌面空闲门**——组合模板专属首步 `wait --idle 15000`（最长 5 分钟；单应用模板保持可交互不加门；合成契约注入同步，68→69 步；flow 步骤校验认 --idle 无目标等待形态）。④ bash 转义纪律入 AGENTS——反斜杠路径与 $ 变量在工具层+bash 双引号组合下会被吃（实证 X:/.xlsx 残渣参数），与 GBK 规则并为一条「含中文/反斜杠/变量一律脚本文件执行」。
-
-- **观察判定耐心家族收口（docs/68、docs/70）**：verify-window 断言失败改为 15 秒内重读（实测带加载项的 Excel 拆窗 3-15 秒，原单发判定必撞假阴性，对齐 verify-closed/rows/file 的 settle）；`wait --gone` 把观察期错误（垂死窗口的 STALE_REF/INTERNAL）视为"尚未消失"在超时内继续轮询；观察恢复的 retryable 集合纳入 INTERNAL（冷启动窗口 UIA 查询抖动，docs/65 同族，有界 3 次/15 秒不吞真错误）。真机：excel-verify8 的 reopen 一次 INTERNAL 被 recovery 实救。
-
-- **Zotero 全链路线修复（9/9 真机通过，zotero-verify11）**：import 前置改 collection-tree 就绪检查（全新空库无 item-tree-main-default）并在导入后等行渲染再核验；快速搜索改 click 聚焦 + ctrl+a 全选 + type 替换（实测 type 为追加语义、tab 提交会清空过滤、裸 press 间歇被首启升级通知条挡）；publication 字段改精确 name 匹配（集合树「我的出版物」可编辑行使 name_contains 歧义）；导出格式列表项加 role=ListItem 限定（弹出 List 自身与选中值同名）；移除保存对话框上的 verify-owner（该对话框跑在 contentproc 子进程，命令行不含任务令牌）；导出文件名改 `${run.dir_native}`（Windows 保存对话框拒收正斜杠路径，用户截图实证「文件名无效」）。zotero 全部 9 步配 recovery 预算。
-
-- **Excel 全链路线修复（13/13 真机通过，excel-verify8）**：close 步核验从单发 verify-window 改 `wait --gone id:1001`（60 秒拆窗耐心）；reopen-cell-readback 与 copy-range 对齐（`type --verify-value` 提交跳转 + 窗口级 ctrl+c，原 set-value 名称框直写不提交、单元格定向修饰和弦无元素焦点）；excel 全部 13 步配 recovery 预算。单应用与整批模板同步。
-
-- **调试手册（docs/70）**：六轮实战沉淀——调试阶梯（单步→单链→整批 + 冻结计划铁律）、观察耐心对照表、正斜杠原生表面规则（`${run.dir_native}` 适用边界）、bash 转义纪律、共享桌面检查单与症状速查；同族风险九项登记 ROADMAP。
-
-- **四软件三处路线缺陷修复（docs/68 第二轮定案）**：① Word 保存后对 docx 持排他句柄、打开期间共享读不可用——word-edit 打开期间的正文核验从 verify-file 改走 UIA `role:Document` text（--normalize-lines），磁盘核验只在重开后（reopened-content 兼查 bold）。② Excel 关最后工作簿后 XLMAIN 空壳常驻、verify-closed 的进程消失断言结构性不可满足——close 断言改 `verify-window --state absent`（工作簿窗口消失；壳不锁文件、不碍 /x 新实例，真机优雅关闭不退已记录为已知限制）。③ Zotero 10 `-datadir` 拒绝正斜杠绝对路径——新增输入占位符 `${run.dir_native}`（保留反斜杠，仅 input default 可用，资源路径保持 fail-closed），zotero data 默认值改用之；app 选择器收紧「我的文库 - Zotero」消除浏览器网页签歧义。三项均单应用与整批模板同步，契约测试（组合合成含 run.dir_native 重写）随同更新。
-
-- **误触自动恢复（显示协议）**：授权被纯鼠标移动类外部输入撤销时，静默窗（默认 4 秒）内无新输入且前台未变，显示端在每任务预算（默认 2 次）内自动重新授权，不需要用户点击；`handoff_pending` 暂停的流程满足同样条件时自动发起续跑。任何键盘事件、点击、滚轮永不赦免；键盘通道动作（type/press 等，种类未知同样按键盘处理）不自动恢复；用户暂停、检查点、待核对与停止状态永不自动继续。策略经 YAML `handoff.pardon_input` 逐流程覆盖全局默认（enabled/quiet_ms/budget/require_foreground/keyboard_safe_only），`ACTL_HANDOFF_PARDON=0` 全局停用。每次赦免记录 consent_decision（reason=input_pardoned）。决策纯函数与预算单测在 actl-core/actl-signal；真机模拟误触验收待做。设计边界见 [32](docs/32-desktop-handoff.md)。
-
-- **步骤失败隔离（流程协议）**：步骤新增 `section` 字段与 `on_failure: skip_section`。失败时保留该步证据，同段其余 pending 步骤标为新增的 `skipped` 状态，继续执行后续段；整轮以 needs_review、reason=`section_failure:<step>` 收束。显式 `--retry-step` 成功后同段 skipped 步骤还原重跑。四软件整批模板按应用分段启用，一段确定性失败不再堵死其余应用。协议与边界见 [20](docs/20-yaml-workflow-protocol.md)。
-
-- **失败分级与证据合成**：步骤记录 `attempt_errors`（最近 8 次错误码）；同一步骤最后 3 次错误相同即视为路线缺陷，暂停 reason 追加 `route_defect_suspected`，提示不应盲目重试。失败无源证据时合成 `{phase,command,synthetic}` 最小结构化证据，不再出现裸错误码。docs/68 首轮的 copy-range 三次同错即属该类。
-
-- **Excel 复制路线修复**：copy-range 名称框写入改为 `type --verify-value`（自带读回证明），选区复制改窗口级 `press ctrl+c`——Excel 网格单元格不持有元素级焦点上报，目标化按键在该场景结构性不可满足；契约测试同步放宽修饰和弦的元素级焦点要求，输入语义按键仍强制。excel-table.yml 与 verify-applications.yml 同步；真机重跑待做。
-
-- **模板验证收敛化**：vscode-edit.yml 与整批模板的跳转/替换/重开/切换等 7 个易瞬态验证步配置 `recovery`（3 次/15 秒/1.5 秒间隔）只读自动重查，动作已生效而观察未跟上的假阴性不再停整轮（docs/68 首轮三次中断的成因）。
-
-- **诊断时间线与执行器 trace 落盘**：`history --timeline` 把任务全部 journal 事件按时间合并为单一序列（旧在前，超限保留最新窗口），重建暂停/交接/失败过程不再手工拼文件；显示端触发的执行器经 `ACTL_TRACE_FILE` 把阶段 trace 追加到 `history/executor-<request_id>.trace`。
-
-- **display-status 陈旧 popup 过滤**：popup.json 记录的进程已退出时返回 null，不再把死显示端的最后状态当作当前现场（docs/68 首轮曾被死进程 2452 的记录误导）。显示端步骤状态渲染补 `skipped`（已跳过）。
-
-- 清理原生迁移后的陈旧 PowerShell 描述：verify-file help 与 skills/references/flows.md 改为现行原生检查器（zip + Windows.Data.Xml.Dom / Win32 / WMI，运行时不启动 PowerShell）；docs/20 旧检查器段加过时标注；docs/22 运行段更正为原生 Rust 入口、不再需要 PowerShell 7；display_gate 注释与 AGENTS 清理措辞去掉脚本时代表述。
-
-- 真机回归新增目标预览入口：`cargo xtask preview-tests` 构建 CLI 与 devtools 后串行运行 preview_window 交互用例（活动急停时整轮让行报阻塞 77；锁屏/遮挡由用例护栏拒绝并如实失败；默认跳过需人工点击的 mouse_selection_acceptance），替代此前仅存于 docs/46 的手工命令片段。flow 契约测试的 Sandbox 补清 ACTL_TASK_CONFIG，消除开发者 shell 残留该变量时的隐性污染。
-
-- 测试清理与门禁计时：旧 cli.rs 契约用例并入 cli_contract.rs（去除 6 项重复、删除恒真断言、合并同调用的两个 batch 断言）；停止代际并发一致性测试写者循环 100→30 轮，去除纯归档 IO 耗时；gate 各步耗时随 stderr 输出，慢环节可头内比较。核查中确认 `--physical --with <键名>` 缺白名单校验、未知键名静默映射为 Win 键，已登记 ROADMAP 待修。
-
-- UIA 语义动作预览后按 RuntimeId、PID、角色、名称、AutomationId 和原生宿主身份复核目标；布局移动不再误报不可操作。动作重新获取所选 Pattern，控件禁用或身份变化仍拒绝；键盘焦点与物理命中护栏保留。workflow 的 metadata 证据保留 target_identity_changed / target_disabled 原因。
-
-- VS Code workflow 使用状态栏按钮跳转行、快速访问按钮切换文件和菜单执行保存/撤销/恢复/替换，减少快捷键注入；动态输入框与结果项等待稳定，跳转后等待目标行列出现再核验。组合模板同步；新版独立 workflow 真机 26/26 通过，主文件与第二文件精确核验及正常关闭通过；实测与限制见 docs/67。
-
-- 标题定位先从可见原生窗口筛选候选，仅读取候选的 UIA provider，并复核 PID 与标题；不存在原生候选时保留虚拟窗口发现路径。避免已知原生窗口的定位被无关应用的整桌面 UIA 枚举故障阻断，目标读取失败仍报错。
-
-- 日志历史清理间隔从 60 秒改为 60 分钟；显示端将清理放到独立后台线程，前台交接和授权审计不再同步扫描历史目录。保留天数、容量上限和跨进程互斥规则不变。
-
-- 应用窗口模板增加必填 ready_target，就绪阶段等待业务控件出现并稳定。VS Code 首次打开与重开拆开窗口、归属、前台和编辑器全文核验，扩展为 26 步；组合模板同步为 68 步，避免启动成功后直接假定页面可输入。
-
-- 补齐组合选择器的窗口枚举、HWND 解析、原生候选查询、属性匹配和读值耗时打点；`ACTL_TRACE=1` 同时输出阶段开始，调用未返回时也能看到停在哪层。60 秒观察阻塞本轮未复现，实测与剩余边界见 docs/65。
-
-- 前台交接的执行器身份核验支持同文件路径别名；流程保留窗口准备/发现的诊断元数据。应用窗口模板拆分启动与前台步骤，避免已启动窗口因激活失败被重复启动；修正 Chrome 夹具 profile 参数。已有窗口 12 次切换/最小化恢复、新窗口热/冷启动及条件模板真机记录见 docs/62、docs/64；单次 UIA 观察约 60 秒的慢点仍未解决。
-
-- **有界观察恢复**：步骤支持 recovery 次数/时限/间隔配置，自动重查仅限可恢复的只读观察；预算持久化且继续不补满。暂停摘要与详情展示失败原因、重查次数、处理建议及观察日志，未知结果不选择否定分支、写入不自动重放。边界与证据见 [64](docs/64-bounded-observation-recovery.md)。
-
-- **简单流程条件**：支持 when/unless/otherwise，窗口存在则前置、不存在则启动，以及可选控件和已达目标状态的跳过。新增只读 `verify-window` 断言；未知观察不走否定分支，不确定动作恢复保持原路线并先核验。附三个参数化模板；协议和验收范围见 [63](docs/63-simple-workflow-conditions.md)。
-
-- 显示协议 v9 补齐前台资格转交与动作结束归还，覆盖连续 CLI、最小化及失败路径；旧显示端需正常替换。不扩大到所有进程，不改变暂停/停止判断。历史记录增加转交/归还结果，窗口失败附原生返回值；慢响应只重查一次授权状态，不重放动作。Chrome/ZCode 六步真机通过，开始一次，见 docs/62。
-
-- 全量移除剩余 41 个 PowerShell 文件：业务动作迁入 workflow，诊断、回归调度、夹具和发布打包迁入 actl-devtools，经 cargo xtask 调用。门禁改跑 Rust 测试；移除 17 个 Bash 包装/过时实验入口，未替代的历史实验保留待办。
-- verify-file/verify-owner/verify-closed 改用原生 ZIP/XML/Win32/WMI，删除运行时解释器；补连续 WinRT 调用、DTD/膨胀限制和进程身份测试。新增 verify --url-query，用于夸克搜索的精确解码核验。
-- 新增网易云播放、夸克搜索、腾讯会议草稿及日期修改、通用启动观察 workflow；均按 once_per_run 交接，恢复先核验结果。模板预检通过不代表真实软件验收通过。迁移清单及测试证据见 docs/61。
-
-
-- 修复 VS Code Quick Input 导航：直接写 ValuePattern 并在 quickInput_list 内激活唯一结果，核验行号/文件内容；关闭核验只读取进程实例身份，避免要求退出阶段的命令行元数据，窗口观察放到进程读取之后。
-
-- 修复悬停暂停/继续按钮时主状态文字被操作提示覆盖；pending 步骤恢复时复用紧邻且完全相同的现场/前置检查，减少重复进程探查，不合并不确定步骤的结果核验。
-
-- 四个应用验证可直接使用 flow-run：YAML 声明隔离目录、初始文本与随包 Office 模板，运行上下文生成默认输入；预检不创建资源，恢复不重新初始化。整批入口为 verify-applications.yml，删除 prepare-workflow.ps1、verify-applications.ps1 和 office-package.ps1；新 workflow 真机验收待完成。
-
-- 新增 workflow 连续操作组、文件/行集合/剪贴板/进程归属/关闭断言及规范化全文比较，提供四个完整应用 YAML；操作组中断后核验结果，不自动重放。
-
-
-- workflow 增加声明式 inputs 与 --inputs 文件，预检后保存具体计划，恢复不重读输入；新增 VS Code、文本核验与 ValuePattern 编辑模板，VS Code 场景只准备资源。
-- 窗口激活已在前台时不重复请求，后台使用单次原生前台请求并有界核验，避免窗口根 UIA SetFocus 的额外副作用；误让行整体验收仍待真机复验。
+本版把四软件应用验证整体迁移为原生 YAML 流程并整批跑通，扩展流程协议（简单条件、有界恢复预算、失败隔离、声明式输入与资源），显示协议演进到 v9（停止代次、单次交接、前台资格转交），工具链全原生化（移除全部 PowerShell），并交付 timing 画像/扫描夹具与三份横切参考文档。
 
 ### Changed
 
-- **暂停入口持久保留**：状态条保留已展示的 flow 绑定，调用快照到期及显示端重启后仍从持久化任务恢复继续入口；不从多个旧任务猜选、不自动授权，完成任务不再显示继续。
-
-- **可恢复 VS Code 验证入口**：新增 vscode-resume.ps1，将桌面动作登记为持久化 flow；暂停后可从显示端继续，重新定位目标并核对完整文本，未知或部分完成的写入不自动重放。新增跨执行器恢复测试；该入口不宣称普通 PowerShell 脚本都可恢复。
-
-- **交接诊断补全**：授权撤销保留首个原因；历史关联失败调用、输入解析分支与长度、监听注册状态和心跳年龄。输入来源统计不包含键值、设备句柄或坐标；VS Code 增加最小输入保存验证入口。
-
-- **重复交接修复**：Raw Input 读取并校验事件来源，排除无设备且携带 actl 注入标记的自身事件，避免自动按键撤销同任务授权。真实设备、未知来源和读取失败继续触发让行；交接历史记录实际弹窗、用户确认、授权复用及失效原因，不记录键值或坐标。仅在确实等待授权时显示等待状态。
-
-- **应用失败修复**：关闭脚本对异步退出有界观察且不重发关闭；Office 窗口在 native/UIA 检查之间消失时重新核实。严格选择器支持按已知角色查询原生候选，VS Code/Word 场景改用语义目标，启动归属检查使用原生窗口并显式核验窗口激活。证据与真机限制见 [53](docs/53-application-failure-repair.md)。
-
-- **任务交接策略（显示协议 v8）**：flow YAML 与脚本任务配置支持 `handoff.approval: once_per_run`，首次确认后同任务不因空闲/总时长反复交接。策略变化不能复用旧授权，人工接管、停止与监听故障仍撤销；默认保留 expiring。新增整批应用验证入口，遇到交接中断停止整批。
-
-- **应用验证脚本**：VS Code/浏览器跨调用 ref 绑定来源快照；编辑器、Word 正文和 Excel 单元格键盘操作增加具体焦点断言，避免旧场景只验证窗口。补充静态回归与 [应用复验记录](docs/51-application-revalidation.md)，保留失败轮次和未验收路线。
-
-- **深树容器定位**：严格 UIA 选择器含精确 ID/名称时使用原生条件查询完整候选，再核验组合条件与唯一性，避免局部容器被无关深分支的客户端预算阻断。保留 RawView、子级/后代范围、候选数量限制及 provider 错误；宽泛选择器仍按原预算遍历。复现与验收见 [50](docs/50-deep-container-query.md)。
-
-- **停止恢复显示一致性**：显示端定时核对停止代次，停止、修复或状态损坏后主动收回旧交接提示，无需等待旧 CLI 再次请求；当前代次的新任务提示保留。execution-status 在同一文件锁内读取代次与停止记录，避免并发停止/修复时报告矛盾状态。
-- **[BC] 停止代次与恢复（显示协议 v7）**：急停废止已运行调用的代次；之后即使修复或确认新任务，旧调用仍不能续跑。新观察和预览不受历史停止阻断，新写任务在开始/继续时确认当前代次。新增 execution-status / execution-recover；修复归档原始状态、不授予权限、不自动续跑。删除 v1/时间戳兼容解析、直接 clear_stop 接口及 WM_APP+49 解除握手；旧显示端需成对升级。流程详情继续请求经主显示端核验并绑定排队调用的代次。设计和验收见 [47](docs/47-execution-recovery.md)。
-- **[BC] Phase 2 观察失败契约**：UIA 窗口清单、身份基线、新窗口等待及 PID 定位迁移到可失败的 RawView 枚举，必要属性失败不再伪装为空值、缺席或唯一结果。`wait --idle` 系统输入查询失败返回带 evidence 的 INTERNAL，并在轮询中响应 flow 暂停/停止；Rust `idle_ms` 改为 Result。
-- **输入监听冗余**：显示端增加 Raw Input 键鼠活动计数、注册状态核验和消息泵心跳；健康未知时撤销授权并返回既有监听不可用原因，恢复健康不会自动授权。不记录键值/坐标，不发送探针输入；实际人工接管仍待验收。
-- **启动清理开销**：历史日志保留扫描通过跨进程文件锁限制为每分钟一次，启动时的短期调用快照扫描限制为每秒一次；失败不记成功，时钟回退重新扫描，不改变急停或流程恢复记录。
+- **[BC] 显示协议 v7–v9，`actl` 与 `actl-signal` 需成对升级**：急停废止已运行调用的代次，修复归档原始状态、不授予权限、不自动续跑（删除 v1/时间戳兼容解析与直接解除握手）；任务配置支持 `handoff.approval: once_per_run`，首次确认后同任务不因空闲/总时长反复交接；动作开始向前台资格进程转交、结束归还，覆盖连续 CLI、最小化与失败路径（身份核验接受同文件路径别名）。输入监听增加 Raw Input 冗余与消息泵心跳，健康未知即撤销授权。新增 `execution-status` / `execution-recover`；显示端定时核对停止代次并主动收回旧提示。[停止与恢复](docs/47-execution-recovery.md) · [交接策略](docs/52-task-handoff-policy.md) · [前台资格](docs/62-foreground-handoff.md)
+- **[BC] 观察失败契约收紧**：窗口清单、身份基线、新窗口等待及 PID 定位迁移到可失败的 RawView 枚举，必要属性失败不再伪装为空值、缺席或唯一结果；`wait --idle` 系统输入查询失败返回带证据的 INTERNAL，并在轮询中响应流程暂停/停止。
+- **工具链全原生化**：移除剩余 41 个 PowerShell 文件——业务动作迁入 workflow，诊断、回归调度、夹具与发布打包迁入 `actl-devtools`（经 `cargo xtask` 调用），门禁改跑 Rust 测试；verify-file/owner/closed 改用原生 ZIP/XML/Win32/WMI 检查器，删除运行时解释器，补 DTD/膨胀限制与进程身份测试；新增 `verify --url-query` 精确解码断言。[迁移记录](docs/61-native-tooling-migration.md)
+- **Excel 关闭路线定案（模板）**：close 步改后台文档关闭序列（文件菜单 → ListItem「关闭」→ 等后台消失），断言保持工作簿窗口消失（`wait --gone`，60 秒拆窗耐心）；close-window 新增 `--system-close`（投递 SC_CLOSE，点标题栏 X 的同一命令）——Excel 裸框架对 WM_CLOSE 只隐藏不退程，模板在后台关闭后以 `close-window --hwnd <归属> --system-close` + `verify-closed`（窗口+进程双断言）收尾。完整流程后 VSTO/输入法加载项钉住进程为已知限制，壳归环境治理。[docs/68](docs/68-combined-batch-first-round.md)
+- **观察耐心家族收口**：verify-window 断言失败改 15 秒内重读（带加载项的 Excel 拆窗实测 3–15 秒）；`verify --value` 与 verify-clipboard 补 5 秒沉降；verify-rows 行树缺失改报 NOT_FOUND 入沉降（尚未渲染，可重试）；`wait --gone` 把垂死窗口的观察错误视为"尚未消失"在超时内继续轮询；有界恢复的 retryable 集纳入 INTERNAL（冷启动 UIA 抖动）。观察假阴性不再停整轮。[docs/68](docs/68-combined-batch-first-round.md) · [docs/70](docs/70-debug-playbook.md)
+- **模板验证收敛化与就绪门**：易瞬态验证步配置 `recovery`（3 次/15 秒）只读自动重查；应用模板必填 `ready_target`，就绪阶段等待业务控件出现并稳定；组合模板首步 `wait --idle` 桌面空闲门。启动成功不再直接假定页面可输入。
+- **UIA 语义动作执行前复核**：预览后按 RuntimeId、PID、角色、名称、AutomationId 与原生宿主身份复核目标，布局移动不再误报不可操作；控件禁用或身份变化仍拒绝，键盘焦点与物理命中护栏保留。
+- **标题定位原生优先**：先从可见原生窗口筛选候选、仅读取候选的 UIA provider 并复核 PID 与标题，不存在原生候选时保留虚拟窗口发现路径——已知窗口的定位不再被无关应用的整桌面枚举故障阻断。
+- **窗口激活去重**：已在前台不重复请求激活；后台使用单次原生前台请求并有界核验；启动与前台步骤拆分，避免已启动窗口因激活失败被重复启动。
+- **内部时序一致性**：desktop-prepare/restore 与 minimize/restore 的输入锁等待、挂起唤醒再探针、verify 族沉降轮询全部改跟 `Timing` 旋钮（`ACTL_LOCK_WAIT_MS`/`ACTL_PROBE_MS`/`ACTL_POLL_MS`），默认值不变，仅 env 联动生效。[PARAMETERS](docs/PARAMETERS.md)
+- **维护性**：历史清理间隔 60 秒→60 分钟并移入显示端后台线程；旧契约用例合并去重、并发测试写者循环缩减；gate 各步耗时随 stderr 输出；陈旧 PowerShell 描述与注释清理。
 
 ### Added
 
-- **ZCode 超深会话复验**：恢复历史会话后，旧版 sidebar 查询仍返回遍历预算超限，修复版前后局部观察完整、身份与内容一致，3 个绑定引用读回通过。首轮 provider STALE_REF 失败记录保留；完整窗口树仍截断，本轮不计算削减率。证据见 [50](docs/50-deep-container-query.md)。
-
-- **ZCode 只读档案**：新增已验证的 sidebar 局部观察及快照绑定读回路线；保留启动中内容变化的受阻记录。当前稳定页面完整 JSON 字节减少约 13.8%，不等同 token 或耗时改善，也不代替历史超深页面与虚拟化验收，见 [50](docs/50-deep-container-query.md)。
-
-- **局部观察验收入口**：新增只读采样脚本，记录完整/局部快照、绑定引用读回、窗口及容器稳定性和逐调用证据；分别统计元素与完整 envelope 字节，截断、根节点孤立和观察失败不计为有效削减。真实窗口限制见 [49](docs/49-local-observation-acceptance.md)。
-
-- **容器局部观察**：`snapshot --within <严格 UIA 选择器> --app/--hwnd` 支持 depth/limit，返回范围、投影前节点数及真实截断原因。局部 ref 配合 snapshot_id 保存容器身份和预算，重放核对原容器与元素，不回退全窗口序号。减少无关输出；容器唯一性定位仍可能扫描全窗口，验收与限制见 [48](docs/48-local-snapshot.md)。
-
-- **候选目标纠正**：`preview @eN --candidate @eM --snapshot <id> --app <window>` 展示同一快照的 2–20 个候选，支持切换、明确选择和取消。选择时重新定位并核对身份/边界；返回选择结果和快照绑定，始终 executed=false，不授予桌面权限。关闭和超时不默认选择。
-- **预览失效回归用例**：增加 release CLI 在自有原生目标移动、改名、隐藏、销毁、重建、遮挡、隔离急停和关闭消息下的交互桌面测试；按 CLI PID 核对窗口回收，保存逐调用输出与清理证据。provider 消失时保留原生观察失败，不强制改写为 STALE_REF；验收范围见 [46](docs/46-target-preview.md)。
-- **独立目标预览**：`preview` 为单一 UIA 目标显示边框与动作说明，支持关闭和超时退出；不点击、不输入、不授予桌面权限。ref 要求快照绑定，目标变化、离屏或中心点遮挡时停止，预览窗口不抢焦点并随调用清理。首批不含坐标预览、候选选择或流程编辑器；验收见 [46](docs/46-target-preview.md)。
-- **无人值守验收入口**：`cargo xtask regress --unattended` 仅运行明确登记的无输入用例，其余保留 skipped，并通过 complete 区分局部运行与全量验收。新增只读性能/观察采样脚本，保存环境、二进制哈希、逐调用输出、100 次新进程耗时和稳定观察下的字节削减率；不把字节数宣称为 tokenizer token 数。浏览器原型失败报告保留有界异常原因链。验收与遗留项见 [44](docs/44-phase2-acceptance.md)。
-
-- **首条业务流程 YAML**：交付 `skills/actl/workflows/release-review-draft.yml`——读取已打开的 actl Releases 页(Chrome)，在 Word 新文档生成核对草稿并以静态文件名另存为。演练输出绑定（标题跨应用进入草稿）、时效声明、检查点授权边界、恢复后源稳定性核验（resume_check 绑定）与写后业务核验；全静态锚点、零逐次输入。协议预检、读段真机（检查点前零派发）与时效拒绝路径（过期不派发动作）已验证；写段联测待用户授权执行，不宣称业务闭环。浏览器 pack 新增窗口标题读取路线与 GitHub 页主文档定位知识，索引与限制见 [43](docs/43-release-review-draft.md)。
+- **流程协议扩展**：简单条件 `when/unless/otherwise`（条件观察失败不走否定分支，附参数化模板）；步骤级 `recovery` 有界观察恢复预算（持久化、继续不补满、暂停摘要含失败原因与重查日志）；`section` + `on_failure: skip_section` 失败隔离——一段失败保留证据、同段其余步骤跳过、后续段继续，整轮以 needs_review 收束，显式重试成功后还原；声明式 `inputs`/`--inputs` 与运行上下文资源（预检不创建、失败保留不覆盖、恢复不重初始化）；可恢复操作组（1–16 调用、以 verify 收尾）与文件/行集合/剪贴板/进程归属/关闭断言族；`${run.dir_native}` 反斜杠占位符（Windows 原生对话框拒收正斜杠路径）。[20](docs/20-yaml-workflow-protocol.md) · [63](docs/63-simple-workflow-conditions.md) · [64](docs/64-bounded-observation-recovery.md) · [55](docs/55-resumable-desktop-tasks.md) · [60](docs/60-workflow-resources.md)
+- **失败分级与三路留证**：步骤记录 `attempt_errors`（最近 8 次错误码），同写步骤同错三连标记 `route_defect_suspected` 提示勿盲目重试；步骤失败瞬间向 flow-resources 落三件套——整屏 PNG、原生窗口清单 JSON、定向 UIA 快照 JSON（吞错不碍流程、同名覆盖不堆积）；无源失败合成带错误原文（截断 200 字）的最小结构化证据。
+- **误触自动恢复（pardon）**：授权被纯鼠标移动类外部输入撤销时，静默窗（默认 4 秒）内无新输入且前台未变，显示端按每任务预算（默认 2 次）自动重新授权，满足同样条件的暂停流程自动发起续跑；任何键盘事件、点击、滚轮永不赦免，用户暂停、检查点、待核对与停止状态永不自动继续；YAML `handoff.pardon_input` 逐流程覆盖，`ACTL_HANDOFF_PARDON=0` 全局停用。真机模拟误触验收待做。[32](docs/32-desktop-handoff.md)
+- **局部观察与目标预览**：`snapshot --within <严格选择器>` 容器局部快照（depth/limit、真实截断原因，局部 ref 绑定容器身份重放，不回退全窗口序号）；严格选择器含精确 ID/名称时先原生条件查询完整候选再核验唯一性（深树容器不被无关分支预算阻断）；`preview` 独立目标预览与 `--candidate` 同快照候选显式切换（不点击、不授予桌面权限、不默认选择），附预览失效交互回归用例。[48](docs/48-local-snapshot.md) · [50](docs/50-deep-container-query.md) · [46](docs/46-target-preview.md)
+- **应用 workflow 全家**：VS Code/Word/Excel/Zotero 验证直接 flow-run，整批入口 verify-applications.yml（声明式隔离目录、初始文本与随包 Office 模板）；新增网易云播放、夸克搜索、腾讯会议草稿/日期、通用启动观察 workflow（once_per_run 交接，恢复先核验结果）；VS Code 改状态栏按钮与菜单控件路线，动态输入等稳定后再核验；首条业务流程 release-review-draft（Chrome→Word 全静态锚点，写段联测待授权）。[57](docs/57-application-workflow-migration.md) · [61](docs/61-native-tooling-migration.md) · [67](docs/67-vscode-navigation-controls.md) · [43](docs/43-release-review-draft.md)
+- **诊断与回归入口**：`history --timeline` 把任务全部 journal 事件合并为单一时间序列；显示端触发的执行器经 `ACTL_TRACE_FILE` 落阶段 trace；`cargo xtask regress --unattended` 只跑登记的无输入用例；`cargo xtask preview-tests` 串行运行目标预览交互用例；`cargo xtask timing profile|sweep` 时序画像/参数扫描夹具——`ACTL_*` 旋钮的固定消费者，优雅关闭+verify-closed、标记文件隔离、急停/显示端未就绪/锁屏预检让行报阻塞（77）。[41](docs/41-logging-metadata.md) · [timing](docs/timing-2026-09.md)
 
 ### Fixed
 
-- **应用 YAML 同步输入身份规范**：更新 10 份应用档案，补齐 ref 与同次快照绑定、输入框焦点断言、读取后的结果比较要求，修复微信空点击目标及旧右键参数、浏览器链接消歧和固定正文序号。修改过的已验证路线改记 manual 待复验，保留历史日期与证据；不把静态检查记为新版真机通过。详见 [45](docs/45-app-pack-refresh.md)。
-- **桌面根枚举瞬态毒化（原始标题 fixture STALE_REF 根因）**：标题定位（`find_window` 与 `uia:` 作用域标题路径）对桌面根做一次整批 `FindAll(Children)`，任何无关顶层窗口处于创建/销毁中途都会让整批枚举失败——所有应用的标题定位报 STALE_REF，无匹配窗口时把 NOT_FOUND 误报成 STALE_REF（350ms 周期的 `Start-Process notepad` 扰动下 9/10 复现，本机无 notepad 关联时启动退化为系统选应用对话框，顶层窗口竞态同样成立；HWND 路径不做桌面根枚举故不受影响，当日差异由此解释）。修复为仅对桌面根枚举做有界瞬态重试（仅 StaleRef、3 次/200ms，与 stale_read 同参数；持久失败保留错误并附 attempts），`uia:` 作用域此前把枚举失败误映射 Internal 一并统一为 StaleRef；窗口子树枚举与既有控件失效语义不变。净环境 fixture 8/8 完整通过、扰动与显示端重启下直查 36/36、无匹配探针 30/30 NOT_FOUND；显示端创建叠加扰动的元素级瞬态 NOT_FOUND 作为独立观察项登记，见 [38](docs/38-flow-output-bindings.md)。
-- **完整发布包补齐技能**：ZIP 包含可独立安装的 `skills/actl/`，保留应用档案和流程索引，流程与归档说明收进 references；技能内只使用本地相对链接，不包含 URL；设计与验收记录留在开发仓库，不打包完整 docs。打包后核对必需文件、内容和技能内部链接，缺失即失败。安装说明明确技能须由 Agent 加载、桌面写操作需要配套显示端。此修复不修改已发布的 0.1.6 附件。
+- **整屏留证 COM 线程污染**：失败留证的整屏 PNG 路径把执行器线程 CoInitializeEx(STA) 后从不释放，同线程后续一切 UIA 调用以 RPC_E_CHANGED_MODE 失败——combined-batch 恢复核验连续 INTERNAL 的根因；改 COINIT_MULTITHREADED + 配对释放 + CHANGED_MODE 容忍。修复后整批 69/69。
+- **桌面根枚举瞬态毒化**：标题定位的桌面根整批枚举被无关顶层窗口创建/销毁竞态毒化，所有应用报 STALE_REF、无匹配时误报；改仅对桌面根做有界瞬态重试（StaleRef、3 次/200ms），`uia:` 作用域枚举失败统一映射。净环境 8/8、扰动下直查 36/36。[38](docs/38-flow-output-bindings.md)
+- **四软件路线缺陷（docs/68 定案）**：Word 打开期间正文核验改 UIA `role:Document` text（排他句柄期不做磁盘读，重开后兼查）；Excel 复制改 `type --verify-value` 提交跳转 + 窗口级 ctrl+c（网格单元格无元素级焦点上报）；Zotero 导入前置集合树就绪检查、快速搜索改 click 聚焦+全选+替换（type 为追加语义、tab 会清空过滤）、导出对话框移除 verify-owner（子进程无任务令牌）、导出文件名用 `run.dir_native`。Zotero 9/9、Excel 13/13 真机通过。
+- **重复交接误判**：Raw Input 读取并校验事件来源，排除无设备且携带注入标记的自身事件；真实设备、未知来源与读取失败仍触发让行；交接历史记录弹窗、确认与失效原因，不记录键值/坐标。[54](docs/54-repeated-handoff.md)
+- **显示与恢复细节**：悬停暂停/继续按钮不再覆盖主状态文字；pending 步骤恢复复用紧邻且完全相同的现场/前置检查；授权撤销保留首个原因，交接诊断关联失败调用与监听状态；display-status 过滤已退出进程的陈旧 popup 记录；状态条持久保留 flow 绑定，快照到期/显示端重启后仍可继续。
+- **VS Code Quick Input 导航**：直接写 ValuePattern 并在 quickInput_list 内激活唯一结果；关闭核验只读进程实例身份。[59](docs/59-vscode-quick-input.md)
+- **发布包技能补齐**：ZIP 包含可独立安装的 `skills/actl/`（应用档案、流程索引、references 本地相对链接），打包后核对必需文件与内部链接；不修改已发布的 0.1.6 附件。
+
+### Documentation and validation
+
+- 新增调试手册（调试阶梯、观察耐心对照、正斜杠原生表面规则、症状速查）与三份横切参考文档——FALLBACK（全量兜底/降级清单）、STABILITY（按步骤生命周期的护栏地图）、PARAMETERS（协议常量/内部旋钮/硬编码时序总览）；docs 索引同步。[70](docs/70-debug-playbook.md) · [FALLBACK](docs/FALLBACK.md) · [STABILITY](docs/STABILITY.md) · [PARAMETERS](docs/PARAMETERS.md)
+- 十份应用 pack 同步输入身份规范（ref 快照绑定、焦点断言），修改过的已验证路线改记 manual 待复验；ZCode 超深会话与局部观察只读档案、无人值守验收工具留证。[45](docs/45-app-pack-refresh.md) · [49](docs/49-local-observation-acceptance.md) · [44](docs/44-phase2-acceptance.md)
+- 真机状态如实记录：四软件整批 combined-batch1 第七轮 69/69 completed——含三次人工救场（user_paused 让行、Zotero-Word 集成模态、重开 STALE_REF）与一次 COM 线程修复，非无干预跑通；单链 VS Code 26/26、Zotero 9/9、Excel 13/13。timing sweep 整轮当前受阻于显示端表面被盖（covered_or_offscreen），预检阻塞路径已真机验证。无干预整跑、误触自动恢复真机验收与 60 秒观察阻塞定位仍待，见 [ROADMAP](docs/ROADMAP.md)。
 
 ## [0.1.6] - 2026-09-28
 
