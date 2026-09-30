@@ -25,6 +25,11 @@ pub struct View {
     pub label: String,
     pub effects: InputEffects,
     pub details: String,
+    /// 展开态第二行的三列(主体/进度/备注)。列起点在 paint 层固定;
+    /// 无任务时也给定值,展开不出现空行。
+    pub second: [String; 3],
+    /// 运行中调用的进行时长 mm:ss(等宽数字,槽内字符数稳定)。
+    pub elapsed: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -140,6 +145,8 @@ pub fn view(states: &[SessionState], now: u64, stop_ms: Option<u64>, busy: Optio
                 "空闲\n暂无操作"
             }
             .into(),
+            second: ["actl".into(), "空闲".into(), "右键托盘更多".into()],
+            elapsed: None,
         };
     };
     let stale = s.phase == Phase::Running && now.saturating_sub(s.ts_ms) > 10_000;
@@ -458,6 +465,38 @@ pub fn view(states: &[SessionState], now: u64, stop_ms: Option<u64>, busy: Optio
         }
     }
     details.push(control.label().into());
+    // 进行时长 mm:ss:等宽数字,运行中且未陈旧才显示(上限 99:59 后保持稳定宽度)。
+    let elapsed = if s.phase == Phase::Running && !stale {
+        let secs = now.saturating_sub(s.started_ms) / 1000;
+        Some(format!("{:02}:{:02}", (secs / 60).min(99), secs % 60))
+    } else {
+        None
+    };
+    let reason_hint = reason.map(super::ui_text::reason);
+    // 展开态第二行三列(主体/进度/备注):主体=流程标题(回退调用命令),
+    // 进度=步骤或调用相位,备注=原因提示或进行时长。列起点由 paint 固定。
+    let second = if let Some(flow) = valid_flow {
+        [
+            if flow.title.is_empty() {
+                flow.run_id.clone()
+            } else {
+                flow.title.clone()
+            },
+            flow.step_id.clone().unwrap_or_else(|| flow.status.clone()),
+            reason_hint.or(elapsed.as_deref()).unwrap_or("—").into(),
+        ]
+    } else {
+        [
+            s.command.clone(),
+            match s.phase {
+                Phase::Running => "进行中".into(),
+                Phase::Done => "已完成".into(),
+                Phase::Stopped => "已停止".into(),
+                Phase::Error => "失败".into(),
+            },
+            elapsed.clone().unwrap_or_else(|| target.to_string()),
+        ]
+    };
     View {
         mode,
         control,
@@ -475,6 +514,8 @@ pub fn view(states: &[SessionState], now: u64, stop_ms: Option<u64>, busy: Optio
             )
         },
         details: details.join("\n"),
+        second,
+        elapsed,
     }
 }
 

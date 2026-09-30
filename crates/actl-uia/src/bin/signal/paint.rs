@@ -1,6 +1,7 @@
 //! Antialiased DIP geometry and DirectWrite text, composed with per-pixel alpha.
 use super::model::{Mode, View};
 use actl_core::activity::ClipboardEffect;
+use actl_core::state::unix_ms;
 use windows::Win32::Foundation::*;
 use windows::Win32::Graphics::{
     Direct2D::Common::*, Direct2D::*, DirectWrite::*, Dxgi::Common::*, Gdi::*, Imaging::*,
@@ -13,6 +14,16 @@ use std::sync::OnceLock;
 
 pub const WIDTH: i32 = 280;
 pub const HEIGHT: i32 = 34;
+/// 展开态高度:第一行锚点不变,第二行三列栅格(y 34-62)。
+pub const HEIGHT_EXT: i32 = 62;
+/// 展开箭头固定锚点(DIP):效果图标(≤235)与按钮(250)之间的槽位。
+pub const CHEVRON_X: i32 = 234;
+/// 预授权描边色(青):常驻信任的可见性补偿,文字版保留在窗口标题里。
+const STROKE_PREAUTH: u32 = 0x5FC4D4;
+static PREAUTH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub(super) fn set_preauth(on: bool) {
+    PREAUTH.store(on, std::sync::atomic::Ordering::Relaxed);
+}
 pub fn pixels(value: i32, dpi: u32) -> i32 {
     ((i64::from(value) * i64::from(dpi.max(96)) + 48) / 96) as i32
 }
@@ -159,11 +170,14 @@ fn has_cjk(text: &str) -> bool {
     })
 }
 fn color(rgb: u32) -> D2D1_COLOR_F {
+    color_a(rgb, 1.)
+}
+fn color_a(rgb: u32, a: f32) -> D2D1_COLOR_F {
     D2D1_COLOR_F {
         r: ((rgb >> 16) & 255) as f32 / 255.,
         g: ((rgb >> 8) & 255) as f32 / 255.,
         b: (rgb & 255) as f32 / 255.,
-        a: 1.,
+        a,
     }
 }
 fn rect(x: f32, y: f32, w: f32, h: f32) -> D2D_RECT_F {
@@ -182,6 +196,51 @@ fn rounded(x: f32, y: f32, w: f32, h: f32, radius: f32) -> D2D1_ROUNDED_RECT {
     }
 }
 
+/// 0..1 平滑呼吸相位(cos 包络,无跳变)。
+fn breath(now_ms: u64, period_ms: u64) -> f32 {
+    let t = (now_ms % period_ms) as f32 / period_ms as f32;
+    0.5 - 0.5 * (t * std::f32::consts::TAU).cos()
+}
+
+/// 状态点/描边共用类别色。
+fn status_color(mode: Mode) -> u32 {
+    match mode {
+        Mode::Preparing
+        | Mode::Unknown
+        | Mode::StopRequested
+        | Mode::Partial
+        | Mode::Paused
+        | Mode::Waiting
+        | Mode::Desktop => 0xD4B879,
+        Mode::Running | Mode::Background => 0x93B4CA,
+        Mode::Failed | Mode::Blocked => 0xE59188,
+        Mode::Done => 0x8AB698,
+        _ => 0xB4BAC0,
+    }
+}
+
+/// 边框通道:预授权=青色常驻描边;动画态用状态色描边并呼吸
+/// (进行中慢呼吸、"需要你"的态快脉冲);静止态回归中性灰描边。
+fn border_channel(mode: Mode, preauth: bool) -> (u32, Option<(u64, f32, f32)>) {
+    let anim = match mode {
+        Mode::Running | Mode::Background | Mode::Preparing | Mode::Desktop => {
+            Some((2400, 0.55, 1.0))
+        }
+        Mode::Paused | Mode::Waiting | Mode::Partial | Mode::Blocked | Mode::StopRequested => {
+            Some((1000, 0.30, 1.0))
+        }
+        _ => None,
+    };
+    let rgb = if preauth {
+        STROKE_PREAUTH
+    } else if anim.is_some() {
+        status_color(mode)
+    } else {
+        0x383B3E
+    };
+    (rgb, anim)
+}
+
 // COM objects and native bitmap handles remain on the display thread.
 struct ComScope;
 impl Drop for ComScope {
@@ -190,13 +249,14 @@ impl Drop for ComScope {
     }
 }
 
-unsafe fn raster(view: &View, hovered: bool, dpi: u32) -> Result<Vec<u8>> {
+unsafe fn raster(view: &View, hovered: bool, dpi: u32, expanded: bool) -> Result<Vec<u8>> {
     CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok()?;
     let _com = ComScope;
     let wic: IWICImagingFactory =
         CoCreateInstance(&CLSID_WICImagingFactory, None, CLSCTX_INPROC_SERVER)?;
     let width = pixels(WIDTH, dpi) as u32;
-    let height = pixels(HEIGHT, dpi) as u32;
+    let layout_h = if expanded { HEIGHT_EXT } else { HEIGHT };
+    let height = pixels(layout_h, dpi) as u32;
     let bitmap = wic.CreateBitmap(
         width,
         height,
@@ -225,23 +285,24 @@ unsafe fn raster(view: &View, hovered: bool, dpi: u32) -> Result<Vec<u8>> {
     target.SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
     target.BeginDraw();
     target.Clear(Some(&D2D1_COLOR_F::default()));
-    target.FillRoundedRectangle(&rounded(0., 0., WIDTH as f32, HEIGHT as f32, 10.), &brush);
-    brush.SetColor(&color(0x383B3E));
-    target.DrawRoundedRectangle(&rounded(0.5, 0.5, 279., 33., 9.5), &brush, 0.5, None);
-    let status_color = match view.mode {
-        Mode::Preparing
-        | Mode::Unknown
-        | Mode::StopRequested
-        | Mode::Partial
-        | Mode::Paused
-        | Mode::Waiting
-        | Mode::Desktop => 0xD4B879,
-        Mode::Running | Mode::Background => 0x93B4CA,
-        Mode::Failed | Mode::Blocked => 0xE59188,
-        Mode::Done => 0x8AB698,
-        _ => 0xB4BAC0,
+    let h = layout_h as f32;
+    target.FillRoundedRectangle(&rounded(0., 0., WIDTH as f32, h, 10.), &brush);
+    // 边框通道:预授权=青色常驻描边(文字版保留在窗口标题);动画态低幅呼吸,
+    // "需要你"的态脉冲更明显;空闲/完成/失败静止(减少动态下静止,docs/18)。
+    let preauth = PREAUTH.load(std::sync::atomic::Ordering::Relaxed);
+    let (stroke_rgb, anim) = border_channel(view.mode, preauth);
+    let alpha = match anim {
+        Some((period, lo, hi)) => lo + (hi - lo) * breath(unix_ms(), period),
+        None => 1.,
     };
-    brush.SetColor(&color(status_color));
+    brush.SetColor(&color_a(stroke_rgb, alpha));
+    target.DrawRoundedRectangle(
+        &rounded(0.5, 0.5, WIDTH as f32 - 1., h - 1., 9.5),
+        &brush,
+        1.,
+        None,
+    );
+    brush.SetColor(&color(status_color(view.mode)));
     target.FillRoundedRectangle(&rounded(10., 11., 12., 12., 6.), &brush);
     let pending = matches!(view.mode, Mode::StopRequested | Mode::Stopped);
     // Hover highlights only the control; progress must remain visible after a click.
@@ -285,6 +346,24 @@ unsafe fn raster(view: &View, hovered: bool, dpi: u32) -> Result<Vec<u8>> {
         outline(225., 11., 10., 13., 2.);
         outline(228., 9., 4., 4., 1.);
     }
+    // 展开箭头:固定锚点(CHEVRON_X),常显提供可展开暗示;收起▸/展开▾。
+    brush.SetColor(&color(0x7E858C));
+    if expanded {
+        for i in 0..5 {
+            let w = 9. - i as f32 * 1.6;
+            bar(
+                CHEVRON_X as f32 + 2.5 + (9. - w) / 2.,
+                14.5 + i as f32 * 1.7,
+                w,
+                1.,
+            );
+        }
+    } else {
+        for i in 0..6 {
+            let h2 = 9. - i as f32 * 1.5;
+            bar(CHEVRON_X as f32 + 3.5 + i as f32, 17. - h2 / 2., 1., h2);
+        }
+    }
     brush.SetColor(&color(if pending {
         0x2D2F31
     } else if hovered {
@@ -309,6 +388,28 @@ unsafe fn raster(view: &View, hovered: bool, dpi: u32) -> Result<Vec<u8>> {
         super::model::Control::Details => {
             outline(258., 12., 10., 10., 5.);
             bar(262.5, 16., 1., 4.);
+        }
+    }
+    if expanded {
+        // 第二行:细分隔线 + 三列栅格,列起点固定(31/155/208),值列定宽截断
+        // (文本格式自带 NO_WRAP + 字符级省略号)。第一行锚点不受展开影响。
+        brush.SetColor(&color(0x2F3234));
+        target.FillRoundedRectangle(&rounded(12., 34., 256., 1., 0.5), &brush);
+        for (i, (x, w)) in [(31f32, 118f32), (155f32, 46f32), (208f32, 60f32)]
+            .iter()
+            .enumerate()
+        {
+            let text = &view.second[i];
+            brush.SetColor(&color(if i == 0 { 0xD6DADD } else { 0x9AA0A6 }));
+            let fmt = if has_cjk(text) { cjk } else { latin };
+            target.DrawText(
+                &text.encode_utf16().collect::<Vec<_>>(),
+                fmt,
+                &rect(*x, 34., *w, 28.),
+                &brush,
+                D2D1_DRAW_TEXT_OPTIONS_CLIP,
+                DWRITE_MEASURING_MODE_NATURAL,
+            );
         }
     }
     target.EndDraw(None, None)?;
@@ -379,12 +480,13 @@ pub(super) unsafe fn present_alpha(
     result
 }
 
-pub unsafe fn draw(hwnd: HWND, view: &View, stop_hovered: bool) -> bool {
+pub unsafe fn draw(hwnd: HWND, view: &View, stop_hovered: bool, expanded: bool) -> bool {
     let mut ps = PAINTSTRUCT::default();
     let _ = BeginPaint(hwnd, &mut ps);
     let dpi = GetDpiForWindow(hwnd).max(96);
-    let result =
-        raster(view, stop_hovered, dpi).and_then(|data| present(hwnd, &data, dpi, WIDTH, HEIGHT));
+    let layout_h = if expanded { HEIGHT_EXT } else { HEIGHT };
+    let result = raster(view, stop_hovered, dpi, expanded)
+        .and_then(|data| present(hwnd, &data, dpi, WIDTH, layout_h));
     if let Err(e) = &result {
         eprintln!("INTERNAL: display render failed: {e}");
     }
@@ -536,8 +638,8 @@ mod tests {
         let mut view = super::super::model::view(&[], 0, None, Some(false));
         for label in ["正在暂停", "已暂停", "正在运行", "待核对"] {
             view.label = label.into();
-            let normal = unsafe { raster(&view, false, 96) }.unwrap();
-            let hovered = unsafe { raster(&view, true, 96) }.unwrap();
+            let normal = unsafe { raster(&view, false, 96, false) }.unwrap();
+            let hovered = unsafe { raster(&view, true, 96, false) }.unwrap();
             for row in 0..HEIGHT as usize {
                 let start = row * WIDTH as usize * 4;
                 assert_eq!(
@@ -584,7 +686,7 @@ mod tests {
         for (name, data, w, h) in [
             (
                 "strip",
-                unsafe { raster(&view, false, 192) }.unwrap(),
+                unsafe { raster(&view, false, 192, false) }.unwrap(),
                 560,
                 68,
             ),
@@ -612,10 +714,38 @@ mod tests {
         assert_eq!(pixels(WIDTH, 192), 560);
     }
     #[test]
+    fn expanded_raster_doubles_rows_and_keeps_line1_anchors() {
+        let view = super::super::model::view(&[], 0, None, Some(false));
+        let collapsed = unsafe { raster(&view, false, 96, false) }.expect("WIC render");
+        let expanded = unsafe { raster(&view, false, 96, true) }.expect("WIC render");
+        let width = pixels(WIDTH, 96) as usize;
+        assert_eq!(collapsed.len(), width * pixels(HEIGHT, 96) as usize * 4);
+        assert_eq!(
+            expanded.len(),
+            width * pixels(HEIGHT_EXT, 96) as usize * 4,
+            "expanded layout must be exactly two rows tall"
+        );
+        // 第一行锚点不受展开影响:状态点行的像素在箭头锚点(▸↔▾ 本应变化)
+        // 与左右描边之外的区段必须逐字节一致。
+        let row_mid = |data: &[u8], y: usize| -> Vec<u8> {
+            data[y * width * 4 + 3 * 4..y * width * 4 + 230 * 4].to_vec()
+        };
+        assert_eq!(row_mid(&collapsed, 17), row_mid(&expanded, 17));
+        // 第二行栅格:分隔线以下必须有内容(非全透明)。
+        assert!(
+            expanded[(pixels(48, 96) as usize) * width * 4..]
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .any(|p| p[3] > 0),
+            "second row must render its grid"
+        );
+    }
+    #[test]
     fn raster_has_transparent_corners_opaque_body_and_antialiased_edges() {
         let view = super::super::model::view(&[], 0, Some(1), Some(false));
         for dpi in [96, 120, 144, 192] {
-            let data = unsafe { raster(&view, false, dpi) }.expect("WIC render");
+            let data = unsafe { raster(&view, false, dpi, false) }.expect("WIC render");
             let width = pixels(WIDTH, dpi) as usize;
             assert_eq!(data[3], 0);
             let center = ((pixels(17, dpi) as usize * width) + pixels(100, dpi) as usize) * 4;

@@ -26,6 +26,25 @@ static HOTKEY: AtomicBool = AtomicBool::new(false);
 static STOP_HOVERED: AtomicBool = AtomicBool::new(false);
 static DRAG_STOP: AtomicBool = AtomicBool::new(false);
 static FRAME_READY: AtomicBool = AtomicBool::new(false);
+static EXPANDED: AtomicBool = AtomicBool::new(false);
+
+/// 两行展开/收回:只改窗口高度与重绘,不激活不抢焦点;再次点击切换,不自动收回。
+unsafe fn set_expanded(hwnd: HWND, on: bool) {
+    EXPANDED.store(on, Ordering::Relaxed);
+    let dpi = windows::Win32::UI::HiDpi::GetDpiForWindow(hwnd);
+    let h = paint::pixels(if on { paint::HEIGHT_EXT } else { paint::HEIGHT }, dpi);
+    let w = paint::pixels(paint::WIDTH, dpi);
+    let _ = SetWindowPos(
+        hwnd,
+        None,
+        0,
+        0,
+        w,
+        h,
+        SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
+    );
+    let _ = InvalidateRect(Some(hwnd), None, false);
+}
 static TRAY_ICON: Mutex<Option<(usize, i32, u32)>> = Mutex::new(None);
 static EPOCH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
@@ -140,10 +159,8 @@ unsafe fn tick(hwnd: HWND) {
     let stop = stop_timestamp(&paths);
     let mut v = model::view(&states, now, stop, actl_uia::display_support::input_busy());
     v.details.push_str(&paths.stop_details());
-    if paths.preauthorized() {
-        // 常驻预授权的可见性补偿:横条常显模式标记,动作预告照常上屏。
-        v.label = format!("预授权·{}", v.label);
-    }
+    // 常驻预授权的可见性补偿:青色描边(paint 层)+ 窗口标题文字版;正文不再加前缀。
+    super::paint::set_preauth(paths.preauthorized());
     if matches!(
         v.mode,
         model::Mode::Running | model::Mode::Background | model::Mode::Desktop
@@ -185,21 +202,50 @@ unsafe fn tick(hwnd: HWND) {
             );
         }
     }
-    let changed = if let Ok(mut old) = VIEW.lock() {
+    // 标题/图标只在四要素变化时更新;展开行内容(second/elapsed)变化只触发重绘,
+    // 避免运行中每秒重建托盘图标。
+    let (changed, content) = if let Ok(mut old) = VIEW.lock() {
         let changed = old.as_ref().is_none_or(|o| {
             o.mode != v.mode
                 || o.label != v.label
                 || o.effects != v.effects
                 || o.control != v.control
         });
+        let content = old
+            .as_ref()
+            .is_none_or(|o| o.second != v.second || o.elapsed != v.elapsed);
         *old = Some(v.clone());
-        changed
+        (changed, content)
     } else {
-        false
+        (false, false)
     };
-    if changed {
+    if changed || content {
         let _ = InvalidateRect(Some(hwnd), None, false);
-        let title = paint::wide(&format!("actl · {}", v.label));
+    }
+    // 动画态(呼吸/脉冲)与展开态需要每 tick 连续重绘(走下方 DwmFlush 配对路径);
+    // 静止态保持静止(docs/18 立场)。
+    let animated = matches!(
+        v.mode,
+        model::Mode::Running
+            | model::Mode::Background
+            | model::Mode::Preparing
+            | model::Mode::Desktop
+            | model::Mode::Paused
+            | model::Mode::Waiting
+            | model::Mode::Partial
+            | model::Mode::Blocked
+            | model::Mode::StopRequested
+    ) || EXPANDED.load(Ordering::Relaxed);
+    if changed {
+        let title = paint::wide(&format!(
+            "actl · {}{}",
+            if paths.preauthorized() {
+                "预授权·"
+            } else {
+                ""
+            },
+            v.label
+        ));
         let _ = SetWindowTextW(hwnd, PCWSTR(title.as_ptr()));
         let mut nid = tray(hwnd);
         nid.uFlags = NIF_TIP | NIF_ICON;
@@ -237,9 +283,16 @@ unsafe fn tick(hwnd: HWND) {
                 .filter(|a| a.phase == ActionPhase::Preparing && a.expires_ms > now)
                 .map(|a| (s, a))
         });
-    if visible && (changed || preparing.is_some() || !FRAME_READY.load(Ordering::Relaxed)) {
+    if visible
+        && (changed
+            || content
+            || animated
+            || preparing.is_some()
+            || !FRAME_READY.load(Ordering::Relaxed))
+    {
         FRAME_READY.store(
-            paint::draw(hwnd, &v, hovered) && windows::Win32::Graphics::Dwm::DwmFlush().is_ok(),
+            paint::draw(hwnd, &v, hovered, EXPANDED.load(Ordering::Relaxed))
+                && windows::Win32::Graphics::Dwm::DwmFlush().is_ok(),
             Ordering::Relaxed,
         );
     }
@@ -557,7 +610,14 @@ pub(super) fn flow_action(id: &str, resume: bool) -> Result<(), String> {
 unsafe fn place(hwnd: HWND) {
     let dpi = windows::Win32::UI::HiDpi::GetDpiForWindow(hwnd);
     let w = paint::pixels(paint::WIDTH, dpi);
-    let h = paint::pixels(paint::HEIGHT, dpi);
+    let h = paint::pixels(
+        if EXPANDED.load(Ordering::Relaxed) {
+            paint::HEIGHT_EXT
+        } else {
+            paint::HEIGHT
+        },
+        dpi,
+    );
     let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
     let mut info = MONITORINFO {
         cbSize: std::mem::size_of::<MONITORINFO>() as u32,
@@ -619,7 +679,12 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
                 .and_then(|v| v.clone())
                 .unwrap_or_else(|| model::view(&[], unix_ms(), None, Some(false)));
             FRAME_READY.store(
-                paint::draw(hwnd, &view, STOP_HOVERED.load(Ordering::Relaxed)),
+                paint::draw(
+                    hwnd,
+                    &view,
+                    STOP_HOVERED.load(Ordering::Relaxed),
+                    EXPANDED.load(Ordering::Relaxed),
+                ),
                 Ordering::Relaxed,
             );
             LRESULT(0)
@@ -679,12 +744,18 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
         }
         WM_LBUTTONUP => {
             let x = (lp.0 as u16 as i16) as i32;
+            let dpi = windows::Win32::UI::HiDpi::GetDpiForWindow(hwnd);
             let captured = PRESSED.lock().ok().and_then(|mut p| p.take());
-            if x >= paint::pixels(246, windows::Win32::UI::HiDpi::GetDpiForWindow(hwnd)) {
+            if x >= paint::pixels(246, dpi) {
                 if let Some(control) = captured {
                     primary(hwnd, control);
                 }
                 tick(hwnd);
+            } else if x >= paint::pixels(paint::CHEVRON_X, dpi)
+                && x < paint::pixels(paint::CHEVRON_X + 12, dpi)
+            {
+                // 展开箭头固定锚点:点击切换两行,再次点击收回;不自动收回。
+                set_expanded(hwnd, !EXPANDED.load(Ordering::Relaxed));
             } else {
                 details(hwnd);
             }
