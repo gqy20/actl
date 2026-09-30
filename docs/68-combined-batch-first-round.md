@@ -268,3 +268,10 @@ excel-verify9 实测给出**定案修正**：
 excel-verify10（新模板全链）：**13/13 通过**——close-before-reopen 与 close 均走后台关闭序列，
 窗口消失断言无假阴性；两实例进程仍驻留（13→15，加载项钉住，与 excel-verify9 的定案一致），
 壳归环境层治理。excel-verify9 保留为 verify-closed 尝试的失败证据（任务状态 needs_review，不归档不改写）。
+
+用户质询后复核（同日）：excel-verify10 的两个实例（29864/47160，命令行坐实）在流程完成后
+**约 10 分钟仍未退出**——"13/13 通过"只覆盖任务层（文档正确关闭、断言满足），进程并未真正退出；
+同时 verify9 的 40900 在约 1-2 小时后自行退出——加载项的钉是**延迟释放**而非永久。本机 Excel 注册的
+LoadBehavior=3 COM 加载项：不坑盒子（BKOffice2025，三处注册）、MSOfficePLUS、iWebOffice2009（32位）、
+NtkoOfficeControl.HelperAddin（32位）；VSTO 运行时在场与其中 VSTO 实现者相符。要"流程结束即进程退出"
+需禁用钉住者（用户机器配置决定，不由 agent 擅改）；模板保持文档关闭+窗口断言的设计不变。
