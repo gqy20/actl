@@ -208,7 +208,12 @@ fn find_marker_window(bench: &mut Bench, marker: &str) -> Result<Option<(String,
         .as_array()
         .ok_or_else(|| io("window list unavailable"))?
         .iter()
-        .filter(|w| w["title"].as_str().is_some_and(|t| t.contains(marker)))
+        // 只认 Notepad 类窗口:另存为对话框(标题含文件名)会造成第二匹配
+        // (2026-09-30 实测 marker not unique 的根因)。
+        .filter(|w| {
+            w["title"].as_str().is_some_and(|t| t.contains(marker))
+                && w["class"].as_str().is_some_and(|c| c == "Notepad")
+        })
         .collect();
     require(hits.len() <= 1, "marker window not unique")?;
     Ok(hits.first().map(|w| {
