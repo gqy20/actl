@@ -9,6 +9,10 @@
 
 ## [Unreleased]
 
+- **内部时序字面量统一跟随 Timing 旋钮（默认值不变）**：desktop-prepare/restore 与 minimize/restore 的输入锁等待从硬编码 3000ms 改跟 `ACTL_LOCK_WAIT_MS`（三处）；挂起唤醒循环的再探针从硬编码 60ms 改跟 `ACTL_PROBE_MS`；verify-file/rows/clipboard/closed 与 verify-window 的沉降轮询间隔从硬编码 100ms 改跟 `ACTL_POLL_MS`。默认值全部不变，仅 env 联动生效；settle 窗口数值（5s/15s）仍按 help 契约钉死，可调化路线与 timing fixtures 已登记 ROADMAP（[PARAMETERS §9](docs/PARAMETERS.md)）。
+
+- **三份横切参考文档（docs/FALLBACK、docs/STABILITY、docs/PARAMETERS）**：把散在各编号文档与代码里的三类知识各自整理成跨子系统总览，供后续逐项完善与优化——FALLBACK 收全量兜底/降级路线（自动/显式/fail-closed 三分类 + 换路可观测字段清单）；STABILITY 按步骤生命周期（就绪→观察→身份焦点→输入→核验→流程推进→协作→失败处置）收护栏机制地图与稳定性不变量；PARAMETERS 收全部时序参数（协议常量 5 项不可 env 覆盖、`Timing` 14 内部旋钮、使用点硬编码）并登记已知不对称（desktop.rs 硬编码锁等待、唤醒再探针不跟 `probe_ms`、不可覆写硬编码清单）。README 索引同步。
+
 - **[spec] close-window 新增 `--system-close` + excel 模板进程收尾两步**：差分实验定案（docs/68）——Excel 在后台正确关闭文档后，裸框架对 WM_CLOSE 只隐藏不退程，但收到 WM_SYSCOMMAND/SC_CLOSE（点标题栏 X 的同一命令）后 ~5 秒干净退出；未走文档关闭的旧壳对 SC_CLOSE 也不退。据此：close-window 支持投递 SC_CLOSE（协议面小扩展，docs/06 同步）；excel-table（单应用与整批同步）在两处后台关闭后各加「close-frame/exit」步——`close-window --hwnd <ownership> --system-close` + `verify-closed`（窗口+进程双断言），Excel 流程从此任务层与进程层都真正关闭。步骤数 13→15 / 69→71，契约 golden 同步。
 
 - **Excel 关闭路线改后台文档关闭（模板）**：excel-table（单应用与整批同步）的 close/close-before-reopen 从 `close-window`（WM_CLOSE：只收起窗口，进程必驻留为隐藏空壳）改走后台关闭序列（click 文件 → NavBarMenu 内 ListItem「关闭」→ 等 NavBarMenu 消失），断言保持「工作簿窗口消失」（wait --gone id:1001）。实测定案：后台路线是正确的文档关闭，干净条件下进程 ~5 秒退出；但完整流程后 VSTO 运行时+输入法类加载项被激活会钉住进程（excel-verify9 实证），进程退出不是本机可靠后置条件，故不做任务级断言——壳归环境治理（免重启清扫配方与归因修正见 docs/68 残壳专项）。步骤数不变，模板合成一致性测试通过。

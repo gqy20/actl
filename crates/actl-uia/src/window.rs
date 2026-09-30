@@ -241,7 +241,7 @@ pub(crate) fn ensure_window_responsive(elem: &UIElement) -> u32 {
     // Explicit focus-window performs guarded restoration/activation instead.
     while started.elapsed() < std::time::Duration::from_millis(timing().wake_bound_ms) {
         std::thread::sleep(std::time::Duration::from_millis(timing().poll_ms));
-        if pumps(60) {
+        if pumps(timing().probe_ms) {
             break;
         }
     }

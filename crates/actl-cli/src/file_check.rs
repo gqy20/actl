@@ -249,7 +249,9 @@ pub fn clipboard(expected: &str, normalize_lines: bool) -> Result<Value, CtlErro
                     ErrorCode::AssertionFailed | ErrorCode::NotActionable
                 ) && start.elapsed().as_millis() < 5000 =>
             {
-                std::thread::sleep(std::time::Duration::from_millis(100))
+                std::thread::sleep(std::time::Duration::from_millis(
+                    actl_core::timing::Timing::load().poll_ms,
+                ))
             }
             result => return result,
         }
@@ -295,7 +297,9 @@ pub fn rows(app: &str, prefix: &str, expected: &str) -> Result<Value, CtlError> 
                 if matches!(error.code, ErrorCode::AssertionFailed | ErrorCode::NotFound)
                     && start.elapsed().as_millis() < 5000 =>
             {
-                std::thread::sleep(std::time::Duration::from_millis(100))
+                std::thread::sleep(std::time::Duration::from_millis(
+                    actl_core::timing::Timing::load().poll_ms,
+                ))
             }
             result => return result,
         }
@@ -398,7 +402,9 @@ fn settle(mut read: impl FnMut() -> Result<Value, CtlError>) -> Result<Value, Ct
                 if error.code == ErrorCode::AssertionFailed
                     && start.elapsed().as_millis() < 5000 =>
             {
-                std::thread::sleep(std::time::Duration::from_millis(100))
+                std::thread::sleep(std::time::Duration::from_millis(
+                    actl_core::timing::Timing::load().poll_ms,
+                ))
             }
             result => return result,
         }

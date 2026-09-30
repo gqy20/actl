@@ -19,7 +19,7 @@ pub fn verify_window(app: &str, state: &str) -> Result<Value, CtlError> {
                 if error.code == ErrorCode::AssertionFailed
                     && start.elapsed().as_millis() < 15000 =>
             {
-                std::thread::sleep(std::time::Duration::from_millis(100));
+                std::thread::sleep(std::time::Duration::from_millis(crate::timing().poll_ms));
             }
             result => return result,
         }

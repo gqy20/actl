@@ -90,7 +90,7 @@ pub fn set_minimized(r: crate::WindowRef<'_>, minimize: bool) -> Result<Value, C
             "only ordinary unowned application windows can be minimized",
         ));
     }
-    let _lock = crate::input::InputLock::acquire(3000)?;
+    let _lock = crate::input::InputLock::acquire(crate::timing().lock_wait_ms)?;
     let mut action = crate::feedback::window_action(
         if minimize {
             "minimize-window"
@@ -134,7 +134,7 @@ fn save(token: &str, doc: &Value) -> Result<(), CtlError> {
 }
 pub fn prepare(handles: &[isize]) -> Result<Value, CtlError> {
     let token = actl_core::snapshot::new_snapshot_id();
-    let _lock = crate::input::InputLock::acquire(3000)?;
+    let _lock = crate::input::InputLock::acquire(crate::timing().lock_wait_ms)?;
     let mut doc = json!({"version":1,"session":token,"windows":[],"foreground":unsafe { GetForegroundWindow() }.0 as isize});
     save(&token, &doc)?;
     let mut results = Vec::new();
@@ -224,7 +224,7 @@ pub fn restore(token: &str) -> Result<Value, CtlError> {
         .as_array()
         .ok_or_else(|| CtlError::protocol("missing window records"))?
         .len();
-    let _lock = crate::input::InputLock::acquire(3000)?;
+    let _lock = crate::input::InputLock::acquire(crate::timing().lock_wait_ms)?;
     let mut results = Vec::new();
     for index in (0..count).rev() {
         let record = doc["windows"][index].clone();
