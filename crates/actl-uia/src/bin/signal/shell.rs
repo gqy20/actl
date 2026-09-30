@@ -408,14 +408,14 @@ unsafe fn menu(hwnd: HWND) {
             _ => None,
         }
     });
-    if let Some((_, resume)) = &action {
-        lines.push(if *resume { "继续" } else { "暂停" }.into());
-    }
     lines.push(if paths.preauthorized() {
         "预授权写入：开（点此关闭）".into()
     } else {
         "预授权写入：关（点此开启）".into()
     });
+    if let Some((_, resume)) = &action {
+        lines.push(if *resume { "继续" } else { "暂停" }.into());
+    }
     if let Ok(mut stored) = MENU_FLOW.lock() {
         *stored = action;
     }
@@ -451,17 +451,9 @@ unsafe fn menu_action(hwnd: HWND, cmd: usize) {
             let _ = DestroyWindow(hwnd);
         }
         6 => {
-            let action = MENU_FLOW.lock().ok().and_then(|a| a.clone());
-            if let Some((id, resume)) = action {
-                let result = flow_action(&id, resume);
-                if let Err(error) = result {
-                    super::popup::show(hwnd, vec!["流程操作未完成".into(), error], false);
-                }
-            }
-        }
-        7 => {
-            // 预授权开关:授予动作只发生在显示端 UI(本菜单),agent/CLI 无写入通道。
-            // 关闭时立即撤销常驻同意,回到点击模式;急停在任何模式下都有效。
+            // 预授权开关(固定第 6 项,流程操作在它之后动态追加):授予动作只发生在
+            // 显示端 UI(本菜单),agent/CLI 无写入通道。关闭时立即撤销常驻同意,
+            // 回到点击模式;急停在任何模式下都有效。
             let paths = SignalPaths::default();
             let next = !paths.preauthorized();
             match paths.set_preauth(next) {
@@ -484,6 +476,15 @@ unsafe fn menu_action(hwnd: HWND, cmd: usize) {
                     vec!["预授权开关写入失败".into(), error.to_string()],
                     false,
                 ),
+            }
+        }
+        7 => {
+            let action = MENU_FLOW.lock().ok().and_then(|a| a.clone());
+            if let Some((id, resume)) = action {
+                let result = flow_action(&id, resume);
+                if let Err(error) = result {
+                    super::popup::show(hwnd, vec!["流程操作未完成".into(), error], false);
+                }
             }
         }
         _ => {}
