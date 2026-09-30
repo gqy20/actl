@@ -40,6 +40,8 @@ mod pardon;
 mod perimeter;
 #[path = "signal/popup.rs"]
 mod popup;
+#[path = "signal/probe.rs"]
+mod probe;
 #[path = "signal/shell.rs"]
 mod shell;
 #[path = "signal/ui_text.rs"]

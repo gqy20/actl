@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+- **修复检测与 auto_resume（批次 4，显示端）**：action_failed 暂停期间，显示端以 5 秒节奏**静默**运行阻塞步骤的 before/verify（子进程带 `ACTL_SILENT_PROBE`，不发布调用状态，横条不闪），把"什么时候可以点继续"点亮——**双判据**：before 过 → 「障碍已清除 · 可重试」；verify 过 → 「结果已存在 · 继续前请核对」（警示手动代做的双重生效风险）；都不过不出提示。暂停超 10 分钟停止探测；探测结果记 repair_probe 流程事件。流程 YAML 新增 `auto_resume: action_failed`（默认关，与预授权正交）：声明后 Retriable 判定自动派发 flow-resume，预算 2 次/运行，急停/损坏代次在场绝不派发，user_paused/checkpoint/needs_review 永不自动续跑。schema 同步。设计见 [32](docs/32-desktop-handoff.md)。
+
 - **[spec] Standing 有界等待安静（显示协议 v11，批次 3）**：修复预授权下的误触倒退——v10 的 Standing 让行是"该次调用立即失败"，流任务表现为 action_failed 暂停，误触容忍反而低于默认模式的 pardon。v11 的 CHECK 响应区分两种让行：授权仍在、仅输入活跃 → 新响应 **YIELD_BUSY**，客户端有界等待安静（**3 秒/150ms 轮询**），安静即通过（误触无感）；等待期间**急停/停止即时生效**；超时仍活跃才按让行失败（证据 `yield=busy_timeout` + `waited_ms`）。授权真被撤销/过期 → 维持 YIELDED 立即失败，默认模式体验不变；BUSY 中间响应不刷审计，终态才记一次；键盘通道动作等待通过后仍走焦点复核。协议 10→11，actl 与 actl-signal 需成对升级（golden 同步）。设计见 [32](docs/32-desktop-handoff.md)。
 
 - **暂停体验三件套（批次 2）**：① 暂停延迟可见化——暂停请求待处理时横条显示「正在暂停 · {阻塞步骤} · 可操作」，详情含已等待时长与"已送达部分不重复注入"承诺（升级既有静态"正在暂停"）；② 注入边界观察暂停——wait_control 的 Scope 从仅 Wait 命令扩展到流程内全部命令，type 的分段间隙在批间检查暂停标记（长输入从"整体打完才停"变为分段亚秒级响应；已送达段数入证据，引擎按 user_paused 转协作暂停；序列子调用间隙本已观察）；③ 暂停超时教育——请求超 ~5 秒未生效时详情提示急停入口（区分有无热键注册），纠正"不耐烦就急停"的工具倒挂，但不自动升级（保留用户意图）。批次 3（Standing 有界等待）与批次 4（修复检测/auto_resume）见 ROADMAP。

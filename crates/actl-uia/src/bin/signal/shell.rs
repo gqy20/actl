@@ -203,15 +203,64 @@ unsafe fn tick(hwnd: HWND) {
             .map(|f| f.run_id.clone())
             .filter(|id| actl_core::history::valid_id(id))
     });
-    let progress = bound_flow
-        .map(|id| {
-            let plan = super::ui_text::plan(&paths, &id);
-            super::flow_ui::read(&paths, &id)
-                .map(|s| super::ui_text::strip_progress(&s, plan.as_ref()))
-                .unwrap_or_else(|| "步骤状态未确认".into())
-        })
-        .unwrap_or_default();
-    super::paint::set_progress(progress);
+    let bound_state = bound_flow
+        .as_deref()
+        .and_then(|id| super::flow_ui::read(&paths, id));
+    let plan = bound_flow
+        .as_deref()
+        .and_then(|id| super::ui_text::plan(&paths, id));
+    let progress = bound_flow.as_deref().map(|id| {
+        super::flow_ui::read(&paths, id)
+            .map(|s| super::ui_text::strip_progress(&s, plan.as_ref()))
+            .unwrap_or_else(|| "步骤状态未确认".into())
+    });
+    super::paint::set_progress(progress.unwrap_or_default());
+    // 批次4:修复检测探测(5s 静默跑阻塞步骤的 before/verify)——点亮"什么时候
+    // 可以点继续";auto_resume 仅在流程显式声明、Retriable 且预算内时派发,
+    // 且急停/损坏代次在场绝不派发。
+    if let Some((id, verdict)) = super::probe::tick(
+        &paths,
+        bound_flow.as_deref(),
+        bound_state.as_ref().and_then(|s| s["status"].as_str()),
+        bound_state.as_ref().and_then(|s| s["reason"].as_str()),
+        bound_state
+            .as_ref()
+            .and_then(|s| s["updated_ms"].as_u64())
+            .unwrap_or(0),
+        plan.as_ref(),
+    ) {
+        let declared = plan
+            .as_ref()
+            .is_some_and(|p| p["auto_resume"] == "action_failed");
+        match verdict {
+            super::probe::Verdict::Retriable => {
+                if super::probe::consume_auto_resume(&id, declared, verdict)
+                    && paths.execution_generation().is_ok()
+                    && !paths.stop_requested()
+                {
+                    actl_core::signal_session::flow_event(
+                        "auto_resume",
+                        serde_json::json!({"run":id}),
+                    );
+                    if let Err(error) = super::flow_ui::request(&id, true, "auto-resume") {
+                        eprintln!("INTERNAL: auto-resume dispatch failed: {error}");
+                    }
+                } else {
+                    v.label = "障碍已清除 · 可重试".into();
+                    v.details.push_str(
+                        "\n探测显示失败步骤的前置条件已满足；点「已修复，重试继续」将重发该步动作",
+                    );
+                }
+            }
+            super::probe::Verdict::AlreadyDone => {
+                v.label = "结果已存在 · 继续前请核对".into();
+                v.details.push_str(
+                    "\n探测显示该步后置条件已满足（可能是你手动完成了这步）；重发动作可能重复生效，请先核对",
+                );
+            }
+            super::probe::Verdict::Pending => {}
+        }
+    }
     if matches!(
         v.mode,
         model::Mode::Running | model::Mode::Background | model::Mode::Desktop

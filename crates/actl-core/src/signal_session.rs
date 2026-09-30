@@ -11,6 +11,8 @@ struct Publisher {
     state: SessionState,
     journal: Option<crate::history::Journal>,
     task: Option<String>,
+    /// 静默探测(ACTL_SILENT_PROBE):不写调用状态,不闪横条。
+    silent: bool,
 }
 impl Publisher {
     fn event(&mut self, event: &str, data: serde_json::Value) {
@@ -26,6 +28,9 @@ impl Publisher {
         }
     }
     fn publish(&mut self) {
+        if self.silent {
+            return;
+        }
         self.state.ts_ms = unix_ms();
         self.state.seq += 1;
         self.paths.write_state(&self.state);
@@ -49,6 +54,29 @@ impl SignalSession {
         task: Option<String>,
     ) -> Self {
         let _trace = crate::trace::scope("session.start");
+        // 静默探测(批次4):显示端的修复检测探测设置 ACTL_SILENT_PROBE——
+        // 不发布调用状态/心跳(横条不闪"后台处理"),不占历史保留窗口。
+        // 探测结果由显示端以 flow_event 记审计,不靠这里的调用日志。
+        if std::env::var_os("ACTL_SILENT_PROBE").is_some() {
+            let (stop, _rx) = mpsc::channel();
+            return Self {
+                publisher: Arc::new(Mutex::new(Publisher {
+                    paths,
+                    state: SessionState::now(
+                        std::process::id(),
+                        command,
+                        app,
+                        None,
+                        crate::state::Phase::Running,
+                    ),
+                    journal: None,
+                    task,
+                    silent: true,
+                })),
+                stop,
+                worker: None,
+            };
+        }
         let calls = paths.dir.join("calls");
         let maintenance = std::fs::create_dir_all(&calls).and_then(|()| {
             crate::maintenance::periodic_with_interval(&calls, unix_ms(), 1000, || {
@@ -83,6 +111,7 @@ impl SignalSession {
             state,
             journal,
             task,
+            silent: false,
         }));
         CURRENT.with(|c| *c.borrow_mut() = Arc::downgrade(&publisher));
         if let Ok(mut p) = publisher.lock() {

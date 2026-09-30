@@ -22,6 +22,9 @@
       "type": "object", "additionalProperties": false, "required": ["approval"],
       "properties": {"approval": {"enum": ["expiring", "once_per_run", "standing"]}}
     },
+    "auto_resume": {
+      "enum": ["action_failed"]
+    },
     "version": {
       "const": 1
     },

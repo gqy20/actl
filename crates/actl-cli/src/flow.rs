@@ -167,6 +167,7 @@ pub fn validate(plan: &Plan) -> Result<(), CtlError> {
                 version: plan.version,
                 name: plan.name.clone(),
                 handoff: plan.handoff,
+                auto_resume: None,
                 steps: vec![child],
             })?;
         }
@@ -184,6 +185,7 @@ pub fn validate(plan: &Plan) -> Result<(), CtlError> {
                     version: plan.version,
                     name: plan.name.clone(),
                     handoff: plan.handoff,
+                    auto_resume: None,
                     steps: vec![child],
                 })?;
             }
@@ -434,6 +436,7 @@ impl Host for Adapter<'_> {
         validate(&Plan {
             version: 1,
             handoff: self.plan.handoff,
+            auto_resume: None,
             name: self.plan.name.clone(),
             steps: vec![step.clone()],
         })

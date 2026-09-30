@@ -21,7 +21,17 @@ pub struct Plan {
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub handoff: Option<actl_core::handoff::Policy>,
+    /// 修复检测的自动续跑策略(批次4):`action_failed` = 障碍清除且结果未现时
+    /// 由显示端自动发起继续(预算 2 次/运行);默认关——授权通道与重试策略正交。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auto_resume: Option<AutoResume>,
     pub steps: Vec<Step>,
+}
+/// 显式声明,唯一取值 action_failed(user_paused/checkpoint/needs_review 永不自动)。
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AutoResume {
+    ActionFailed,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -357,4 +367,30 @@ fn decode_yaml(text: &str) -> Result<serde_json::Value, CtlError> {
     let raw: serde_json::Value = serde_saphyr::from_str_with_options(text, options)
         .map_err(|e| CtlError::protocol(format!("invalid flow YAML: {e}")))?;
     Ok(raw)
+}
+
+#[cfg(test)]
+mod auto_resume_tests {
+    use super::*;
+    #[test]
+    fn auto_resume_field_round_trips_and_stays_opt_in() {
+        let plan = parse(
+            "version: 1\nname: probe demo\nauto_resume: action_failed\nsteps:\n  - id: a\n    title: A\n    run: {command: find, args: ['--role', Button]}\n",
+        )
+        .unwrap();
+        assert_eq!(plan.auto_resume, Some(AutoResume::ActionFailed));
+        assert_eq!(
+            serde_json::to_value(&plan).unwrap()["auto_resume"],
+            "action_failed"
+        );
+        let plain = parse(
+            "version: 1\nname: plain\nsteps:\n  - id: a\n    title: A\n    run: {command: find}\n",
+        )
+        .unwrap();
+        assert_eq!(plain.auto_resume, None);
+        assert!(parse(
+            "version: 1\nname: bad\nauto_resume: always\nsteps:\n  - id: a\n    title: A\n    run: {command: find}\n"
+        )
+        .is_err());
+    }
 }
