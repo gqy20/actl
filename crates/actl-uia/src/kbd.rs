@@ -108,12 +108,15 @@ fn uni_event(ch: u16, up: bool) -> INPUT {
 /// 修饰键用**通用** VK(0x10/0x11/0x12),与 AutoHotkey/pywinauto 一致。
 /// 左右手变体(VK_LCONTROL 等)的 DOWN 会被 WinUI 输入栈丢弃,实测 ctrl+s
 /// 退化成裸 's' 直接打进了文档。
-fn modifier_vk(name: &str) -> VIRTUAL_KEY {
+/// 白名单外的键名返回 None,由编译层 PROTOCOL 拒绝——历史上未知键名
+/// (如 ctrlx)静默映射成 Win 键,物理点击会注入 Win+点击(ROADMAP 实录)。
+fn modifier_vk(name: &str) -> Option<VIRTUAL_KEY> {
     match name {
-        "ctrl" => VK_CONTROL,
-        "shift" => VK_SHIFT,
-        "alt" => VK_MENU,
-        _ => VK_LWIN,
+        "ctrl" => Some(VK_CONTROL),
+        "shift" => Some(VK_SHIFT),
+        "alt" => Some(VK_MENU),
+        "win" => Some(VK_LWIN),
+        _ => None,
     }
 }
 
@@ -205,7 +208,12 @@ fn char_vk(c: char) -> Option<(VIRTUAL_KEY, bool)> {
 fn compile_key_spec(spec: &KeySpec) -> Result<Vec<INPUT>, CtlError> {
     let mut inputs: Vec<INPUT> = Vec::new();
     for m in &spec.modifiers {
-        inputs.push(vk_event(modifier_vk(m), false));
+        let vk = modifier_vk(m).ok_or_else(|| {
+            CtlError::protocol(format!(
+                "unknown modifier {m:?}: expected ctrl | shift | alt | win"
+            ))
+        })?;
+        inputs.push(vk_event(vk, false));
     }
     for key in &spec.keys {
         match key {
@@ -248,7 +256,12 @@ fn compile_key_spec(spec: &KeySpec) -> Result<Vec<INPUT>, CtlError> {
         }
     }
     for m in spec.modifiers.iter().rev() {
-        inputs.push(vk_event(modifier_vk(m), true));
+        let vk = modifier_vk(m).ok_or_else(|| {
+            CtlError::protocol(format!(
+                "unknown modifier {m:?}: expected ctrl | shift | alt | win"
+            ))
+        })?;
+        inputs.push(vk_event(vk, true));
     }
     Ok(inputs)
 }
@@ -273,7 +286,11 @@ pub(crate) fn modifier_hold_events(
 fn compile_modifier_events(spec: &KeySpec, down: bool) -> Result<Vec<INPUT>, CtlError> {
     let mut inputs = Vec::new();
     for m in &spec.modifiers {
-        let vk = modifier_vk(m);
+        let vk = modifier_vk(m).ok_or_else(|| {
+            CtlError::protocol(format!(
+                "unknown modifier {m:?}: expected ctrl | shift | alt | win"
+            ))
+        })?;
         inputs.push(vk_event(vk, !down)); // vk_event(down: bool) — 见其文档
     }
     Ok(inputs)
@@ -383,6 +400,14 @@ mod tests {
         compile_key_spec(&spec).unwrap()
     }
 
+    fn compile_err(expr: &str) -> CtlError {
+        let spec = parse_key_expr(expr).unwrap();
+        match compile_key_spec(&spec) {
+            Err(error) => error,
+            Ok(_) => panic!("{expr} compiled but should be rejected"),
+        }
+    }
+
     /// (VK 码, 是否 UP) 序列;UNICODE 事件 wVk=0,不会与 VK 断言混淆。
     fn vk_seq(events: &[INPUT]) -> Vec<(u16, bool)> {
         events
@@ -396,6 +421,37 @@ mod tests {
 
     fn is_unicode(i: &INPUT) -> bool {
         unsafe { i.Anonymous.ki.dwFlags.contains(KEYEVENTF_UNICODE) }
+    }
+
+    #[test]
+    fn unknown_modifier_names_are_rejected_not_mapped_to_win() {
+        // 回归(ROADMAP 实录):--with 的修饰键不经过键表达式解析,曾把未知键名
+        // (如 ctrlx)静默映射成 Win 键,物理点击注入 Win+点击。
+        for bad in ["ctrlx", " CTRL ", "meta", "cmd", ""] {
+            let error = match modifier_hold_events(&[bad.to_string()], true) {
+                Err(error) => error,
+                Ok(_) => panic!("{bad} compiled but should be rejected"),
+            };
+            assert_eq!(error.code, ErrorCode::Protocol, "{bad}");
+            assert!(error.message.contains("unknown modifier"), "{bad}");
+        }
+        // 白名单四键正常编译;win 显式映射 VK_LWIN(此前是兜底误配,现在是明示)。
+        let events = modifier_hold_events(&["win".into()], true).unwrap();
+        assert!(!events.is_empty());
+        let hold = modifier_hold_events(&["ctrl".into(), "shift".into()], true);
+        assert!(hold.is_ok());
+        let release = modifier_hold_events(&["alt".into()], false);
+        assert!(release.is_ok());
+        // 编译层同样拒绝(KeySpec 直接构造,绕过解析器)。
+        let spec = KeySpec {
+            modifiers: vec!["ctrlx".into()],
+            keys: vec![Key::Char('s')],
+        };
+        let error = match compile_key_spec(&spec) {
+            Err(error) => error,
+            Ok(_) => panic!("spec with unknown modifier compiled but should be rejected"),
+        };
+        assert_eq!(error.code, ErrorCode::Protocol);
     }
 
     #[test]

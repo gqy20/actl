@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+- **修复 `--physical --with` 修饰键静默误配 Win 键（安全）**：kbd 层 `modifier_vk` 此前把白名单外的任意键名兜底映射成 Win 键——`--with ctrlx` 这类笔误会让物理点击实际注入 **Win+点击**（打开开始菜单等非预期副作用）。现白名单收紧为 ctrl/shift/alt/win 四键，未知键名在事件编译前 PROTOCOL 拒绝（`--with` 不经过键表达式解析，正是旧兜底的暴露面）；"win"由隐式兜底改为显式映射。真机验收批次的遗留安全项，单测覆盖三条编译路径（表达式/裸修饰键/修饰键-点击组合）。
+
 - **修复检测与 auto_resume（批次 4，显示端）**：action_failed 暂停期间，显示端以 5 秒节奏**静默**运行阻塞步骤的 before/verify（子进程带 `ACTL_SILENT_PROBE`，不发布调用状态，横条不闪），把"什么时候可以点继续"点亮——**双判据**：before 过 → 「障碍已清除 · 可重试」；verify 过 → 「结果已存在 · 继续前请核对」（警示手动代做的双重生效风险）；都不过不出提示。暂停超 10 分钟停止探测；探测结果记 repair_probe 流程事件。流程 YAML 新增 `auto_resume: action_failed`（默认关，与预授权正交）：声明后 Retriable 判定自动派发 flow-resume，预算 2 次/运行，急停/损坏代次在场绝不派发，user_paused/checkpoint/needs_review 永不自动续跑。schema 同步。设计见 [32](docs/32-desktop-handoff.md)。
 
 - **[spec] Standing 有界等待安静（显示协议 v11，批次 3）**：修复预授权下的误触倒退——v10 的 Standing 让行是"该次调用立即失败"，流任务表现为 action_failed 暂停，误触容忍反而低于默认模式的 pardon。v11 的 CHECK 响应区分两种让行：授权仍在、仅输入活跃 → 新响应 **YIELD_BUSY**，客户端有界等待安静（**3 秒/150ms 轮询**），安静即通过（误触无感）；等待期间**急停/停止即时生效**；超时仍活跃才按让行失败（证据 `yield=busy_timeout` + `waited_ms`）。授权真被撤销/过期 → 维持 YIELDED 立即失败，默认模式体验不变；BUSY 中间响应不刷审计，终态才记一次；键盘通道动作等待通过后仍走焦点复核。协议 10→11，actl 与 actl-signal 需成对升级（golden 同步）。设计见 [32](docs/32-desktop-handoff.md)。
