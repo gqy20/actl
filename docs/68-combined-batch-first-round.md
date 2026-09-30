@@ -264,3 +264,7 @@ excel-verify9 实测给出**定案修正**：
 - 因此断言设计定案：**保持「工作簿窗口消失」（wait --gone id:1001）**，进程退出不是本机可靠后置条件，
   不做任务级断言（曾试 verify-closed，在 excel-verify9 如实失败并把环境噪声变成任务失败，已回退；
   该次失败保留了完整证据三件套）。壳的治理归环境层（清扫配方），模板层保证文档正确关闭。
+
+excel-verify10（新模板全链）：**13/13 通过**——close-before-reopen 与 close 均走后台关闭序列，
+窗口消失断言无假阴性；两实例进程仍驻留（13→15，加载项钉住，与 excel-verify9 的定案一致），
+壳归环境层治理。excel-verify9 保留为 verify-closed 尝试的失败证据（任务状态 needs_review，不归档不改写）。
