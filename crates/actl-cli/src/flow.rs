@@ -667,6 +667,71 @@ pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
             drop(active);
             outcome(&store, &run)
         }
+        FlowCommand::Clean {
+            older_than_minutes,
+            dry_run,
+        } => {
+            let flows_dir = root.join("flows");
+            let archive_dir = root.join("flows-archived");
+            if !*dry_run {
+                std::fs::create_dir_all(&archive_dir)
+                    .map_err(|e| CtlError::internal(format!("cannot create archive dir: {e}")))?;
+            }
+            let cutoff_ms = actl_core::state::unix_ms()
+                .saturating_sub(older_than_minutes.saturating_mul(60_000));
+            let mut moved = vec![];
+            let mut kept = vec![];
+            let mut errors = vec![];
+            if let Ok(entries) = std::fs::read_dir(&flows_dir) {
+                for entry in entries.flatten() {
+                    let id = entry.file_name().to_string_lossy().into_owned();
+                    let state_path = entry.path().join("state.json");
+                    let Ok(text) = std::fs::read_to_string(&state_path) else {
+                        continue; // 非 flow 目录或损坏状态,不动
+                    };
+                    let Ok(state) = serde_json::from_str::<serde_json::Value>(&text) else {
+                        continue;
+                    };
+                    let status = state["status"].as_str().unwrap_or("");
+                    if status == "completed" {
+                        continue; // 已完成不动(保留在 flows/ 里作保留窗口内的证据)
+                    }
+                    let updated = state["updated_ms"].as_u64().unwrap_or(0);
+                    if updated >= cutoff_ms {
+                        kept.push(json!({"id":id,"status":status,"reason":"recent"}));
+                        continue;
+                    }
+                    // active runner 在跑的不动:running.lock 存 PID,进程死了视为过期锁
+                    if let Ok(lock) = std::fs::read_to_string(entry.path().join("running.lock"))
+                        && let Some(pid) = lock.trim().parse::<u32>().ok()
+                        && actl_uia::evidence::process(pid, false)
+                            .ok()
+                            .and_then(|p| p["state"].as_str().map(str::to_owned))
+                            .is_some_and(|s| s != "absent")
+                    {
+                        kept.push(json!({"id":id,"status":status,"reason":"runner_active"}));
+                        continue;
+                    }
+                    if *dry_run {
+                        moved.push(json!({"id":id,"status":status,"would_archive":true}));
+                        continue;
+                    }
+                    let dest = archive_dir.join(&id);
+                    match std::fs::rename(entry.path(), &dest) {
+                        Ok(()) => moved.push(json!({"id":id,"status":status,"archived":true})),
+                        Err(e) => errors.push(json!({"id":id,"error":e.to_string()})),
+                    }
+                }
+            }
+            Ok(json!({
+                "archived": moved.len(),
+                "kept": kept.len(),
+                "errors": errors,
+                "detail": moved,
+                "dry_run": dry_run,
+                "older_than_minutes": older_than_minutes,
+            }))
+        }
     }
 }
 fn outcome(store: &Store, run: &Run) -> Result<Value, CtlError> {

@@ -140,6 +140,16 @@ pub(crate) enum FlowCommand {
         #[arg(long)]
         retry_step: Option<String>,
     },
+    /// Batch-archive historical non-completed flow states; preserves all evidence
+    #[command(name = "flow-clean")]
+    Clean {
+        /// Only archive flows whose last update is older than this many minutes
+        #[arg(long, default_value_t = 60)]
+        older_than_minutes: u64,
+        /// Archive without renaming (dry run: list what would move)
+        #[arg(long)]
+        dry_run: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -769,6 +779,7 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
         Command::Flow(FlowCommand::Status { .. }) => "flow-status",
         Command::Flow(FlowCommand::Pause { .. }) => "flow-pause",
         Command::Flow(FlowCommand::Resume { .. }) => "flow-resume",
+        Command::Flow(FlowCommand::Clean { .. }) => "flow-clean",
         Command::Desktop(DesktopCommand::History { .. }) => "history",
         Command::Desktop(DesktopCommand::DisplayStart) => "display-start",
         Command::Desktop(DesktopCommand::MinimizeWindow { .. }) => "minimize-window",
