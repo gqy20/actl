@@ -203,6 +203,16 @@ unsafe extern "system" fn mouse(code: i32, wp: WPARAM, lp: LPARAM) -> LRESULT {
     CallNextHookEx(None, code, wp, lp)
 }
 
+/// CHECK 让行的响应裁决(显示协议 v11,批次3):Standing 授权下输入只是活跃
+/// → YIELD_BUSY,客户端有界等待安静而非立即失败;授权真被撤销/过期 → YIELDED。
+fn check_response(reason: &str) -> usize {
+    if reason == "input_active" {
+        actl_core::handoff::YIELD_BUSY
+    } else {
+        YIELDED
+    }
+}
+
 fn read_request(paths: &SignalPaths, pid: u32) -> Option<Request> {
     let data = std::fs::read(paths.dir.join(format!("handoff-{pid}.json"))).ok()?;
     if data.len() > 8192 {
@@ -255,8 +265,12 @@ pub fn message(msg: u32, pid: u32) -> usize {
                 ALLOWED
             } else {
                 let reason = s.consent.reason();
-                s.audit_failure(None, reason);
-                YIELDED
+                let response = check_response(reason);
+                if response != actl_core::handoff::YIELD_BUSY {
+                    // BUSY 不落审计:客户端 150ms 轮询会刷屏;终态让行才记一次。
+                    s.audit_failure(None, reason);
+                }
+                response
             };
         }
         let Some(r) = read_request(&paths, pid) else {
@@ -691,6 +705,22 @@ unsafe fn decide(_hwnd: HWND, start: bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn check_response_distinguishes_busy_standby_from_revoked_yield() {
+        // Standing 输入活跃 → BUSY(客户端等待);撤销/过期/任务变更 → 维持 YIELDED。
+        assert_eq!(
+            check_response("input_active"),
+            actl_core::handoff::YIELD_BUSY
+        );
+        for revoked in [
+            "revoked",
+            "external_input",
+            "duration_expired",
+            "different_task",
+        ] {
+            assert_eq!(check_response(revoked), YIELDED);
+        }
+    }
     #[test]
     fn handoff_layout_scales_native_bounds_and_font() {
         unsafe {

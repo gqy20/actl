@@ -117,7 +117,23 @@ fn query(message: u32) -> Result<usize, CtlError> {
 }
 pub(crate) fn check() -> Result<(), CtlError> {
     if ACTIVE.with(Cell::get) {
-        match query(CHECK_MESSAGE)? {
+        let started = std::time::Instant::now();
+        let mut code = query(CHECK_MESSAGE)?;
+        if code == actl_core::handoff::YIELD_BUSY {
+            // 批次3(显示协议 v11):Standing 授权仍在、输入活跃——有界等待安静
+            // (≤3s,150ms 轮询),期间急停/停止即时生效;超时才按让行失败。
+            // 误触(鼠标一晃/键盘一碰)不再直接打断任务。
+            let deadline = started + std::time::Duration::from_millis(3000);
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(150));
+                actl_core::stop::check_current()?;
+                code = query(CHECK_MESSAGE)?;
+                if code != actl_core::handoff::YIELD_BUSY || std::time::Instant::now() >= deadline {
+                    break;
+                }
+            }
+        }
+        match code {
             ALLOWED => {}
             USER_PAUSED => return Err(failure("user_paused")),
             CANCELLED => {
@@ -127,7 +143,17 @@ pub(crate) fn check() -> Result<(), CtlError> {
                 ));
             }
             MONITOR_UNAVAILABLE => return Err(failure("input_monitor_unavailable")),
-            _ => return Err(failure("human_takeover_or_grant_expired")),
+            _ => {
+                let mut error = failure("human_takeover_or_grant_expired");
+                let waited = started.elapsed().as_millis() as u64;
+                if waited > 0
+                    && let Some(evidence) = error.evidence.as_mut()
+                {
+                    evidence["yield"] = "busy_timeout".into();
+                    evidence["waited_ms"] = waited.into();
+                }
+                return Err(error);
+            }
         }
     }
     Ok(())

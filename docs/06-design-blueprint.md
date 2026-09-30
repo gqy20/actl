@@ -811,3 +811,5 @@ click（Invoke/SelectionItem/Toggle/ExpandCollapse）、set-value、select、tog
 - Standing 的 check 语义：不过期；输入计数变化时**让行而非撤销**（reason=input_active，基线重置，安静即自动通过）；急停、监听不可用、代次变化照常杀死信任。审计记录 reason=preauthorized。
 
 安全不变量：急停在任何模式下立即生效；动作预告照常上屏；授予动作只能来自显示端 UI 或用户点击（YAML 声明永远不自动生效）。协议版本 9→10，actl 与 actl-signal 需成对升级。按流程指纹（冻结计划哈希）持久信任的「始终信任此流程」为后续方向（ROADMAP）。
+
+**v11 增补（2026-10 批次 3）**：CHECK 响应新增 `YIELD_BUSY`（9）——Standing 授权仍在、仅输入活跃时返回，客户端有界等待安静（3 秒/150ms 轮询、急停即时、超时按让行失败并带 waited_ms 证据）；授权撤销/过期维持 YIELDED 立即失败。误触（鼠标一晃/键盘一碰）在预授权下不再打断任务。协议 10→11 成对升级。

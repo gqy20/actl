@@ -2,7 +2,8 @@
 use crate::state::{SignalPaths, unix_ms};
 use serde::{Deserialize, Serialize};
 
-pub const DISPLAY_PROTOCOL: u32 = 10;
+/// v11:CHECK 响应新增 YIELD_BUSY(Standing 授权仍在、输入活跃),客户端有界等待。
+pub const DISPLAY_PROTOCOL: u32 = 11;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DisplayLease {
     pub protocol: u32,

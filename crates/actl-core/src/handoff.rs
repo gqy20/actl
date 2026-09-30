@@ -120,6 +120,9 @@ pub const PANEL_UNAVAILABLE: usize = 5;
 pub const MONITOR_UNAVAILABLE: usize = 6;
 pub const USER_PAUSED: usize = 7;
 pub const CANCELLED: usize = 8;
+/// Standing 授权仍在、仅输入活跃(显示协议 v11):客户端应做有界等待安静,
+/// 而非立即让行失败——预授权下误触不再直接打断任务(批次3)。
+pub const YIELD_BUSY: usize = 9;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Request {
