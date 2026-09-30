@@ -56,9 +56,8 @@ unsafe fn hover_slot(hwnd: HWND) -> u8 {
     }
     match pointer.x {
         x if x >= bounds_w - px(30) => paint::HOVER_BUTTON,
-        x if x >= bounds_w - px(46) => paint::HOVER_CHEVRON,
         x if !expanded && x >= px(8) && x < px(24) => paint::HOVER_DOT,
-        // 非拖拽手柄的空白区(右侧效果图标一带)承载空闲信息卡;手柄区不打扰拖拽。
+        // 非拖拽手柄的空白区承载信息卡;手柄区不打扰拖拽(悬浮无卡,点击切换展开)。
         x if x >= px(181) => paint::HOVER_BODY,
         _ => paint::HOVER_NONE,
     }
@@ -943,19 +942,25 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
             let x = (lp.0 as u16 as i16) as i32;
             let dpi = windows::Win32::UI::HiDpi::GetDpiForWindow(hwnd);
             let captured = PRESSED.lock().ok().and_then(|mut p| p.take());
-            if x >= paint::pixels(246, dpi) {
+            let mut bounds = RECT::default();
+            let _ = GetClientRect(hwnd, &mut bounds);
+            let button_x = (bounds.right - bounds.left) - paint::pixels(30, dpi);
+            if x >= button_x {
                 if let Some(control) = captured {
                     primary(hwnd, control);
                 }
                 tick(hwnd);
-            } else if x >= paint::pixels(paint::CHEVRON_X, dpi)
-                && x < paint::pixels(paint::CHEVRON_X + 12, dpi)
-            {
-                // 展开箭头固定锚点:点击切换两行,再次点击收回;不自动收回。
-                set_expanded(hwnd, !EXPANDED.load(Ordering::Relaxed));
             } else {
-                details(hwnd);
+                // 点击空白即切换展开/收回(无箭头指示);详情窗口从托盘「任务详情」
+                // 或收起态右侧按钮进入。
+                set_expanded(hwnd, !EXPANDED.load(Ordering::Relaxed));
             }
+            LRESULT(0)
+        }
+        WM_NCLBUTTONUP => {
+            // 拖拽手柄(HTCAPTION)上的"点击未拖拽"同样切换展开;拖拽路径
+            // (WM_ENTERSIZEMOVE)不受影响。
+            set_expanded(hwnd, !EXPANDED.load(Ordering::Relaxed));
             LRESULT(0)
         }
         WM_RBUTTONUP => {

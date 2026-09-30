@@ -15,16 +15,14 @@ use std::sync::OnceLock;
 pub const WIDTH: i32 = 280;
 pub const HEIGHT: i32 = 34;
 /// 展开态:宽度 1.5 倍(信息更清晰)、高度两行;第二行显示最近工作流步骤链。
+/// 展开交互 = 点击横条空白(无箭头指示)。
 pub const WIDTH_EXT: i32 = 420;
 pub const HEIGHT_EXT: i32 = 62;
-/// 展开箭头固定锚点(DIP,收起态):效果图标与按钮之间的槽位;展开态右缘锚定随宽度。
-pub const CHEVRON_X: i32 = 234;
 /// 悬浮槽位(锚点即命中区;hover 卡内容按槽位由 shell 提供)。
 pub const HOVER_NONE: u8 = 0;
 pub const HOVER_BUTTON: u8 = 1;
-pub const HOVER_CHEVRON: u8 = 2;
-pub const HOVER_DOT: u8 = 3;
-pub const HOVER_BODY: u8 = 4;
+pub const HOVER_DOT: u8 = 2;
+pub const HOVER_BODY: u8 = 3;
 /// 预授权描边色(青):常驻信任的可见性补偿,文字版保留在窗口标题里。
 const STROKE_PREAUTH: u32 = 0x5FC4D4;
 static PREAUTH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -326,11 +324,10 @@ unsafe fn raster(view: &View, hover: u8, dpi: u32, expanded: bool) -> Result<Vec
     brush.SetColor(&color(status_color(view.mode)));
     target.FillRoundedRectangle(&rounded(10., 11., 12., 12., 6.), &brush);
     let pending = matches!(view.mode, Mode::StopRequested | Mode::Stopped);
-    // 右缘锚定簇:箭头与按钮贴右缘;标签右界收到箭头前 6 DIP——
-    // 旧值 240 越过箭头起点 234,尾部残字画进箭头底下"看不见还占着"(实测修正)。
-    let chevron_x = w - 46.;
+    // 右缘锚定簇:按钮贴右缘;标签右界收到按钮前 6 DIP(残字修正)。
     let button_x = w - 30.;
     let label = &view.label;
+    // 标签右界收到按钮前 6 DIP(无箭头指示;旧值 240 曾越过右簇把残字画进不可见区)。
     let text_right = if view.effects.keyboard
         || view.effects.focus
         || view.effects.pointer
@@ -338,7 +335,7 @@ unsafe fn raster(view: &View, hover: u8, dpi: u32, expanded: bool) -> Result<Vec
     {
         181.
     } else {
-        chevron_x - 6.
+        button_x - 6.
     };
     brush.SetColor(&color(0xE8EBED));
     let text_format = if has_cjk(label) { cjk } else { latin };
@@ -370,29 +367,8 @@ unsafe fn raster(view: &View, hover: u8, dpi: u32, expanded: bool) -> Result<Vec
         outline(225., 11., 10., 13., 2.);
         outline(228., 9., 4., 4., 1.);
     }
-    // 展开箭头:右缘锚定簇,常显提供可展开暗示;收起▸/展开▾;悬浮提亮。
-    brush.SetColor(&color(if hover == HOVER_CHEVRON {
-        0xB6BDC4
-    } else {
-        0x7E858C
-    }));
-    if expanded {
-        for i in 0..5 {
-            let gw = 9. - i as f32 * 1.6;
-            bar(
-                chevron_x + 2.5 + (9. - gw) / 2.,
-                14.5 + i as f32 * 1.7,
-                gw,
-                1.,
-            );
-        }
-    } else {
-        for i in 0..6 {
-            let h2 = 9. - i as f32 * 1.5;
-            bar(chevron_x + 3.5 + i as f32, 17. - h2 / 2., 1., h2);
-        }
-    }
-    // 展开态隐藏冗余的详情按钮(点横条空白即直达详情);暂停/继续保留。
+    // 展开态隐藏详情按钮(点横条空白即切换,详情从托盘/收起态按钮进入);
+    // 暂停/继续保留。无箭头指示——展开交互就是点击横条本身。
     let show_button = !(expanded && matches!(view.control, super::model::Control::Details));
     if show_button {
         brush.SetColor(&color(if pending {
