@@ -242,27 +242,35 @@ pub unsafe fn message(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> Option<LR
             let danger = item.CtlID == 12;
             let window_button = matches!(item.CtlID, 15 | 16);
             let hovered = GetWindowLongPtrW(item.hwndItem, GWLP_USERDATA) != 0;
-            let bg = if disabled {
-                0x292C2F
-            } else if pressed {
-                0x465663
-            } else if primary {
-                if hovered { 0xC0D9EA } else { 0xA8C8DE }
-            } else if hovered {
-                0x464C52
+            // 轻量化(2026-09-30):次级/危险按钮从实心色块改为幽灵描边——
+            // 透明底 + 1px 边框 + 悬浮微填充;主按钮保留实心(唯一强引导),
+            // 色彩收敛;窗口按钮保持纯图形。状态色三元组 = (底, 字, 框)。
+            let (bg, fg, border) = if disabled {
+                (BACKGROUND, 0x6A7178, 0x3A3E42)
             } else if window_button {
-                BACKGROUND
-            } else {
-                0x34383D
-            };
-            let fg = if disabled {
-                0x788088
+                (BACKGROUND, TEXT, BACKGROUND)
             } else if primary {
-                0x18242C
+                if pressed {
+                    (0x8FB4CC, 0x18242C, 0x8FB4CC)
+                } else if hovered {
+                    (0xB7D4E6, 0x18242C, 0xB7D4E6)
+                } else {
+                    (0x9EC2D8, 0x18242C, 0x9EC2D8)
+                }
             } else if danger {
-                0xF0A69D
+                if pressed {
+                    (0x463634, 0xF0A69D, 0x9A5A52)
+                } else if hovered {
+                    (0x392E2C, 0xF0A69D, 0x8A514B)
+                } else {
+                    (BACKGROUND, 0xF0A69D, 0x6E4640)
+                }
+            } else if pressed {
+                (0x26292C, TEXT, 0x565C63)
+            } else if hovered {
+                (0x2E3236, TEXT, 0x565C63)
             } else {
-                TEXT
+                (BACKGROUND, TEXT, 0x4A4F55)
             };
             let dc = item.hDC;
             let saved = SaveDC(dc);
@@ -270,9 +278,16 @@ pub unsafe fn message(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> Option<LR
             SetDCBrushColor(dc, rgb(bg));
             SelectObject(dc, GetStockObject(DC_BRUSH));
             SelectObject(dc, GetStockObject(NULL_PEN));
-            let radius = paint::pixels(12, GetDpiForWindow(hwnd));
+            let radius = paint::pixels(8, GetDpiForWindow(hwnd));
             let r = item.rcItem;
             let _ = RoundRect(dc, r.left, r.top, r.right, r.bottom, radius, radius);
+            // 幽灵描边:非主/非窗口按钮描 1px 边框(主按钮框色=底色即不可见)。
+            if border != bg {
+                SelectObject(dc, GetStockObject(DC_PEN));
+                SetDCPenColor(dc, rgb(border));
+                SelectObject(dc, GetStockObject(NULL_BRUSH));
+                let _ = RoundRect(dc, r.left, r.top, r.right - 1, r.bottom - 1, radius, radius);
+            }
             let font = SendMessageW(item.hwndItem, WM_GETFONT, None, None);
             SelectObject(dc, HGDIOBJ(font.0 as *mut _));
             SetBkMode(dc, TRANSPARENT);
