@@ -21,6 +21,8 @@ struct Popup {
     owner: usize,
     lines: Vec<String>,
     menu: bool,
+    /// 悬浮卡归属:只有归属者可以撤下,避免误删菜单/详情弹窗。
+    hover: bool,
     selected: Option<usize>,
 }
 static POPUP: Mutex<Option<Popup>> = Mutex::new(None);
@@ -29,6 +31,18 @@ pub unsafe fn hide() {
     if let Some(p) = old {
         let _ = DestroyWindow(HWND(p.hwnd as *mut _));
     }
+}
+/// 任意弹窗(菜单/详情/悬浮卡)是否打开——悬浮卡让位的判据。
+pub fn any_open() -> bool {
+    POPUP.lock().ok().is_some_and(|p| p.is_some())
+}
+/// 当前弹窗是否为悬浮卡。
+pub fn shown_by_hover() -> bool {
+    POPUP
+        .lock()
+        .ok()
+        .and_then(|p| p.as_ref().map(|p| p.hover))
+        .unwrap_or(false)
 }
 fn report(reason: &str, detail: &str) {
     let paths = actl_core::state::SignalPaths::default();
@@ -39,6 +53,13 @@ fn report(reason: &str, detail: &str) {
     );
 }
 pub unsafe fn show(owner: HWND, lines: Vec<String>, menu: bool) {
+    open_popup(owner, lines, menu, false);
+}
+/// 悬浮卡:与详情同形态(只读文本行),但带 hover 归属,换槽/离开即由 shell 撤下。
+pub unsafe fn show_hover(owner: HWND, lines: Vec<String>) {
+    open_popup(owner, lines, false, true);
+}
+unsafe fn open_popup(owner: HWND, lines: Vec<String>, menu: bool, hover: bool) {
     hide();
     let Ok(instance) = GetModuleHandleW(None) else {
         report(
@@ -80,6 +101,8 @@ pub unsafe fn show(owner: HWND, lines: Vec<String>, menu: bool) {
         class,
         if menu {
             w!("actl · 菜单")
+        } else if hover {
+            w!("actl · 提示")
         } else {
             w!("actl · 详情")
         },
@@ -105,6 +128,7 @@ pub unsafe fn show(owner: HWND, lines: Vec<String>, menu: bool) {
             owner: owner.0 as usize,
             lines,
             menu,
+            hover,
             selected: None,
         });
     }

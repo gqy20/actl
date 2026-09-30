@@ -27,6 +27,45 @@ static STOP_HOVERED: AtomicBool = AtomicBool::new(false);
 static DRAG_STOP: AtomicBool = AtomicBool::new(false);
 static FRAME_READY: AtomicBool = AtomicBool::new(false);
 static EXPANDED: AtomicBool = AtomicBool::new(false);
+/// 悬浮槽位(paint::HOVER_*)、进入时间与当前打开卡片的归属槽位。
+static HOVER_SLOT: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+static HOVER_SINCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static HOVER_CARD: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+/// 光标当前落在哪个悬浮槽位(100ms 轮询,无 TrackMouseEvent 依赖)。
+unsafe fn hover_slot(hwnd: HWND) -> u8 {
+    let mut pointer = POINT::default();
+    let mut bounds = RECT::default();
+    if !GetCursorPos(&mut pointer).is_ok()
+        || !GetClientRect(hwnd, &mut bounds).is_ok()
+        || !ScreenToClient(hwnd, &mut pointer).as_bool()
+        || pointer.x < 0
+        || pointer.y < 0
+        || pointer.x >= bounds.right
+        || pointer.y >= bounds.bottom
+    {
+        return paint::HOVER_NONE;
+    }
+    let dpi = windows::Win32::UI::HiDpi::GetDpiForWindow(hwnd);
+    let px = |v: i32| paint::pixels(v, dpi);
+    // 展开态第二行:按三列栅格命中(列起点 31/155/208)。
+    if pointer.y >= px(paint::HEIGHT) {
+        return match pointer.x {
+            x if x >= px(31) && x < px(149) => paint::HOVER_L2C1,
+            x if x >= px(155) && x < px(201) => paint::HOVER_L2C2,
+            x if x >= px(208) && x < px(268) => paint::HOVER_L2C3,
+            _ => paint::HOVER_NONE,
+        };
+    }
+    match pointer.x {
+        x if x >= px(246) => paint::HOVER_BUTTON,
+        x if x >= px(paint::CHEVRON_X) => paint::HOVER_CHEVRON,
+        x if x >= px(8) && x < px(24) => paint::HOVER_DOT,
+        // 非拖拽手柄的空白区(右侧效果图标一带)承载空闲信息卡;手柄区不打扰拖拽。
+        x if x >= px(181) => paint::HOVER_BODY,
+        _ => paint::HOVER_NONE,
+    }
+}
 
 /// 两行展开/收回:只改窗口高度与重绘,不激活不抢焦点;再次点击切换,不自动收回。
 unsafe fn set_expanded(hwnd: HWND, on: bool) {
@@ -141,16 +180,13 @@ fn call_snapshot() -> Vec<actl_core::state::SessionState> {
         .unwrap_or_default()
 }
 unsafe fn tick(hwnd: HWND) {
-    let mut pointer = POINT::default();
-    let mut bounds = RECT::default();
-    let hovered = GetCursorPos(&mut pointer).is_ok()
-        && GetClientRect(hwnd, &mut bounds).is_ok()
-        && ScreenToClient(hwnd, &mut pointer).as_bool()
-        && pointer.x >= paint::pixels(246, windows::Win32::UI::HiDpi::GetDpiForWindow(hwnd))
-        && pointer.x < bounds.right
-        && pointer.y >= 0
-        && pointer.y < bounds.bottom;
-    if STOP_HOVERED.swap(hovered, Ordering::Relaxed) != hovered {
+    let slot = hover_slot(hwnd);
+    let slot_entered = HOVER_SLOT.swap(slot, Ordering::Relaxed) != slot;
+    if slot_entered {
+        HOVER_SINCE.store(unix_ms(), Ordering::Relaxed);
+    }
+    let hovered = slot == paint::HOVER_BUTTON;
+    if slot_entered || STOP_HOVERED.swap(hovered, Ordering::Relaxed) != hovered {
         let _ = InvalidateRect(Some(hwnd), None, false);
     }
     let paths = SignalPaths::default();
@@ -287,14 +323,42 @@ unsafe fn tick(hwnd: HWND) {
         && (changed
             || content
             || animated
+            || slot_entered
             || preparing.is_some()
             || !FRAME_READY.load(Ordering::Relaxed))
     {
         FRAME_READY.store(
-            paint::draw(hwnd, &v, hovered, EXPANDED.load(Ordering::Relaxed))
+            paint::draw(hwnd, &v, slot, EXPANDED.load(Ordering::Relaxed))
                 && windows::Win32::Graphics::Dwm::DwmFlush().is_ok(),
             Ordering::Relaxed,
         );
+    }
+    // 悬浮卡:槽位 dwell ≥500ms 触发;换槽/离开即收;按下按钮或拖拽期间不出卡;
+    // 其他弹窗(菜单/详情)占用时让位,且只有悬浮卡归属者能撤自己。
+    let card = if slot != 0
+        && !slot_entered
+        && unix_ms().saturating_sub(HOVER_SINCE.load(Ordering::Relaxed)) >= 500
+        && PRESSED.lock().map(|p| p.is_none()).unwrap_or(true)
+        && !DRAG_STOP.load(Ordering::Relaxed)
+        && (!super::popup::any_open() || super::popup::shown_by_hover())
+    {
+        hover_card(slot, &v, &paths, &states, now)
+    } else {
+        None
+    };
+    if let Some(lines) = card {
+        if HOVER_CARD.load(Ordering::Relaxed) != slot {
+            super::popup::show_hover(hwnd, lines);
+            HOVER_CARD.store(slot, Ordering::Relaxed);
+        }
+    } else if HOVER_CARD.load(Ordering::Relaxed) != 0 {
+        if super::popup::shown_by_hover() && (slot == 0 || slot_entered) {
+            super::popup::hide();
+        }
+        if !super::popup::shown_by_hover() {
+            // 弹窗已被菜单/详情接管或自行关闭:放弃归属,不再补卡。
+            HOVER_CARD.store(0, Ordering::Relaxed);
+        }
     }
     let ready = visible
         && FRAME_READY.load(Ordering::Relaxed)
@@ -641,6 +705,113 @@ unsafe fn place(hwnd: HWND) {
     let _ = InvalidateRect(Some(hwnd), None, false);
 }
 
+/// 悬浮卡内容:问哪答哪——状态点=状态图例,空闲空白=一站式状态卡,
+/// 展开态列=完整未截断值;按钮/箭头/手柄区不出卡。
+fn hover_card(
+    slot: u8,
+    v: &model::View,
+    paths: &SignalPaths,
+    states: &[actl_core::state::SessionState],
+    now: u64,
+) -> Option<Vec<String>> {
+    if slot == paint::HOVER_DOT {
+        return Some(legend_card(v));
+    }
+    if slot == paint::HOVER_BODY {
+        return Some(
+            if matches!(v.mode, model::Mode::Idle | model::Mode::Unknown) {
+                idle_card(paths, states, now)
+            } else {
+                legend_card(v)
+            },
+        );
+    }
+    if (paint::HOVER_L2C1..=paint::HOVER_L2C3).contains(&slot) {
+        let idx = (slot - paint::HOVER_L2C1) as usize;
+        let name = ["主体", "进度", "备注"][idx];
+        return Some(vec![format!("{name} · 完整内容"), v.second[idx].clone()]);
+    }
+    None
+}
+
+fn legend_card(v: &model::View) -> Vec<String> {
+    let (name, hint) = match v.mode {
+        model::Mode::Idle => ("空闲", "无任务无调用"),
+        model::Mode::Background => ("后台处理", "只读查询进行中，不动你的键鼠"),
+        model::Mode::Running => ("运行中", "自动化正在执行"),
+        model::Mode::Preparing => ("准备中", "动作预告已上屏，即将执行"),
+        model::Mode::Desktop => ("桌面操作", "正在写入界面，暂勿操作"),
+        model::Mode::Waiting => ("等待你", "需要开始/继续确认"),
+        model::Mode::Paused => ("已暂停", "继续前先核对上一步"),
+        model::Mode::Partial => ("待核对", "结果不确定，先核对再继续"),
+        model::Mode::Blocked => ("受阻", "查看详情了解原因"),
+        model::Mode::Failed => ("失败", "查看详情了解原因"),
+        model::Mode::Done => ("完成", "调用已成功结束"),
+        model::Mode::StopRequested => ("停止请求", "后续操作已阻止"),
+        model::Mode::Stopped => ("已停止", "本次调用已被停止"),
+        model::Mode::Unknown => ("状态未知", "观察超时或状态陈旧"),
+    };
+    vec![
+        format!("状态 · {name}"),
+        hint.into(),
+        format!("右侧按钮：{}", v.control.label()),
+    ]
+}
+
+/// 空闲态一站式卡:上次活动/权限模式/急停入口/遗留流程。
+fn idle_card(
+    paths: &SignalPaths,
+    states: &[actl_core::state::SessionState],
+    now: u64,
+) -> Vec<String> {
+    let last = match states.last() {
+        Some(s) => format!(
+            "上次 {} · {} · {}",
+            s.command,
+            match s.phase {
+                actl_core::state::Phase::Done => "完成",
+                actl_core::state::Phase::Error => "失败",
+                actl_core::state::Phase::Stopped => "停止",
+                actl_core::state::Phase::Running => "进行中",
+            },
+            relative_time(now.saturating_sub(s.ts_ms))
+        ),
+        None => "暂无活动记录".into(),
+    };
+    let mut lines = vec![format!("空闲 · {last}")];
+    lines.push(
+        if paths.preauthorized() {
+            "预授权：开（托盘右键可关闭；让行与急停仍有效）"
+        } else {
+            "预授权：关（托盘右键可开启）"
+        }
+        .into(),
+    );
+    lines.push(
+        if HOTKEY.load(Ordering::Relaxed) {
+            "急停：Ctrl+Alt+F12 或右键菜单"
+        } else {
+            "急停：右键菜单 → 紧急停止"
+        }
+        .into(),
+    );
+    if let Some(id) = super::flow_ui::discover(paths) {
+        lines.push(format!("待处理流程 {id}（任务详情可查看）"));
+    }
+    lines
+}
+
+fn relative_time(ms: u64) -> String {
+    let secs = ms / 1000;
+    if secs < 60 {
+        format!("{secs}秒前")
+    } else if secs < 3600 {
+        format!("{}分钟前", secs / 60)
+    } else {
+        format!("{}小时前", secs / 3600)
+    }
+}
+
 unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
     match msg {
         super::flow_start::MESSAGE => LRESULT(isize::from(super::flow_start::receive(wp.0 as u32))),
@@ -682,7 +853,7 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
                 paint::draw(
                     hwnd,
                     &view,
-                    STOP_HOVERED.load(Ordering::Relaxed),
+                    HOVER_SLOT.load(Ordering::Relaxed),
                     EXPANDED.load(Ordering::Relaxed),
                 ),
                 Ordering::Relaxed,

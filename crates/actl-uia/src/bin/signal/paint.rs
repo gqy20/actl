@@ -18,6 +18,16 @@ pub const HEIGHT: i32 = 34;
 pub const HEIGHT_EXT: i32 = 62;
 /// 展开箭头固定锚点(DIP):效果图标(≤235)与按钮(250)之间的槽位。
 pub const CHEVRON_X: i32 = 234;
+/// 悬浮槽位(锚点即命中区;hover 卡内容按槽位由 shell 提供)。
+pub const HOVER_NONE: u8 = 0;
+pub const HOVER_BUTTON: u8 = 1;
+pub const HOVER_CHEVRON: u8 = 2;
+pub const HOVER_DOT: u8 = 3;
+pub const HOVER_BODY: u8 = 4;
+/// 展开态第二行三列(列起点 31/155/208)。
+pub const HOVER_L2C1: u8 = 5;
+pub const HOVER_L2C2: u8 = 6;
+pub const HOVER_L2C3: u8 = 7;
 /// 预授权描边色(青):常驻信任的可见性补偿,文字版保留在窗口标题里。
 const STROKE_PREAUTH: u32 = 0x5FC4D4;
 static PREAUTH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -249,7 +259,7 @@ impl Drop for ComScope {
     }
 }
 
-unsafe fn raster(view: &View, hovered: bool, dpi: u32, expanded: bool) -> Result<Vec<u8>> {
+unsafe fn raster(view: &View, hover: u8, dpi: u32, expanded: bool) -> Result<Vec<u8>> {
     CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok()?;
     let _com = ComScope;
     let wic: IWICImagingFactory =
@@ -346,8 +356,12 @@ unsafe fn raster(view: &View, hovered: bool, dpi: u32, expanded: bool) -> Result
         outline(225., 11., 10., 13., 2.);
         outline(228., 9., 4., 4., 1.);
     }
-    // 展开箭头:固定锚点(CHEVRON_X),常显提供可展开暗示;收起▸/展开▾。
-    brush.SetColor(&color(0x7E858C));
+    // 展开箭头:固定锚点(CHEVRON_X),常显提供可展开暗示;收起▸/展开▾;悬浮提亮。
+    brush.SetColor(&color(if hover == HOVER_CHEVRON {
+        0xB6BDC4
+    } else {
+        0x7E858C
+    }));
     if expanded {
         for i in 0..5 {
             let w = 9. - i as f32 * 1.6;
@@ -366,7 +380,7 @@ unsafe fn raster(view: &View, hovered: bool, dpi: u32, expanded: bool) -> Result
     }
     brush.SetColor(&color(if pending {
         0x2D2F31
-    } else if hovered {
+    } else if hover == HOVER_BUTTON {
         0x494D52
     } else {
         0x35383B
@@ -480,12 +494,12 @@ pub(super) unsafe fn present_alpha(
     result
 }
 
-pub unsafe fn draw(hwnd: HWND, view: &View, stop_hovered: bool, expanded: bool) -> bool {
+pub unsafe fn draw(hwnd: HWND, view: &View, hover: u8, expanded: bool) -> bool {
     let mut ps = PAINTSTRUCT::default();
     let _ = BeginPaint(hwnd, &mut ps);
     let dpi = GetDpiForWindow(hwnd).max(96);
     let layout_h = if expanded { HEIGHT_EXT } else { HEIGHT };
-    let result = raster(view, stop_hovered, dpi, expanded)
+    let result = raster(view, hover, dpi, expanded)
         .and_then(|data| present(hwnd, &data, dpi, WIDTH, layout_h));
     if let Err(e) = &result {
         eprintln!("INTERNAL: display render failed: {e}");
@@ -638,8 +652,8 @@ mod tests {
         let mut view = super::super::model::view(&[], 0, None, Some(false));
         for label in ["正在暂停", "已暂停", "正在运行", "待核对"] {
             view.label = label.into();
-            let normal = unsafe { raster(&view, false, 96, false) }.unwrap();
-            let hovered = unsafe { raster(&view, true, 96, false) }.unwrap();
+            let normal = unsafe { raster(&view, HOVER_NONE, 96, false) }.unwrap();
+            let hovered = unsafe { raster(&view, HOVER_BUTTON, 96, false) }.unwrap();
             for row in 0..HEIGHT as usize {
                 let start = row * WIDTH as usize * 4;
                 assert_eq!(
@@ -686,7 +700,7 @@ mod tests {
         for (name, data, w, h) in [
             (
                 "strip",
-                unsafe { raster(&view, false, 192, false) }.unwrap(),
+                unsafe { raster(&view, HOVER_NONE, 192, false) }.unwrap(),
                 560,
                 68,
             ),
@@ -716,8 +730,8 @@ mod tests {
     #[test]
     fn expanded_raster_doubles_rows_and_keeps_line1_anchors() {
         let view = super::super::model::view(&[], 0, None, Some(false));
-        let collapsed = unsafe { raster(&view, false, 96, false) }.expect("WIC render");
-        let expanded = unsafe { raster(&view, false, 96, true) }.expect("WIC render");
+        let collapsed = unsafe { raster(&view, HOVER_NONE, 96, false) }.expect("WIC render");
+        let expanded = unsafe { raster(&view, HOVER_NONE, 96, true) }.expect("WIC render");
         let width = pixels(WIDTH, 96) as usize;
         assert_eq!(collapsed.len(), width * pixels(HEIGHT, 96) as usize * 4);
         assert_eq!(
@@ -745,7 +759,7 @@ mod tests {
     fn raster_has_transparent_corners_opaque_body_and_antialiased_edges() {
         let view = super::super::model::view(&[], 0, Some(1), Some(false));
         for dpi in [96, 120, 144, 192] {
-            let data = unsafe { raster(&view, false, dpi, false) }.expect("WIC render");
+            let data = unsafe { raster(&view, HOVER_NONE, dpi, false) }.expect("WIC render");
             let width = pixels(WIDTH, dpi) as usize;
             assert_eq!(data[3], 0);
             let center = ((pixels(17, dpi) as usize * width) + pixels(100, dpi) as usize) * 4;
