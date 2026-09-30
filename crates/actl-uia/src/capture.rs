@@ -297,12 +297,25 @@ unsafe fn encode_png(
         IWICBitmapEncoder, IWICImagingFactory, WICBitmapEncoderNoCache,
     };
     use windows::Win32::System::Com::{
-        CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx,
-        STGM_CREATE,
+        CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx, STGM_CREATE,
     };
     use windows::core::Interface;
-    // 区域路径不经 UIA(其内部已 CoInit),编码入口自查 COM
-    let _com = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
+    // 与 uiautomation crate/evidence.rs 同走 MTA,且必须配对释放:线程一旦遗留
+    // STA 公寓,同线程后续 UIAutomation::new()(仅接受 MTA)会以 RPC_E_CHANGED_MODE
+    // 全体失败(docs/68 整批 resume INTERNAL 的根因)。
+    struct Com(bool);
+    impl Drop for Com {
+        fn drop(&mut self) {
+            if self.0 {
+                unsafe { windows::Win32::System::Com::CoUninitialize() };
+            }
+        }
+    }
+    let hr = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
+    let _com = Com(hr.is_ok());
+    if !hr.is_ok() && hr.0 != 0x80010106u32 as i32 {
+        return Err(internal(hr));
+    }
     use windows::Win32::System::Com::STGM_WRITE;
     let wpath: Vec<u16> = path
         .as_os_str()
