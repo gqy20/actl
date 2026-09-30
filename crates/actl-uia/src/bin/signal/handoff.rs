@@ -288,6 +288,24 @@ pub fn message(msg: u32, pid: u32) -> usize {
         if s.deferred.as_deref() == Some(&r.call) {
             return DEFERRED;
         }
+        // 始终信任此流程(指纹持久信任,与全局预授权正交):请求带计划指纹
+        // 且指纹在信任集内 → 与预授权同路径即刻 Standing 授予。模板变更 →
+        // 指纹变 → 信任集不匹配 → 重新走出卡确认(用户点一次即再入信任集)。
+        if !paths.stop_requested()
+            && let Some(hash) = r.plan_hash.as_deref()
+            && paths.trust_store().trusted(hash)
+        {
+            s.consent
+                .allow_with_policy(&r.task, seq, unix_ms(), Approval::Standing);
+            if s.foreground_call.as_deref() != Some(&r.call) {
+                super::foreground::transfer(pid, &r);
+                s.foreground_call = Some(r.call.clone());
+            }
+            audit(&r, "granted", "flow_trusted");
+            s.active_request = Some(r.clone());
+            s.active = Some((pid, r.call, r.task));
+            return ALLOWED;
+        }
         // 预授权模式(用户在托盘开启的常驻信任):请求即刻按 Standing 授予,
         // 不出卡、不点击。急停/监听健康/代次检查已在上方完成;用户输入仍会
         // 让行(Standing 的 check 对输入变化只拒绝不撤销,安静后自动通过)。
@@ -692,6 +710,16 @@ unsafe fn decide(_hwnd: HWND, start: bool) {
                 s.consent
                     .allow_with_policy(&r.task, activity(), unix_ms(), r.approval);
                 audit(&r, "granted", "user_start");
+                // 始终信任此流程:用户确认了带指纹的 standing 请求 → 指纹入信任集。
+                // 语义 = "这份计划(模板)我信任,后续同模板免点击";模板改了(指纹变)
+                // 下次首跑会再出一次卡。显示端 UI 独占写入。
+                if let Some(hash) = r.plan_hash.as_deref() {
+                    let paths = SignalPaths::default();
+                    let mut store = paths.trust_store();
+                    store.grant(hash, &r.task, unix_ms());
+                    paths.save_trust_store(&store);
+                    actl_core::signal_session::handoff_event("flow_trust_granted");
+                }
                 super::foreground::transfer(pid, &r);
                 s.foreground_call = Some(r.call.clone());
             } else {

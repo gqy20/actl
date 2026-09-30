@@ -171,6 +171,16 @@ pub(crate) fn prepare(target: &str, action: &str) -> Result<(), CtlError> {
         error
     })
 }
+thread_local! {
+    /// 当前流程的冻结计划指纹(声明 standing 时由 flow runner 设置;
+    /// 持久信任按此匹配,模板变更即自动失效)。
+    static PLAN_HASH: std::cell::RefCell<Option<String>> =
+        const { std::cell::RefCell::new(None) };
+}
+pub(crate) fn set_plan_hash(hash: Option<String>) {
+    PLAN_HASH.with(|h| *h.borrow_mut() = hash);
+}
+
 fn request(target: &str, action: &str) -> Result<(), CtlError> {
     let (call, task) =
         actl_core::signal_session::handoff_identity().ok_or_else(|| failure("missing_session"))?;
@@ -191,6 +201,7 @@ fn request(target: &str, action: &str) -> Result<(), CtlError> {
         target: target.chars().take(180).collect(),
         ts_ms: unix_ms(),
         action: action.chars().take(32).collect(),
+        plan_hash: PLAN_HASH.with(|h| h.borrow().clone()),
     };
     let mut waiting = false;
     let start = Instant::now();

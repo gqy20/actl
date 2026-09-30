@@ -22,6 +22,10 @@ pub mod display_gate;
 pub mod display_support;
 mod feedback;
 mod handoff;
+/// 流程执行器注入计划指纹的窄通道(始终信任此流程)。
+pub fn set_plan_hash(hash: Option<String>) {
+    handoff::set_plan_hash(hash);
+}
 mod identity;
 mod idle;
 mod input_verify;

@@ -478,7 +478,16 @@ impl Host for Adapter<'_> {
             }
             return Ok(json!({"executed":calls.len()}));
         }
-        actl_core::handoff::configure(self.plan.handoff.unwrap_or_default().approval);
+        let handoff_policy = self.plan.handoff.unwrap_or_default();
+        // 始终信任此流程:standing 声明 → 指纹跟随请求(持久信任匹配,
+        // 模板变更自动失效);非 standing 不带指纹(不影响其他信任通道)。
+        if handoff_policy.approval == actl_core::handoff::Approval::Standing {
+            let hash = actl_core::handoff::plan_fingerprint(
+                &serde_json::to_value(self.plan).unwrap_or(serde_json::Value::Null),
+            );
+            actl_uia::set_plan_hash(Some(hash));
+        }
+        actl_core::handoff::configure(handoff_policy.approval);
         let command = parse(call)?;
         // 批次2②:暂停观察点从 Wait 轮询扩展到全部命令——type 的分段间隙等
         // 注入边界也能在亚秒内响应暂停(序列子调用间隙本就观察)。

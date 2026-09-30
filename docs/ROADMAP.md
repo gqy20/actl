@@ -29,7 +29,7 @@
 
 - [ ] 补齐前台交接 v9 的人工接管、进程内嵌套动作及多窗口真机矩阵；保留 Windows 拒绝激活时的可恢复提示。证据与边界见 [62](62-foreground-handoff.md)。
 - [ ] UWP 双窗口使窗口管理命令的标题路径身份复核必败（2026-09-30 演示实录）：计算器的 ApplicationFrameWindow（框架进程）与 Windows.UI.Core.CoreWindow（应用进程）同名同标题，`focus-window/restore-window 计算器` 在 native→UIA 身份复核处恒 STALE_REF（"native window identity changed"）；最小化态下 CoreWindow 又因 UWP 挂起对 WM_NULL 探针 window_unresponsive。hwnd 路径完全正常。修复方向：身份复核按类配对（frame↔core 视为同一身份）或对 UWP 帧类走纯 native 通道；恢复前先解除挂起。
-- [ ] 预授权「始终信任此流程」（按冻结计划哈希的持久信任，显示协议 v10 后续）：声明 standing 的流程首跑出卡加「始终信任」按钮，用户点过即按指纹持久免点击，模板变更（哈希变）重新询问；信任集由显示端持有。v10 已交付的会话级 standing 与全局托盘开关见 docs/32。真机验证 v10/v11 两条通道（含让行自动恢复、急停仍生效）随本轮一并做。
+- [ ] 始终信任此流程真机验收（指纹持久信任已实现，2026-10-01）：声明 standing 的流程首跑出卡确认后指纹入信任集，二跑免卡；模板修改后指纹变化重新出卡。v10/v11 两条通道的真机验证（含让行自动恢复、急停仍生效）随本轮一并做。
 - [ ] 修复检测/auto_resume 真机验收（批次 4 已实现）：构造 action_failed 暂停 + 声明 auto_resume 的演示流程，验证 5s 探测点亮两种判定、自动续跑预算与急停阻断；静默探测确认横条无"后台处理"闪烁。
 
 - [ ] 流程残留清扫入口（2026-09-30 验收录入）：本机 flows/ 目录已积累数十个历史 paused/needs_review 流程——discover 因"多未完结不猜"恒 None，探测孤儿化（已由 newest_probe_target 修复探测侧），但显示端绑定与任务详情仍受影响。需要一个入口（CLI 命令或 flow-status 选项）按时间/状态批量归档历史残留，同时保留失败证据。

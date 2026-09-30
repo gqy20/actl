@@ -18,6 +18,7 @@ impl Fixture {
             target: "owned test window".into(),
             ts_ms: unix_ms(),
             action: String::new(),
+            plan_hash: None,
         };
         paths.write_display("handoff-42.json", &request).unwrap();
         // Real HWND, kept hidden: no consent, keyboard hook, or input injection.

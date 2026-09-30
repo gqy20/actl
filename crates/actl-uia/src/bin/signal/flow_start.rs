@@ -37,6 +37,7 @@ pub fn allow(id: &str) -> Result<String, String> {
         target: "flow continue".into(),
         ts_ms: unix_ms(),
         action: String::new(),
+        plan_hash: None, // 流程开始的"继续"确认不走指纹信任
     };
     let filename = format!("flow-start-{}.json", std::process::id());
     paths

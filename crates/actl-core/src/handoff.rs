@@ -135,6 +135,10 @@ pub struct Request {
     /// 动作种类（click/type/press…）；旧执行器请求缺失时按未知处理。
     #[serde(default)]
     pub action: String,
+    /// 冻结计划的指纹（声明 standing 的流程首跑由执行器填入;哈希变化=模板已改,
+    /// 信任集自动失效）。持久信任按此匹配,与全局预授权正交。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan_hash: Option<String>,
 }
 impl Request {
     pub fn fresh(&self, now: u64) -> bool {
@@ -444,5 +448,117 @@ mod tests {
                 pardon_input: PardonPolicy::default()
             }
         );
+    }
+}
+
+// ─── 始终信任此流程:指纹持久信任(与全局预授权正交) ─────────────────────
+
+/// 冻结计划指纹:规范化 JSON → FNV-1a 双通道 128 位。非密码学(非对抗场景:
+/// 用户自己的模板变更检测);serde_json 的 BTreeMap 保证键序确定。
+pub fn plan_fingerprint(value: &serde_json::Value) -> String {
+    let bytes = serde_json::to_vec(value).unwrap_or_default();
+    let (mut h1, mut h2) = (0xcbf2_9ce4_8422_2325u64, 0x9e37_79b9_7f4a_7c15u64);
+    for &b in &bytes {
+        h1 = (h1 ^ u64::from(b)).wrapping_mul(0x0000_0100_0000_01b3);
+        h2 = (h2 ^ u64::from(b).rotate_left(7)).wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    format!("{h1:016x}{h2:016x}")
+}
+
+/// 信任集条目:指纹 → 何时信任的何份计划。
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TrustEntry {
+    pub fingerprint: String,
+    pub name: String,
+    pub trusted_at_ms: u64,
+}
+
+/// 持久信任集(`%LOCALAPPDATA%\actl\trusted-flows.json`),由显示端 UI 独占写入。
+/// 显示端重启不丢;模板变更 → 指纹变 → 自动失效(重新询问一次)。
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct TrustStore {
+    pub entries: Vec<TrustEntry>,
+}
+impl TrustStore {
+    const MAX: usize = 128;
+
+    pub fn trusted(&self, fingerprint: &str) -> bool {
+        self.entries.iter().any(|e| e.fingerprint == fingerprint)
+    }
+
+    pub fn grant(&mut self, fingerprint: &str, name: &str, now_ms: u64) {
+        if self.trusted(fingerprint) {
+            return;
+        }
+        self.entries.push(TrustEntry {
+            fingerprint: fingerprint.into(),
+            name: name.into(),
+            trusted_at_ms: now_ms,
+        });
+        // 有界:最旧先出
+        if self.entries.len() > Self::MAX {
+            self.entries.drain(..self.entries.len() - Self::MAX);
+        }
+    }
+
+    pub fn revoke(&mut self, fingerprint: &str) -> bool {
+        let before = self.entries.len();
+        self.entries.retain(|e| e.fingerprint != fingerprint);
+        self.entries.len() != before
+    }
+}
+impl crate::state::SignalPaths {
+    pub fn trusted_flows_file(&self) -> std::path::PathBuf {
+        self.dir.join("trusted-flows.json")
+    }
+    /// 读取失败按空集处理(fail-closed)。
+    pub fn trust_store(&self) -> TrustStore {
+        std::fs::read(self.trusted_flows_file())
+            .ok()
+            .and_then(|b| serde_json::from_slice(&b).ok())
+            .unwrap_or_default()
+    }
+    pub fn save_trust_store(&self, store: &TrustStore) {
+        use std::io::Write;
+        let tmp = self.dir.join("trusted-flows.json.tmp");
+        let saved = (|| {
+            let mut f = std::fs::File::create(&tmp)?;
+            f.write_all(&serde_json::to_vec_pretty(store).unwrap_or_default())?;
+            std::fs::rename(&tmp, self.trusted_flows_file())
+        })();
+        if saved.is_err() {
+            let _ = std::fs::remove_file(&tmp);
+        }
+    }
+}
+
+#[cfg(test)]
+mod trust_tests {
+    use super::*;
+    #[test]
+    fn fingerprint_is_deterministic_and_change_sensitive() {
+        let a = serde_json::json!({"steps":[{"id":"x","run":{"command":"find"}}]});
+        let b = serde_json::json!({"steps":[{"id":"x","run":{"command":"find"}}]});
+        let c = serde_json::json!({"steps":[{"id":"x","run":{"command":"get"}}]});
+        let fa = plan_fingerprint(&a);
+        assert_eq!(fa, plan_fingerprint(&b), "identical plans must match");
+        assert_ne!(fa, plan_fingerprint(&c), "changed plan must differ");
+        assert_eq!(fa.len(), 32, "128-bit hex: {fa}");
+    }
+    #[test]
+    fn trust_store_grant_revoke_and_bound() {
+        let mut s = TrustStore::default();
+        s.grant("aa", "flow-a", 100);
+        assert!(s.trusted("aa"));
+        assert!(!s.trusted("bb"));
+        s.grant("aa", "flow-a", 200); // 幂等
+        assert_eq!(s.entries.len(), 1);
+        assert!(s.revoke("aa"));
+        assert!(!s.trusted("aa"));
+        assert!(!s.revoke("aa"));
+        for i in 0..TrustStore::MAX + 10 {
+            s.grant(&format!("f{i}"), "f", 1);
+        }
+        assert!(s.entries.len() <= TrustStore::MAX);
     }
 }
