@@ -238,6 +238,10 @@ hover @e3                  (其余物理兜底:同参数 + --physical)
 #### 窗口/应用(window)
 ```
 launch <app> [--args ...]  focus-window w-4521   resize-window / close-window
+close-window --hwnd w-4521 --system-close  # 投 WM_SYSCOMMAND/SC_CLOSE(=点标题栏 X);
+                                           # 对 WM_CLOSE 只收窗不退程的应用(实测 Excel 在
+                                           # 后台正确关闭文档后,裸框架 WM_CLOSE 隐藏、
+                                           # SC_CLOSE 才退出),作为进程收尾手段
 ```
 
 #### 系统(system)

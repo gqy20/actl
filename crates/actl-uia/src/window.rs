@@ -679,10 +679,11 @@ pub fn list_windows() -> Result<Vec<WindowEntry>, CtlError> {
 }
 
 /// close-window:优雅关闭标题匹配的唯一窗口(WM_CLOSE 异步投递;未保存内容
-/// 由应用自行弹提示——语义关闭,不是强杀)。
-pub fn close_window(pattern: &str) -> Result<String, CtlError> {
-    use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_CLOSE};
-
+/// 由应用自行弹提示——语义关闭,不是强杀)。`system_close` 改投 WM_SYSCOMMAND
+/// 的 SC_CLOSE——即点标题栏 X 的同一命令;对"收起窗口但不退出进程"的应用
+/// (实测 Excel:后台关闭文档后裸框架对 WM_CLOSE 只隐藏,SC_CLOSE 才退出),
+/// 这是文档正确关闭后终结进程的收尾手段。
+pub fn close_window(pattern: &str, system_close: bool) -> Result<String, CtlError> {
     let auto = UIAutomation::new().map_err(internal)?;
     let walker = auto.create_tree_walker().map_err(internal)?;
     let win = find_window(&auto, &walker, pattern)?;
@@ -694,17 +695,45 @@ pub fn close_window(pattern: &str) -> Result<String, CtlError> {
             format!("window {pattern:?} exposes no native handle"),
         ));
     };
-    unsafe {
-        PostMessageW(
-            Some(hwnd),
-            WM_CLOSE,
-            windows::Win32::Foundation::WPARAM(0),
-            windows::Win32::Foundation::LPARAM(0),
-        )
-    }
-    .map_err(|e| CtlError::internal(format!("PostMessageW(WM_CLOSE) failed for {title:?}: {e}")))?;
+    post_close(hwnd, system_close, &title)?;
     action.delivered();
     Ok(title)
+}
+
+/// 统一的关闭投递:默认 WM_CLOSE(语义关闭);`system_close` 走 SC_CLOSE。
+fn post_close(
+    hwnd: windows::Win32::Foundation::HWND,
+    system_close: bool,
+    title: &str,
+) -> Result<(), CtlError> {
+    use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_CLOSE, WM_SYSCOMMAND};
+    unsafe {
+        if system_close {
+            PostMessageW(
+                Some(hwnd),
+                WM_SYSCOMMAND,
+                windows::Win32::Foundation::WPARAM(0xF060), // SC_CLOSE
+                windows::Win32::Foundation::LPARAM(0),
+            )
+        } else {
+            PostMessageW(
+                Some(hwnd),
+                WM_CLOSE,
+                windows::Win32::Foundation::WPARAM(0),
+                windows::Win32::Foundation::LPARAM(0),
+            )
+        }
+    }
+    .map_err(|e| {
+        CtlError::internal(format!(
+            "PostMessageW({}) failed for {title:?}: {e}",
+            if system_close {
+                "WM_SYSCOMMAND/SC_CLOSE"
+            } else {
+                "WM_CLOSE"
+            }
+        ))
+    })
 }
 
 /// resize-window:标题唯一匹配窗口 → SetWindowPos(不动位置,只改尺寸)。
@@ -841,7 +870,7 @@ pub fn parse_hwnd(raw: &str) -> Result<isize, CtlError> {
 }
 
 /// close-window 的按引用入口(FR3)。
-pub fn close_window_by(r: WindowRef<'_>) -> Result<String, CtlError> {
+pub fn close_window_by(r: WindowRef<'_>, system_close: bool) -> Result<String, CtlError> {
     let win = resolve_window(r)?;
     let mut action = crate::feedback::window_action("close-window", &win, false)?;
     let title = win.get_name().unwrap_or_default();
@@ -851,15 +880,7 @@ pub fn close_window_by(r: WindowRef<'_>) -> Result<String, CtlError> {
             format!("window {title:?} exposes no native handle"),
         ));
     };
-    unsafe {
-        windows::Win32::UI::WindowsAndMessaging::PostMessageW(
-            Some(hwnd),
-            windows::Win32::UI::WindowsAndMessaging::WM_CLOSE,
-            windows::Win32::Foundation::WPARAM(0),
-            windows::Win32::Foundation::LPARAM(0),
-        )
-    }
-    .map_err(|e| CtlError::internal(format!("PostMessageW(WM_CLOSE) failed for {title:?}: {e}")))?;
+    post_close(hwnd, system_close, &title)?;
     action.delivered();
     Ok(title)
 }

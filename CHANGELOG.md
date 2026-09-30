@@ -9,6 +9,8 @@
 
 ## [Unreleased]
 
+- **[spec] close-window 新增 `--system-close` + excel 模板进程收尾两步**：差分实验定案（docs/68）——Excel 在后台正确关闭文档后，裸框架对 WM_CLOSE 只隐藏不退程，但收到 WM_SYSCOMMAND/SC_CLOSE（点标题栏 X 的同一命令）后 ~5 秒干净退出；未走文档关闭的旧壳对 SC_CLOSE 也不退。据此：close-window 支持投递 SC_CLOSE（协议面小扩展，docs/06 同步）；excel-table（单应用与整批同步）在两处后台关闭后各加「close-frame/exit」步——`close-window --hwnd <ownership> --system-close` + `verify-closed`（窗口+进程双断言），Excel 流程从此任务层与进程层都真正关闭。步骤数 13→15 / 69→71，契约 golden 同步。
+
 - **Excel 关闭路线改后台文档关闭（模板）**：excel-table（单应用与整批同步）的 close/close-before-reopen 从 `close-window`（WM_CLOSE：只收起窗口，进程必驻留为隐藏空壳）改走后台关闭序列（click 文件 → NavBarMenu 内 ListItem「关闭」→ 等 NavBarMenu 消失），断言保持「工作簿窗口消失」（wait --gone id:1001）。实测定案：后台路线是正确的文档关闭，干净条件下进程 ~5 秒退出；但完整流程后 VSTO 运行时+输入法类加载项被激活会钉住进程（excel-verify9 实证），进程退出不是本机可靠后置条件，故不做任务级断言——壳归环境治理（免重启清扫配方与归因修正见 docs/68 残壳专项）。步骤数不变，模板合成一致性测试通过。
 
 - **修复整屏留证的 COM 线程模型污染（capture.rs）**：失败留证三通道的整屏 PNG 路径把执行器线程 CoInitializeEx(STA) 成功后从不释放，线程一旦走过留证即永久 STA；`uiautomation` crate 仅接受 MTA 且不容错，同线程后续一切 UIA 调用（恢复核验、快照留证）以 RPC_E_CHANGED_MODE 全体失败——combined-batch1 整批中 word-append/zotero-import 恢复核验连续 INTERNAL 的根因（也解释了此前恢复路径上零星 INTERNAL）。改为 COINIT_MULTITHREADED（与 evidence.rs/uiautomation crate 一致）+ 配对释放 + CHANGED_MODE 容忍（线程已是其他公寓时照常执行，WIC 为 Both 模型）。真机：修复后 import 恢复核验一次通过，整批 69/69（docs/68 第七轮）。

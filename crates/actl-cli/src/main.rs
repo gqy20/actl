@@ -521,9 +521,12 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
         Command::FocusWindow { pattern, pid, hwnd } => {
             focus_window_cmd(pattern.as_deref(), *pid, hwnd.as_deref())
         }
-        Command::CloseWindow { pattern, pid, hwnd } => {
-            close_window_cmd(pattern.as_deref(), *pid, hwnd.as_deref())
-        }
+        Command::CloseWindow {
+            pattern,
+            pid,
+            hwnd,
+            system_close,
+        } => close_window_cmd(pattern.as_deref(), *pid, hwnd.as_deref(), *system_close),
         Command::ListWindows { native, hwnd } => list_windows_cmd(*native, hwnd.as_deref()),
         Command::Find {
             target,

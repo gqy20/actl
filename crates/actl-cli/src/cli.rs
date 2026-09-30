@@ -614,6 +614,11 @@ pub(crate) enum Command {
         /// Close the window at this native handle (decimal or 0x-hex; from list-windows)
         #[arg(long, id = "chwnd", value_name = "HWND", conflicts_with_all = ["pattern", "cpid"])]
         hwnd: Option<String>,
+        /// Send the title-bar close command (WM_SYSCOMMAND/SC_CLOSE) instead of a bare
+        /// WM_CLOSE — same as clicking the X button; apps that only hide on WM_CLOSE
+        /// (Excel after a proper document close) actually exit on this
+        #[arg(long)]
+        system_close: bool,
     },
     /// List top-level windows (title, class, pid)
     ListWindows {

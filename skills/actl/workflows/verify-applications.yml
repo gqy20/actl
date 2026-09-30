@@ -3264,6 +3264,44 @@
       "title": "Close only the verified task process"
     },
     {
+      "run": {
+        "command": "close-window",
+        "args": [
+          "--hwnd",
+          "1",
+          "--system-close"
+        ],
+        "bind": {
+          "1": "excel-table-ownership.hwnd"
+        }
+      },
+      "recovery": {
+        "max_retries": 3,
+        "timeout_ms": 15000,
+        "interval_ms": 1500
+      },
+      "id": "excel-table-close-frame",
+      "section": "excel-table",
+      "on_failure": "skip_section",
+      "verify": {
+        "command": "verify-closed",
+        "args": [
+          "--hwnd",
+          "1",
+          "--pid",
+          "1",
+          "--instance",
+          "pending"
+        ],
+        "bind": {
+          "1": "excel-table-ownership.hwnd",
+          "3": "excel-table-ownership.pid",
+          "5": "excel-table-ownership.start"
+        }
+      },
+      "title": "Exit the emptied frame via the title-bar close command"
+    },
+    {
       "title": "Reopen the saved task file",
       "run": {
         "command": "launch",
@@ -3546,6 +3584,44 @@
         }
       },
       "title": "Close only the verified task process"
+    },
+    {
+      "run": {
+        "command": "close-window",
+        "args": [
+          "--hwnd",
+          "1",
+          "--system-close"
+        ],
+        "bind": {
+          "1": "excel-table-reopened-owner.hwnd"
+        }
+      },
+      "recovery": {
+        "max_retries": 3,
+        "timeout_ms": 15000,
+        "interval_ms": 1500
+      },
+      "id": "excel-table-exit",
+      "section": "excel-table",
+      "on_failure": "skip_section",
+      "verify": {
+        "command": "verify-closed",
+        "args": [
+          "--hwnd",
+          "1",
+          "--pid",
+          "1",
+          "--instance",
+          "pending"
+        ],
+        "bind": {
+          "1": "excel-table-reopened-owner.hwnd",
+          "3": "excel-table-reopened-owner.pid",
+          "5": "excel-table-reopened-owner.start"
+        }
+      },
+      "title": "Exit the emptied frame via the title-bar close command"
     },
     {
       "id": "word-edit-open",

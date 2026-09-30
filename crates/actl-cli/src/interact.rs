@@ -599,8 +599,9 @@ pub(crate) fn close_window_cmd(
     pattern: Option<&str>,
     pid: Option<u32>,
     hwnd: Option<&str>,
+    system_close: bool,
 ) -> Result<CommandOutput, CtlError> {
-    let title = actl_uia::close_window_by(window_ref_of(pattern, pid, hwnd)?)?;
+    let title = actl_uia::close_window_by(window_ref_of(pattern, pid, hwnd)?, system_close)?;
     Ok(json!({ "action": "close-window", "window": title }).into())
 }
 
