@@ -197,12 +197,16 @@ unsafe fn tick(hwnd: HWND) {
     // 常驻预授权的可见性补偿:青色描边(paint 层)+ 窗口标题文字版;正文不再加前缀。
     super::paint::set_preauth(paths.preauthorized());
     // 展开态第二行步骤链:当前绑定流程的步骤列表;无流程时清空(回落最近调用摘要)。
-    let bound_flow = model::selected(&states, now).and_then(|s| {
-        s.workflow
-            .as_ref()
-            .map(|f| f.run_id.clone())
-            .filter(|id| actl_core::history::valid_id(id))
-    });
+    // 真机验收发现的孤儿化:最近调用的流程完成后 visible-flow 指向 completed,
+    // 更早的暂停流程从显示与探测中消失——绑定回落到 discover(唯一未完结流程)。
+    let bound_flow = model::selected(&states, now)
+        .and_then(|s| {
+            s.workflow
+                .as_ref()
+                .map(|f| f.run_id.clone())
+                .filter(|id| actl_core::history::valid_id(id))
+        })
+        .or_else(|| super::flow_ui::discover(&paths));
     let bound_state = bound_flow
         .as_deref()
         .and_then(|id| super::flow_ui::read(&paths, id));
@@ -234,17 +238,17 @@ unsafe fn tick(hwnd: HWND) {
             .is_some_and(|p| p["auto_resume"] == "action_failed");
         match verdict {
             super::probe::Verdict::Retriable => {
-                if super::probe::consume_auto_resume(&id, declared, verdict)
-                    && paths.execution_generation().is_ok()
+                // 先核验派发前置(真实代次/无急停),再扣预算,最后派发——
+                // 真机验收发现:预算不得在派发失败时消耗,generation 必须传真实值
+                // (曾把标记串当 generation 传给子进程,flow-resume 代次校验即败)。
+                let generation = paths.execution_generation().ok();
+                if declared
+                    && generation.is_some()
                     && !paths.stop_requested()
+                    && super::probe::consume_auto_resume(&paths, &id, true, verdict)
+                    && super::flow_ui::request(&id, true, generation.as_deref().unwrap()).is_ok()
                 {
-                    actl_core::signal_session::flow_event(
-                        "auto_resume",
-                        serde_json::json!({"run":id}),
-                    );
-                    if let Err(error) = super::flow_ui::request(&id, true, "auto-resume") {
-                        eprintln!("INTERNAL: auto-resume dispatch failed: {error}");
-                    }
+                    super::probe::record(&paths, &id, "auto_resume", &serde_json::json!({}));
                 } else {
                     v.label = "障碍已清除 · 可重试".into();
                     v.details.push_str(
