@@ -39,6 +39,9 @@
 | [PRD.md](PRD.md) | 产品需求:定位、用户故事、功能/非功能需求、成功指标、风险 |
 | [ROADMAP.md](ROADMAP.md) | 路线图：剩余工作、验收标准、MCP 访问方向与平台范围 |
 | [TECH_STACK.md](TECH_STACK.md) | 技术选型规格:工具链、workspace 结构、依赖清单、ADR、测试与分发 |
+| [FALLBACK.md](FALLBACK.md) | 兜底与降级总览:各子系统主路径失败后的备选路线、显式兜底与 fail-closed 清单 |
+| [STABILITY.md](STABILITY.md) | 稳定性设计总览:按步骤生命周期的护栏链、错误协议自愈、稳定性不变量 |
+| [PARAMETERS.md](PARAMETERS.md) | 时序与可调参数总览:协议默认值、内部旋钮、使用点硬编码与调优证据 |
 | [07-golden-tasks.md](07-golden-tasks.md) | 金任务集:各 Phase 的验收标的与测试纪律 |
 | [spike-findings.md](spike-findings.md) | M0 坑清单:五场景实测结论、性能量级、uiautomation crate 评估 |
 
