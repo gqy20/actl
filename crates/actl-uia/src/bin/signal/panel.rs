@@ -113,7 +113,7 @@ pub unsafe fn fonts(hwnd: HWND, dpi: u32, ids: &[i32]) {
     let task_panel = GetDlgItem(Some(hwnd), 17).is_ok();
     let fonts = Box::new(Fonts {
         body: face_font(if task_panel { 14 } else { 16 }, dpi, BODY_FACES),
-        title: face_font(if task_panel { 20 } else { 22 }, dpi, TITLE_FACES),
+        title: face_font(if task_panel { 18 } else { 22 }, dpi, TITLE_FACES),
         caption: face_font(if task_panel { 12 } else { 14 }, dpi, BODY_FACES),
         result: face_font(22, dpi, TITLE_FACES),
     });
@@ -212,29 +212,6 @@ pub unsafe fn message(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> Option<LR
             let mut rect = RECT::default();
             let _ = GetClientRect(hwnd, &mut rect);
             fill(HDC(wp.0 as *mut _), &rect, BACKGROUND);
-            if GetDlgItem(Some(hwnd), 17).is_ok()
-                && let Ok(footer) = GetDlgItem(Some(hwnd), 12)
-            {
-                let mut r = RECT::default();
-                let _ = GetWindowRect(footer, &mut r);
-                let mut point = POINT {
-                    x: r.left,
-                    y: r.top,
-                };
-                let _ = ScreenToClient(hwnd, &mut point);
-                let inset = paint::pixels(24, GetDpiForWindow(hwnd));
-                let y = point.y - paint::pixels(12, GetDpiForWindow(hwnd));
-                fill(
-                    HDC(wp.0 as *mut _),
-                    &RECT {
-                        left: inset,
-                        right: rect.right - inset,
-                        top: y,
-                        bottom: y + 1,
-                    },
-                    0x3A3E42,
-                );
-            }
             super::frame::border(hwnd, HDC(wp.0 as *mut _), &rect);
             Some(LRESULT(1))
         }
@@ -252,6 +229,7 @@ pub unsafe fn message(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> Option<LR
                 dc,
                 rgb(match id {
                     101 => 0xEDB88F,
+                    102 if task_panel => 0xC6CED4,
                     103 if task_panel => TEXT,
                     100 | 106 | 107 if task_panel => MUTED,
                     103..=105 => MUTED,

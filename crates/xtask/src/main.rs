@@ -1,6 +1,6 @@
 //! xtask —— 仓库任务入口:`cargo xtask setup|gate|fmt`
 //!
-//! 存在的意义:新 clone 者唯一前置依赖 = git + rustup(全平台一致,无需 make/python)。
+//! Rust 门禁单点；详情页检查另需 Node + pnpm，无需 make/python。
 //! `gate` 是质量门禁的**唯一实现**(file-lines + fmt-check + clippy + test + lint-packs),
 //! pre-push hook 与 CI 都调用它,门禁定义从此单点维护(AGENTS.md 工作流)。
 
@@ -29,7 +29,7 @@ fn main() -> ExitCode {
             eprintln!(
                 "tasks:\n  \
                  cargo xtask setup   install git hooks + activate pinned toolchain (run once after clone)\n  \
-                 cargo xtask gate    quality gate: file-lines + fmt --check + clippy -D warnings + tests (= pre-push = CI)\n  \
+                 cargo xtask gate    quality gate: file-lines + pnpm UI verify + fmt --check + clippy -D warnings + tests (= pre-push = CI)\n  \
                  cargo xtask fmt     format all code
                  cargo xtask fixture CASE | diagnose KIND | package [OPTIONS]
                  cargo xtask regress [--list | --suite flow|system|scenario | --case ID] [--unattended] (native Rust)
@@ -74,6 +74,9 @@ fn gate() -> ExitCode {
     if !timed("file-lines", file_lines_gate) {
         return ExitCode::FAILURE;
     }
+    if !timed("signal-ui", frontend_gate) {
+        return ExitCode::FAILURE;
+    }
     for (label, args) in [
         ("fmt", &["fmt", "--all", "--", "--check"][..]),
         (
@@ -90,10 +93,26 @@ fn gate() -> ExitCode {
         return ExitCode::FAILURE;
     }
     eprintln!(
-        "✓ gate passed (file-lines + fmt + clippy + workspace tests + lint-packs) in {:.1}s",
+        "✓ gate passed (file-lines + signal-ui + fmt + clippy + workspace tests + lint-packs) in {:.1}s",
         gate_started.elapsed().as_secs_f32()
     );
     ExitCode::SUCCESS
+}
+
+fn frontend_gate() -> bool {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../ui/signal");
+    let pnpm = if cfg!(windows) { "pnpm.cmd" } else { "pnpm" };
+    for args in [&["install", "--frozen-lockfile"][..], &["verify"][..]] {
+        match Command::new(pnpm).args(args).current_dir(&path).status() {
+            Ok(status) if status.success() => {}
+            Ok(_) => return false,
+            Err(error) => {
+                eprintln!("signal-ui: pnpm unavailable or failed: {error}");
+                return false;
+            }
+        }
+    }
+    true
 }
 
 /// 步级计时:执行门禁单步并输出耗时(仅诊断,不影响结果)。

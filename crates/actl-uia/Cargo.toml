@@ -16,6 +16,7 @@ actl-core = { path = "../actl-core", version = "0.1.7" }
 uiautomation.workspace = true
 serde_json.workspace = true
 zip.workspace = true
+webview2-com.workspace = true
 windows = { workspace = true, features = ["Win32_UI_Controls", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi", "Win32_UI_Shell", "Win32_System_LibraryLoader", "Win32_UI_HiDpi", "Win32_UI_Accessibility", "Win32_System_Variant", "Win32_System_Registry", "Win32_System_Com", "Win32_Graphics_Imaging", "Win32_Graphics_Dwm", "Win32_System_Com_StructuredStorage", "Win32_Graphics_Direct2D", "Win32_Graphics_Direct2D_Common", "Win32_Graphics_DirectWrite", "Win32_Graphics_Dxgi_Common", "Win32_System_SystemInformation", "Win32_System_Wmi", "Win32_System_Time", "Data_Xml_Dom", "Storage_Streams", "Security_Cryptography", "Security_Cryptography_Core"] }
 
 [lints]

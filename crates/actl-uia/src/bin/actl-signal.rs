@@ -44,6 +44,8 @@ mod popup;
 mod shell;
 #[path = "signal/ui_text.rs"]
 mod ui_text;
+#[path = "signal/web_details.rs"]
+mod web_details;
 fn main() {
     let result = unsafe {
         if std::env::args().any(|arg| arg == "--controls") {

@@ -183,6 +183,11 @@ Rust workspace,trunk-based(`main` 始终绿)。克隆后 `make setup` 一步配�
 与锁定工具链,提交前 `make gate` 过门禁;协作规范(Conventional Commits、测试纪律、
 门禁单点等)见 [AGENTS.md](AGENTS.md),人与 AI 共用。
 
+详情页使用 TypeScript/Vite，环境由 pnpm 管理。前端检查已纳入同一门禁，开发机另需
+Node 24 和 package.json 指定的 pnpm；预览与构建命令见 [详情前端](ui/signal/README.md)。
+发布 EXE 内嵌静态页面，不需要 Node/pnpm；详情按需使用机器已有 Evergreen WebView2，
+缺失或加载失败自动回退原生内容。
+
 ## License
 
 [MIT](LICENSE)

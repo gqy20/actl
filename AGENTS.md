@@ -9,7 +9,7 @@
 3. **失败必须有错误码**:统一走 actl-core 的 Error → ErrorCode 映射,运行路径禁 `unwrap/expect`(ADR-004);
 4. **不引入 async/tokio**(ADR-001);
 5. **`actl-core` 禁止依赖 windows 相关 crate;`unsafe` 只允许出现在 `actl-uia`**(workspace 已 deny,仅该 crate 豁免并登记理由);
-6. **直接依赖总数 ≤ 8**,新增先登记 docs/TECH_STACK.md §3;
+6. **直接依赖总数 ≤ 9**,新增先登记 docs/TECH_STACK.md §3（2026-09-30 用户授权 WebView2 显示层增加 webview2-com；前端构建工具单独登记）;
 7. **默认 UIA,物理鼠标兜底必须显式 `--physical`**(ADR-007);键盘按 docs/06 使用显式 `--app` 绑定与输入护栏,人工交接不替代命令参数要求;
 8. **协议/命令语义变更(spec 提交)必须同 PR 完成**:契约 golden 测试 + docs/06 + CHANGELOG,三者同步。
 

@@ -88,15 +88,22 @@ unsafe fn layout(hwnd: HWND, dpi: u32) {
     } else {
         720
     };
-    let body_height = text_height(hwnd, 100, dpi, (monitor_height - 300).clamp(32, 216));
-    let mut next = 112 + body_height + 12;
+    let web = super::web_details::active(hwnd);
+    let body_height = if web {
+        super::web_details::height(hwnd).clamp(64, (monitor_height - 180).max(64))
+    } else {
+        text_height(hwnd, 100, dpi, (monitor_height - 300).clamp(32, 216))
+    };
+    let mut next = (if web { 64 } else { 112 }) + body_height + 12;
     let feedback_y = next;
-    if has_feedback(hwnd) {
+    if !web && has_feedback(hwnd) {
         next += text_height(hwnd, 101, dpi, 64) + 12;
     }
     let has_action = shown(hwnd, 10) || shown(hwnd, 11);
     let records_y = next;
-    next += 36;
+    if !web {
+        next += 36;
+    }
     let both = RECORDS.with(|v| v.get()) && EXPANDED.with(|v| v.get());
     let budget = (monitor_height - next - 36 - 72 - 24).max(64);
     let records_height = text_height(
@@ -105,18 +112,20 @@ unsafe fn layout(hwnd: HWND, dpi: u32) {
         dpi,
         (if both { budget / 2 } else { budget }).clamp(32, 160),
     );
-    if RECORDS.with(|v| v.get()) {
+    if !web && RECORDS.with(|v| v.get()) {
         next += records_height + 12;
     }
     let technical_y = next;
-    next += 36;
+    if !web {
+        next += 36;
+    }
     let technical_height = text_height(
         hwnd,
         107,
         dpi,
         (monitor_height - next - 72 - 12).clamp(32, 200),
     );
-    if EXPANDED.with(|v| v.get()) {
+    if !web && EXPANDED.with(|v| v.get()) {
         next += technical_height + 12;
     }
     let footer_y = next + 16;
@@ -125,7 +134,7 @@ unsafe fn layout(hwnd: HWND, dpi: u32) {
         i64::from(dpi),
         i64::from(body_height),
         i64::from(feedback_y),
-        i64::from(has_action),
+        i64::from(has_action) + 2 * i64::from(web),
         i64::from(records_y),
         i64::from(technical_y),
         i64::from(footer_y),
@@ -144,6 +153,15 @@ unsafe fn layout(hwnd: HWND, dpi: u32) {
         SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
     );
     super::frame::update(hwnd, dpi);
+    super::web_details::bounds(
+        hwnd,
+        RECT {
+            left: px(24),
+            top: px(64),
+            right: px(536),
+            bottom: px(64 + body_height),
+        },
+    );
     for &(id, _, x, y, width, height) in CONTROLS {
         if let Ok(child) = GetDlgItem(Some(hwnd), id) {
             let x = match id {
@@ -264,6 +282,14 @@ fn control_view(paths: &SignalPaths) -> model::View {
 fn has_feedback(hwnd: HWND) -> bool {
     unsafe { GetDlgItem(Some(hwnd), 101).is_ok_and(|c| GetWindowTextLengthW(c) > 0) }
 }
+unsafe fn text(hwnd: HWND, id: i32) -> String {
+    let Ok(child) = GetDlgItem(Some(hwnd), id) else {
+        return String::new();
+    };
+    let mut buffer = vec![0u16; GetWindowTextLengthW(child).max(0) as usize + 1];
+    let length = GetWindowTextW(child, &mut buffer).max(0) as usize;
+    String::from_utf16_lossy(&buffer[..length])
+}
 unsafe fn visible(hwnd: HWND, id: i32, show: bool) {
     if let Ok(child) = GetDlgItem(Some(hwnd), id) {
         let _ = ShowWindow(child, if show { SW_SHOWNOACTIVATE } else { SW_HIDE });
@@ -309,7 +335,11 @@ pub(super) unsafe fn refresh_with(hwnd: HWND, paths: &SignalPaths, id: Option<&s
     } else {
         local_error
     };
-    let feedback = super::ui_text::feedback(&message, status);
+    let mut feedback = super::ui_text::feedback(&message, status);
+    let backend_error = super::web_details::error(hwnd);
+    if feedback.is_empty() && backend_error.is_some() {
+        feedback = "WebView2 未就绪，当前使用原生详情。".into();
+    }
     set_text(hwnd, 101, &feedback);
     visible(hwnd, 101, !feedback.is_empty());
     set_text(hwnd, 102, &summary.title);
@@ -319,14 +349,19 @@ pub(super) unsafe fn refresh_with(hwnd: HWND, paths: &SignalPaths, id: Option<&s
     let technical = id
         .map(|id| flow_ui::details(paths, id))
         .unwrap_or_else(|| control_view(paths).details);
-    let mut text = technical;
-    if expanded {
-        text.push_str(&paths.stop_details());
-        if !message.is_empty() {
-            text.push_str(&format!("\r\n{message}"));
-        }
+    let mut diagnostic = technical;
+    diagnostic.push_str(&paths.stop_details());
+    if !message.is_empty() {
+        diagnostic.push_str(&format!("\r\n{message}"));
     }
-    set_text(hwnd, 107, &text.replace("\r\n", "\n").replace('\n', "\r\n"));
+    if let Some(error) = backend_error {
+        diagnostic.push_str(&format!("\r\n{error}"));
+    }
+    set_text(
+        hwnd,
+        107,
+        &diagnostic.replace("\r\n", "\n").replace('\n', "\r\n"),
+    );
     set_text(
         hwnd,
         106,
@@ -411,9 +446,39 @@ pub(super) unsafe fn refresh_with(hwnd: HWND, paths: &SignalPaths, id: Option<&s
         stopped || repair,
     );
     let _ = EnableWindow(GetDlgItem(Some(hwnd), 12).unwrap_or_default(), !stopped);
+    let primary = if running {
+        10
+    } else if resumable {
+        11
+    } else {
+        0
+    };
+    let json = serde_json::json!({
+        "version":1, "title":text(hwnd, 102), "status":text(hwnd, 103),
+        "tone":if stopped { "error" } else { match status { Some("completed") => "done", Some("running") => "working", Some("paused" | "needs_review") => "waiting", Some("failed" | "stopped") => "error", _ => "neutral" } },
+        "body":text(hwnd,100), "records":text(hwnd,106), "diagnostics":text(hwnd,107), "feedback":text(hwnd,101),
+        "primary":text(hwnd,primary), "primaryEnabled":GetDlgItem(Some(hwnd),primary).is_ok_and(|c| IsWindowEnabled(c).as_bool()),
+        "stop":text(hwnd,if stopped || repair { 13 } else { 12 }), "shortcut":if stopped { "" } else { "Ctrl+Alt+F12" }
+    }).to_string();
+    super::web_details::tick(hwnd, &json);
+    let web = super::web_details::active(hwnd);
+    let first_web_frame = web && shown(hwnd, 103);
+    for id in [100, 103, 14, 17] {
+        visible(hwnd, id, !web);
+    }
+    visible(hwnd, 101, !web && has_feedback(hwnd));
+    visible(hwnd, 106, !web && records);
+    visible(hwnd, 107, !web && expanded);
     layout(hwnd, GetDpiForWindow(hwnd));
+    if first_web_frame && GetForegroundWindow() == hwnd {
+        super::web_details::focus(hwnd);
+    }
 }
 unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
+    if super::web_details::is_update(msg) {
+        refresh(hwnd);
+        return LRESULT(0);
+    }
     if let Some(result) = super::panel::message(hwnd, msg, wp, lp) {
         return result;
     }
@@ -479,6 +544,7 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
             LRESULT(0)
         }
         WM_DESTROY => {
+            super::web_details::close(hwnd);
             super::panel::release(hwnd);
             PostQuitMessage(0);
             LRESULT(0)
@@ -597,6 +663,14 @@ pub unsafe fn run() -> windows::core::Result<()> {
         return Ok(());
     }
     let hwnd = create_window()?;
+    let com = super::web_details::Apartment::new();
+    if com.initialized() {
+        if let Err(error) = super::web_details::start(hwnd, &SignalPaths::default()) {
+            eprintln!("NOT_ACTIONABLE: WebView2 initialization: {error}");
+        }
+    } else {
+        eprintln!("NOT_ACTIONABLE: WebView2 COM apartment unavailable; using native details");
+    }
     refresh(hwnd);
     let _ = ShowWindow(hwnd, SW_SHOW);
     // StartupInfo may request a hidden helper; this explicit user window must be visible.
@@ -614,7 +688,9 @@ pub unsafe fn run() -> windows::core::Result<()> {
         if result == 0 {
             break;
         }
-        if !IsDialogMessageW(hwnd, &msg).as_bool() {
+        let handled = super::web_details::keyboard(hwnd, &msg)
+            .unwrap_or_else(|| IsDialogMessageW(hwnd, &msg).as_bool());
+        if !handled {
             let _ = TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }

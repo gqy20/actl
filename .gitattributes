@@ -8,6 +8,10 @@ hooks/* text eol=lf
 Makefile text eol=lf
 *.sh text eol=lf
 
+# 可复现的前端嵌入产物：gate 按字节比较，CSP 哈希与脚本文本一致。
+ui/signal/** text eol=lf
+crates/actl-uia/assets/signal-details.html text eol=lf
+
 # Windows 原生脚本保留 CRLF
 *.bat text eol=crlf
 *.cmd text eol=crlf

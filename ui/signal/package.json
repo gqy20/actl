@@ -1,0 +1,17 @@
+{
+  "name": "actl-signal-ui",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.13.1",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "check": "tsc --noEmit",
+    "test": "node --test src/model.test.ts",
+    "build": "pnpm check && vite build && node scripts/embed.mjs",
+    "verify": "pnpm test && pnpm check && vite build && node scripts/embed.mjs --check"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "vite": "8.3.1"
+  }
+}

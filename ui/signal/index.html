@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ACTL 任务详情</title>
+  </head>
+  <body>
+    <nav id="preview-tools" hidden aria-label="预览状态"></nav>
+    <div id="preview-window">
+      <header id="preview-header" hidden><span id="preview-title"></span><span aria-hidden="true">—　×</span></header>
+      <main id="content">
+        <section aria-labelledby="status">
+          <h1 id="status" aria-live="polite">正在读取状态</h1>
+          <div id="summary"></div>
+          <p id="feedback" role="status" hidden></p>
+        </section>
+        <details id="records-section">
+          <summary>步骤记录</summary>
+          <pre id="records"></pre>
+        </details>
+        <details id="diagnostics-section">
+          <summary>技术详情</summary>
+          <pre id="diagnostics"></pre>
+        </details>
+      </main>
+      <footer id="preview-footer" hidden>
+        <button id="preview-primary" class="primary" disabled></button>
+        <button id="preview-stop" class="danger" disabled>急停</button>
+        <span id="preview-shortcut">Ctrl+Alt+F12</span>
+      </footer>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

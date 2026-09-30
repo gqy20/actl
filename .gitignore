@@ -1,5 +1,7 @@
 # Rust 构建产物
 /target
+node_modules/
+/ui/signal/dist/
 
 # LLVM 覆盖率 profiling(llvm-cov / -Cprofile-generate 运行时产生)
 *.profraw

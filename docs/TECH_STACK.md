@@ -34,6 +34,8 @@ serde-saphyr 与标准文件锁要求的 MSRV 已同步根 Cargo.toml；实际�
 
 ## 3. 依赖清单
 
+2026-09-30 用户授权详情页使用 TypeScript + WebView2：增加 webview2-com 0.39.1（MIT），直接 Rust 依赖总数上限及实际数量为 9。该库沿用 windows 0.62，不引入 async/tokio；COM 回调与现有 Win32 消息泵集成，仅 actl-uia 接触 unsafe。TS 页面使用 pnpm 管理 TypeScript/Vite 开发工具，零前端运行时库；锁文件入库，Node/pnpm 仅构建与预览需要，发布嵌入本地静态页面、依赖机器已有 Evergreen WebView2。原生状态条、全局急停与所有授权/恢复校验继续由 Rust 执行。
+
 2026-09-29 前台交接：signal/foreground 的 unsafe 限于查询并持有执行进程句柄、核对同目录 actl.exe 路径与请求 PID、调用 AllowSetForegroundWindow；RAII 关闭句柄，不使用 ASFW_ANY、不注入 Alt、不改变系统前台锁。沿用已有 windows 依赖。
 客户端 handoff 的动作租约核验显示端 PID/版本/租约，在最外层动作退出时通过同一原生 API 归还资格；不授予任务权限。foreground 消息沿用有界同步 IPC，版本提升为 v9。
 
@@ -44,6 +46,7 @@ serde-saphyr 与标准文件锁要求的 MSRV 已同步根 Cargo.toml；实际�
 | 用途 | crate | 版本策略 | 备注/备选 |
 |---|---|---|---|
 | UIA/COM | `windows`(微软官方) | **全 workspace 锁同一版本**(ADR-003);features: `Win32_UI_Accessibility`, `Win32_UI_WindowsAndMessaging`, `Win32_System_Com`, `Win32_System_Threading` | 唯一重度依赖 |
+| 详情内容宿主 | `webview2-com` | =0.39.1 | 仅 actl-signal 的按需详情窗口；共享 Evergreen 运行时，失败回退原生内容；新增 1 个直接 Rust 依赖 |
 | UIA 高层封装 | `uiautomation`(**0.25,M0 评估期**:actl-uia 的 dev-dep,供 examples/probe 使用) | 评估结论(M1 采用或自写薄封装)写入 [spike-findings](spike-findings.md) |
 | CLI | `clap`(derive) | 4.6 | 子命令即契约;help 文本与 `commands` schema 从 doc comment 同源生成(06 §3.5) |
 | 序列化 | `serde` + `serde_json` | 跟 stable | envelope 唯一出口 |
@@ -78,7 +81,7 @@ serde-saphyr 与标准文件锁要求的 MSRV 已同步根 Cargo.toml；实际�
 | 集成 | fixtures 驱动(`cargo test --test integration`) | 真实驱动计算器/记事本/ms-settings 跑金任务的脚本化子集;CI 上跑,失败自动附 evidence |
 | 性能 | 手动基准脚本 | 冷启动 100 次采样 / snapshot 耗时;M1、M2 退出时记录,不进常规 CI |
 
-CI(GitHub Actions,`windows-latest`):`cargo xtask gate`(file-lines 单文件行数门禁 → `fmt --check` → `clippy -D warnings` → `test`)→(main 分支)构建单 exe 上传 artifact。行数门禁:crates/*/src 下 .rs 文件 >800 行警告、>1500 行失败(社区惯例手写代码 400–800 行/文件为宜;examples/tests 不扫,生成代码如引入须在 xtask 登记豁免)。
+CI(GitHub Actions,`windows-latest`):`cargo xtask gate`(file-lines 单文件行数门禁 → pnpm 前端类型/样例/产物一致性 → `fmt --check` → `clippy -D warnings` → `test`)→(main 分支)构建单 exe 上传 artifact。前端检查需要 Node 24 与 package.json 指定的 pnpm；运行发布 EXE 不需要它们。行数门禁:crates/*/src 下 .rs 文件 >800 行警告、>1500 行失败(社区惯例手写代码 400–800 行/文件为宜;examples/tests 不扫,生成代码如引入须在 xtask 登记豁免)。
 
 ## 6. 构建与分发
 
