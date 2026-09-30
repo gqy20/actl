@@ -437,6 +437,9 @@ pub(super) unsafe fn refresh_with(hwnd: HWND, paths: &SignalPaths, id: Option<&s
             "正在检查"
         } else if matches!(status, Some("needs_review" | "stopped")) {
             "核对结果"
+        } else if state.as_ref().and_then(|s| s["reason"].as_str()) == Some("action_failed") {
+            // 失败暂停:点继续会自动重发该步动作——文案明示语义。
+            "已修复，重试继续"
         } else {
             "继续"
         },

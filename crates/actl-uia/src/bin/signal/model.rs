@@ -22,6 +22,9 @@ pub enum Mode {
 pub struct View {
     pub mode: Mode,
     pub control: Control,
+    /// 按钮的人类文案,按暂停上下文差异化(重试/核验/检查);
+    /// 绘制层的图形不变,文案供图例/详情/控制窗口使用。
+    pub control_hint: String,
     pub label: String,
     pub effects: InputEffects,
     pub details: String,
@@ -117,6 +120,7 @@ pub fn view(states: &[SessionState], now: u64, stop_ms: Option<u64>, busy: Optio
     let Some(s) = selected else {
         return View {
             control: Control::Details,
+            control_hint: Control::Details.label().into(),
             mode: if stop_ms.is_some() {
                 Mode::StopRequested
             } else if busy != Some(false) {
@@ -353,6 +357,7 @@ pub fn view(states: &[SessionState], now: u64, stop_ms: Option<u64>, busy: Optio
         );
     }
     let mut control = Control::Details;
+    let mut control_hint: String = Control::Details.label().into();
     let flow = s.workflow.as_ref();
     let valid_flow = flow.filter(|f| actl_core::history::valid_id(&f.run_id));
     let blocked =
@@ -397,20 +402,42 @@ pub fn view(states: &[SessionState], now: u64, stop_ms: Option<u64>, busy: Optio
                     control = Control::Continue {
                         flow: f.run_id.clone(),
                     };
+                    // 继续语义按上下文差异化(2026-10 批次1):让按钮文案说真话——
+                    // 失败暂停=点继续会自动重发该步动作;待核对=先核验;人工暂停=检查。
+                    control_hint = if f.status == "needs_review" {
+                        "核验并继续"
+                    } else if f.reason.as_deref() == Some("action_failed") {
+                        "已修复，重试继续"
+                    } else {
+                        "检查并继续"
+                    }
+                    .into();
                     if !compact {
-                        let (new_mode, label) = match f.reason.as_deref() {
-                            Some("precondition_failed") => (Mode::Blocked, "条件未满足 · 可操作"),
-                            Some("action_failed") => (Mode::Blocked, "操作未完成 · 可操作"),
-                            _ if f.status == "needs_review" => {
-                                (Mode::Partial, "待核对结果 · 可操作")
+                        let (new_mode, label): (Mode, String) = match f.reason.as_deref() {
+                            Some("precondition_failed") => {
+                                (Mode::Blocked, "条件未满足 · 可操作".into())
                             }
-                            _ => (Mode::Paused, "已暂停 · 可操作"),
+                            Some("action_failed") => (
+                                Mode::Blocked,
+                                match f.step_id.as_deref() {
+                                    Some(id) => format!("操作未完成 · {id} · 可操作"),
+                                    None => "操作未完成 · 可操作".into(),
+                                },
+                            ),
+                            _ if f.status == "needs_review" => {
+                                (Mode::Partial, "待核对结果 · 可操作".into())
+                            }
+                            _ => (Mode::Paused, "已暂停 · 可操作".into()),
                         };
                         mode = new_mode;
-                        text = label.into();
+                        text = label;
                         compact = true;
                     }
-                    details.push("继续时先核对上一步；结果不明确不会自动重做".into());
+                    details.push(if f.reason.as_deref() == Some("action_failed") {
+                        "点继续将自动重发失败步骤的动作（适合已清除障碍）；若你已手动完成该步，请先在应用中核对结果再继续".into()
+                    } else {
+                        "继续时先核对上一步；结果不明确不会自动重做".into()
+                    });
                 }
                 "running" if s.phase == Phase::Running => {
                     control = Control::Pause {
@@ -464,7 +491,7 @@ pub fn view(states: &[SessionState], now: u64, stop_ms: Option<u64>, busy: Optio
             };
         }
     }
-    details.push(control.label().into());
+    details.push(control_hint.clone());
     // 进行时长 mm:ss:等宽数字,运行中且未陈旧才显示(上限 99:59 后保持稳定宽度)。
     let elapsed = if s.phase == Phase::Running && !stale {
         let secs = now.saturating_sub(s.started_ms) / 1000;
@@ -500,6 +527,7 @@ pub fn view(states: &[SessionState], now: u64, stop_ms: Option<u64>, busy: Optio
     View {
         mode,
         control,
+        control_hint,
         effects,
         label: if compact {
             text

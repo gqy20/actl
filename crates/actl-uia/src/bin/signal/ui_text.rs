@@ -46,6 +46,18 @@ pub fn reason(reason: &str) -> &'static str {
         _ => "需要处理，请查看技术详情。",
     }
 }
+/// 按错误码给"障碍提示"——把常见的失败原因翻译成用户可以在应用里核实的
+/// 障碍(2026-10 批次1:手动修复路径的可操作性)。
+pub fn obstacle_hint(code: &str) -> Option<&'static str> {
+    Some(match code {
+        "TIMEOUT" => "障碍提示：查前台是否被占用、应用是否繁忙无响应",
+        "NOT_FOUND" => "障碍提示：目标可能尚未渲染或已变化，可在应用中确认界面状态",
+        "STALE_REF" => "障碍提示：界面可能已重建或切页，可重新打开对应界面",
+        "AMBIGUOUS" => "障碍提示：存在多个同名目标，界面里如有重复项需先处理",
+        "PERM_DENIED" => "障碍提示：目标权限层级更高，可能需要提权或换路径",
+        _ => return None,
+    })
+}
 pub fn summary(state: Option<&Value>, plan: Option<&Value>, stopped: bool) -> Summary {
     let title = task_title(plan);
     let Some(state) = state else {

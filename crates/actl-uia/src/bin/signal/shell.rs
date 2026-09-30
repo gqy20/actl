@@ -771,7 +771,7 @@ fn legend_card(v: &model::View) -> Vec<String> {
     vec![
         format!("状态 · {name}"),
         hint.into(),
-        format!("右侧按钮：{}", v.control.label()),
+        format!("右侧按钮：{}", v.control_hint),
     ]
 }
 

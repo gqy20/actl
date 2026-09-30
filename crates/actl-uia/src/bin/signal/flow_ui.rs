@@ -228,10 +228,22 @@ pub fn details(paths: &SignalPaths, id: &str) -> String {
             let sid = step["id"].as_str().unwrap_or("—");
             let step_status = status_name(step["status"].as_str().unwrap_or(""));
             let code = step["error_code"].as_str();
+            let attempts = step["attempts"].as_u64().unwrap_or(0);
             lines.push(format!(
-                "▸ {sid} · {step_status}{}",
-                code.map(|c| format!(" · {c}")).unwrap_or_default()
+                "▸ {sid} · {step_status}{}{}",
+                code.map(|c| format!(" · {c}")).unwrap_or_default(),
+                if attempts > 1 {
+                    format!(" · 第 {attempts} 次尝试")
+                } else {
+                    String::new()
+                }
             ));
+            // 障碍提示:把错误码翻译成用户可在应用里核实的障碍(手动修复路径)。
+            if let Some(code) = code
+                && let Some(hint) = super::ui_text::obstacle_hint(code)
+            {
+                lines.push(format!("   {hint}"));
+            }
             if let Some(event) = step["recovery"]["events"].as_array().and_then(|e| e.last()) {
                 lines.push(format!(
                     "   最后观察 {} · 重试 {} · 用时 {} · 剩余 {}",
@@ -243,11 +255,27 @@ pub fn details(paths: &SignalPaths, id: &str) -> String {
             }
         }
     }
+    // 失败留证直达(三路:整屏截图/原生窗口清单/UIA 快照)。
+    let evidence_dir = paths.dir.join("flow-resources").join(id).join("evidence");
+    if evidence_dir.is_dir() {
+        lines.push(format!(
+            "失败留证：{}（整屏截图 · 窗口清单 · UIA 快照）",
+            evidence_dir.display()
+        ));
+    }
     if matches!(status, "paused" | "needs_review") {
-        lines.push(
-            "继续：先核对上一步结果，再使用底部的继续或核对结果按钮。\n重放写步骤须显式 --retry-step。"
-                .into(),
-        );
+        if state["reason"].as_str() == Some("action_failed") {
+            lines.push(
+                "继续：将自动重发失败步骤的动作——适合你已清除障碍（关弹窗/修正状态）。\
+                 若你已手动完成该步，请先在应用中核对结果再继续。"
+                    .into(),
+            );
+        } else {
+            lines.push(
+                "继续：先核对上一步结果，再使用底部的继续或核对结果按钮。\n重放写步骤须显式 --retry-step。"
+                    .into(),
+            );
+        }
     } else if status == "failed" {
         lines.push("失败：查看异常步骤的原因后修正路线；直接重试不会绕过失败。".into());
     } else if status == "stopped" {
@@ -301,7 +329,7 @@ mod tests {
                 "steps":[
                     {"id":"open","status":"completed"},
                     {"id":"fill","status":"completed"},
-                    {"id":"cell-readback","status":"uncertain","error_code":"NOT_FOUND",
+                    {"id":"cell-readback","status":"uncertain","error_code":"NOT_FOUND","attempts":2,
                      "recovery":{"events":[{"outcome":"recovered","retries":3,"elapsed_ms":14700,"remaining_ms":300}]}},
                     {"id":"close-frame","status":"skipped"}
                 ]
@@ -326,17 +354,22 @@ mod tests {
             !text.contains("\nopen ·") && !text.contains("fill · 已完成"),
             "{text}"
         );
-        // 异常步骤一行合并错误码;恢复观察压缩为一行且数字人性化。
+        // 异常步骤一行合并错误码与尝试计数;障碍提示紧随;恢复观察压缩为一行且数字人性化。
         assert!(
-            text.contains("▸ cell-readback · 待核对 · NOT_FOUND"),
+            text.contains("▸ cell-readback · 待核对 · NOT_FOUND · 第 2 次尝试"),
+            "{text}"
+        );
+        assert!(
+            text.contains("障碍提示：目标可能尚未渲染或已变化"),
             "{text}"
         );
         assert!(
             text.contains("最后观察 recovered · 重试 3 · 用时 14.7s · 剩余 300ms"),
             "{text}"
         );
-        // 结尾一行继续指引。
-        assert!(text.contains("继续："), "{text}");
+        // action_failed 上下文:指引明示"点继续将自动重发动作"与代做警示。
+        assert!(text.contains("继续：将自动重发失败步骤的动作"), "{text}");
+        assert!(text.contains("若你已手动完成该步"), "{text}");
         std::fs::remove_dir_all(paths.dir).unwrap();
     }
     #[test]
