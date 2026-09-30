@@ -275,3 +275,15 @@ excel-verify10（新模板全链）：**13/13 通过**——close-before-reopen 
 LoadBehavior=3 COM 加载项：不坑盒子（BKOffice2025，三处注册）、MSOfficePLUS、iWebOffice2009（32位）、
 NtkoOfficeControl.HelperAddin（32位）；VSTO 运行时在场与其中 VSTO 实现者相符。要"流程结束即进程退出"
 需禁用钉住者（用户机器配置决定，不由 agent 擅改）；模板保持文档关闭+窗口断言的设计不变。
+
+## close-window --system-close 落地与 excel-verify11（2026-09-30 终轮）
+
+用户提案「先点主页关闭、再点右上角叉」差分验证成立后落地：close-window 新增 `--system-close`
+（投 WM_SYSCOMMAND/SC_CLOSE = 点标题栏 X 的同一命令）；excel-table 两处后台关闭后各加
+close-frame/exit 步（--hwnd 绑 ownership + verify-closed 窗口+进程双断言），步骤数 13→15/69→71。
+
+excel-verify11 实测（14/15 needs_review，如实）：**首个实例在 close-frame 步当场干净退出**
+（流程内净减一进程，组合路线首次全流程生效）；重开实例的 exit 步在 5 秒沉降×4 次重试内未退，
+手动补发 SC_CLOSE + 3 分钟等待后仍存活——加载项钉的释放是**分钟级长尾**（对照：verify10 的
+29864 在约 10 分钟闲置后 SC_CLOSE 即退）。结论：组合路线是正确收尾，常见 case 当场完成；
+长尾 case 由 verify-closed 如实标注 needs_review，壳随后自行释放或由清扫兜底，不静默放宽断言。
