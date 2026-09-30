@@ -304,3 +304,21 @@ excel-verify11 实测（14/15 needs_review，如实）：**首个实例在 close
 偏好稳定指向最近注册实例（与激活状态无关，实测激活 9276 后仍路由 46536）——逐个点名无法实现。
 用户决定：流程已能跑通（模板修复 + --system-close 已落地），存量 12 壳交由下次重启清零，
 专项到此收束。实验现场已收拾（sweep2 工作簿窗已关，无可见残留）。
+
+## 无干预整批第八轮（2026-09-30，v0.1.8 发布构建）
+
+被测二进制 `target/validation/release/actl.exe`（v0.1.8，tag v0.1.8 CI 绿后构建）；预授权全局开关开启（Standing），显示协议 v11。运行 ID `combined-unattended-1`，71 步（vscode 26 + excel 15 + word + zotero）。
+
+**结果：70/71 completed，1 uncertain（excel-table-exit），零人工救场。**
+
+| 对比 | 第七轮（combined-batch1） | 本轮（combined-unattended-1） |
+|---|---|---|
+| 结果 | 69/69 completed | 70/71 completed |
+| 人工救场 | **3 次**（user_paused 让行、Zotero-Word 模态、重开 STALE_REF） | **0 次** |
+| 唯一失败 | 无 | excel-table-exit（uncertain，段隔离收束 needs_review） |
+
+excel-table-exit 的失败是已知限制（本文件"残壳专项"节已定案：VSTO+输入法加载项在完整流程后钉住进程，`verify-closed` 进程断言结构性不满足；模板已带 close-frame/exit 两步，`SC_CLOSE` 已投递但进程在分钟级长尾内退出）。窗口层正确关闭（无可见 Excel 窗口），仅进程断言失败。
+
+零救场的归因：v11 的 YIELD_BUSY 有界等待吸收了 user_paused 类中断（本轮全程无此类暂停）；recovery 预算（INTERNAL 纳入 retryable）吸收了冷启动 STALE_REF；预授权消除了全部交接确认。显示协议 v10/v11 + 批次 1-4 的暂停修复链首次真机验证了"无干预整跑"能力。
+
+残壳：3 个隐藏 XLMAIN 空壳（含本轮新起后退出长尾），用户已决定重启清扫（见"残壳专项"）；未做任务级强断言。
