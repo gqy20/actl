@@ -274,6 +274,21 @@ pub fn message(msg: u32, pid: u32) -> usize {
         if s.deferred.as_deref() == Some(&r.call) {
             return DEFERRED;
         }
+        // 预授权模式(用户在托盘开启的常驻信任):请求即刻按 Standing 授予,
+        // 不出卡、不点击。急停/监听健康/代次检查已在上方完成;用户输入仍会
+        // 让行(Standing 的 check 对输入变化只拒绝不撤销,安静后自动通过)。
+        if !paths.stop_requested() && paths.preauthorized() {
+            s.consent
+                .allow_with_policy(&r.task, seq, unix_ms(), Approval::Standing);
+            if s.foreground_call.as_deref() != Some(&r.call) {
+                super::foreground::transfer(pid, &r);
+                s.foreground_call = Some(r.call.clone());
+            }
+            audit(&r, "granted", "preauthorized");
+            s.active_request = Some(r.clone());
+            s.active = Some((pid, r.call, r.task));
+            return ALLOWED;
+        }
         if !paths.stop_requested() && s.consent.check_policy(&r.task, seq, unix_ms(), r.approval) {
             if s.foreground_call.as_deref() != Some(&r.call) {
                 super::foreground::transfer(pid, &r);

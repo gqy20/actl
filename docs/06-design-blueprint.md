@@ -801,3 +801,13 @@ expected: 预期完整文本
 click（Invoke/SelectionItem/Toggle/ExpandCollapse）、set-value、select、toggle 在预览前后核对组件 RuntimeId、PID、角色、AutomationId、名称，以及最近原生宿主的 RuntimeId/PID。祖先查询有界，provider 错误保留；无法确认宿主则拒绝。矩形只服务预览，布局移动不单独阻止语义操作。窗口语义动作复核窗口实例，不以矩形不变为条件。
 
 执行前重新获取已选 Pattern，不因能力变化切换到其他动作或物理点击。组件禁用或身份改变返回 NOT_ACTIONABLE，evidence.reason 分别为 target_disabled / target_identity_changed，action_started=false；metadata 保留原因与送达事实，不包含组件正文。组件重建后需重新观察，不自动重放写入。键盘动作仍核验实际焦点，物理动作仍核验位置与遮挡。wait --stable 只证明连续内容样本一致，不证明可写或业务完成；动作后仍需业务后置核验。
+
+### 预授权写入（显示协议 v10，2026-09-30）
+
+新增 `Approval::Standing`（常驻信任）与两种用户授予通道，目标是在不引入"隐身执行"的前提下消除重复点击：
+
+- **显示端托盘开关「预授权写入」**：用户点开即对所有桌面写入生效（持久，`state/preauth.json`，由显示端 UI 独占写入；CLI/agent 无 sanctioned 写入通道）。开启后 REQUEST 即刻按 Standing 授予并返回 ALLOWED，不出卡；显示端横条常显「预授权·」前缀作为可见性补偿；关闭开关立即撤销常驻同意。
+- **流程声明 `approval: standing`**：声明只是意图，不构成授权——首次仍需用户点一次「开始」，之后本会话内该流程常驻（不因闲置/时长/外部输入撤销）。与 `once_per_run` 的区别：跨调用任务切换与输入让行后无需再次点击。
+- Standing 的 check 语义：不过期；输入计数变化时**让行而非撤销**（reason=input_active，基线重置，安静即自动通过）；急停、监听不可用、代次变化照常杀死信任。审计记录 reason=preauthorized。
+
+安全不变量：急停在任何模式下立即生效；动作预告照常上屏；授予动作只能来自显示端 UI 或用户点击（YAML 声明永远不自动生效）。协议版本 9→10，actl 与 actl-signal 需成对升级。按流程指纹（冻结计划哈希）持久信任的「始终信任此流程」为后续方向（ROADMAP）。

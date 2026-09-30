@@ -140,6 +140,10 @@ unsafe fn tick(hwnd: HWND) {
     let stop = stop_timestamp(&paths);
     let mut v = model::view(&states, now, stop, actl_uia::display_support::input_busy());
     v.details.push_str(&paths.stop_details());
+    if paths.preauthorized() {
+        // 常驻预授权的可见性补偿:横条常显模式标记,动作预告照常上屏。
+        v.label = format!("预授权·{}", v.label);
+    }
     if matches!(
         v.mode,
         model::Mode::Running | model::Mode::Background | model::Mode::Desktop
@@ -407,6 +411,11 @@ unsafe fn menu(hwnd: HWND) {
     if let Some((_, resume)) = &action {
         lines.push(if *resume { "继续" } else { "暂停" }.into());
     }
+    lines.push(if paths.preauthorized() {
+        "预授权写入：开（点此关闭）".into()
+    } else {
+        "预授权写入：关（点此开启）".into()
+    });
     if let Ok(mut stored) = MENU_FLOW.lock() {
         *stored = action;
     }
@@ -448,6 +457,33 @@ unsafe fn menu_action(hwnd: HWND, cmd: usize) {
                 if let Err(error) = result {
                     super::popup::show(hwnd, vec!["流程操作未完成".into(), error], false);
                 }
+            }
+        }
+        7 => {
+            // 预授权开关:授予动作只发生在显示端 UI(本菜单),agent/CLI 无写入通道。
+            // 关闭时立即撤销常驻同意,回到点击模式;急停在任何模式下都有效。
+            let paths = SignalPaths::default();
+            let next = !paths.preauthorized();
+            match paths.set_preauth(next) {
+                Ok(()) => {
+                    if !next {
+                        super::handoff::revoke();
+                    }
+                    super::popup::show(
+                        hwnd,
+                        vec![if next {
+                            "预授权写入已开启：桌面写入不再要求开始；让行与急停仍然有效".into()
+                        } else {
+                            "预授权写入已关闭".into()
+                        }],
+                        false,
+                    );
+                }
+                Err(error) => super::popup::show(
+                    hwnd,
+                    vec!["预授权开关写入失败".into(), error.to_string()],
+                    false,
+                ),
             }
         }
         _ => {}

@@ -139,6 +139,26 @@ impl SignalPaths {
         self.dir.join("stop-requested")
     }
 
+    pub fn preauth_file(&self) -> PathBuf {
+        self.dir.join("preauth.json")
+    }
+    /// 常驻预授权开关:开启后桌面写入免出卡(Consent 以 Standing 策略授予)。
+    /// 写入方只应是显示端托盘的用户点击;读取失败按关闭处理(fail-closed)。
+    pub fn preauthorized(&self) -> bool {
+        std::fs::read(self.preauth_file())
+            .ok()
+            .and_then(|data| serde_json::from_slice::<serde_json::Value>(&data).ok())
+            .and_then(|v| v.get("enabled").and_then(|e| e.as_bool()))
+            .unwrap_or(false)
+    }
+    pub fn set_preauth(&self, enabled: bool) -> std::io::Result<()> {
+        std::fs::create_dir_all(&self.dir)?;
+        let payload = serde_json::json!({"enabled": enabled, "ts_ms": unix_ms()});
+        let tmp = self.dir.join("preauth.json.tmp");
+        std::fs::write(&tmp, serde_json::to_vec(&payload)?)?;
+        std::fs::rename(&tmp, self.preauth_file())
+    }
+
     /// 状态快照落盘；诊断故障不改变业务结果，但写入独立健康记录。
     pub fn write_state(&self, st: &SessionState) {
         if let Err(error) = self.try_write_state(st) {

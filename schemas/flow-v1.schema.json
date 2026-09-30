@@ -20,7 +20,7 @@
     },
     "handoff": {
       "type": "object", "additionalProperties": false, "required": ["approval"],
-      "properties": {"approval": {"enum": ["expiring", "once_per_run"]}}
+      "properties": {"approval": {"enum": ["expiring", "once_per_run", "standing"]}}
     },
     "version": {
       "const": 1

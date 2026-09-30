@@ -7,6 +7,11 @@ pub enum Approval {
     #[default]
     Expiring,
     OncePerRun,
+    /// 常驻信任:不过期、用户输入只让行不撤销(安静即自动通过)。
+    /// 授予来源只有两种,均为用户动作:显示端托盘的「预授权写入」开关
+    /// (持久,对所有写入生效),或流程声明 `approval: standing` 后用户
+    /// 点一次开始(会话内常驻)。声明本身永远不构成授权。
+    Standing,
 }
 /// 误触自动恢复（pardon）：授权被外部输入撤销后，若撤销源与后续输入均为
 /// "良性"（纯鼠标移动，无任何按键/点击/滚轮），静默窗内无新输入且前台未变，
@@ -192,6 +197,12 @@ impl Consent {
             if now - *started < GRACE_MS {
                 // 宽限窗内:授权动作的余韵,重设基线继续放行
                 *seq = input_seq;
+            } else if self.approval == Approval::Standing {
+                // 常驻信任下用户输入是预期状态:本边界让行但不撤销,
+                // 重置基线——计数不再变化(安静)即自动通过,无需点击。
+                self.reason = Some("input_active");
+                *seq = input_seq;
+                return false;
             } else {
                 self.revoke_with_reason("external_input");
                 return false;
@@ -273,6 +284,22 @@ mod tests {
         assert!(!c.check("a", 10, 10_000 + GRACE_MS + 2));
         c.allow("a", 12, 10_000 + GRACE_MS + 3);
         assert!(c.check("a", 12, 10_000 + GRACE_MS + 4));
+    }
+    #[test]
+    fn standing_trust_never_expires_and_yields_without_revoking() {
+        let mut c = Consent::default();
+        c.allow_with_policy("a", 10, 100, Approval::Standing);
+        // 不过期:远超 expiring 的 10 分钟总量与 60 秒闲置
+        assert!(c.check("a", 10, 100 + 700_000));
+        // 用户输入:让行(拒绝)但不撤销,基线重置后安静即自动通过
+        assert!(!c.check("a", 11, 100 + 700_001));
+        assert_eq!(c.reason(), "input_active");
+        assert!(c.check("a", 11, 100 + 700_002));
+        // 任务边界仍然生效
+        assert!(!c.check("b", 11, 100 + 700_003));
+        // 急停等显式撤销仍然杀死常驻信任
+        c.revoke_with_reason("stopped");
+        assert!(!c.check("a", 11, 100 + 700_004));
     }
 
     #[test]
