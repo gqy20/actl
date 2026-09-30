@@ -142,6 +142,11 @@ UIA 属性调用本身受 provider 调度影响，轮询超时不等于整个 CO
 保留 pending，可直接继续到未开始的步骤。单 CLI 和 PowerShell 脚本保留现场，由调用方接续，
 当前版本不提供假继续按钮。紧急停止独立于暂停，不会自动解除。
 
+流程绑定横条的时效（2026-09-30 修订）：人工暂停（paused）与停止（stopped）持久保留继续入口；
+**待核对（needs_review）只在 30 分钟内钉住横条**——超时无人核对即视为结果已被人工消化，
+横条回空闲（状态文件与 `flow-status` 核对/继续入口不受影响，只是不再霸屏出按钮）。
+没有这条时效，历史待核对流程会永久占据横条的「检查并继续」按钮。
+
 需要界面继续的验证使用 `skills/actl/workflows/vscode-resume.yml`：动作在执行前登记为持久化 flow，暂停后由绑定 run ID 的继续按钮恢复，不重新运行准备脚本。核验判据与当前迁移范围见 [55](55-resumable-desktop-tasks.md)。
 
 重复提示诊断记录在本地 history 的 consent_decision：区分实际 shown、用户 granted 与 reused，附带策略、失效原因和两路活动计数，不记录输入内容。Raw Input 只排除无设备且携带 actl 注入标记的自身事件，其余来源或解析失败仍让行。复现和验收见 [54](54-repeated-handoff.md)。

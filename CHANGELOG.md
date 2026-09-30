@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+- **横条按钮状态时效修复（needs_review 不再永久钉住横条）**：显示端"暂停入口持久保留"特性此前对 paused/needs_review/stopped 一视同仁地持久注入横条——一个以 needs_review 收尾的历史流程会永远挂着「检查并继续」按钮（实测 excel-verify11 在结果已被人工消化 40+ 分钟后仍霸屏）。现按语义分级：paused/stopped（人工意图态）持久保留；needs_review 只在 30 分钟内钉住横条，超时回空闲，状态文件与 flow-status 核对入口不变。真机验证：修复后横条立即翻篇。见 [32](docs/32-desktop-handoff.md)。
+
 - **[spec] 预授权写入（显示协议 v10）**：新增 `Approval::Standing` 常驻信任与两条用户授予通道，消除重复点击开始——① 显示端托盘开关「预授权写入」（持久 `state/preauth.json`，仅显示端 UI 写入）：开启后桌面写入免出卡（即刻 ALLOWED，审计 reason=preauthorized），横条常显「预授权·」前缀，关闭即撤销；② flow YAML `approval: standing`：声明不构成授权，首次点一次开始后本会话内常驻（闲置/时长/外部输入不再要求点击）。Standing 语义：不过期；用户输入让行而非撤销（安静自动通过）；急停、监听不可用、代次变化照常杀死信任；动作预告照常上屏。协议 9→10，actl 与 actl-signal 成对升级（golden 同步）。按流程指纹持久信任的「始终信任此流程」为后续方向（ROADMAP）。设计见 [32](docs/32-desktop-handoff.md) · [06](docs/06-design-blueprint.md)。
 
 ## [0.1.7] - 2026-09-30
