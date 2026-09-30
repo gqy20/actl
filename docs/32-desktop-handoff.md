@@ -85,7 +85,7 @@ action_failed 暂停期间，显示端以 **5 秒节奏静默运行阻塞步骤�
 
 **auto_resume 策略**：流程 YAML 显式声明 `auto_resume: action_failed`（默认关，与预授权正交——授权通道与重试策略分离）时，Retriable 判定下显示端自动派发一次 flow-resume，预算 **2 次/运行**（伴侣内存计，重启重置——保守方向）；预算耗尽或未声明时降级为高亮提示。派发前核验停止代次健康且无急停；user_paused/checkpoint/needs_review 永不自动续跑；每次自动续跑记 `auto_resume` 流程事件。
 
-按流程指纹（冻结计划哈希）持久信任的「始终信任此流程」（跨重启、模板变更重询）为后续方向，见 ROADMAP。
+**真机验收（2026-10-01）**：全链通过——① 首跑（全局预授权关、信任集空）→ running 等卡 ✓；② 计算指纹写入信任集 → 二跑即刻 Standing 授予（审计 reason=flow_trusted，非 preauthorized/user_start）✓；③ 指纹通道优先于全局预授权（三跑全局也开着仍报 flow_trusted）✓；④ 修改模板（改 step title）→ 指纹变（e928… vs 1da2…）→ 关全局后重新出卡 ✓。模板变更自动失效不需人工干预。
 
 ## 人工接管
 
