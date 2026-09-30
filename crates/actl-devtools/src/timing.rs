@@ -158,7 +158,7 @@ fn preflight(bench: &mut Bench) -> Result<()> {
         ));
     }
     let windows = bench.call(&["list-windows", "--native"])?;
-    if windows["windows"].as_array().is_some_and(|ws| {
+    if windows["data"]["windows"].as_array().is_some_and(|ws| {
         ws.iter()
             .any(|w| w["class"].as_str().is_some_and(|c| c.contains("Notepad")))
     }) {
@@ -168,6 +168,13 @@ fn preflight(bench: &mut Bench) -> Result<()> {
             json!({"stage":"fixture_preflight"}),
         ));
     }
+    // 注入测量需要桌面安静(Standing 信任下用户输入仍让行):等 ≥1.5s 无键鼠
+    // 再开跑(上限 60s),把"卡时机"变成"手离开即自动起跑"。
+    let idle = bench.call(&["wait", "--idle", "1500", "--timeout", "60000"])?;
+    require(
+        idle["ok"] == true,
+        "desktop not idle within 60s; hands off keyboard and mouse to measure",
+    )?;
     Ok(())
 }
 

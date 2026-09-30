@@ -58,7 +58,7 @@ handoff:
 
 针对"重复点击开始太烦"的体验问题，提供两条**由用户动作授予**的常驻信任通道（`Approval::Standing`）：
 
-1. **托盘开关「预授权写入」**：右键 actl 托盘图标 → 预授权写入 → 点此开启。开启后所有桌面写入免出卡（REQUEST 即刻 ALLOWED，审计 reason=preauthorized），横条常显「预授权·」前缀。开关状态持久（`%LOCALAPPDATA%\actl\state\preauth.json`，仅显示端 UI 写入），关闭立即撤销常驻同意。适合 timing sweep/regress 这类开发诊断与本机自动化常驻场景。
+1. **托盘开关「预授权」**：右键 actl 托盘图标 → 预授权 → 开/关。开启后所有桌面写入免出卡（REQUEST 即刻 ALLOWED，审计 reason=preauthorized），横条常显「预授权·」前缀。开关状态持久（`%LOCALAPPDATA%\actl\preauth.json`，仅显示端 UI 写入），关闭立即撤销常驻同意。注意：预授权只去掉点击，**用户正在输入时仍会让行**（安静后自动继续）——注入永远不与真人抢桌面。适合 timing sweep/regress 这类开发诊断与本机自动化常驻场景。
 2. **流程声明 `approval: standing`**：flow YAML 的 handoff 段写 `approval: standing`——声明不构成授权，首次仍点一次「开始」，之后本会话内该流程常驻（闲置/时长/外部输入都不再要求点击）。适合"这个流程我信任，一次就行"。
 
 Standing 语义与安全补偿：不过期；用户输入计数变化时**让行而非撤销**（安静后自动通过，无需点击）；急停、输入监听不可用、停止代次变化照常杀死信任；动作预告照常上屏；横条指示常在。协议版本 9→10，actl 与 actl-signal 需成对升级。

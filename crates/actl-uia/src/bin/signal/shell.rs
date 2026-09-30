@@ -409,9 +409,9 @@ unsafe fn menu(hwnd: HWND) {
         }
     });
     lines.push(if paths.preauthorized() {
-        "预授权写入：开（点此关闭）".into()
+        "预授权: 开（关）".into()
     } else {
-        "预授权写入：关（点此开启）".into()
+        "预授权: 关（开）".into()
     });
     if let Some((_, resume)) = &action {
         lines.push(if *resume { "继续" } else { "暂停" }.into());
