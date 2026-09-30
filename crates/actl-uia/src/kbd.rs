@@ -400,14 +400,6 @@ mod tests {
         compile_key_spec(&spec).unwrap()
     }
 
-    fn compile_err(expr: &str) -> CtlError {
-        let spec = parse_key_expr(expr).unwrap();
-        match compile_key_spec(&spec) {
-            Err(error) => error,
-            Ok(_) => panic!("{expr} compiled but should be rejected"),
-        }
-    }
-
     /// (VK 码, 是否 UP) 序列;UNICODE 事件 wVk=0,不会与 VK 断言混淆。
     fn vk_seq(events: &[INPUT]) -> Vec<(u16, bool)> {
         events
