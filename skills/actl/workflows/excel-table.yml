@@ -568,14 +568,41 @@
     },
     {
       "run": {
-        "command": "close-window",
-        "args": [
-          "--hwnd",
-          "1"
-        ],
-        "bind": {
-          "1": "ownership.hwnd"
-        }
+        "sequence": [
+          {
+            "command": "click",
+            "args": [
+              "name:文件",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "click",
+            "args": [
+              "uia:{\"match\":{\"role\":\"ListItem\",\"name\":\"关闭\"},\"within\":{\"id\":\"NavBarMenu\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "wait",
+            "args": [
+              "--gone",
+              "uia:{\"match\":{\"id\":\"NavBarMenu\"}}",
+              "--app",
+              {
+                "input": "app"
+              },
+              "--timeout",
+              "20000"
+            ]
+          }
+        ]
       },
       "recovery": {
         "max_retries": 3,
@@ -815,14 +842,41 @@
     },
     {
       "run": {
-        "command": "close-window",
-        "args": [
-          "--hwnd",
-          "1"
-        ],
-        "bind": {
-          "1": "reopened-owner.hwnd"
-        }
+        "sequence": [
+          {
+            "command": "click",
+            "args": [
+              "name:文件",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "click",
+            "args": [
+              "uia:{\"match\":{\"role\":\"ListItem\",\"name\":\"关闭\"},\"within\":{\"id\":\"NavBarMenu\"}}",
+              "--app",
+              {
+                "input": "app"
+              }
+            ]
+          },
+          {
+            "command": "wait",
+            "args": [
+              "--gone",
+              "uia:{\"match\":{\"id\":\"NavBarMenu\"}}",
+              "--app",
+              {
+                "input": "app"
+              },
+              "--timeout",
+              "20000"
+            ]
+          }
+        ]
       },
       "recovery": {
         "max_retries": 3,

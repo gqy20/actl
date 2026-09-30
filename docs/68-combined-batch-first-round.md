@@ -248,3 +248,19 @@ Zotero/VS Code/Word 进程全部退出；Excel 又添一隐藏残壳（52824，X
   某现存实例）→ 按 pid 跟踪当前 XLMAIN → 循环 [文件→关闭] 排干该实例全部工作簿 → 进程退出 → 重复
   至清零。全程 UIA，无 taskkill。需要一次面板授权（代点击机械不可达，见上文）。
 - **重启并非必需**：从「消除劫持变量」降级为「普通进程卫生」。修好流程的关闭路线后，壳根本不再产生。
+
+## 模板落地与 excel-verify9 实测（2026-09-30 收尾）
+
+关闭路线改造落地：excel-table 与整批模板的 close/close-before-reopen 改后台关闭序列
+（click 文件 → NavBarMenu 内 ListItem「关闭」→ 等 NavBarMenu 消失，严格选择器实测唯一命中）。
+
+excel-verify9 实测给出**定案修正**：
+- 后台路线正确关闭了工作簿（窗口标题落回裸 Excel）；
+- 但该实例进程未在 5 秒内退出（后续仍驻留，438MB、进程内出现 `WindowsForms10` 等 .NET 窗口类）；
+- 复查模块（修正过滤器——此前把 `C:\Windows\assembly` 下的托管 DLL 一并滤掉导致误判）：**所有实例
+  （老壳与实验实例）均加载 VSTO 运行时（Microsoft.VisualStudio.Tools.Office.Runtime）+ 腾讯微信输入法
+  组件 + Sangfor**。「无第三方模块」是过滤器伪影，加载项在场是事实；干净启动+后台关闭可退（两例），
+  完整流程跑完后加载项被激活钉住进程不退（excel-verify9）。
+- 因此断言设计定案：**保持「工作簿窗口消失」（wait --gone id:1001）**，进程退出不是本机可靠后置条件，
+  不做任务级断言（曾试 verify-closed，在 excel-verify9 如实失败并把环境噪声变成任务失败，已回退；
+  该次失败保留了完整证据三件套）。壳的治理归环境层（清扫配方），模板层保证文档正确关闭。
