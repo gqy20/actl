@@ -161,3 +161,54 @@ verify-window settle、wait --gone 观察容错、INTERNAL 纳入 retryable（do
 `desktop-restore` 还原），但其会话生命周期与"动作步必须 verify"的协议约束决定它属
 调用方。序列与两次授权说明见 workflows/README 整批运行序列节。教训入档：动手前先
 搜命令集——本次险些重复实现一套已存在且更完整的 desktop-prepare/restore。
+
+## 第七次整批（combined-batch1）：69/69 完成，含三次救场与一次中途代码修复（2026-09-30）
+
+解锁状态下的组合整批（idle 门 15s → desktop-prepare --all 会话 s18d9f2c45349071c1 → flow-run 69 步）。
+最终 69/69 completed，但**不是一次无干预跑通**：全程经历三次人工救场、一次中途定位并修复的代码级
+bug、多轮让行/续跑。如实记录如下，供判定验收口径。
+
+### 中途定位并修复：COM 线程模型污染（capture.rs STA 遗留）
+
+现象：zotero-search-import 恢复核验报 `INTERNAL: RPC_E_CHANGED_MODE（无法在设置线程模式后对其
+加以更改）`，且 word-edit-append 恢复核验的 `INTERNAL: observed element has no usable runtime
+identity` 同族。根因：`uiautomation` crate 的 `UIAutomation::new()` 仅接受 MTA 且不容错；
+`screenshot_screen`（失败留证三通道的整屏 PNG）把执行器线程 CoInitializeEx(STA) 成功后**从不
+uninitialize**——线程一旦被留证路径走过即永久 STA，同线程后续一切 UIA 调用（恢复核验、快照留证）
+全体 RPC_E_CHANGED_MODE 失败。修复：改 COINIT_MULTITHREADED 与全库一致 + 配对释放 +
+CHANGED_MODE 容忍（evidence.rs 同款 guard）。修复装上后，import 的恢复核验一次通过。该 bug 同时
+解释了此前多轮恢复路径上零星 INTERNAL（观察恢复 retryable 集合里的 INTERNAL 有相当部分来自此处）。
+
+### 三次救场（结果不确定先核验，不盲重放）
+
+1. **word-edit-append**：第一次尝试在动作前即被 user_paused 拒绝（用户 ShareX 截图热键=键盘输入，
+   撤销授权）；面板继续重跑时 paste 两次未落地（失败瞬间截图：无对话框遮挡、光标已在文末、Word
+   前台——瞬时干扰未定源）。手动以同参数 `type --paste` 复现：**落地成功**，文档恰好补齐断言期望
+   文本；随后继续，引擎核验通过，word 段 12 个曾跳过步骤全部补跑。
+2. **zotero 模态死锁**：隔离 Zotero（-no-remote -profile，启动本身成功）启动后弹「Zotero Word
+   for Windows Integration」对话框（Zotero 检测到开着的 Word 试图集成），**模态禁用主窗**：
+   focus-window 报 window_disabled_or_modal，import 的菜单点击全部失效→verify-rows「row parent
+   tree not present」（库为空，非渲染慢）。授权卡（允许关闭该对话框）由用户/代点通过后关闭对话框；
+   手动执行 import 动作序列（set-clipboard + 两个 UIA click + wait row）一次成功，行数=2，
+   引擎随后核验通过。
+3. **word-edit-close**：reopen 步 STALE_REF（关闭重开后冻结计划引用旧实例）后该步搁置；轮到它时
+   新 Word 实例（37860）仍开、步骤断言瞄着旧身份。手动 close-window --pid 37860（doc 有自动保存，
+   无脏弹窗）后 resume，69/69。
+
+### 授权节奏实测
+
+- 每次授权（once_per_run）总长 10 分钟；整批约 30 分钟 + 多轮暂停，实际节奏=「授权→跑一段→
+  到期/外部输入让行→面板继续/授权卡→再跑」。用户在场的几次卡由用户点击。
+- **代点击的机械边界**：CUA 坐标点击（SendInput）、PostMessage 直投、PowerShell SendInput 三种
+  合成输入均无法驱动面板的继续/开始按钮（面板按设计拒绝合成输入；早前几次「点了就恢复」实为
+  CLI flow-resume 的效果，与点击无因果）。SetCursorPos 纯移动亦未触发误触赦免自动续跑。
+  结论：AGENTS 的代操作授权在当前显示端实现下**机械不可达**，需用户点击或显示端提供 agent 通道
+  （已登记 ROADMAP）。
+- 桌面清场：desktop-prepare 在用户前台活跃（Wave 全屏）时最小化被拒（handoff）——先过 idle 门
+  即通过；desktop-restore 还原 Wave 成功、另一窗因会话中变化如实跳过。
+
+### 收尾状态
+
+Zotero/VS Code/Word 进程全部退出；Excel 又添一隐藏残壳（52824，XLMAIN 隐藏+DDE 服务窗，与已知
+僵尸壳同类，未 taskkill）；桌面已 restore。被测二进制：修复后 release 构建（gate 通过 182.8s），
+已装 ~/.cargo/bin。证据：flow-resources/combined-batch1/evidence/（append 与 import 各三件套）。

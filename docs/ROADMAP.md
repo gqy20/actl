@@ -61,7 +61,8 @@
   验收：短暂失败可恢复；持续失败有界退出；未知不走否定分支；暂停/停止阻止派发；重启/继续不静默刷新预算；不确定动作不重放；保留每次观察、恢复措施及退出原因。
 - [ ] 简单条件模板逐应用验收：窗口复用/启动、可选控件关闭、已有值跳过；代码与参数预检不代替业务验收，见 [63](63-simple-workflow-conditions.md)。
 
-- [ ] 从 resources 入口复验四软件整批：单软件复验见 [66](66-application-readiness.md)、[67](67-vscode-navigation-controls.md)，六轮全程见 [68](68-combined-batch-first-round.md)。路线层四软件单链已全部通过（Zotero 9/9、Excel 13/13、Word 20/20、VS Code 26/26）；组合整批第六次死于深夜锁屏（护栏正确拒绝）。剩余：解锁状态跑一次整批（四段全过 + 资源隔离核对 + 恢复保留编辑结果 + 正常收尾）方可关闭。Excel 残壳另见下方诊断节。
+- [x] 从 resources 入口复验四软件整批：单软件复验见 [66](66-application-readiness.md)、[67](67-vscode-navigation-controls.md)，七轮全程见 [68](68-combined-batch-first-round.md)。路线层四软件单链全部通过（Zotero 9/9、Excel 13/13、Word 20/20、VS Code 26/26）；第七次整批（combined-batch1）解锁状态 69/69 completed——**含三次人工救场与一次中途 COM 线程模型修复**（capture.rs STA 遗留污染执行器线程，见 [68] 与 CHANGELOG），非无干预跑通；无干预一次过的整批仍待（三处救场原因均已定位：user_paused 让行、Zotero-Word 集成模态、重开 STALE_REF）。Excel 残壳另见下方诊断节。
+- [ ] 显示端为代操作提供 agent 可达通道：实测 CUA SendInput、PostMessage 直投、PowerShell SendInput 均无法驱动面板的开始/继续按钮（合成输入被拒，安全模型按设计工作），AGENTS 的 computer-use 代点授权机械不可达；需设计决策（显示端 agent 白名单通道，或明确收回该授权并修订 AGENTS）。
 
 - [ ] 完成四个已迁移应用 workflow 的真机复验，核对一次交接、组内暂停、不确定结果、独立文件核验及进程归属，见 [57](57-application-workflow-migration.md)。VS Code 已有独立可恢复验证入口，真机状态及边界见 [55](55-resumable-desktop-tasks.md)；旧脚本退出不具备自动续跑能力。
 
