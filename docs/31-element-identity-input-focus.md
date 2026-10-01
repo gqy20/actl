@@ -98,3 +98,49 @@ RuntimeId 不是跨启动永久标识；provider 若复用相同身份与全部�
 不可靠的 UIA 焦点会被拒绝，本批不以仅窗口匹配降级。控件重建后调用方重新观察、
 使用唯一语义选择器定位，不自动重试已可能生效的写操作。
 计算器 UWP 宿主关闭生命周期仍是 docs/30 的独立遗留项。
+
+## 组件选择问题的判定树（2026-10-01 沉淀）
+
+来源：金任务 1/2 修复会话的实作归纳。入口永远是 error envelope，组件选择问题只有五类症状，
+每类有对应处置；观察工具按代价递增，效果核验收口。
+
+### 症状分类（读 error envelope）
+
+| 症状 | 错误码 | 含义 | 实例 |
+|---|---|---|---|
+| 选择器太松 | `AMBIGUOUS` | 命中 N 个元素，信封自带 candidates 列表 | `id:1001` 同 hit 地址 ToolBar + 文件名 Edit；`name:不保存` hit Button + Text |
+| 元素没了 | `NOT_FOUND` | 树中不存在 | 已关窗口上的 snapshot |
+| 元素变了 | `STALE_REF` | 身份中途改变，信封带 expected/current | ComboBox 重建后的定点观测 |
+| **打错但"成功"** | 无报错 | 点到错误元素，动作本身成功——最危险 | Enter 按 ComboBox 旧提交值保存了默认文件名 |
+| 绑错窗口 | 各种 | 同标题多顶层窗 | UWP 计算器三窗同标题（框架/CoreWindow/TitleBar） |
+
+第四类没有错误可读，只能靠下游核验暴露（verify-value/verify-file/窗口状态），
+因此输入动作永远不是终点，效果核验才是。
+
+### 确认新组件情况（工具按代价递增）
+
+1. `snapshot --app hwnd:N` 重取全树（主工具）；
+2. **新旧快照 diff**：代码用过的快照落在 `~/.actl/snapshots/<id>.json`（含 runtime_id，
+   UIA 稳定身份）。与新房对比直接看出"组件去哪了"——同名元素身份是否变化、
+   新增/消失的兄弟节点。`cargo xtask diagnose snapshot-diff --from <id1> --to <id2>` 直接输出结构化差异；
+3. `get @eN` 读候选属性（role/name/automation_id/bounds），对 AMBIGUOUS 的 candidates 逐个甄别；
+4. `preview` / 截图：preview 只看不点；**截图是最后仲裁**，专治 UIA 树说谎——
+   悬浮才出现的控件（记事本标签 X）树里根本没有，树里不存在 ≠ 界面不存在；
+   反过来悬浮/滚动后元素才物化，操作后须重新观察。
+   焦点争议用 `focus-report` 三视图（UIA 焦点元素 / 物理焦点根窗 / 前台窗）交叉——
+   WinUI 上 UIA focused element 实测会谎报，以物理层为权威。
+
+### 按类处置
+
+- 选择器松 → 收紧组合（role+name / automation_id）、快照后 `@eN + --snapshot` 绑定、`--near` 锚点；
+- 重建/移动 → 诱发变更的操作后重新快照，ref 绑新 snapshot_id；
+- 树里没有 → 截图确认视觉存在，再想物理通道（悬浮物化、键盘快捷键如 ctrl+w）；
+- UIA 谎报 → 物理层判据交叉（focus-report / GetGUIThreadInfo）；
+- 多窗同标题 → class 过滤（UWP 限定 ApplicationFrameWindow）。
+
+### 修复的验证标准（分层，勿混）
+
+- **选择器/归属修复** → 即时验证：AMBIGUOUS candidates 收敛到 1 的证据 + 一次效果核验，不需要多轮统计；
+- **通道/竞态修复**（忙窗、重建、前台过渡）→ 才需要连续多轮（单轮 3 连过 + 批量统计）。
+- 裸 CLI 输入动作后核验信封里的 `resolved` 元素与预期一致（流程引擎步骤已强制 verify；
+  裸调用方靠此纪律补位）。
