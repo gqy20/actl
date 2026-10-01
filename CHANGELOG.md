@@ -27,6 +27,7 @@
 - **`diagnose title-watch` / `close-gone`（devtools）**：标题瞬态监视（按拍采样记录变化事件，前台护栏 actual="" 类问题取证）与 close→gone 计时（优雅关闭→窗口消失各阶段耗时，收尾拖尾取证标准化），活体验证后入库。诊断动词家族至此：cleanup-tabs/snapshot-diff/title-watch/close-gone + focus-report。
 
 ### Documentation and validation
+- **P0 验收推进（2026-10-01/02）**：UIA 组合定位真机验收✓（composite-locate 五点全绿）；显示失联恢复✓（kill 伴侣→自动重启→ready/responsive true）；状态一致性部分完成（display-status 路径核验，伴侣条视觉核对待截屏修正）；Raw Input/多屏 DPI/系统重启需用户配合。
 - **NFR 验收与发布产物核对（2026-10-01 晚间）**：冷启动 PowerShell Stopwatch 口径 P50=67ms/P95=94ms（超 PRD 目标 34%/18%，timing 纪律不跨日比绝对值，基线当日为轻负载）；snapshot 记事本 P50=433ms（达标 <500ms）；输出体积 status 135B / get 245B（达标 <2KB）；skeleton 削减 45%（基线 38%）。发布产物：gate 159.8s 全绿、二进制 5.3MB 零依赖、契约测试 79 个/94 全过、golden 22 文件。非开发机 US3 需用户提供环境（docs/timing-data/nfr-20261001-evening.md）。
 - **金任务跨日重复双百（2026-10-01 晚间）**：GT1 10/10（UWP 挂起就绪等待修复后；双日合计上午+晚间各 10/10）；GT2 10/10（7+3，中途一次前台护栏拒绝——用户发消息夺焦点，清残后续 3 轮补齐）。NFR timing profile 43 calls 完成。
 - **tencent-meeting-draft 真机复验全绿（2026-10-01，四场景收官）**：${run.dir} 路径展开引擎缺陷已修——input default 的 ${run.dir}/${run.id}/${env:} 展开此前仅在模板声明 resources 块时生效，无资源模板中原样传给命令致 screenshot ERROR_PATH_NOT_FOUND（quark/wemeet 两场景同源复现）；修复后展开不依赖 resources 声明，flow-run 额外确保 run.dir 存在。修复后流程四步全绿（check-date/topic/confirm-date/evidence，attempts 全 1，result.png 自动落盘 ${run.dir}；flow id wg4）。首页入口按档案走截图+physical（首页 UIA 仅 1 个可交互元素），表单语义选择器当前版本直接可用。对话框关闭→主窗优雅退出，无真实会议产生。draft-date 变体与 inputs 格式陷阱（app 须带 hwnd: 前缀且不会被自动补）已记 pack。
