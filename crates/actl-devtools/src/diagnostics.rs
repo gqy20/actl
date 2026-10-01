@@ -66,12 +66,17 @@ pub fn run(kind: &str, args: &Args) -> Result<Value> {
             "winapp",
             "automation-id",
             "timeout",
+            "from",
+            "to",
         ],
         &[],
     )?;
     let mut c = context(args, kind)?;
     let mut report = json!({"kind":kind,"status":"blocked","cleanup":"no_target_resources_created","atomic":false,"unit":"UTF-8 bytes, not tokenizer tokens"});
     let outcome = (|| -> Result<Value> {
+        if kind == "snapshot-diff" {
+            return snapshot_diff(args.get("from")?, args.get("to")?);
+        }
         let state = c.call(&["execution-status"])?;
         report["execution"] = state;
         if kind == "phase2-readonly" {
@@ -281,4 +286,76 @@ pub fn run(kind: &str, args: &Args) -> Result<Value> {
             Err(e)
         }
     }
+}
+
+/// 快照差异对比(docs/31 组件选择判定树第 2 步):按 runtime_id(UIA 稳定身份)
+/// 对比两份历史快照,回答"组件去哪了"——消失/新增/同身份但语义元数据变化
+/// (如标签名"已修改"→"未修改")。文件来自此前 snapshot 调用落盘的
+/// `~/.actl/snapshots/<id>.json`;无 runtime_id 的元素按 role/name/automation_id
+/// 退化合并。列表截断 20 条防膨胀,计数保持完整。
+fn snapshot_diff(from: &str, to: &str) -> Result<Value> {
+    const CAP: usize = 20;
+    let dir = actl_core::state::SignalPaths::default()
+        .dir
+        .join("snapshots");
+    let load = |id: &str| -> Result<BTreeMap<String, Value>> {
+        let raw = crate::capture::read_json(&dir.join(format!("{id}.json")))
+            .map_err(|_| io("snapshot file unreadable (ids come from prior snapshot calls)"))?;
+        let elements = raw["elements"]
+            .as_array()
+            .ok_or_else(|| io("snapshot file has no elements array"))?;
+        Ok(elements
+            .iter()
+            .map(|e| {
+                let key = if e["runtime_id"].is_array() {
+                    e["runtime_id"].to_string()
+                } else {
+                    format!("{}|{}|{}", e["role"], e["name"], e["automation_id"])
+                };
+                (key, e.clone())
+            })
+            .collect())
+    };
+    let from_map = load(from)?;
+    let to_map = load(to)?;
+    let mut gone: Vec<Value> = vec![];
+    let mut identity_changed: Vec<Value> = vec![];
+    for (key, old) in &from_map {
+        match to_map.get(key) {
+            None => gone.push(old.clone()),
+            Some(new) => {
+                if old["name"] != new["name"]
+                    || old["role"] != new["role"]
+                    || old["automation_id"] != new["automation_id"]
+                {
+                    identity_changed.push(json!({
+                        "runtime_id": old["runtime_id"],
+                        "from": {"name": old["name"], "role": old["role"], "automation_id": old["automation_id"]},
+                        "to": {"name": new["name"], "role": new["role"], "automation_id": new["automation_id"]},
+                    }));
+                }
+            }
+        }
+    }
+    let added: Vec<Value> = to_map
+        .iter()
+        .filter(|(key, _)| !from_map.contains_key(*key))
+        .map(|(_, e)| e.clone())
+        .collect();
+    Ok(json!({
+        "status": "diffed",
+        "from": from,
+        "to": to,
+        "counts": {
+            "from": from_map.len(),
+            "to": to_map.len(),
+            "gone": gone.len(),
+            "added": added.len(),
+            "identity_changed": identity_changed.len(),
+        },
+        "gone": gone.into_iter().take(CAP).collect::<Vec<_>>(),
+        "added": added.into_iter().take(CAP).collect::<Vec<_>>(),
+        "identity_changed": identity_changed.into_iter().take(CAP).collect::<Vec<_>>(),
+        "list_cap": CAP,
+    }))
 }
