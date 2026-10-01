@@ -11,9 +11,17 @@
 
 ### Added
 
+- **`flow-clean` 补记（文档欠账）**：命令随 20c9726 入库但当时未同步 docs/06 契约与本文件——批量归档历史非完结流程（默认 60 分钟阈值；completed 与存活执行器不动；归档即整目录 rename 到 `flows-archived/`，证据全保留；`--dry-run` 列候选），2026-10-01 整理 roadmap 时发现补齐。
+- **`diagnose cleanup-tabs` 清场动词（devtools）**：按名称子串关标签+弹层「不保存」有界轮询（与夹具 close_task_tabs 同路线泛化）。沉淀背景：ad-hoc 清场脚本三次手写"选中标签+ctrl+w+弹层点不保存"三次出错（单次采样不等弹层渲染、grep 不匹配静默跳过、ref 提取残渣），用户当场截获未处理弹窗后入库——清场不再手写。活体验证：未保存标签弹层正确轮询处理、窗口随末标签关闭、无残留。
+- **UWP 标题路径类配对下沉引擎**：同一标题下框架窗（`ApplicationFrameWindow`）与应用 `CoreWindow`/标题栏装饰窗并存时，`focus-window`/`restore-window`/`close-window` 按标题解析在 native→UIA 身份复核处恒 STALE_REF（provider 报告进程/名称与 native 层不一致）。`title_elements` 现按类配对：有框架窗时只保留框架窗（可操作真顶层窗，CoreWindow 托管其内），无框架窗的候选集不受影响。活体验证：计算器 focus/minimize→restore/close 标题路径全部通过（此前恒败）；夹具层同族修复（金任务 1 owner class 过滤）先验证了方向。残留：长时间最小化后 UWP 挂起导致 WM_NULL 探针 window_unresponsive 的恢复前解除挂起，另行推进。
 - **preview 框语义澄清（操作矩形，非视觉标注）**：黄框渲染的是 UIA provider 报告的操作矩形（`--physical` 点击落点为其中心，pointer 物理链同源）——与视觉边框的偏差是**物理点击风险信号**而非渲染缺陷，把框"修"得贴合视觉等于藏掉风险。默认 message、help、docs/06 契约、docs/31 判定树同步该语义；核对闭环 = preview 输出的 bounds 数字 + `screenshot --rect` 区域截图（窗口模式抓不到独立置顶的预览框，实测确认）。记事本编辑器实测贴合 1–3px、粘贴前后 bounds 稳定。
 - **`focus-report` 只读诊断命令**：三视图并列——UIA 焦点元素、物理焦点根窗（GetGUIThreadInfo）、物理前台窗（各带 hwnd/title/pid 身份），附进程一致性事实信号。用途：元素选择与焦点争议的交叉比对——WinUI 上 UIA focused element 实测会谎报，此前要读引擎源码才能理解护栏拒绝，现在一条命令出全部证据；判读规则（物理层权威）见 docs/31 组件选择判定树。
 - **`snapshot-diff` 诊断动词（devtools）**：`cargo xtask diagnose snapshot-diff --from <id> --to <id>` 按 runtime_id 对比两份历史快照，输出消失/新增/同身份但元数据变化三类差异（列表截断 20、计数完整）——回答"组件去哪了"，替代人工 diff 两份 JSON。
+
+### Documentation and validation
+
+- **全部原生夹具复验通过（2026-10-01）**：金任务 1（UWP 类配对归属，3 单轮 + 5 轮批量 + **正式十轮 10/10**）、金任务 2（3 单轮 + **正式十轮 10/10**，合计 13 连胜）、input-target、msinfo32 表格提取、Explorer 虚拟化列表、显示端 readiness/signal-display（含 `--physical` 物理路线活体）、Edge 深树/内容视图、Chrome 内容视图、flow-evaluation（冻结计划不改写）——身份、单次写入、失败保留与优雅清理逐项核过。期间修复：夹具收尾按标签/整窗双路线分流（标签路线对无标签应用是空操作的回归）、Win11 资源管理器地址栏控件消失（面包屑改自定义控件，改由窗口标题+item-container 文件发现承载归属核验）。
+- **预授权下急停仍生效（显式真机验证）**：standing 开启 → 写直过（无卡）→ Ctrl+Alt+F12 全局热停 → 新代次 stopped → 写被拒（"never clear emergency stop automatically"）→ execution-recover 恢复 → 写路径正常。授权三层（托盘/会话/指纹）之上，急停仍是最高优先级撤销通道；让行自动恢复此前已由 round8 零救场覆盖。
 
 ### Fixed
 

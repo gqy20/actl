@@ -66,6 +66,7 @@ pub(crate) fn title_elements(
     if candidates.is_empty() {
         return Ok(None);
     }
+    let candidates = pair_uwp_frame(candidates);
     candidates
         .into_iter()
         .map(|w| {
@@ -90,6 +91,27 @@ pub(crate) fn title_elements(
         })
         .collect::<Result<Vec<_>, _>>()
         .map(Some)
+}
+
+/// UWP 类配对:同一标题下框架窗(ApplicationFrameWindow,宿主进程)与应用
+/// CoreWindow/标题栏装饰窗并存。CoreWindow 走 element_from_handle 的身份
+/// 复核恒 STALE_REF(provider 报告的进程/名称与 native 层不一致),焦点/
+/// 恢复/定位按标题解析必败(docs/ROADMAP UWP 双窗实录)。有框架窗时只保留
+/// 框架窗——它是可操作的真顶层窗,CoreWindow 被托管其内;无框架窗的候选集
+/// (普通 Win32 应用)原样通过。夹具层的同族修复(golden-task-1 owner 按
+/// class 过滤)已验证此方向,此处下沉到引擎使所有标题路径命令受益。
+fn pair_uwp_frame(candidates: Vec<WindowEntry>) -> Vec<WindowEntry> {
+    let has_frame = candidates
+        .iter()
+        .any(|w| w.class == "ApplicationFrameWindow");
+    if has_frame {
+        candidates
+            .into_iter()
+            .filter(|w| w.class == "ApplicationFrameWindow")
+            .collect()
+    } else {
+        candidates
+    }
 }
 
 fn read_window(hwnd: HWND, foreground: HWND) -> Result<Option<WindowEntry>, CtlError> {
@@ -143,5 +165,39 @@ mod tests {
         let rows = native_window(desktop.0 as isize).unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].hwnd, Some(desktop.0 as isize));
+    }
+    fn entry(class: &str, title: &str) -> WindowEntry {
+        WindowEntry {
+            title: title.into(),
+            class: class.into(),
+            pid: 1,
+            foreground: false,
+            topmost: false,
+            minimized: false,
+            visible: true,
+            z_order: None,
+            rect: None,
+            owner_title: None,
+            hwnd: Some(1),
+        }
+    }
+    #[test]
+    fn uwp_frame_pairing_keeps_only_the_frame_window() {
+        // UWP 一标题三窗:框架/应用 CoreWindow/标题栏装饰——只留框架窗
+        let paired = pair_uwp_frame(vec![
+            entry("ApplicationFrameWindow", "计算器"),
+            entry("Windows.UI.Core.CoreWindow", "计算器"),
+            entry("ApplicationFrameTitleBarWindow", "计算器"),
+        ]);
+        assert_eq!(paired.len(), 1);
+        assert_eq!(paired[0].class, "ApplicationFrameWindow");
+    }
+    #[test]
+    fn non_uwp_candidates_pass_through_unchanged() {
+        let set = vec![entry("Notepad", "a"), entry("Chrome_WidgetWin_1", "ab")];
+        assert_eq!(pair_uwp_frame(set.clone()).len(), set.len());
+        // 无框架窗的孤立 CoreWindow 不动(不臆断归属)
+        let lone = vec![entry("Windows.UI.Core.CoreWindow", "x")];
+        assert_eq!(pair_uwp_frame(lone).len(), 1);
     }
 }

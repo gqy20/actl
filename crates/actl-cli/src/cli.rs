@@ -870,6 +870,9 @@ fn after_help_for(name: &str) -> Option<&'static str> {
         "flow-resume" => {
             "Example:\n  actl flow-resume --id report-01\nUses the saved plan; never clears emergency stop. Optional resume_check verifies current context before uncertain-result checks. retry=stale_read retries only read-only STALE_REF, at most three calls. --retry-step requires an explicit failed assertion; observation errors never authorize write replay.\nErrors: PROTOCOL invalid state/step | NOT_ACTIONABLE executor busy | ABORTED stop | INTERNAL storage"
         }
+        "flow-clean" => {
+            "Example:\n  actl flow-clean --older-than-minutes 120\n  actl flow-clean --dry-run\nBatch-archives historical non-completed flow states (paused/needs_review/interrupted) whose last update is older than the threshold; default 60 minutes. Archives like task-archive: state moves to archive, all evidence preserved, nothing deleted. Completed flows are untouched; running flows are skipped (executor alive). --dry-run lists candidates without moving.\nErrors: PROTOCOL invalid arguments | INTERNAL storage"
+        }
         "task-archive" => {
             "Example:\n  actl task-archive --file report.json\nImmutable caller report, retained 30 days; never implies verified task success.\nErrors: PROTOCOL invalid report | INTERNAL file/storage failure"
         }

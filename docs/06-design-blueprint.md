@@ -748,6 +748,17 @@ UIA 写操作也按桌面操作显示，不能仅因无物理键鼠就声称可�
 - 与 `wait --idle` 组合即"人不在时干活"的两件套（docs/09 §6.2）；扫描/采集类长任务的会话切换
   不再打断用户当前窗口。
 
+## 流程残留批量归档（flow-clean）
+
+`flow-clean [--older-than-minutes N] [--dry-run]`：批量归档历史非完结流程
+（paused/needs_review/中断态）。默认仅处理最后更新早于 60 分钟的流程；
+`completed` 不动（保留在 flows/ 作证据保留窗）；running.lock 记录的存活执行器
+在跑的不动（进程已死视为过期锁）。归档即整目录 `rename` 到 `flows-archived/`，
+全部证据保留、不删除任何文件；`--dry-run` 仅列候选不移动。
+输出 data 为 `{archived, kept, errors[], detail[], dry_run, older_than_minutes}`。
+非 flow 目录与损坏状态跳过不报错。文档补记：该命令随 20c9726 入库时未同步
+本契约（硬规则 8 欠账，2026-10-01 整理 roadmap 时发现补齐）。
+
 ## 可复用流程输入（2026-09-29）
 
 `flow-validate` 和 `flow-run` 支持 `--inputs values.yml`（UTF-8 YAML 或 JSON 字符串映射）。
