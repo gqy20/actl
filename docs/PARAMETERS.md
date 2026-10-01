@@ -27,6 +27,7 @@
 | `focus_retries` | 3 | `ACTL_FOCUS_RETRIES` | press 链中元素级 SetFocus 的重试轮数 | `action.rs::ensure_element_focus` |
 | `press_focus_ms` | 120 | `ACTL_PRESS_FOCUS_MS` | press/paste 链窗口 SetFocus 后的稳定等待 | `action.rs::prepare_keyboard`、paste 路径 |
 | `type_focus_ms` | 150 | `ACTL_TYPE_FOCUS_MS` | type 链元素 SetFocus 后、进前台护栏前的稳定等待 | `action.rs::type_text` |
+| `foreground_settle_ms` | 600 | `ACTL_FOREGROUND_SETTLE_MS` | 前台护栏入口的沉降预算：激活过渡期前台可能是空标题过渡窗（ForegroundStaging）或目标标题未就位，轮询至匹配或耗尽；真抢焦（标题稳定地不是目标）照样拒 | `kbd.rs::foreground_settles_to`（type/press/paste 三入口） |
 | `segment_chars` | 32 | `ACTL_SEGMENT_CHARS` | type 键盘通道分批大小（停止响应粒度 = 本值；段间焦点复查） | `input.rs::send_in_segments` |
 | `modifier_wait_ms` | 1500 | `ACTL_MODIFIER_WAIT_MS` | 注入前等物理修饰键空置的上限（超时 NOT_ACTIONABLE） | `kbd.rs::wait_modifiers_clear` |
 | `lock_wait_ms` | 3000 | `ACTL_LOCK_WAIT_MS` | 会话输入互斥锁 `actl-input-lock` 的等待上限（他实例占用 → TIMEOUT） | `input.rs::InputLock::acquire`；例外见 §9 |

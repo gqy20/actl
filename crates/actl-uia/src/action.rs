@@ -128,10 +128,11 @@ pub fn type_text(
             ),
         )
     })?;
-    // 护栏与 press 相同:元素置焦后仍要物理前台核对,文本才允许注入
+    // 护栏与 press 相同:元素置焦后仍要物理前台核对,文本才允许注入。
+    // 沉降轮询容忍激活过渡瞬态(空标题过渡窗/标题未就位),真抢焦仍拒。
     if app.is_some() {
         std::thread::sleep(std::time::Duration::from_millis(timing().type_focus_ms));
-        let fg = kbd::foreground_title().unwrap_or_default();
+        let fg = kbd::foreground_settles_to(&loc.window_title);
         if fg != loc.window_title {
             return Err(actl_core::handoff::foreground_error(&loc.window_title, &fg));
         }
@@ -293,8 +294,9 @@ fn prepare_keyboard(app: Option<&str>) -> Result<Option<String>, CtlError> {
             // 元素聚焦是异步请求且存在竞态(实测固定延时忽好忽坏):
             // 反复 SetFocus 并验证 UIA 焦点元素真的变为可编辑角色,最多 3 轮
             ensure_element_focus(pattern)?;
-            // 护栏:物理前台必须是目标窗口,否则注入会打进别处(已发生过真实事故)
-            let fg = kbd::foreground_title().unwrap_or_default();
+            // 护栏:物理前台必须是目标窗口,否则注入会打进别处(已发生过真实事故);
+            // 沉降轮询容忍激活过渡瞬态,真抢焦仍拒
+            let fg = kbd::foreground_settles_to(&title);
             if fg != title {
                 return Err(actl_core::handoff::foreground_error(&title, &fg));
             }
@@ -536,7 +538,7 @@ pub fn paste(app: &str) -> Result<String, CtlError> {
     let _lock = input::InputLock::acquire(timing().lock_wait_ms)?;
     let title = focus_window(app)?;
     std::thread::sleep(std::time::Duration::from_millis(timing().press_focus_ms));
-    let fg = kbd::foreground_title().unwrap_or_default();
+    let fg = kbd::foreground_settles_to(&title);
     if fg != title {
         return Err(actl_core::handoff::foreground_error(&title, &fg));
     }

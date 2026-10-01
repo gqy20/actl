@@ -19,6 +19,10 @@ pub struct Timing {
     pub press_focus_ms: u64,
     /// type 链 SetFocus 后的稳定等待
     pub type_focus_ms: u64,
+    /// 前台护栏入口的沉降预算:窗口激活过渡期前台可能是空标题过渡窗
+    /// (ForegroundStaging)或目标标题未就位——轮询至匹配或预算耗尽。
+    /// 真被抢焦(标题稳定地不是目标)不受影响照样拒。
+    pub foreground_settle_ms: u64,
     /// type 键盘通道分批大小(停止响应粒度 = 本值)
     pub segment_chars: usize,
     /// 修饰键空置等待上限
@@ -58,6 +62,7 @@ impl Default for Timing {
             focus_retries: 3,
             press_focus_ms: 120,
             type_focus_ms: 150,
+            foreground_settle_ms: 600,
             segment_chars: 32,
             modifier_wait_ms: 1500,
             lock_wait_ms: 3000,
@@ -90,6 +95,7 @@ impl Timing {
                 focus_retries: env_num("ACTL_FOCUS_RETRIES", d.focus_retries),
                 press_focus_ms: env_num("ACTL_PRESS_FOCUS_MS", d.press_focus_ms),
                 type_focus_ms: env_num("ACTL_TYPE_FOCUS_MS", d.type_focus_ms),
+                foreground_settle_ms: env_num("ACTL_FOREGROUND_SETTLE_MS", d.foreground_settle_ms),
                 segment_chars: env_num("ACTL_SEGMENT_CHARS", d.segment_chars),
                 modifier_wait_ms: env_num("ACTL_MODIFIER_WAIT_MS", d.modifier_wait_ms),
                 lock_wait_ms: env_num("ACTL_LOCK_WAIT_MS", d.lock_wait_ms),
@@ -116,6 +122,7 @@ mod tests {
         assert_eq!(d.lock_wait_ms, 3000);
         assert_eq!(d.modifier_wait_ms, 1500);
         assert_eq!(d.focus_retries, 3);
+        assert_eq!(d.foreground_settle_ms, 600); // 激活过渡瞬态 < 1s
         assert_eq!(d.settle_ms, 250); // 稳定窗 = 2×250ms
         assert_eq!(d.fast_poll_ms, 25);
         assert_eq!(d.ready_poll_ms, 50);

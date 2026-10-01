@@ -37,6 +37,23 @@ pub fn foreground_title() -> Option<String> {
     }
 }
 
+/// 前台护栏入口的沉降轮询:窗口激活过渡期,物理前台可能是空标题过渡窗
+/// (ForegroundStaging)或目标标题尚未就位——一次性标题比对会把这种瞬态
+/// 误判成抢焦(金任务2 十轮统计 actual="" 实证)。轮询至匹配或预算耗尽,
+/// 返回最后观测标题供证据;真被抢焦(标题稳定地不是目标)不受影响照样拒。
+pub fn foreground_settles_to(expected: &str) -> String {
+    let budget = std::time::Duration::from_millis(crate::timing().foreground_settle_ms);
+    let start = std::time::Instant::now();
+    let mut last = foreground_title().unwrap_or_default();
+    while last != expected && start.elapsed() < budget {
+        std::thread::sleep(std::time::Duration::from_millis(
+            crate::timing().fast_poll_ms,
+        ));
+        last = foreground_title().unwrap_or_default();
+    }
+    last
+}
+
 /// 物理键盘焦点所在控件,上溯到根窗口后的 HWND 和标题(None = 取不到)。
 /// 焦点归属的**物理**判据:UIA focused element 视图在 WinUI 上实测会谎报
 /// (物理层 RichEditD2DPT 已聚焦时仍报别窗口编辑框,金任务 2 误拒绝实证)。
