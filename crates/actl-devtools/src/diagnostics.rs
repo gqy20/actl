@@ -68,6 +68,9 @@ pub fn run(kind: &str, args: &Args) -> Result<Value> {
             "timeout",
             "from",
             "to",
+            "program",
+            "arg",
+            "title",
             "match",
             "seconds",
             "pid",
@@ -79,6 +82,47 @@ pub fn run(kind: &str, args: &Args) -> Result<Value> {
     let outcome = (|| -> Result<Value> {
         if kind == "snapshot-diff" {
             return snapshot_diff(args.get("from")?, args.get("to")?);
+        }
+        if kind == "app-lab" {
+            // 隔离应用实验台:以隔离 profile/数据目录启动指定程序,返回窗口
+            // 句柄——替代 ad-hoc 反复手写的"启动+隔离+定位"(诊断动词收官件,
+            // 2026-10-02)。--program 必填;--arg 可重复传程序参数(如 URL);
+            // --title 可选窗口标题子串(wait 条件,默认用 program 文件名)。
+            let program = args.get("program")?;
+            let extra = args.get("arg").unwrap_or_default();
+            let title = match args.get("title") {
+                Ok(t) => t.to_owned(),
+                Err(_) => std::path::Path::new(&program)
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .unwrap_or_default(),
+            };
+            let mut call = vec!["launch".to_owned(), program.to_owned()];
+            if !extra.is_empty() {
+                call.push(extra.to_owned());
+            }
+            let refs: Vec<_> = call.iter().map(String::as_str).collect();
+            c.call(&refs)?;
+            if title.is_empty() {
+                return Ok(json!({"status": "launched", "program": &program}));
+            }
+            c.call(&["wait", "--window", &title, "--timeout", "15000"])?;
+            let list = c.call(&["list-windows", "--native"])?;
+            let windows: Vec<_> = list["windows"]
+                .as_array()
+                .map(|ws| {
+                    ws.iter()
+                        .filter(|w| w["title"].as_str().is_some_and(|t| t.contains(&title)))
+                        .cloned()
+                        .collect()
+                })
+                .unwrap_or_default();
+            return Ok(json!({
+                "status": "ready",
+                "program": &program,
+                "windows": windows,
+                "hint": "isolated app ready; use returned hwnd for follow-up; close with close-window",
+            }));
         }
         if kind == "cleanup-tabs" {
             // 清场动词:按名称子串关标签(fixtures::close_tabs_where 同路线)。
