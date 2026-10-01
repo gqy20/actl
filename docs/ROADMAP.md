@@ -33,7 +33,7 @@
 
 ### 原生迁移后待验收
 
-- [ ] 场景复验推进（2026-10-01 实况）：app-launch-observe 已用记事本复验通过（launch→wait→observe→verify 全链、逐调用与清理证据、attempts 全 1，flow id alo-recheck1）——流程机制就绪，真实应用面待补：cloudmusic-playback 待用户方便时执行（应用正以托盘模式运行、无主窗，执行需唤起主窗并 toggle 播放四轮）；quark-search 与 tencent-meeting-draft/date 本机未安装，无法复验（需安装或换机后推进）。
+- [ ] 场景轨剩余（2026-10-01 实况）：app-launch-observe 与 **cloudmusic-playback 均已复验通过**（后者 flow id cloudmusic-recheck1：9 步 attempts 全 1、播放状态四轮 toggle-restore 后回到基线、consent 一等字段 input_source 在时间线中工作、现场仅最小化未关闭——用户正在使用）；quark-search 与 tencent-meeting-draft/date 本机未安装，需安装或换机后推进。
 
 ### 执行顺序
 

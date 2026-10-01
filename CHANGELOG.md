@@ -27,6 +27,7 @@
 - **`diagnose title-watch` / `close-gone`（devtools）**：标题瞬态监视（按拍采样记录变化事件，前台护栏 actual="" 类问题取证）与 close→gone 计时（优雅关闭→窗口消失各阶段耗时，收尾拖尾取证标准化），活体验证后入库。诊断动词家族至此：cleanup-tabs/snapshot-diff/title-watch/close-gone + focus-report。
 
 ### Documentation and validation
+- **cloudmusic-playback 真机复验通过（2026-10-01，用户授权轮）**：托盘模式唤起主窗后全链通过——baseline 核对 → UIA click 与 ctrl+p 键盘两通道各两轮 toggle-restore（9 步 attempts 全 1），播放状态每轮切回基线；时间线 14 组逐调用证据、consent_decision 带一等字段 input_source 实战工作（preauthorized 授予时如实分类）。窗口按最小化处理未关闭（用户正在使用）。flow id cloudmusic-recheck1。
 - **场景轨探测与 app-launch-observe 复验（2026-10-01）**：本机探测——网易云已装（正以托盘模式运行、无主窗）、夸克/腾讯会议未装。app-launch-observe 以记事本为目标复验通过（launch→wait→observe→verify 全链、2 步 attempts 全 1、逐调用与 consent 证据齐、现场清零；flow id alo-recheck1）。cloudmusic-playback 留待用户方便时执行（需唤起主窗并 toggle 播放四轮）；quark/tencent 需安装或换机。
 
 - **修复检测/auto_resume 全链真机验收（纯文件流零桌面依赖演示）**：action_failed 暂停 → 5s 静默探测 → **Retriable**（before_ok 且 verify 未过）自动续 #1 → **AlreadyDone**（verify 已过）自动续 #2 推进至下一步 → 第 3 次判定满足但**预算（2 次）耗尽不再派发** → 手动 resume 收口；**急停在场时判定满足也零派发**，recover 后手动续跑正常。证据落 `flows/<id>/probe.jsonl`。关键语义实录：探测的是失败步骤的 before/verify 谓词，run-only 步骤（无谓词）永远 pending 不自动续；带 before 的步骤首败 reason=precondition_failed，不进探测目标。横条"无后台处理闪烁"的视觉确认仍待用户顺带观察。
