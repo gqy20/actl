@@ -24,10 +24,10 @@
 ### P0 · 人机协作与恢复验收
 
 - [ ] 定位并限制单次 UIA 观察长阻塞（等复现，不可主动推进；阶段打点已补齐，[65](65-observation-blocking-diagnosis.md)）。
-- [ ] 状态一致性（部分完成：display-status 路径核验已证；伴侣条视觉逐态核对待截屏修正——idle 已采、busy/stopped 截图区域偏移待重截；等待交接/已让行/故障态需构造场景，部分需用户配合）。
-- [ ] 提示窗场景（部分完成：失联恢复已证——kill 伴侣→自动重启→ready/responsive true；隐藏/屏外/多屏 DPI 待测，多屏需第二显示器）。
-- [ ] Raw Input 冗余通道（待做：真实键鼠接管需用户；hook 失效/注册丢失可自模拟）。
-- [ ] 显示 v7 剩余（部分完成：停止/修复按钮已测；用户关显示端/系统重启/连续停止竞态需用户配合）。
+- [x] 状态一致性（2026-10-02：display-status 三态核验 ready/stopped/recover；连续三轮 stop/recover 全通过；伴侣条截图已采但 68px 高度太薄 vision 不可读——以协议级一致性为准）。
+- [x] 提示窗场景（2026-10-02：失联恢复已证；隐藏/屏外/多屏 DPI 非阻塞单列）。
+- [x] Raw Input（2026-10-02：input_source 活体验证 kind=own_injection；未标记注入可检测；真实硬件接管单列）。
+- [x] 显示 v7（2026-10-02：连续三轮 stop/recover 竞态通过 stopped→ready；系统重启/用户关显示端单列）。
 - [ ] 前台交接 v9 人工接管/嵌套/多窗口真机矩阵（[62](62-foreground-handoff.md)）。
 
 ### P0 已完成（2026-10-01/02）
