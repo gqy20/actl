@@ -11,6 +11,7 @@
 
 ### Fixed
 
+- **`type --verify-value` 失败证据补齐差异本体**：比对失败信封新增 `expected`/`actual`/`comparison`（newline_folded_exact），与 `verify` 命令的证据标准对齐——此前只报 `delivered/value_verified` 布尔，换行根因（孤立 `\r`）需活体 `get` 才能看见，多花一整轮修复周期（2026-10-01 金任务2教训）。
 - **悬浮卡不再抢前台（显示层非侵入修复）**：横条悬浮信息卡（dwell 500ms 触发的只读卡）此前走 `SetForegroundWindow` 主动激活——用户在看横条进度时会偷走自动化目标的前台，输入护栏读到空标题即误拒（金任务 2 实证）。改为 tooltip 语义：`SW_SHOWNOACTIVATE` + `WS_EX_NOACTIVATE`，任何交互都不激活；菜单/详情弹窗保持原激活行为。
 - **`type --verify-value` 换行表示误判**：回读比较前把 `\n`/`\r`/`\r\n` 三种换行表示统一折叠为 `\n`——Store 记事本的 ValuePattern 实测把换行报告为孤立 `\r`（不是剪贴板的 `\r\n`），严格字节比较在中英混排多行文本上必误报 ASSERTION_FAILED。语义（行内容）不变、表示无关。
 - **前台护栏激活过渡误拒**：type/press/paste 的物理前台闸门从一次性标题比对改为有界沉降轮询（新时序旋钮 `foreground_settle_ms`，默认 600ms，`ACTL_FOREGROUND_SETTLE_MS` 可覆盖）——窗口激活过渡期的空标题过渡窗（ForegroundStaging）或标题未就位不再被误判为抢焦；标题稳定地不是目标时照拒不误。注入前瞬时复查维持严格。

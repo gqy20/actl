@@ -624,7 +624,7 @@ NOT_ACTIONABLE 显示或窗口未就绪；ABORTED 用户停止；INTERNAL 持久
   可选在原控件上最多等待 2000ms，ValuePattern 优先、不可用时 TextPattern，精确比较完整字符串，
   包括空串；换行在比较前折叠为 \n（\r、\r\n、\n 三种表示在剪贴板/UIA 提供方之间等价，Store 记事本 ValuePattern 实测报孤立 \r），语义为行内容精确比较、表示无关，不重复输入。成功新增 `focus_verified:true`，`value_verified:true`；
   未要求读回时后者为 null。读回不符/不可读返回 `ASSERTION_FAILED`；实例改变返回 `STALE_REF`。
-  错误 evidence 含 delivered/value_verified；输入可能已经生效，调用方先核实，不能直接重放。
+  错误 evidence 含 delivered/value_verified/expected/actual/comparison（newline_folded_exact——与 verify 命令证据标准对齐，差异本体首份信封可见）；输入可能已经生效，调用方先核实，不能直接重放。
 - `press <keys> --app X [--target <selector>] [--snapshot ID]`：`--snapshot` 要求 `--target`。
   指定目标时只断言其已拥有焦点，不切换窗口、不 SetFocus、不猜测首个 Edit；不符返回
   `NOT_ACTIONABLE`，尚未发键。目标歧义遵循现有 `AMBIGUOUS`，ref 可绑定快照身份。

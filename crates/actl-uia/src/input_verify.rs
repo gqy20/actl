@@ -10,6 +10,24 @@ fn normalize_newlines(s: &str) -> String {
     s.replace("\r\n", "\n").replace('\r', "\n")
 }
 
+/// 比对失败信封:与 verify 命令的证据标准对齐(docs/06)——失败必须能直接
+/// 看出差异本体(expected/actual),换行根因(孤立 \r)在首份信封即可见,
+/// 不必再活体观测(2026-10-01 金任务2教训:实际值只报布尔多花一整轮)。
+fn mismatch_error(delivered: usize, expected: &str, actual: &str) -> CtlError {
+    CtlError::with_evidence(
+        ErrorCode::AssertionFailed,
+        "input was delivered but value readback did not match within 2000ms; do not replay input",
+        json!({
+            "delivered": delivered,
+            "value_verified": false,
+            "readable": true,
+            "expected": expected,
+            "actual": actual,
+            "comparison": "newline_folded_exact"
+        }),
+    )
+}
+
 fn readback(
     result: Result<Option<String>, CtlError>,
     delivered: usize,
@@ -52,11 +70,7 @@ pub(crate) fn verify_value(
             return Ok(());
         }
         if std::time::Instant::now() >= deadline {
-            return Err(CtlError::with_evidence(
-                ErrorCode::AssertionFailed,
-                "input was delivered but value readback did not match within 2000ms; do not replay input",
-                json!({"delivered":delivered,"value_verified":false,"readable":true}),
-            ));
+            return Err(mismatch_error(delivered, expected, &value));
         }
         std::thread::sleep(std::time::Duration::from_millis(crate::timing().poll_ms));
     }
@@ -76,6 +90,18 @@ mod tests {
         // 无换行与空串不受影响。
         assert_eq!(normalize_newlines("abc"), "abc");
         assert_eq!(normalize_newlines(""), "");
+    }
+    #[test]
+    fn mismatch_evidence_carries_expected_and_actual() {
+        // 与 verify 命令证据标准对齐:expected/actual 直接入信封。
+        let error = mismatch_error(19, "golden task 2\n第二行中文", "golden task 2\r第二行中文");
+        assert_eq!(error.code, ErrorCode::AssertionFailed);
+        let evidence = error.evidence.unwrap();
+        assert_eq!(evidence["expected"], "golden task 2\n第二行中文");
+        assert_eq!(evidence["actual"], "golden task 2\r第二行中文");
+        assert_eq!(evidence["delivered"], 19);
+        assert_eq!(evidence["value_verified"], false);
+        assert_eq!(evidence["comparison"], "newline_folded_exact");
     }
     #[test]
     fn failed_readback_retains_delivery_and_provider_evidence() {
