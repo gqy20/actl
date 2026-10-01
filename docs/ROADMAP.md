@@ -33,8 +33,7 @@
 
 ### 原生迁移后待验收
 
-- [ ] 在已确认现场复验 cloudmusic-playback、quark-search、tencent-meeting-draft/date 与 app-launch-observe；保持同一 flow ID，补逐调用、文件哈希与清理证据。
-- [ ] 重建已退役的跨应用搬运、坐标输入、动态网站深测和参数扫描验收。旧脚本依赖硬编码 ref、既有用户窗口或盲重试，清理不表示能力已验收。范围与替代入口见 [61](61-native-tooling-migration.md)。
+- [ ] 场景复验推进（2026-10-01 实况）：app-launch-observe 已用记事本复验通过（launch→wait→observe→verify 全链、逐调用与清理证据、attempts 全 1，flow id alo-recheck1）——流程机制就绪，真实应用面待补：cloudmusic-playback 待用户方便时执行（应用正以托盘模式运行、无主窗，执行需唤起主窗并 toggle 播放四轮）；quark-search 与 tencent-meeting-draft/date 本机未安装，无法复验（需安装或换机后推进）。
 
 ### 执行顺序
 
