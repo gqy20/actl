@@ -11,6 +11,7 @@
 
 ### Added
 
+- **preview 框语义澄清（操作矩形，非视觉标注）**：黄框渲染的是 UIA provider 报告的操作矩形（`--physical` 点击落点为其中心，pointer 物理链同源）——与视觉边框的偏差是**物理点击风险信号**而非渲染缺陷，把框"修"得贴合视觉等于藏掉风险。默认 message、help、docs/06 契约、docs/31 判定树同步该语义；核对闭环 = preview 输出的 bounds 数字 + `screenshot --rect` 区域截图（窗口模式抓不到独立置顶的预览框，实测确认）。记事本编辑器实测贴合 1–3px、粘贴前后 bounds 稳定。
 - **`focus-report` 只读诊断命令**：三视图并列——UIA 焦点元素、物理焦点根窗（GetGUIThreadInfo）、物理前台窗（各带 hwnd/title/pid 身份），附进程一致性事实信号。用途：元素选择与焦点争议的交叉比对——WinUI 上 UIA focused element 实测会谎报，此前要读引擎源码才能理解护栏拒绝，现在一条命令出全部证据；判读规则（物理层权威）见 docs/31 组件选择判定树。
 - **`snapshot-diff` 诊断动词（devtools）**：`cargo xtask diagnose snapshot-diff --from <id> --to <id>` 按 runtime_id 对比两份历史快照，输出消失/新增/同身份但元数据变化三类差异（列表截断 20、计数完整）——回答"组件去哪了"，替代人工 diff 两份 JSON。
 

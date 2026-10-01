@@ -120,6 +120,9 @@ state/run 响应的步骤可带 outputs，显式保存的业务数据不受 erro
 
 `preview <target> --app <window> [--snapshot <id>] [--message <text>] [--duration <ms>]`。
 只展示已定位 UIA 元素的边框和调用方提供的动作说明，不执行目标动作、输入、剪贴板修改或授权。
+框渲染的是 **UIA provider 报告的操作矩形**（`--physical` 点击落点为其中心，pointer 物理链同源），
+与视觉边框的偏差是**物理点击风险信号**而非渲染缺陷；核对用 `screenshot --rect` 区域模式
+（窗口模式抓目标窗口表面，拍不到独立置顶的预览框）。
 默认说明为预览提示；说明须为 1–160 字符且无控制字符，duration 为 500–30000ms（默认 3000）。
 坐标目标拒绝；ref 必须绑定 snapshot，语义目标每次定位。支持组合选择器，歧义沿用 AMBIGUOUS，不自动选择候选。
 临时窗口不激活、不修改 flow 的显示会话；可关闭或超时结束。不允许作为持久化 flow 的 run/check，不构成业务结果验证。
