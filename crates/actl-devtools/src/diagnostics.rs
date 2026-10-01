@@ -69,6 +69,8 @@ pub fn run(kind: &str, args: &Args) -> Result<Value> {
             "from",
             "to",
             "match",
+            "seconds",
+            "pid",
         ],
         &[],
     )?;
@@ -95,6 +97,53 @@ pub fn run(kind: &str, args: &Args) -> Result<Value> {
                 "closed": closed,
                 "window_present": after["ok"] == true,
             }));
+        }
+        if kind == "title-watch" {
+            // 标题监视器:按拍采样目标窗标题,记录变化事件与时刻——用于观察
+            // 激活过渡/加载期的标题瞬态(前台护栏 actual="" 类问题的取证)。
+            let hwnd = args.get("hwnd")?;
+            let seconds = args.number("seconds", 5, 1, 120)?;
+            let start = std::time::Instant::now();
+            let mut last: Option<String> = None;
+            let mut events = vec![];
+            while start.elapsed().as_secs() < seconds {
+                let list = c.call(&["list-windows", "--native", "--hwnd", hwnd])?;
+                let title = list["windows"][0]["title"].as_str().map(str::to_owned);
+                if title != last {
+                    events.push(json!({"elapsed_ms": start.elapsed().as_millis(), "title": title}));
+                    last = title;
+                }
+                std::thread::sleep(Duration::from_millis(200));
+            }
+            return Ok(json!({"status": "watched", "seconds": seconds, "events": events}));
+        }
+        if kind == "close-gone" {
+            // close→gone 计时器:对调用方自有窗口发优雅关闭,计时窗口消失
+            // 各阶段——收尾拖尾取证的标准化(替代手写计时循环)。进程退出
+            // 计时由 verify-closed(实例核验)承载,本动词不重复。
+            let hwnd = args.get("hwnd")?;
+            let start = std::time::Instant::now();
+            c.call(&["close-window", "--hwnd", hwnd])?;
+            let close_ms = start.elapsed().as_millis();
+            loop {
+                let list = c.raw(&["list-windows", "--native", "--hwnd", hwnd])?;
+                let present = list["windows"].as_array().is_some_and(|w| !w.is_empty());
+                if !present {
+                    return Ok(json!({
+                        "status": "gone",
+                        "close_ms": close_ms,
+                        "window_gone_ms": start.elapsed().as_millis(),
+                    }));
+                }
+                if start.elapsed() >= Duration::from_secs(30) {
+                    return Ok(json!({
+                        "status": "window_remains",
+                        "close_ms": close_ms,
+                        "waited_ms": start.elapsed().as_millis(),
+                    }));
+                }
+                std::thread::sleep(Duration::from_millis(250));
+            }
         }
         let state = c.call(&["execution-status"])?;
         report["execution"] = state;
