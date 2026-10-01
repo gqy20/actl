@@ -539,12 +539,66 @@ impl Host for Adapter<'_> {
         );
     }
 }
+/// 模板文件字节指纹(FNV-1a 双通道,与 handoff::plan_fingerprint 同算法族):
+/// flow-status 陈旧计划提示用——重读模板重算,与冻结时记录不一致即提示
+/// "模板已改,重试仍跑旧路线"。防对冻结计划验证新修复(ROADMAP 实录废过两次)。
+fn bytes_fingerprint(bytes: &[u8]) -> String {
+    let (mut h1, mut h2) = (0xcbf2_9ce4_8422_2325u64, 0x9e37_79b9_7f4a_7c15u64);
+    for &b in bytes {
+        h1 = (h1 ^ u64::from(b)).wrapping_mul(0x0000_0100_0000_01b3);
+        h2 = (h2 ^ u64::from(b).rotate_left(7)).wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    format!("{h1:016x}{h2:016x}")
+}
+/// flow-run 时旁车记录源模板(路径+字节指纹);失败不阻断——提示性特征。
+fn record_source(store: &Store, file: &str) {
+    let Ok(template) = std::path::Path::new(file).canonicalize() else {
+        return;
+    };
+    let Ok(bytes) = std::fs::read(&template) else {
+        return;
+    };
+    let record = json!({
+        "path": template.to_string_lossy(),
+        "fingerprint": bytes_fingerprint(&bytes),
+        "recorded_ms": actl_core::state::unix_ms(),
+    });
+    if let Ok(text) = serde_json::to_vec(&record) {
+        let _ = std::fs::write(store.dir.join("source.json"), text);
+    }
+}
+/// 陈旧计划提示:模板字节指纹与冻结记录比对。旧流程无 source.json 时返回
+/// null(零噪音);模板不可读时 changed=null 并说明原因,不臆断。
+fn template_hint(store: &Store) -> Value {
+    let Some(record) = std::fs::read(store.dir.join("source.json"))
+        .ok()
+        .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
+    else {
+        return Value::Null;
+    };
+    let path = record["path"].as_str().unwrap_or_default().to_owned();
+    let frozen = record["fingerprint"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    match std::fs::read(&path) {
+        Ok(bytes) => {
+            let changed = frozen != bytes_fingerprint(&bytes);
+            json!({
+                "source_path": path,
+                "changed": changed,
+                "hint": if changed { "模板已改,重试仍跑冻结的旧路线;验证新修复需新任务" } else { "" },
+            })
+        }
+        Err(_) => json!({"source_path": path, "changed": null, "hint": "模板不可读,无法比对"}),
+    }
+}
 fn state(store: &Store) -> Result<Value, CtlError> {
     let (_, run) = store.load()?;
     let active = store.active()?;
     let interrupted = run.status == Status::Running && !active;
     Ok(
-        json!({"run":run,"runner_active":active,"interrupted":interrupted,"pause_requested":store.pause_requested()}),
+        json!({"run":run,"runner_active":active,"interrupted":interrupted,"pause_requested":store.pause_requested(),"template":template_hint(store)}),
     )
 }
 fn load_plan(
@@ -630,6 +684,7 @@ pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
             actl_core::stop::check_current()?;
             resources.create()?;
             let mut run = store.create(&plan, id)?;
+            record_source(&store, file);
             let active = store.lock(false)?;
             let mut host = Adapter {
                 plan: &plan,

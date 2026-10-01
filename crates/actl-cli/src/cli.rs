@@ -862,7 +862,7 @@ fn after_help_for(name: &str) -> Option<&'static str> {
             "Example:\n  actl flow-run --file skills/actl/workflows/vscode-edit.yml --id vscode-01\nOptional --inputs values.yml overrides declared defaults; --paused explicitly registers without executing steps. After full preflight, resources create isolated directories/text files or copy bundled assets once. Saves resolved immutable plan and durable state. Resume never rereads inputs or initializes resources. Physical actions retain explicit authorization.\nErrors: PROTOCOL invalid/reused ID/resource | NOT_ACTIONABLE executor busy | ABORTED stop | INTERNAL storage"
         }
         "flow-status" => {
-            "Example:\n  actl flow-status --id report-01\nReports run state, declared saved outputs, pause request and runner_active. Output contents are not redacted by error evidence policy. An inactive running record is interrupted.\nErrors: PROTOCOL invalid ID/state | INTERNAL storage"
+            "Example:\n  actl flow-status --id report-01\nReports run state, declared saved outputs, pause request and runner_active. template carries the stale-plan hint: when the source template's byte fingerprint differs from the frozen record, changed=true warns that retries still run the old frozen plan (verify new fixes in a new task); null when the run predates source recording or the template is unreadable.\nErrors: PROTOCOL invalid ID/state | INTERNAL storage"
         }
         "flow-pause" => {
             "Example:\n  actl flow-pause --id report-01\nRequests a boundary pause; workflow waits also check each poll. Only status=paused confirms it. In-flight COM calls and other CLI calls are not interrupted.\nErrors: PROTOCOL invalid ID/state | INTERNAL storage"

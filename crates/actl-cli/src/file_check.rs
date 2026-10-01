@@ -410,18 +410,42 @@ fn settle(mut read: impl FnMut() -> Result<Value, CtlError>) -> Result<Value, Ct
         }
     }
 }
+/// IO 失败的可区分分类（docs/ROADMAP P1 补：共享冲突 vs 权限 vs 不存在——
+/// 内容不符已有 expected 语义，此项只细分打不开的原因）。NotFound 保持
+/// ASSERTION_FAILED（文件可能稍后出现，settle 窗内重试）；其余 NOT_ACTIONABLE，
+/// evidence 携带 io_kind/os_code 供失败处置协议直接读证。
+fn io_failure(error: &std::io::Error) -> CtlError {
+    let os_code = error.raw_os_error();
+    let io_kind = match os_code {
+        // ERROR_SHARING_VIOLATION：文件被 Excel/Word 等持有句柄
+        Some(32) => "sharing_violation",
+        // ERROR_ACCESS_DENIED / ERROR_SHARING_VIOLATION 之外按 std 分类
+        _ => match error.kind() {
+            std::io::ErrorKind::PermissionDenied => "permission_denied",
+            std::io::ErrorKind::InvalidFilename => "invalid_filename",
+            _ => "other",
+        },
+    };
+    CtlError::with_evidence(
+        ErrorCode::NotActionable,
+        "cannot read evidence file",
+        json!({"io_kind": io_kind, "os_code": os_code, "raw": error.to_string()}),
+    )
+}
+
 fn verify_once(path: &str, kind: &str, expected: &str, subset: bool) -> Result<Value, CtlError> {
     let expected = expectation(expected)?;
     let actual = if matches!(kind, "text" | "json") {
         let file = std::fs::File::open(path).map_err(|error| {
-            CtlError::new(
-                if error.kind() == std::io::ErrorKind::NotFound {
-                    ErrorCode::AssertionFailed
-                } else {
-                    ErrorCode::NotActionable
-                },
-                "cannot read evidence file",
-            )
+            if error.kind() == std::io::ErrorKind::NotFound {
+                CtlError::with_evidence(
+                    ErrorCode::AssertionFailed,
+                    "cannot read evidence file",
+                    json!({"io_kind": "not_found", "os_code": error.raw_os_error()}),
+                )
+            } else {
+                io_failure(&error)
+            }
         })?;
         let mut text = String::new();
         file.take(LIMIT + 1)
@@ -466,6 +490,24 @@ fn inspect_office(path: &str, kind: &str) -> Result<Value, CtlError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn io_failure_classifies_sharing_violation_permission_and_other() {
+        // 共享冲突(os 32,Excel/Word 持句柄)、权限拒绝、其他——分类入 evidence
+        let shared = std::io::Error::from_raw_os_error(32);
+        let e = io_failure(&shared);
+        assert_eq!(e.code, ErrorCode::NotActionable);
+        assert_eq!(e.evidence.clone().unwrap()["io_kind"], "sharing_violation");
+
+        let denied = std::io::Error::from(std::io::ErrorKind::PermissionDenied);
+        let e = io_failure(&denied);
+        assert_eq!(e.evidence.clone().unwrap()["io_kind"], "permission_denied");
+
+        let broken = std::io::Error::from_raw_os_error(1234);
+        let e = io_failure(&broken);
+        let ev = e.evidence.clone().unwrap();
+        assert_eq!(ev["io_kind"], "other");
+        assert_eq!(ev["os_code"], 1234);
+    }
     #[test]
     fn ownership_requires_a_complete_path_argument() {
         assert!(command_has_path(

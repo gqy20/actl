@@ -357,6 +357,26 @@ impl Drop for Sandbox {
 const SIMPLE: &str = "version: 1\nname: Inspect\nsteps:\n  - id: one\n    title: System\n    run: {command: status}\n  - id: two\n    title: System again\n    pause_before: true\n    run: {command: status}\n";
 
 #[test]
+fn flow_status_flags_stale_template_after_freeze() {
+    // 陈旧计划提示(spec):flow-run 冻结计划时旁车记录源模板指纹;
+    // 模板改写后 flow-status 须提示"重试仍跑旧路线"——防对冻结计划验证
+    // 新修复(ROADMAP 实录废过两次重试)。旧流程无记录时字段为 null。
+    let s = Sandbox::new();
+    let file = s.file(SIMPLE);
+    let (code, result) = s.invoke(&["flow-run", "--file", &file, "--id", "stale", "--paused"]);
+    assert_eq!(code, 0, "{result}");
+    let (code, result) = s.invoke(&["flow-status", "--id", "stale"]);
+    assert_eq!(code, 0, "{result}");
+    assert_eq!(result["data"]["template"]["changed"], false, "{result}");
+    std::fs::write(&file, "version: 1\nname: Inspect v2\nsteps:\n  - id: one\n    title: System\n    run: {command: status}\n").unwrap();
+    let (code, result) = s.invoke(&["flow-status", "--id", "stale"]);
+    assert_eq!(code, 0, "{result}");
+    assert_eq!(result["data"]["template"]["changed"], true, "{result}");
+    let hint = result["data"]["template"]["hint"].as_str().unwrap();
+    assert!(hint.contains("旧路线"), "hint explains frozen plan: {hint}");
+}
+
+#[test]
 fn data_output_persists_across_cli_resume_and_revalidates_bound_args() {
     let s = Sandbox::new();
     let file = s.file("version: 1\nname: Bind\nsteps:\n - id: source\n   title: Read\n   run: {command: status}\n   outputs: {os: {pointer: /os, type: string}}\n - id: sink\n   title: Read again\n   run: {command: wait, args: [--window, ACTL-ABSENT, --timeout, '1'], bind: {'3': source.os}}\n");

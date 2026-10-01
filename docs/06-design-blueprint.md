@@ -748,6 +748,15 @@ UIA 写操作也按桌面操作显示，不能仅因无物理键鼠就声称可�
 - 与 `wait --idle` 组合即"人不在时干活"的两件套（docs/09 §6.2）；扫描/采集类长任务的会话切换
   不再打断用户当前窗口。
 
+## flow-status 陈旧计划提示（2026-10-01）
+
+`flow-run` 冻结计划时旁车记录源模板字节指纹（`flows/<id>/source.json`：
+路径 + FNV-1a 双通道指纹，与 handoff::plan_fingerprint 同族；记录失败不阻断）。
+`flow-status` 的 data 增加 `template` 字段：重读模板重算比对——不一致时
+`changed:true` 且 hint 提示"模板已改，重试仍跑冻结的旧路线；验证新修复需新任务"；
+早于本特性创建的流程无 source.json 时为 null（零噪音）；模板不可读时
+`changed:null` 并说明原因，不臆断。防对冻结计划验证新修复（ROADMAP 实录废过两次重试）。
+
 ## 流程残留批量归档（flow-clean）
 
 `flow-clean [--older-than-minutes N] [--dry-run]`：批量归档历史非完结流程

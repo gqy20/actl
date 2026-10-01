@@ -12,6 +12,14 @@
 ### Added
 
 - **`flow-clean` 补记（文档欠账）**：命令随 20c9726 入库但当时未同步 docs/06 契约与本文件——批量归档历史非完结流程（默认 60 分钟阈值；completed 与存活执行器不动；归档即整目录 rename 到 `flows-archived/`，证据全保留；`--dry-run` 列候选），2026-10-01 整理 roadmap 时发现补齐。
+- **verify-file IO 失败可区分报错**：打不开证据文件时按原因分类入 evidence（`io_kind`: sharing_violation/permission_denied/invalid_filename/other + `os_code` + 原文）——共享冲突（Excel/Word 持句柄）与权限问题一眼可辨；NotFound 维持 ASSERTION_FAILED（settle 窗内可重试）。
+- **flow-status 陈旧计划提示**：flow-run 冻结计划时旁车记录源模板字节指纹（`flows/<id>/source.json`，FNV-1a 双通道与 plan_fingerprint 同族）；flow-status 重读模板比对，不一致时 `template.changed=true` 并提示"模板已改，重试仍跑冻结的旧路线；验证新修复需新任务"——防对冻结计划验证新修复（ROADMAP 实录废过两次重试）。旧流程无记录时字段为 null 零噪音；模板不可读时 changed=null 不臆断。契约测试覆盖改模板→提示链路。
+- **`diagnose title-watch` / `close-gone`（devtools）**：标题瞬态监视（按拍采样记录变化事件，前台护栏 actual="" 类问题取证）与 close→gone 计时（优雅关闭→窗口消失各阶段耗时，收尾拖尾取证标准化），活体验证后入库。诊断动词家族至此：cleanup-tabs/snapshot-diff/title-watch/close-gone + focus-report。
+
+### Documentation and validation
+
+- **修复检测/auto_resume 全链真机验收（纯文件流零桌面依赖演示）**：action_failed 暂停 → 5s 静默探测 → **Retriable**（before_ok 且 verify 未过）自动续 #1 → **AlreadyDone**（verify 已过）自动续 #2 推进至下一步 → 第 3 次判定满足但**预算（2 次）耗尽不再派发** → 手动 resume 收口；**急停在场时判定满足也零派发**，recover 后手动续跑正常。证据落 `flows/<id>/probe.jsonl`。关键语义实录：探测的是失败步骤的 before/verify 谓词，run-only 步骤（无谓词）永远 pending 不自动续；带 before 的步骤首败 reason=precondition_failed，不进探测目标。横条"无后台处理闪烁"的视觉确认仍待用户顺带观察。
+- **UWP 最小化挂起观察**：4 分钟最小化后标题路径 restore 正常（1053ms）——类配对修复后探针只看宿主窗（不挂起），原 CoreWindow 挂起路径疑似绕开；更长放置场景留观察项。
 - **`diagnose cleanup-tabs` 清场动词（devtools）**：按名称子串关标签+弹层「不保存」有界轮询（与夹具 close_task_tabs 同路线泛化）。沉淀背景：ad-hoc 清场脚本三次手写"选中标签+ctrl+w+弹层点不保存"三次出错（单次采样不等弹层渲染、grep 不匹配静默跳过、ref 提取残渣），用户当场截获未处理弹窗后入库——清场不再手写。活体验证：未保存标签弹层正确轮询处理、窗口随末标签关闭、无残留。
 - **UWP 标题路径类配对下沉引擎**：同一标题下框架窗（`ApplicationFrameWindow`）与应用 `CoreWindow`/标题栏装饰窗并存时，`focus-window`/`restore-window`/`close-window` 按标题解析在 native→UIA 身份复核处恒 STALE_REF（provider 报告进程/名称与 native 层不一致）。`title_elements` 现按类配对：有框架窗时只保留框架窗（可操作真顶层窗，CoreWindow 托管其内），无框架窗的候选集不受影响。活体验证：计算器 focus/minimize→restore/close 标题路径全部通过（此前恒败）；夹具层同族修复（金任务 1 owner class 过滤）先验证了方向。残留：长时间最小化后 UWP 挂起导致 WM_NULL 探针 window_unresponsive 的恢复前解除挂起，另行推进。
 - **preview 框语义澄清（操作矩形，非视觉标注）**：黄框渲染的是 UIA provider 报告的操作矩形（`--physical` 点击落点为其中心，pointer 物理链同源）——与视觉边框的偏差是**物理点击风险信号**而非渲染缺陷，把框"修"得贴合视觉等于藏掉风险。默认 message、help、docs/06 契约、docs/31 判定树同步该语义；核对闭环 = preview 输出的 bounds 数字 + `screenshot --rect` 区域截图（窗口模式抓不到独立置顶的预览框，实测确认）。记事本编辑器实测贴合 1–3px、粘贴前后 bounds 稳定。
