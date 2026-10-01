@@ -232,7 +232,13 @@ pub fn view(states: &[SessionState], now: u64, stop_ms: Option<u64>, busy: Optio
     let target = if target.starts_with("hwnd:") {
         "目标窗口"
     } else {
+        // 路径类目标只显示文件名(横条空间宝贵,完整路径是废话;
+        // 全路径保留在 details 里供需要时查看)。
         target
+            .rsplit(['/', '\\'])
+            .next()
+            .filter(|s| !s.is_empty())
+            .unwrap_or(target)
     };
     let command = active.map(|a| a.kind.as_str()).unwrap_or(&s.command);
     let mut text = match mode {
