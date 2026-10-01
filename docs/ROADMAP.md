@@ -33,7 +33,7 @@
 
 ### 原生迁移后待验收
 
-- [ ] 场景轨剩余（2026-10-01 实况）：app-launch-observe 与 **cloudmusic-playback 均已复验通过**（后者 flow id cloudmusic-recheck1：9 步 attempts 全 1、播放状态四轮 toggle-restore 后回到基线、consent 一等字段 input_source 在时间线中工作、现场仅最小化未关闭——用户正在使用）；quark-search 与 tencent-meeting-draft/date 本机未安装，需安装或换机后推进。
+- [ ] 场景轨剩余（2026-10-01 实况）：app-launch-observe、cloudmusic-playback、**quark-search 均已复验通过**（quark 修两处版本漂移后 5 步 4 绿+1 手工补证：搜网盘 Edit 改 name_contains、URL query 断言改内容断言；侧栏入口定案 Text 节点几何+物理点击路线，见 pack 复验更新；flow id quark-recheck3）；遗留：screenshot 的 ${run.dir} 路径展开待查、tencent-meeting-draft/date 待复验（已确认安装于 D:	oolsTecentWeMeet）。
 
 ### 执行顺序
 

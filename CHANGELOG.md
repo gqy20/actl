@@ -27,6 +27,7 @@
 - **`diagnose title-watch` / `close-gone`（devtools）**：标题瞬态监视（按拍采样记录变化事件，前台护栏 actual="" 类问题取证）与 close→gone 计时（优雅关闭→窗口消失各阶段耗时，收尾拖尾取证标准化），活体验证后入库。诊断动词家族至此：cleanup-tabs/snapshot-diff/title-watch/close-gone + focus-report。
 
 ### Documentation and validation
+- **quark-search 真机复验通过（2026-10-01）**：修两处应用版本漂移后业务链全绿——①侧栏入口定案新路线：UIA 桥接 Button 几何退化（bounds 零/clickable point 原点）且 Invoke 不导航，改用页面渲染的 Text 节点（几何完整）preview 读 bounds + 中心物理点击（传统 RPA 能定位是走 MSAA/IA2 legacy 树，与 UIA 两套桥——已记录 pack）；②模板选择器修正：搜网盘 Edit 精确名→name_contains、search/evidence 的 URL query 断言→结果页内容断言（uccd:// 内部页不带 keyword 参数）。empty-count 渲染竞态经 resume 重试通过；evidence 步 screenshot 的 ${run.dir} 展开报路径不存在（待查，手工截图补证）。flow id quark-recheck3。
 - **cloudmusic-playback 真机复验通过（2026-10-01，用户授权轮）**：托盘模式唤起主窗后全链通过——baseline 核对 → UIA click 与 ctrl+p 键盘两通道各两轮 toggle-restore（9 步 attempts 全 1），播放状态每轮切回基线；时间线 14 组逐调用证据、consent_decision 带一等字段 input_source 实战工作（preauthorized 授予时如实分类）。窗口按最小化处理未关闭（用户正在使用）。flow id cloudmusic-recheck1。
 - **场景轨探测与 app-launch-observe 复验（2026-10-01）**：本机探测——网易云已装（正以托盘模式运行、无主窗）、夸克/腾讯会议未装。app-launch-observe 以记事本为目标复验通过（launch→wait→observe→verify 全链、2 步 attempts 全 1、逐调用与 consent 证据齐、现场清零；flow id alo-recheck1）。cloudmusic-playback 留待用户方便时执行（需唤起主窗并 toggle 播放四轮）；quark/tencent 需安装或换机。
 
