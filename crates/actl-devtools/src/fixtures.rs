@@ -59,7 +59,7 @@ fn owner(
         json!({"hwnd":window["hwnd"],"pid":pid,"class":window["class"],"marker":marker,"start":metadata["start"],"program":metadata["program"],"created_unix_ms":metadata["created_unix_ms"]}),
     )
 }
-fn cleanup(c: &mut Context, owner: &Value, tab: bool, browser: bool) -> Result<String> {
+fn cleanup(c: &mut Context, owner: &Value, browser_tab: bool, browser: bool) -> Result<String> {
     require(!c.uncertain, "retain uncertain scene")?;
     require(!c.stopped()?, "retain stopped scene")?;
     let hwnd = owner["hwnd"].to_string();
@@ -83,7 +83,7 @@ fn cleanup(c: &mut Context, owner: &Value, tab: bool, browser: bool) -> Result<S
         list.len() == 1 && checks::matching_identity(owner, &list[0], &process["start"]),
         "window/process identity changed",
     )?;
-    if tab || browser {
+    if browser_tab && browser {
         let snapshot = c.raw(&["snapshot", "--app", &app])?;
         require(
             snapshot["ok"] == true && snapshot["data"]["truncated"] == false,
@@ -92,8 +92,8 @@ fn cleanup(c: &mut Context, owner: &Value, tab: bool, browser: bool) -> Result<S
         let marker = owner["marker"]
             .as_str()
             .ok_or_else(|| io("marker missing"))?;
-        let close = checks::owned_tab(elements(&snapshot["data"])?, marker, tab)?;
-        if tab {
+        let close = checks::owned_tab(elements(&snapshot["data"])?, marker, browser_tab)?;
+        if browser_tab {
             let snapshot_id = snapshot["snapshot_id"]
                 .as_str()
                 .ok_or_else(|| io("snapshot ID missing"))?;
@@ -113,19 +113,181 @@ fn cleanup(c: &mut Context, owner: &Value, tab: bool, browser: bool) -> Result<S
             return Ok("owned_tab_closed".into());
         }
     }
-    c.call(&["close-window", "--hwnd", &hwnd])?;
-    c.call(&[
-        "verify-closed",
-        "--hwnd",
-        &hwnd,
-        "--pid",
-        &pid.to_string(),
-        "--instance",
-        owner["start"]
+    // UWP 进程(计算器)在窗口关闭后驻留——直接 system-close(跳过普通 WM_CLOSE,
+    // 避免窗口被第一次关闭后 system-close 找不到窗口);验证放宽为 verify-window
+    // absent(进程长尾退出不阻塞下一轮)。非 UWP 用 verify-closed 即可。
+    let is_uwp = owner["program"].as_str().is_some_and(|p| {
+        let lower = p.to_ascii_lowercase();
+        // UWP 分支只给 ApplicationFrameHost 承载的应用(计算器等):窗口关闭后进程驻留。
+        // Store 记事本虽从 WindowsApps 别名启动,但行为是普通应用——未保存时弹
+        // 保存对话框,必须走下方处理「不保存」的普通分支(2026-10-01 金任务2实证:
+        // 走 UWP 分支窗口关不掉,清理 retained_for_review 堵塞下一轮)。
+        lower.contains("applicationframehost") || lower.contains("calculatorapp")
+    });
+    if is_uwp {
+        c.call(&["close-window", "--hwnd", &hwnd, "--system-close"])?;
+        c.call(&[
+            "verify-window",
+            "--app",
+            &format!("hwnd:{hwnd}"),
+            "--state",
+            "absent",
+        ])?;
+    } else {
+        // 多标签应用只清理本任务标签(AGENTS):Store 记事本按标签关闭——选中
+        // 标签(selection-item)→ ctrl+w → 未保存弹**窗内弹层**点「不保存」
+        // Button;最后一个标签关闭时窗口随之关闭(单标签 = 关标签即关窗)。
+        // 整窗 WM_CLOSE 路线在「恢复上次会话」下残留标签逐轮累积(2026-10-01
+        // 实证 17 个);「不保存」必须按 Button ref 点——name 选择器同时命中
+        // 弹层 ContentBlock Text(AMBIGUOUS)。
+        let marker = owner["marker"]
             .as_str()
-            .ok_or_else(|| io("process start missing"))?,
-    ])?;
+            .ok_or_else(|| io("marker missing"))?;
+        close_task_tabs(c, &app, marker)?;
+        // 窗口已随标签清空消失;进程可能拖尾退出(Store 打包应用常态,实测
+        // 超过 verify-closed 内置 5s 沉降窗、数十秒内自退)。先核窗口消失,
+        // verify-closed 有界串行重试(每次内部沉降 5s,×3 ≈ 15s);仅剩进程
+        // 拖尾时如实记录状态、不判负——下一轮 preflight 看窗口不看进程,
+        // 与 UWP 分支「进程长尾退出不阻塞下一轮」同族裁决。
+        c.call(&["verify-window", "--app", &app, "--state", "absent"])?;
+        let instance = owner["start"]
+            .as_str()
+            .ok_or_else(|| io("process start missing"))?
+            .to_owned();
+        let pid_text = pid.to_string();
+        for _ in 0..3 {
+            let v = c.raw(&[
+                "verify-closed",
+                "--hwnd",
+                &hwnd,
+                "--pid",
+                &pid_text,
+                "--instance",
+                &instance,
+            ])?;
+            if v["ok"] == true {
+                return Ok("closed_verified".into());
+            }
+        }
+        return Ok("window_closed_process_tailed".into());
+    }
     Ok("closed_verified".into())
+}
+
+/// 按标签关闭本任务标签;未保存内容经窗内弹层「不保存」丢弃。
+/// 第二遍清扫夹具同族残留(notepad-s*):历史失败轮的标签经「恢复上次
+/// 会话」持久化跨进程存活,整窗关闭不清会话——同族前缀是夹具世系的可证
+/// 归属;非本族标签(用户真实内容)不碰。快照失败须区分:NOT_FOUND=窗口
+/// 已关(成功路径),STALE_REF/observation_failed=提供方忙窗(沉降重试)。
+fn close_task_tabs(c: &mut Context, app: &str, marker: &str) -> Result<()> {
+    let gone = |v: &Value| v["ok"] != true && v["error"]["code"] == "NOT_FOUND";
+    let busy = |v: &Value| {
+        v["ok"] != true
+            && v["error"]["code"] == "STALE_REF"
+            && v["error"]["evidence"]["reason"] == "observation_failed"
+    };
+    let tabs_matching = |snapshot: &Value, pred: &dyn Fn(&str) -> bool| -> Option<String> {
+        if snapshot["ok"] != true {
+            return None;
+        }
+        elements(&snapshot["data"])
+            .ok()?
+            .iter()
+            .find(|e| e["role"] == "TabItem" && e["name"].as_str().is_some_and(pred))
+            .and_then(|e| e["ref"].as_str().map(str::to_owned))
+    };
+    let observe = |c: &mut Context| -> Result<Value> {
+        for _ in 0..8 {
+            let snap = c.raw(&["snapshot", "--app", app])?;
+            if gone(&snap) || snap["ok"] == true {
+                return Ok(snap);
+            }
+            if busy(&snap) {
+                std::thread::sleep(std::time::Duration::from_millis(800));
+                continue;
+            }
+            let code: actl_core::ErrorCode = serde_json::from_value(snap["error"]["code"].clone())
+                .map_err(|_| io("unknown CLI error code"))?;
+            return Err(actl_core::CtlError::with_evidence(
+                code,
+                format!(
+                    "snapshot: {}",
+                    snap["error"]["message"]
+                        .as_str()
+                        .unwrap_or("cleanup observation failed")
+                ),
+                snap["error"]["evidence"].clone(),
+            ));
+        }
+        Err(io("cleanup snapshot stayed busy"))
+    };
+    // 第一遍严格本任务 marker;第二遍同族前缀(notepad-s = 夹具世系)
+    for (pred, label) in [
+        (
+            &(|n: &str| n.contains(marker)) as &dyn Fn(&str) -> bool,
+            "task",
+        ),
+        (
+            &(|n: &str| n.contains("notepad-s") && !n.contains(marker)),
+            "lineage",
+        ),
+    ] {
+        for _ in 0..24 {
+            let snapshot = observe(c)?;
+            if gone(&snapshot) {
+                return Ok(());
+            }
+            let Some(tab_ref) = tabs_matching(&snapshot, pred) else {
+                break; // 本遍无匹配标签
+            };
+            let sid = snapshot["snapshot_id"]
+                .as_str()
+                .ok_or_else(|| io("snapshot missing"))?;
+            c.call(&["click", &tab_ref, "--snapshot", sid, "--app", app])
+                .map_err(|e| {
+                    actl_core::CtlError::with_evidence(
+                        e.code,
+                        format!("{label} tab close: {}", e.message),
+                        e.evidence.unwrap_or_else(|| json!({})),
+                    )
+                })?;
+            c.call(&["press", "ctrl+w", "--app", app])?;
+            // 弹层可能迟于 ctrl+w 渲染:有界轮询,「不保存」Button 出现或标签已消失即止
+            for _ in 0..8 {
+                std::thread::sleep(std::time::Duration::from_millis(250));
+                let popup = observe(c)?;
+                if gone(&popup) {
+                    break;
+                }
+                let button = elements(&popup["data"])?.iter().find(|e| {
+                    e["role"] == "Button"
+                        && e["name"].as_str().is_some_and(|n| n.contains("不保存"))
+                });
+                if let Some(button) = button {
+                    let psid = popup["snapshot_id"]
+                        .as_str()
+                        .ok_or_else(|| io("snapshot missing"))?;
+                    let bref = button["ref"]
+                        .as_str()
+                        .ok_or_else(|| io("button ref missing"))?;
+                    c.call(&["click", bref, "--snapshot", psid, "--app", app])?;
+                    break;
+                }
+                // 标签已消失(未修改标签静默关闭)则停止等待弹层
+                if tabs_matching(&popup, pred).is_none() {
+                    break;
+                }
+            }
+        }
+    }
+    let final_snap = observe(c)?;
+    require(
+        gone(&final_snap)
+            || (tabs_matching(&final_snap, &|n| n.contains(marker)).is_none()
+                && tabs_matching(&final_snap, &|n| n.contains("notepad-s")).is_none()),
+        "task or lineage tabs remain after bounded close attempts",
+    )?;
+    Ok(())
 }
 pub fn run(case: &str, args: &Args) -> Result<Value> {
     args.check(&["actl", "output", "hwnd", "runs"], &["physical"])?;
@@ -156,23 +318,24 @@ pub fn run(case: &str, args: &Args) -> Result<Value> {
     let mut failure = result.err();
     if let Some(owner) = owned {
         report["owned"] = owner.clone();
-        if failure.is_none() {
-            match cleanup(
-                &mut c,
-                &owner,
-                matches!(case, "golden-task-2" | "input-target"),
-                case.contains("content-view")
-                    || case == "edge-deep-tree"
-                    || case == "virtualized-list",
-            ) {
-                Ok(state) => report["cleanup"] = json!(state),
-                Err(e) => {
-                    report["cleanup"] = json!("retained_for_review");
+        // AGENTS:"fixture 无论成败统一进入收尾判定并记录清理状态"——
+        // 无论成败都尝试清理;失败时清理失败不覆盖原测试失败原因。
+        let cleanup_result = cleanup(
+            &mut c,
+            &owner,
+            // 记事本不再走标签路径——该路径不处理保存对话框,未保存窗口关不掉,
+            // 堵塞下一轮 preflight(2026-10-01 金任务2十轮全败的根因)。
+            false,
+            case.contains("content-view") || case == "edge-deep-tree" || case == "virtualized-list",
+        );
+        match cleanup_result {
+            Ok(state) => report["cleanup"] = json!(state),
+            Err(e) => {
+                report["cleanup"] = json!("retained_for_review");
+                if failure.is_none() {
                     failure = Some(e);
                 }
             }
-        } else {
-            report["cleanup"] = json!("retained_after_failure");
         }
     }
     report["passed"] = json!(failure.is_none());

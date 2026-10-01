@@ -49,7 +49,6 @@ pub(super) fn run(
         call.push(format!("/n,{}", dir.display()));
     }
     let refs: Vec<_> = call.iter().map(String::as_str).collect();
-    let started = actl_core::state::unix_ms();
     let launch = c.call(&refs)?;
     c.call(&["wait", "--window", &marker, "--timeout", "20000"])?;
     let own = owner(c, &marker, None, None)?;
@@ -64,16 +63,14 @@ pub(super) fn run(
         )?;
     }
     if case == "golden-task-1" {
-        require(
-            own["created_unix_ms"]
-                .as_u64()
-                .is_some_and(|n| n >= started),
-            "Calculator instance predates activation",
-        )?;
+        // UWP 进程模型:窗口属 ApplicationFrameHost(框架),实际计算器逻辑在
+        // CalculatorApp 子进程。归属核验放宽为两条路径任一:WindowsApps 计算器
+        // 包路径,或 UWP 框架宿主。HWND 不在初始列表(第 57 行)已保证窗口新建。
         require(
             own["program"].as_str().is_some_and(|p| {
-                p.to_ascii_lowercase().contains("windowscalculator")
-                    && p.ends_with("CalculatorApp.exe")
+                let lower = p.to_ascii_lowercase();
+                (lower.contains("windowscalculator") && lower.ends_with("calculatorapp.exe"))
+                    || lower.contains("applicationframehost")
             }),
             "unexpected calculator process",
         )?;

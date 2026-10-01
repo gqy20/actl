@@ -9,6 +9,18 @@
 
 - **始终信任此流程（指纹持久信任）**：授权三部曲收官——全局托盘开关 → 会话级 standing → **指纹持久信任**（跨会话免点击）。声明 `approval: standing` 的流程运行时，执行器计算冻结计划的 FNV-1a 双通道 128 位指纹并附在交接请求中；显示端查 `trusted-flows.json` 信任集（显示端 UI 独占写入，有界 128 条）——匹配则即刻 Standing 授予（审计 reason=flow_trusted），不匹配则正常出卡；用户点「开始」后指纹自动入信任集。**模板变更 → 指纹变 → 信任自动失效 → 下次首跑重新出一次卡**。设计见 [32](docs/32-desktop-handoff.md)。
 
+### Fixed
+
+- **悬浮卡不再抢前台（显示层非侵入修复）**：横条悬浮信息卡（dwell 500ms 触发的只读卡）此前走 `SetForegroundWindow` 主动激活——用户在看横条进度时会偷走自动化目标的前台，输入护栏读到空标题即误拒（金任务 2 实证）。改为 tooltip 语义：`SW_SHOWNOACTIVATE` + `WS_EX_NOACTIVATE`，任何交互都不激活；菜单/详情弹窗保持原激活行为。
+- **`type --verify-value` 换行表示误判**：回读比较前把 `\n`/`\r`/`\r\n` 三种换行表示统一折叠为 `\n`——Store 记事本的 ValuePattern 实测把换行报告为孤立 `\r`（不是剪贴板的 `\r\n`），严格字节比较在中英混排多行文本上必误报 ASSERTION_FAILED。语义（行内容）不变、表示无关。
+- **前台护栏激活过渡误拒**：type/press/paste 的物理前台闸门从一次性标题比对改为有界沉降轮询（新时序旋钮 `foreground_settle_ms`，默认 600ms，`ACTL_FOREGROUND_SETTLE_MS` 可覆盖）——窗口激活过渡期的空标题过渡窗（ForegroundStaging）或标题未就位不再被误判为抢焦；标题稳定地不是目标时照拒不误。注入前瞬时复查维持严格。
+
+### Fixed（夹具，devtools）
+
+- **金任务 2 全链修通**（Store 记事本连串根因）：① 启动走 `%LOCALAPPDATA%\Microsoft\WindowsApps\notepad.exe` 执行别名（裸名启动失败致"已存在窗口"恒阻塞）；② 收尾清理无论成败统一执行，且 UWP 判定收窄为 ApplicationFrameHost/CalculatorApp——Store 记事本虽在 WindowsApps 但行为是普通应用，须走普通关闭路径（误走 UWP system-close 时未保存窗口关不掉，`retained_for_review` 堵塞下一轮）；③ 另存为文件名框 `id:1001` 同时命中地址 ToolBar，改为快照后按 `role:Edit`+名称定位；④ 文件名改键盘通道（set-value 写 Edit 的 ValuePattern 不更新 ComboBox 提交值，Enter 会按默认旧名保存弹"确认另存为"）；⑤ 文名录入（清空→输入→回车）与其前置快照做成**阶段化有界重试**——对话框提供方忙窗（UIA_E_TIMEOUT）可击中任一环节，注入前观测失败按错误契约重取快照从失败步续起，对话框已消失时交由 verify-file 终裁；⑥ 误传不存在的 `verify-file --normalize-lines` 旗标移除（text 比较内置 CRLF→LF）。
+- **记事本收尾改按标签清理（多标签纪律）**：整窗 WM_CLOSE 在「恢复上次会话」开启时把未关闭标签逐轮带回、磁盘持久化跨进程存活（实证累积 17 个）。改为选中本任务标签（selection-item）→ `ctrl+w` → 未保存的**窗内弹层**按 Button ref 点「不保存」（name 选择器同时命中弹层 Text，AMBIGUOUS）；最后一个标签关闭时窗口随之关闭。收尾核验先 verify-window absent，再给 verify-closed 有界重试；仅剩进程拖尾时如实记录 `window_closed_process_tailed`、不判负（与 UWP 分支同族裁决）。快照失败区分"窗口已关（NOT_FOUND）"与"提供方忙窗（observation_failed）"，后者沉降重试。非本任务标签不碰，窗口因外来标签存活时如实判负。
+- **金任务 1 归属核验放宽（UWP 进程模型）**：计算器窗口属 ApplicationFrameHost 框架宿主、逻辑在 CalculatorApp 子进程，接受两条路径任一；移除"进程创建时间晚于激活"断言（UWP 复用暂停进程是常态）。
+
 ## [0.1.8] - 2026-09-30
 
 本版是显示端与人机协作体验的大版本：显示协议演进到 v11（预授权 Standing + 有界等待让行），横条信息架构重做（两行展开/悬浮卡/幽灵按钮/步骤链），暂停-修复-继续链路全程"说真话"（上下文按钮语义、障碍提示、修复探测、opt-in 自动续跑），并修复一个输入安全缺陷。
