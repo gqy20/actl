@@ -33,7 +33,7 @@
 
 ### 原生迁移后待验收
 
-- [ ] 场景轨剩余（2026-10-01 实况）：app-launch-observe、cloudmusic-playback、**quark-search 均已复验通过**（quark 修两处版本漂移后 5 步 4 绿+1 手工补证：搜网盘 Edit 改 name_contains、URL query 断言改内容断言；侧栏入口定案 Text 节点几何+物理点击路线，见 pack 复验更新；flow id quark-recheck3）；遗留：screenshot 的 ${run.dir} 路径展开待查、tencent-meeting-draft/date 待复验（已确认安装于 D:	oolsTecentWeMeet）。
+- [ ] 场景轨四场景**全部复验通过**（2026-10-01）：app-launch-observe（记事本）、cloudmusic-playback、quark-search（修两处版本漂移）、**tencent-meeting-draft**（flow id wemeet-draft1：check-date/topic/confirm-date 全绿、日期读回 2026/10/1、主题读回一致；evidence 步 ${run.dir} 截图路径缺陷以手工截图补证——该缺陷跨 quark/wemeet 两场景复现，已单列待办）。预定表单语义选择器（name:开始日期 QDateEdit / name:请输入会议主题）在当前版本直接可用，无需视觉坐标；首页入口仍按档案走截图+physical。draft-date（改日期）变体未跑，与 screenshot 路径缺陷一并遗留。
 
 ### 执行顺序
 
