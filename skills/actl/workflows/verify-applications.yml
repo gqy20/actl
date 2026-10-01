@@ -3284,19 +3284,15 @@
       "section": "excel-table",
       "on_failure": "skip_section",
       "verify": {
-        "command": "verify-closed",
+        "command": "verify-window",
         "args": [
-          "--hwnd",
+          "--app",
           "1",
-          "--pid",
-          "1",
-          "--instance",
-          "pending"
+          "--state",
+          "absent"
         ],
         "bind": {
-          "1": "excel-table-ownership.hwnd",
-          "3": "excel-table-ownership.pid",
-          "5": "excel-table-ownership.start"
+          "1": "excel-table-ownership.hwnd"
         }
       },
       "title": "Exit the emptied frame via the title-bar close command"
@@ -3606,19 +3602,15 @@
       "section": "excel-table",
       "on_failure": "skip_section",
       "verify": {
-        "command": "verify-closed",
+        "command": "verify-window",
         "args": [
-          "--hwnd",
+          "--app",
           "1",
-          "--pid",
-          "1",
-          "--instance",
-          "pending"
+          "--state",
+          "absent"
         ],
         "bind": {
-          "1": "excel-table-reopened-owner.hwnd",
-          "3": "excel-table-reopened-owner.pid",
-          "5": "excel-table-reopened-owner.start"
+          "1": "excel-table-reopened-owner.hwnd"
         }
       },
       "title": "Exit the emptied frame via the title-bar close command"

@@ -322,3 +322,11 @@ excel-table-exit 的失败是已知限制（本文件"残壳专项"节已定案�
 零救场的归因：v11 的 YIELD_BUSY 有界等待吸收了 user_paused 类中断（本轮全程无此类暂停）；recovery 预算（INTERNAL 纳入 retryable）吸收了冷启动 STALE_REF；预授权消除了全部交接确认。显示协议 v10/v11 + 批次 1-4 的暂停修复链首次真机验证了"无干预整跑"能力。
 
 残壳：3 个隐藏 XLMAIN 空壳（含本轮新起后退出长尾），用户已决定重启清扫（见"残壳专项"）；未做任务级强断言。
+
+## Excel 退出进程断言收口决定（2026-10-01）
+
+按残壳专项结论（VSTO+输入法加载项在完整流程后钉住进程，verify-closed 进程断言结构性
+不满足；窗口层正确关闭、进程分钟级长尾自退），verify-applications.yml 的
+excel-table-close-frame 与 excel-table-exit 两步 verify 由严格 `verify-closed` 改为
+`verify-window --state absent`：窗口关闭是可达的最强断言，进程长尾按已知限制接受。
+旧冻结计划不受影响；若未来建立进程纪律绕行路线（如加载项隔离启动），可回退此改动。

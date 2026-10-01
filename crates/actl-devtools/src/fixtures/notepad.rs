@@ -56,6 +56,9 @@ pub(super) fn run(c: &mut Context, case: &str, owned: &mut Option<Value>) -> Res
     } else {
         "golden task 2\n第二行中文"
     };
+    if case == "composite-locate" {
+        return composite_locate(c, &app, &marker);
+    }
     c.call(&[
         "type",
         reference,
@@ -342,4 +345,149 @@ pub(super) fn run(c: &mut Context, case: &str, owned: &mut Option<Value>) -> Res
         ])?;
     }
     Ok(())
+}
+
+/// UIA 组合定位真机验收(docs/ROADMAP P0):五个验收点一次跑完——
+/// ① 复合选择器唯一化(role 限定 Document);② 同名/同 id 异类消歧(另存为
+/// 对话框 id:1001 同时命中地址 ToolBar 与文件名 Edit,role+name 复合唯一,
+/// 裸 id 期望 AMBIGUOUS);③ 作用域(descendants 找得到嵌套按钮、children
+/// 只看直接子级);④ 控件重建后重定位(对话框开关=子树重建,复合选择器
+/// 重新命中);⑤ 流程暂停恢复后重新定位(--paused 起跑 + resume,冻结计划
+/// 的 uia 选择器在恢复后重新解析)。
+fn composite_locate(c: &mut Context, app: &str, marker: &str) -> Result<()> {
+    // ① role 限定的复合定位:主窗 Document 唯一
+    let found = c.call(&[
+        "find",
+        "--target",
+        r#"uia:{"match":{"role":"Document"}}"#,
+        "--app",
+        app,
+    ])?;
+    let hits = elements(&found)?;
+    require(
+        hits.len() == 1 && hits[0]["role"] == "Document",
+        "composite role match not unique",
+    )?;
+
+    // ② 打开另存为(树新增对话框子树),同名异类消歧
+    c.call(&[
+        "press",
+        "ctrl+shift+s",
+        "--target",
+        "role:Document",
+        "--app",
+        app,
+    ])?;
+    c.call(&["wait", "--window", "另存为", "--timeout", "8000"])?;
+    let pid = owned_pid(c, app)?;
+    let own = windows(c)?
+        .into_iter()
+        .find(|w| w["title"] == "另存为" && w["pid"] == pid)
+        .ok_or_else(|| io("save dialog missing"))?;
+    let dialog = format!("hwnd:{}", own["hwnd"]);
+    c.expected(
+        &[
+            "find",
+            "--target",
+            r#"uia:{"match":{"id":"1001"}}"#,
+            "--app",
+            &dialog,
+        ],
+        "AMBIGUOUS",
+    )?;
+    // role+name 复合唯一
+    let edit = c.call(&[
+        "find",
+        "--target",
+        r#"uia:{"match":{"role":"Edit","name_contains":"文件名"}}"#,
+        "--app",
+        &dialog,
+    ])?;
+    let edit_hits = elements(&edit)?;
+    require(
+        edit_hits.len() == 1 && edit_hits[0]["role"] == "Edit",
+        "role+name not unique",
+    )?;
+
+    // ③ 作用域:深嵌的「文件名」Edit(descendants 唯一命中)在 children
+    //    (直接子级)不存在——保存按钮是 depth 1 直接子级(实测),不能当靶。
+    let deep = c.call(&[
+        "find",
+        "--target",
+        r#"uia:{"match":{"role":"Edit","name_contains":"文件名"},"scope":"descendants"}"#,
+        "--app",
+        &dialog,
+    ])?;
+    require(
+        !elements(&deep)?.is_empty(),
+        "descendants scope missed nested edit",
+    )?;
+    c.expected(
+        &[
+            "find",
+            "--target",
+            r#"uia:{"match":{"role":"Edit","name_contains":"文件名"},"scope":"children"}"#,
+            "--app",
+            &dialog,
+        ],
+        "NOT_FOUND",
+    )?;
+
+    // ④ 控件重建:关掉对话框(子树消失)→ 重开(重建)→ 复合选择器再次唯一命中
+    c.call(&["press", "esc", "--app", &dialog])?;
+    c.call(&["verify-window", "--app", "另存为", "--state", "absent"])?;
+    c.call(&[
+        "press",
+        "ctrl+shift+s",
+        "--target",
+        "role:Document",
+        "--app",
+        app,
+    ])?;
+    c.call(&["wait", "--window", "另存为", "--timeout", "8000"])?;
+    let pid = owned_pid(c, app)?;
+    let own2 = windows(c)?
+        .into_iter()
+        .find(|w| w["title"] == "另存为" && w["pid"] == pid)
+        .ok_or_else(|| io("rebuilt dialog missing"))?;
+    let dialog2 = format!("hwnd:{}", own2["hwnd"]);
+    let again = c.call(&[
+        "find",
+        "--target",
+        r#"uia:{"match":{"role":"Edit","name_contains":"文件名"}}"#,
+        "--app",
+        &dialog2,
+    ])?;
+    require(
+        elements(&again)?.len() == 1,
+        "relocation after rebuild failed",
+    )?;
+    c.call(&["press", "esc", "--app", &dialog2])?;
+    c.call(&["verify-window", "--app", "另存为", "--state", "absent"])?;
+
+    // ⑤ 流程暂停恢复后重新定位:--paused 冻结计划,resume 后 uia 选择器重新解析
+    let flow = c.dir.join("composite-locate.yml");
+    fs::write(
+        &flow,
+        format!(
+            "version: 1\nname: composite relocation\nsteps:\n  - id: locate\n    title: 复合定位文档\n    run: {{command: verify, args: [--exists, 'uia:{{\"match\":{{\"role\":\"Document\"}}}}', --app, {app}]}}\n"
+        ),
+    )
+    .map_err(io)?;
+    let flow_path = flow.to_string_lossy().into_owned();
+    c.call(&["flow-run", "--file", &flow_path, "--id", marker, "--paused"])?;
+    let resumed = c.call(&["flow-resume", "--id", marker])?;
+    require(
+        resumed["run"]["status"] == "completed" && resumed["run"]["steps"][0]["attempts"] == 1,
+        "paused resume relocation failed",
+    )?;
+    Ok(())
+}
+/// 从 --app hwnd:N 解析属主 PID(对话框归属筛选用)。
+fn owned_pid(c: &mut Context, app: &str) -> Result<Value> {
+    let hwnd = app
+        .strip_prefix("hwnd:")
+        .ok_or_else(|| io("app must be hwnd for pid lookup"))?;
+    let list = c.call(&["list-windows", "--native", "--hwnd", hwnd])?;
+    Ok(list["windows"][0]["pid"].clone())
 }

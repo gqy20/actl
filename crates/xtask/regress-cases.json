@@ -16,6 +16,14 @@
     "entry": "fixture input-target"
   },
   {
+    "id": "composite-locate",
+    "suite": "system",
+    "state": "ready",
+    "input": "keyboard",
+    "reason": "UIA composite targeting live acceptance on the notepad save-dialog tree.",
+    "entry": "fixture composite-locate"
+  },
+  {
     "id": "flow-evaluation",
     "unattended": true,
     "suite": "flow",

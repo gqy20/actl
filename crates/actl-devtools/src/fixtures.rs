@@ -304,7 +304,10 @@ pub(super) fn close_tabs_where(
         c.call(&["press", "ctrl+w", "--app", app])?;
         let before = tabs_matching(&snapshot, pred);
         let _ = before;
-        // 弹层可能迟于 ctrl+w 渲染:有界轮询,「不保存」Button 出现或标签已消失即止
+        // 弹层可能迟于 ctrl+w 渲染:有界轮询,白名单命中或标签已消失即止。
+        // 前台优先纪律(docs/31):应用用弹窗引导——白名单 = 「不保存」(未保存
+        // 关闭提示)与「找不到…文件」错误框的「确定」(先删文件后关标签实证);
+        // 弹窗全文随快照留证。白名单外弹窗绝不代点,循环末端如实失败保留现场。
         for _ in 0..8 {
             std::thread::sleep(std::time::Duration::from_millis(250));
             let popup = observe(c)?;
@@ -312,25 +315,68 @@ pub(super) fn close_tabs_where(
                 closed += 1;
                 break;
             }
-            let button = elements(&popup["data"])?.iter().find(|e| {
-                e["role"] == "Button" && e["name"].as_str().is_some_and(|n| n.contains("不保存"))
-            });
-            if let Some(button) = button {
+            let popup_texts = || -> String {
+                elements(&popup["data"])
+                    .ok()
+                    .map(|es| {
+                        es.iter()
+                            .filter(|e| e["role"] == "Text")
+                            .filter_map(|e| e["name"].as_str())
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                    })
+                    .unwrap_or_default()
+            };
+            let find_button = |needle: &str| -> Option<String> {
+                elements(&popup["data"]).ok()?.iter().find_map(|e| {
+                    (e["role"] == "Button"
+                        && e["name"].as_str().is_some_and(|n| n.contains(needle)))
+                    .then(|| e["ref"].as_str().map(str::to_owned))
+                    .flatten()
+                })
+            };
+            if let Some(bref) = find_button("不保存") {
                 let psid = popup["snapshot_id"]
                     .as_str()
                     .ok_or_else(|| io("snapshot missing"))?;
-                let bref = button["ref"]
-                    .as_str()
-                    .ok_or_else(|| io("button ref missing"))?;
-                c.call(&["click", bref, "--snapshot", psid, "--app", app])?;
+                c.call(&["click", &bref, "--snapshot", psid, "--app", app])?;
                 closed += 1;
                 break;
+            }
+            if popup_texts().contains("找不到") && find_button("确定").is_some() {
+                let psid = popup["snapshot_id"]
+                    .as_str()
+                    .ok_or_else(|| io("snapshot missing"))?;
+                let bref = find_button("确定").ok_or_else(|| io("ok ref missing"))?;
+                c.call(&["click", &bref, "--snapshot", psid, "--app", app])?;
+                continue; // 错误框消后标签随之关闭,继续轮询确认
             }
             // 标签已消失(未修改标签静默关闭)则停止等待弹层
             if tabs_matching(&popup, pred).is_none() {
                 closed += 1;
                 break;
             }
+        }
+    }
+    // 前台弹层守卫:仍有带按钮的弹出窗口 = 白名单外未处理引导层——如实失败,
+    // 不硬走固定路线(2026-10-01「找不到文件」弹窗滞留事故的机制化收口)。
+    let final_state = observe(c)?;
+    if final_state["ok"] == true {
+        let unhandled = elements(&final_state["data"])?.iter().any(|e| {
+            e["role"] == "Window" && e["name"].as_str().is_some_and(|n| n.contains("弹出"))
+        });
+        if unhandled {
+            let texts = elements(&final_state["data"])?
+                .iter()
+                .filter(|e| e["role"] == "Text")
+                .filter_map(|e| e["name"].as_str())
+                .collect::<Vec<_>>()
+                .join(" ");
+            return Err(actl_core::CtlError::with_evidence(
+                actl_core::ErrorCode::NotActionable,
+                "front popup not handled; retained for review",
+                json!({"popup_text": texts, "hint": "白名单外弹窗不代点,先读 front-report 判读"}),
+            ));
         }
     }
     Ok(closed)
@@ -371,7 +417,9 @@ pub fn run(case: &str, args: &Args) -> Result<Value> {
             "desktop stopped or needs repair; retain state",
         )?;
         match case {
-            "golden-task-2" | "input-target" => notepad::run(&mut c, case, &mut owned),
+            "golden-task-2" | "input-target" | "composite-locate" => {
+                notepad::run(&mut c, case, &mut owned)
+            }
             "edge-deep-tree" | "edge-content-view" | "chrome-content-view" => {
                 browser::run(&mut c, case, &mut owned, &mut report)
             }

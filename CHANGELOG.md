@@ -9,8 +9,16 @@
 
 - **始终信任此流程（指纹持久信任）**：授权三部曲收官——全局托盘开关 → 会话级 standing → **指纹持久信任**（跨会话免点击）。声明 `approval: standing` 的流程运行时，执行器计算冻结计划的 FNV-1a 双通道 128 位指纹并附在交接请求中；显示端查 `trusted-flows.json` 信任集（显示端 UI 独占写入，有界 128 条）——匹配则即刻 Standing 授予（审计 reason=flow_trusted），不匹配则正常出卡；用户点「开始」后指纹自动入信任集。**模板变更 → 指纹变 → 信任自动失效 → 下次首跑重新出一次卡**。设计见 [32](docs/32-desktop-handoff.md)。
 
+### Changed
+
+- **excel-table-exit 进程断言按已知限制收口**：verify-applications.yml 两个 Excel 退出步的 verify 从严格 `verify-closed`（窗口+进程实例）改为 `verify-window --state absent`——VSTO+输入法加载项钉住进程使进程断言结构性不满足（docs/68 残壳专项定案；窗口关闭是可达的最强断言，进程分钟级长尾自退）。旧冻结计划不受影响，下轮整批生效；建立绕行路线后可回退。
+- **verify-owner 进程树归属**：窗口属主进程命令行不含任务令牌时，沿父链（有界 4 级）找携带令牌的祖先——保存/下载/打印对话框常跑在 contentproc 等子进程（zotero 实证），此前只能删除该类核验。直接归属优先，回退成功时载荷带 `via_parent`（祖先 pid/program/start）如实说明；祖先已退出即链断不臆断。
+
 ### Added
 
+- **`front-report` 前台弹层报告（只读，前台优先纪律）**：应用用最前方的弹窗引导用户——错误框、确认框、保存提示、向导；自动化动手前必须先听它说。`front-report --app <窗口>` 汇聚两层证据：原生 owned 可见弹窗（标题/可见/前台）+ 树内子窗表面（文本全文+按钮清单），附朴素分类提示（error/save/confirm/update/unknown，判读归调用方），`front_clear:true` 表示无引导层；绝不点击任何东西。活体验证：「找不到文件」错误框被完整捕获（全文+确定按钮+error 分类）。观察三件套齐备：title-watch（标题瞬态）/ focus-report（焦点争议）/ front-report（前台引导）。
+- **cleanup-tabs 前台弹层白名单与守卫**：弹层轮询从只认「不保存」扩展为白名单——「不保存」与「找不到…文件」错误框的「确定」（文本匹配才点，弹窗全文随快照留证）；收尾守卫：仍有带按钮的弹出窗口即如实失败（`front popup not handled`）保留现场，不硬走固定路线。白名单验证即用事故现场本身：「先删文件后关标签」触发的错误框被自动正确处理。
+- **`composite-locate` 夹具（UIA 组合定位真机验收）**：五点一次跑完——①role 复合唯一化；②同 id 异类消歧（另存为 `id:1001` 双命中 → AMBIGUOUS 证据 + role+name 复合唯一）；③作用域（深嵌 Edit 在 descendants 命中、children NOT_FOUND；实测保存按钮是 depth-1 直接子级不能当靶）；④控件重建后重定位（对话框开关子树重建，复合选择器再命中）；⑤流程暂停恢复后重定位（--paused 冻结 + resume 重新解析）。活体全绿。
 - **`flow-clean` 补记（文档欠账）**：命令随 20c9726 入库但当时未同步 docs/06 契约与本文件——批量归档历史非完结流程（默认 60 分钟阈值；completed 与存活执行器不动；归档即整目录 rename 到 `flows-archived/`，证据全保留；`--dry-run` 列候选），2026-10-01 整理 roadmap 时发现补齐。
 - **verify-file IO 失败可区分报错**：打不开证据文件时按原因分类入 evidence（`io_kind`: sharing_violation/permission_denied/invalid_filename/other + `os_code` + 原文）——共享冲突（Excel/Word 持句柄）与权限问题一眼可辨；NotFound 维持 ASSERTION_FAILED（settle 窗内可重试）。
 - **flow-status 陈旧计划提示**：flow-run 冻结计划时旁车记录源模板字节指纹（`flows/<id>/source.json`，FNV-1a 双通道与 plan_fingerprint 同族）；flow-status 重读模板比对，不一致时 `template.changed=true` 并提示"模板已改，重试仍跑冻结的旧路线；验证新修复需新任务"——防对冻结计划验证新修复（ROADMAP 实录废过两次重试）。旧流程无记录时字段为 null 零噪音；模板不可读时 changed=null 不臆断。契约测试覆盖改模板→提示链路。
