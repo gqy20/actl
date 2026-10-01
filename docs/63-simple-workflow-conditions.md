@@ -73,3 +73,14 @@ YAML 通过 recovery 配置受限次数、时限及间隔，引擎负责计时�
 2026-09-29 Windows 当前交互桌面，以现有 ZCode 窗口的现场 HWND 完成只读 flow：已存在选择 run、明确不存在选择 otherwise、unless 已存在选择 skip，三步均 completed，attempts 分别为 1/1/0。未启动、关闭或修改应用，无新增 GUI 资源需要清理。具体计划、逐次 envelope、状态及 debug 二进制 SHA256 保存在 `target/branches-live/`；这是条件分派实测，不替代三个写入模板的业务验收。
 
 最终 `cargo xtask gate` 通过（含 11 个 pack、296 步校验）。发布版已更新至 `C:\Users\gqy17\.cargo\bin\actl.exe`，SHA256 `A3780B93962BB1A4E56583CD07CEC3F1B20B665A1C636250341C534BFA2E65F3`；同一只读计划发布版复验三步通过，证据为 `target/branches-live/release-run.json`、`release-status.json`、`installed-binary.json`。显示端未变更、未重启。
+
+## 写入侧三模板真机验收（2026-10-01，全自驱，记事本确定性构造）
+
+- **窗口复用/启动**：`unless verify-window exists` 门控 launch——首轮启动并
+  wait 到窗；次轮 ensure 步 **attempts=0（launch 跳过）**、窗口数保持 1。
+- **已有值跳过**：`unless verify --contains` 门控写入——首跑 attempts=1 写入、
+  次跑 **attempts=0 跳过**，两轮均 completed。
+- **可选控件关闭**：`unless verify-window <对话框> absent` 门控 esc——无框
+  轮 attempts=0 跳过；有框轮 attempts=1 关闭且框消失。
+- 途经实录：流程内 type 在窗口后台化+对话框滞留时 NOT_ACTIONABLE（前台护栏
+  正确拒绝），focus-window 后恢复——写入侧模板依赖前台就绪，与判定树一致。

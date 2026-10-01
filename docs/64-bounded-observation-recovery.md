@@ -33,3 +33,17 @@ StepRecord 增加可选 recovery，含 retries、started_ms 和最近观察事�
 条件判断与界面操作之间仍可能发生变化。此实现不包含自动收集歧义候选、自动选择父容器、登录/验证码自动处理，也不增加 shell、表达式或补偿逻辑。已有候选预览可供 agent 在确认目标后使用；自动连接到 workflow 的候选纠正仍需独立身份与冻结计划协议。
 
 60 秒慢调用后续排查见 [65](65-observation-blocking-diagnosis.md)：已补阶段开始/耗时打点，本轮未复现，原始慢调用结论保持未解决。
+
+## 六判据真机验收（2026-10-01，全自驱）
+
+- **短暂失败可恢复**：迟来 2s 的证据文件在 verify 内置沉降窗内吸收，flow 2.2s
+  completed、attempts=1。
+- **持续失败有界退出**：永不出现的文件 → 恢复协议 observe→failed→requires_review
+  有界收束（recovery.events 全程留档），无死循环；流程暂停而非硬败。
+- **未知不走否定分支**：观察错误（NOT_FOUND）如实保留为错误，不转空成功。
+- **暂停/停止阻止派发**：pause_requested 边界暂停与等待中热停 ABORTED（同日
+  E-2/E-4c 实证）。
+- **重启/继续不静默刷新预算**：auto_resume 预算耗尽后第三次满足判定不派发
+  （同日 ard7 实证）；显式 resume 开新有界波是用户明示语义。
+- **不确定动作不重放 + 观察留档**：uncertain 暂停后 resume_check 通过则
+  attempts 保持 1（同日 E-4a）；恢复事件完整落 state。
