@@ -103,7 +103,7 @@ routes:
 #   定位是走 MSAA/IA2 legacy 树(Chrome Legacy Window),与 UIA 是两套桥。
 # - 选择器漂移两处已修模板:搜网盘 Edit 精确名 → name_contains(现名
 #   "搜网盘、搜全网或输入网址(Ctrl + F)");URL query 断言 → 结果页内容
-#   断言(当前版本路由 uccd:// 内部页,URL 不再携带 keyword)。
+#   断言(当前版本路由 uccd 内部页路由,URL 不再携带 keyword)。
 # - empty-count 存在渲染竞态(delayed_observation 同族),resume 重试通过。
 # - 已知问题:${run.dir}/result.png 作 screenshot 输出报 ERROR_PATH_NOT_FOUND,
 #   待查 run.dir 展开路径;证据以手工截图补齐。
