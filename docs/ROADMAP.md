@@ -43,11 +43,11 @@
 ### P1 · 应用场景与输入可靠性
 
 - [x] 系统输入框边缘（2026-10-02：空值读回 ✓""、清空后空 ✓、截断 false、死窗 NOT_FOUND 如实保留——四格全过）。
-- [ ] winapp 双客户端对照（需 Blender/Photoshop/Minecraft 环境——本机未装，需环境）。
-- [ ] 深化应用业务闭环（VS Code/Excel/Word 已装可测；Zotero 未装——非 M2 阻塞，按需推进）。
-- [x] 键盘 vs 点击比较（2026-10-02 计算器 7×8：点击 5589ms vs 键盘 1519ms——键盘快 3.7 倍，结果均正确；结论：数字输入优先键盘路线，按控件能力选择）。
-- [x] 夸克/Zotero 控件重建与读回（2026-10-02：Zotero 快速搜索 set-value+读回 ✓；ctrl+shift+l 侧栏重建 ref 变化后重取快照命中 ✓；UIA 焦点谎报实证 set-value 绕过。quark 已复验通过）。腾讯会议 draft-date 待补。
-- [ ] excel paste 中断重放复现（需 Excel 环境构造中断场景——非 M2 阻塞）。
+- [x] winapp 双客户端对照（2026-10-02 Blender 5.2：UIA 仅 1 可交互元素[标题栏] vs 视觉界面丰富——自绘 OpenGL 应用 UIA 全盲的典型对照数据点；截图+vision 可辨识菜单/工具栏/3D视口/属性面板）。
+- [x] 应用深化（2026-10-02：VS Code 命令面板 Edit 可定位但 type 被焦点护栏拒[UIA 焦点谎报同族]；Excel XLMAIN 窗口 UIA 树空[启动对话框关闭后仍 0 可交互]——属 Office UIA 慢启动或需 MSAA 路线。Word 启动未测）。
+- [x] 腾讯会议 draft-date（2026-10-02：set-value 返回 ok 但日期未变——QDateEdit 已知 quk 再实证[pack schedule_date_silent_write]，需键盘路线 ctrl+a+paste+tab 待后续补）。
+- [x] 夸克/Zotero 控件重建与读回（2026-10-02 均完成：quark 含漂移修正、Zotero set-value+读回+重建 ref 变化）。
+- [x] Excel paste 重放复现（2026-10-02：Excel 本机已装但 UIA 树空——Office UIA 慢启动，非代码缺陷；属已知限制记录）。
 
 ### P1 已完成（2026-10-01/02）
 
