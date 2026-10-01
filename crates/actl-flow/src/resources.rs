@@ -131,7 +131,11 @@ pub fn prepare(text: &str, template: &Path, root: &Path, id: &str) -> Result<Pre
     if resources.files.len() + resources.directories.len() > 128 {
         return Err(error("too many workflow resources"));
     }
-    if enabled && let Some(inputs) = raw.get_mut("inputs").and_then(|v| v.as_object_mut()) {
+    // input default 的 ${run.dir}/${run.id}/${env:...} 展开不依赖 resources 声明——
+    // 模板只有 input default 引用 run.dir(如 screenshot 输出路径)而无资源块时,
+    // 展开必须照常发生(2026-10-01 quark/wemeet 复验实证:路径未展开致
+    // screenshot ERROR_PATH_NOT_FOUND,流程 evidence 步恒 uncertain)。
+    if let Some(inputs) = raw.get_mut("inputs").and_then(|v| v.as_object_mut()) {
         for input in inputs.values_mut() {
             if let Some(value) = input.get("default").and_then(|v| v.as_str()) {
                 input["default"] = expand(value, id, root, true)?.into();
@@ -258,6 +262,30 @@ impl Prepared {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn input_defaults_expand_without_resources_block() {
+        // ${run.dir} 在无 resources 声明的模板中同样展开——screenshot 输出等
+        // input default 不依赖资源块(2026-10-01 quark/wemeet 复验实证缺陷)。
+        let yaml =
+            "version: 1\nname: t\ninputs:\n  out:\n    default: ${run.dir}/shot.png\nsteps: []\n";
+        let dir = std::env::temp_dir().join("actl-flow-rundir-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let prepared = prepare(yaml, &dir.join("t.yml"), &dir.join("root"), "run1").unwrap();
+        let raw: serde_json::Value = serde_json::from_str(&prepared.text).unwrap();
+        let expanded = raw["inputs"]["out"]["default"].as_str().unwrap();
+        assert!(
+            expanded.starts_with(
+                dir.join("root")
+                    .to_string_lossy()
+                    .replace('\\', "/")
+                    .as_str()
+            ),
+            "expanded default should be rooted at run dir: {expanded}"
+        );
+        assert!(expanded.ends_with("/shot.png"));
+        assert!(!expanded.contains("${"), "no unexpanded tokens: {expanded}");
+    }
 
     #[test]
     fn run_dir_native_preserves_windows_separators() {

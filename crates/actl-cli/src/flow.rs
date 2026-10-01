@@ -683,6 +683,16 @@ pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
             }
             actl_core::stop::check_current()?;
             resources.create()?;
+            // 无资源声明时 ${run.dir} 仍可能被 input default 引用(screenshot
+            // 输出等)——确保 run.dir 存在,否则写文件报路径不存在。
+            let run_dir = actl_core::state::SignalPaths::default()
+                .dir
+                .join("flow-resources")
+                .join(id);
+            if !run_dir.exists() {
+                std::fs::create_dir_all(&run_dir)
+                    .map_err(|e| CtlError::internal(format!("cannot create run dir: {e}")))?;
+            }
             let mut run = store.create(&plan, id)?;
             record_source(&store, file);
             let active = store.lock(false)?;

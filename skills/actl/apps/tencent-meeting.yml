@@ -117,3 +117,11 @@ routes:
       - ["click", "xy:{download_x},{download_y}", "--app", "{window}", "--physical"]
       - ["list-windows"]
       - ["snapshot", "--app", "hwnd:{browser_hwnd}"]
+
+# 2026-10-01 复验更新:
+# - ${run.dir} 引擎缺陷已修:input default 的路径展开不再依赖 resources 声明,
+#   flow-run 确保 run.dir 存在;screenshot 输出 ${run.dir}/result.png 正常落盘。
+# - draft 流程四步全绿(flow id wg4):check-date/topic/confirm-date/evidence。
+# - inputs 格式陷阱:app 值须写完整 "hwnd:<n>" 前缀——引擎不会自动补,
+#   裸数字会被当标题子串解析(NOT_FOUND)。
+# - draft-date(改日期)变体未跑,后续补。
