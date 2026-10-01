@@ -28,15 +28,12 @@
 ## Phase 2 · M2 v0.2.0 剩余工作
 
 - [ ] 补齐前台交接 v9 的人工接管、进程内嵌套动作及多窗口真机矩阵；保留 Windows 拒绝激活时的可恢复提示。证据与边界见 [62](62-foreground-handoff.md)。
-- [ ] UWP 双窗口使窗口管理命令的标题路径身份复核必败（2026-09-30 演示实录）：计算器的 ApplicationFrameWindow（框架进程）与 Windows.UI.Core.CoreWindow（应用进程）同名同标题，`focus-window/restore-window 计算器` 在 native→UIA 身份复核处恒 STALE_REF（"native window identity changed"）；最小化态下 CoreWindow 又因 UWP 挂起对 WM_NULL 探针 window_unresponsive。hwnd 路径完全正常。修复方向：身份复核按类配对（frame↔core 视为同一身份）或对 UWP 帧类走纯 native 通道；恢复前先解除挂起。
-- [ ] 始终信任此流程真机验收（指纹持久信任已实现，2026-10-01）：声明 standing 的流程首跑出卡确认后指纹入信任集，二跑免卡；模板修改后指纹变化重新出卡。v10/v11 两条通道的真机验证（含让行自动恢复、急停仍生效）随本轮一并做。
+- [ ] UWP 长时间最小化后的挂起恢复：标题路径身份复核已修（`title_elements` 按类配对，有 `ApplicationFrameWindow` 时只保留框架窗——focus/restore/close 标题路径真机全过，2026-10-01；夹具层同族修复先验证方向）。残留：CoreWindow 因 UWP 挂起对 WM_NULL 探针 window_unresponsive（最小化态恢复），修复方向恢复前解除挂起或对 UWP 帧类走纯 native 通道。
+- [ ] 夹具简化机会（低优先）：前台护栏沉降、租约有界重读、忙窗观测判别进引擎后，金任务 2 夹具的阶段化重试可回头瘦身。
 - [ ] 修复检测/auto_resume 真机验收（批次 4 已实现）：构造 action_failed 暂停 + 声明 auto_resume 的演示流程，验证 5s 探测点亮两种判定、自动续跑预算与急停阻断；静默探测确认横条无"后台处理"闪烁。
-
-- [ ] 流程残留清扫入口（2026-09-30 验收录入）：本机 flows/ 目录已积累数十个历史 paused/needs_review 流程——discover 因"多未完结不猜"恒 None，探测孤儿化（已由 newest_probe_target 修复探测侧），但显示端绑定与任务详情仍受影响。需要一个入口（CLI 命令或 flow-status 选项）按时间/状态批量归档历史残留，同时保留失败证据。
 
 ### 原生迁移后待验收
 
-- [ ] 对新 Rust 夹具复验 Calculator、Notepad、Explorer、msinfo32、Edge/Chrome 及显示端；验证身份、单次写入、失败保留和优雅清理，不能沿用旧 PS 的通过记录。
 - [ ] 在已确认现场复验 cloudmusic-playback、quark-search、tencent-meeting-draft/date 与 app-launch-observe；保持同一 flow ID，补逐调用、文件哈希与清理证据。
 - [ ] 重建已退役的跨应用搬运、坐标输入、动态网站深测和参数扫描验收。旧脚本依赖硬编码 ref、既有用户窗口或盲重试，清理不表示能力已验收。范围与替代入口见 [61](61-native-tooling-migration.md)。
 
@@ -129,7 +126,9 @@
 - [ ] excel paste 中断重放后盘上仍为种子、xlsx subset 断言失败（docs/68 第五轮），
   重放恢复路径复现优先。
 - [ ] 诊断脚本沉淀入 devtools：窗口标题监视器、close→gone 计时器、隔离应用实验台
-  （本轮以 ad-hoc 脚本反复手写）。
+  （本轮以 ad-hoc 脚本反复手写）。已沉淀：`diagnose cleanup-tabs`（按名称关标签+
+  弹层「不保存」轮询，ad-hoc 清场脚本三次手写三次出错后入库）、`diagnose snapshot-diff`
+  （历史快照结构化差异）、`focus-report`（焦点三视图），2026-10-01。
 - [ ] verify 族耐心值可调化（spec，按需推进）：verify-file/rows/clipboard/closed 5s、
   verify-window 15s、`--verify-value` 2s 已被 after_help 承诺为契约；若实际出现按应用调耐心的
   需求，走 Timing 内部旋钮 + help 措辞去具体化 + golden/docs/06/CHANGELOG 同 PR 的 spec 路线，
@@ -140,7 +139,7 @@
 
 ### P2 · 发布验收
 
-- [ ] 在固定环境完成金任务全量回归，US1 十次重跑成功率 ≥90%；人工交接与受阻运行分别记账。
+- [ ] 金任务十次重跑记账已达标（2026-10-01：金 1 与金 2 各 10/10，遇错即停纪律、轮间现场核验；受阻运行如实记账——环境干扰拒绝不计通过）。剩余：固定环境重复一轮确认跨日稳定性，与 NFR 一并做。
 - [ ] 在正常负载环境重新测量冷启动、snapshot、输出体积与 skeleton 削减率，按
   [PRD §4/§6](PRD.md) 验收；耗时仅在同一环境头内比较，复核浏览器形态的 token 口径。
 - [ ] 在非开发机按 README 复现 US3，验证安装、CLI 与配套显示端版本匹配及首次使用体验。
