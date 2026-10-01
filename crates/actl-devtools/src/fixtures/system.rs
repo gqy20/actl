@@ -93,6 +93,18 @@ pub(super) fn run(
     *owned = Some(own);
     if case == "golden-task-1" {
         let mut rounds = vec![];
+        // UWP 挂起恢复竞态:wait --window 只核标题,内容区可能未渲染——
+        // 元素级就绪等待兜底(2026-10-01 跨日十轮第 4 轮失败实证:窗口标题
+        // 在但 clearButton 不在,等 8s 后出现;上午同夹具 10/10 过,间歇 ~30%)。
+        c.call(&[
+            "wait",
+            "--element",
+            "id:clearButton",
+            "--timeout",
+            "15000",
+            "--app",
+            &app,
+        ])?;
         for round in 0..args.number("runs", 3, 1, 100)? {
             let start = Instant::now();
             c.call(&["click", "id:clearButton", "--app", &app])?;
