@@ -3,6 +3,13 @@ use actl_core::{CtlError, ErrorCode};
 use serde_json::json;
 use uiautomation::UIElement;
 
+/// 换行规范化:换行在剪贴板/UIA 提供方之间有三种表示——期望值用 \n,
+/// Win32 EDIT 报 \r\n,Store 记事本的 ValuePattern 实测报孤立 \r。
+/// 比较前统一为 \n,语义(行内容)不变、表示无关。
+fn normalize_newlines(s: &str) -> String {
+    s.replace("\r\n", "\n").replace('\r', "\n")
+}
+
 fn readback(
     result: Result<Option<String>, CtlError>,
     delivered: usize,
@@ -41,7 +48,7 @@ pub(crate) fn verify_value(
             ));
         }
         let value = readback(crate::read::read_value(element), delivered)?;
-        if value == expected {
+        if normalize_newlines(&value) == normalize_newlines(expected) {
             return Ok(());
         }
         if std::time::Instant::now() >= deadline {
@@ -58,6 +65,18 @@ pub(crate) fn verify_value(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn newline_normalization_matches_across_line_ending_forms() {
+        // 期望值用 \n;Win32 EDIT 报 \r\n;Store 记事本 ValuePattern 实测报孤立 \r
+        // (golden-task-2 2026-10-01 现场:回读 "a\rb" 而期望 "a\nb")——三种统一。
+        assert_eq!(normalize_newlines("a\r\nb"), normalize_newlines("a\nb"));
+        assert_eq!(normalize_newlines("a\r\nb"), "a\nb");
+        assert_eq!(normalize_newlines("a\rb"), "a\nb");
+        assert_eq!(normalize_newlines("a\rb\r\nc\nd"), "a\nb\nc\nd");
+        // 无换行与空串不受影响。
+        assert_eq!(normalize_newlines("abc"), "abc");
+        assert_eq!(normalize_newlines(""), "");
+    }
     #[test]
     fn failed_readback_retains_delivery_and_provider_evidence() {
         let error = CtlError::with_evidence(
