@@ -198,12 +198,24 @@ fn self_describing_commands_schema() {
         "extract",
         "select",
         "toggle",
+        "focus-report",
     ] {
         assert!(names.contains(&must), "commands schema must list {must}");
     }
     for c in cmds {
         assert!(c["about"].is_string(), "every command has about");
     }
+}
+
+#[test]
+fn focus_report_help_documents_three_views() {
+    // spec:三视图(UIA 焦点元素/物理焦点根窗/前台窗)并列、只读、物理层权威
+    // (docs/31 组件选择判定树)。help 四要素齐备进 after_help 表。
+    let (code, stdout) = actl(&["focus-report", "--help"]);
+    assert_eq!(code, 0);
+    assert!(stdout.contains("Read-only diagnostic"), "help: {stdout}");
+    assert!(stdout.contains("physical focus root"), "help: {stdout}");
+    assert!(stdout.contains("Errors:"), "help: {stdout}");
 }
 
 #[test]

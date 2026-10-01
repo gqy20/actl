@@ -18,7 +18,10 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     VK_LMENU, VK_LSHIFT, VK_LWIN, VK_MENU, VK_NEXT, VK_PRIOR, VK_RCONTROL, VK_RETURN, VK_RIGHT,
     VK_RMENU, VK_RSHIFT, VK_RWIN, VK_SHIFT, VK_SPACE, VK_TAB, VK_UP, VkKeyScanW,
 };
-use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowTextW};
+use windows::Win32::UI::WindowsAndMessaging::{
+    GA_ROOT, GUITHREADINFO, GetAncestor, GetForegroundWindow, GetGUIThreadInfo, GetWindowTextW,
+    GetWindowThreadProcessId,
+};
 
 /// Win32 物理前台窗口标题(None = 取不到)。
 /// verify-then-inject 护栏的判据:UIA 焦点视图可能与物理前台不一致,以物理层为准。
@@ -58,9 +61,6 @@ pub fn foreground_settles_to(expected: &str) -> String {
 /// 焦点归属的**物理**判据:UIA focused element 视图在 WinUI 上实测会谎报
 /// (物理层 RichEditD2DPT 已聚焦时仍报别窗口编辑框,金任务 2 误拒绝实证)。
 pub fn focused_root_window() -> Option<(isize, String)> {
-    use windows::Win32::UI::WindowsAndMessaging::{
-        GA_ROOT, GUITHREADINFO, GetAncestor, GetGUIThreadInfo,
-    };
     unsafe {
         let mut info = GUITHREADINFO {
             cbSize: std::mem::size_of::<GUITHREADINFO>() as u32,
@@ -83,6 +83,40 @@ pub fn focused_root_window() -> Option<(isize, String)> {
             String::from_utf16_lossy(&buf[..len as usize]),
         ))
     }
+}
+
+/// 窗口完整身份(hwnd/title/pid)——focus-report 三视图诊断的证据单元。
+fn window_identity(hwnd: windows::Win32::Foundation::HWND) -> serde_json::Value {
+    let mut buf = [0u16; 512];
+    let len = unsafe { GetWindowTextW(hwnd, &mut buf) };
+    let mut pid = 0u32;
+    unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
+    serde_json::json!({
+        "hwnd": hwnd.0 as isize,
+        "title": String::from_utf16_lossy(&buf[..len.max(0) as usize]),
+        "pid": pid,
+    })
+}
+
+/// 物理键盘焦点根窗身份(GetGUIThreadInfo → GA_ROOT;None = 取不到)。
+pub fn physical_focus_identity() -> Option<serde_json::Value> {
+    unsafe {
+        let mut info = GUITHREADINFO {
+            cbSize: std::mem::size_of::<GUITHREADINFO>() as u32,
+            ..Default::default()
+        };
+        if !GetGUIThreadInfo(0, &mut info).is_ok() || info.hwndFocus.0.is_null() {
+            return None;
+        }
+        let root = GetAncestor(info.hwndFocus, GA_ROOT);
+        (!root.0.is_null()).then(|| window_identity(root))
+    }
+}
+
+/// 物理前台窗身份(None = 取不到)。
+pub fn foreground_identity() -> Option<serde_json::Value> {
+    let hwnd = unsafe { GetForegroundWindow() };
+    (!hwnd.0.is_null()).then(|| window_identity(hwnd))
 }
 
 const KEYDOWN: KEYBD_EVENT_FLAGS = KEYBD_EVENT_FLAGS(0);

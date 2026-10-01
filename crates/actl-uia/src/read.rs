@@ -351,3 +351,34 @@ pub fn set_clipboard_text(text: &str) -> Result<(), CtlError> {
         Ok(())
     }
 }
+
+/// 焦点三视图诊断(只读):UIA 焦点元素 / 物理焦点根窗(GetGUIThreadInfo)/
+/// 物理前台窗。WinUI 上 UIA focused element 实测会谎报(kbd.rs 注释),
+/// 三视图并列供交叉比对,不做裁决——判读按 docs/31 组件选择判定树留给调用方。
+/// `focus_root_processes_agree` 只是进程一致性的廉价事实信号,不是结论。
+pub fn focus_report() -> Result<serde_json::Value, CtlError> {
+    let auto = uiautomation::UIAutomation::new().map_err(crate::internal)?;
+    let uia_focused = auto.get_focused_element().ok().map(|e| {
+        serde_json::json!({
+            "name": e.get_name().unwrap_or_default(),
+            "role": e
+                .get_control_type()
+                .map(|t| format!("{t:?}"))
+                .unwrap_or_default(),
+            "automation_id": e.get_automation_id().unwrap_or_default(),
+            "process_id": e.get_process_id().unwrap_or_default(),
+        })
+    });
+    let physical_focus_root = crate::kbd::physical_focus_identity();
+    let foreground = crate::kbd::foreground_identity();
+    let agree = match (&physical_focus_root, &uia_focused) {
+        (Some(root), Some(uia)) => root["pid"] == uia["process_id"],
+        _ => false,
+    };
+    Ok(serde_json::json!({
+        "uia_focused": uia_focused,
+        "physical_focus_root": physical_focus_root,
+        "foreground": foreground,
+        "focus_root_processes_agree": agree,
+    }))
+}

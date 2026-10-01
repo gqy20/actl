@@ -9,6 +9,11 @@
 
 - **始终信任此流程（指纹持久信任）**：授权三部曲收官——全局托盘开关 → 会话级 standing → **指纹持久信任**（跨会话免点击）。声明 `approval: standing` 的流程运行时，执行器计算冻结计划的 FNV-1a 双通道 128 位指纹并附在交接请求中；显示端查 `trusted-flows.json` 信任集（显示端 UI 独占写入，有界 128 条）——匹配则即刻 Standing 授予（审计 reason=flow_trusted），不匹配则正常出卡；用户点「开始」后指纹自动入信任集。**模板变更 → 指纹变 → 信任自动失效 → 下次首跑重新出一次卡**。设计见 [32](docs/32-desktop-handoff.md)。
 
+### Added
+
+- **`focus-report` 只读诊断命令**：三视图并列——UIA 焦点元素、物理焦点根窗（GetGUIThreadInfo）、物理前台窗（各带 hwnd/title/pid 身份），附进程一致性事实信号。用途：元素选择与焦点争议的交叉比对——WinUI 上 UIA focused element 实测会谎报，此前要读引擎源码才能理解护栏拒绝，现在一条命令出全部证据；判读规则（物理层权威）见 docs/31 组件选择判定树。
+- **`snapshot-diff` 诊断动词（devtools）**：`cargo xtask diagnose snapshot-diff --from <id> --to <id>` 按 runtime_id 对比两份历史快照，输出消失/新增/同身份但元数据变化三类差异（列表截断 20、计数完整）——回答"组件去哪了"，替代人工 diff 两份 JSON。
+
 ### Fixed
 
 - **`type --verify-value` 失败证据补齐差异本体**：比对失败信封新增 `expected`/`actual`/`comparison`（newline_folded_exact），与 `verify` 命令的证据标准对齐——此前只报 `delivered/value_verified` 布尔，换行根因（孤立 `\r`）需活体 `get` 才能看见，多花一整轮修复周期（2026-10-01 金任务2教训）。

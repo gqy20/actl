@@ -576,6 +576,7 @@ Windows 锁屏可能保留可见窗口属性，因此另用屏幕命中检查拒
 | 命令 | 参数 | data |
 |---|---|---|
 | display-status | 无 | ready, lease（可空）, stop_requested |
+| focus-report | 无 | uia_focused（可空）, physical_focus_root（可空）, foreground（可空）, focus_root_processes_agree |
 | display-start | 无 | ready, lease, stop_requested |
 | minimize-window / restore-window | 标题、--pid、--hwnd 三选一 | hwnd, window, minimized, input_effects |
 | desktop-prepare | --all 或重复 --hwnd | session, results[] |
@@ -672,6 +673,7 @@ launch 新增 --wait-window <标题子串> 与 --timeout <1..60000 毫秒>（默
 不自动重启、重复注入、清急停或跨权限强行激活。
 
 display-status 新增 reason/hwnd/responsive/popup，ready 同时校验真实可见窗口、进程身份及租约。
+focus-report：只读诊断，三视图并列——UIA 焦点元素（name/role/automation_id/process_id）、物理焦点根窗（GetGUIThreadInfo→GA_ROOT 的 hwnd/title/pid）、物理前台窗（hwnd/title/pid），附 focus_root_processes_agree（两视图进程一致性的事实信号，非裁决）。用途：元素选择与焦点争议的交叉比对（WinUI 上 UIA focused element 实测会谎报，以物理层为权威；判定树见 docs/31）。观察命令，不强制启动显示端。
 popup 读取 popup.json，但记录的 pid 已退出时视为陈旧证据返回 null，不再把死显示端的最后状态当作现场。
 display-start 可对兼容显示端无激活恢复及位置校正；版本不符仍拒绝并保留停止状态。
 popup 是最后一次菜单/详情诊断，带 ts_ms/pid，不代表当前存在。显示 v4 租约 golden 替代 v3。

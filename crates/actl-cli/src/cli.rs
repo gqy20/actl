@@ -28,6 +28,8 @@ pub(crate) enum DesktopCommand {
     ExecutionStatus,
     /// Explicitly repair execution state, archive old records and revoke old calls; never resume
     ExecutionRecover,
+    /// Report the three focus views (UIA focused element, physical focus root, foreground window) for selection diagnostics
+    FocusReport,
     /// Read recent local call events, newest calls first
     History {
         /// Filter by the caller-provided ACTL_TASK_ID
@@ -772,6 +774,7 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
         Command::Preview { .. } => "preview",
         Command::Desktop(DesktopCommand::DisplayStatus) => "display-status",
         Command::Desktop(DesktopCommand::ExecutionStatus) => "execution-status",
+        Command::Desktop(DesktopCommand::FocusReport) => "focus-report",
         Command::Desktop(DesktopCommand::ExecutionRecover) => "execution-recover",
         Command::Desktop(DesktopCommand::TaskArchive { .. }) => "task-archive",
         Command::Flow(FlowCommand::Validate { .. }) => "flow-validate",
@@ -872,6 +875,9 @@ fn after_help_for(name: &str) -> Option<&'static str> {
         }
         "display-status" => {
             "Example:\n  actl display-status\nReports native readiness, reason, lease, popup diagnostics, and sticky stop state; never starts the companion.\nErrors: INTERNAL unavailable state storage"
+        }
+        "focus-report" => {
+            "Example:\n  actl focus-report\nRead-only diagnostic: reports the UIA focused element, the physical focus root window (GetGUIThreadInfo) and the foreground window in one envelope, plus a process-agreement fact signal; use to arbitrate element-selection and focus disputes (UIA focus can misreport on WinUI; the physical layer is authoritative).\nErrors: INTERNAL UIA unavailable"
         }
         "display-start" => {
             "Example:\n  actl display-start\nStarts sibling actl-signal.exe if missing; restores a hidden/offscreen matching display; waits up to 4s for a matching visible frame. Does not clear stop.\nErrors: NOT_ACTIONABLE missing/hidden/incompatible display | INTERNAL launch failure"

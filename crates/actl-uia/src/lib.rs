@@ -39,6 +39,7 @@ pub mod preview;
 #[allow(unsafe_op_in_unsafe_fn)] // Temporary no-activate preview windows and GDI resources.
 mod preview_window;
 mod read;
+pub use read::focus_report;
 mod read_channel;
 mod scoped_locate;
 mod table;

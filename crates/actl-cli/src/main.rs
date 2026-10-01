@@ -188,6 +188,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
                 .execution_status()
                 .into())
         }
+        Command::Desktop(DesktopCommand::FocusReport) => actl_uia::focus_report().map(Into::into),
         Command::Desktop(DesktopCommand::ExecutionRecover) => {
             actl_uia::display_gate::recover_execution().map(Into::into)
         }
