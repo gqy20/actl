@@ -15,6 +15,8 @@
 - **verify-owner 进程树归属**：窗口属主进程命令行不含任务令牌时，沿父链（有界 4 级）找携带令牌的祖先——保存/下载/打印对话框常跑在 contentproc 等子进程（zotero 实证），此前只能删除该类核验。直接归属优先，回退成功时载荷带 `via_parent`（祖先 pid/program/start）如实说明；祖先已退出即链断不臆断。
 
 ### Added
+- **consent_decision 一等字段 `input_source`**：决策时刻最近输入的来源分类（kind: device/foreign_injected/own_injection + age_ms 新鲜度）——钩子层按 injected 标志三分、Raw 层按设备句柄+标签映射，人工物理输入与外来程序注入一眼可辨（docs/68 第五轮"用户未操作仍让行"的追因不再需要深挖监视器快照）。活体验证：预授权授予事件如实记录 kind=own_injection；同日两类样本（用户真点 / 注入让行）在案。
+- **续跑 journal 时间线并入确认已修复**：ard7 时间线完整交错（首执行器→伴侣探测→flow_resume_requested→续跑执行器 call/step 事件全部并入）——第五轮"止于首执行器"缺陷已被 resume journal source guard 工作覆盖，今日数据为验收证据，无需新代码。
 
 - **`front-report` 前台弹层报告（只读，前台优先纪律）**：应用用最前方的弹窗引导用户——错误框、确认框、保存提示、向导；自动化动手前必须先听它说。`front-report --app <窗口>` 汇聚两层证据：原生 owned 可见弹窗（标题/可见/前台）+ 树内子窗表面（文本全文+按钮清单），附朴素分类提示（error/save/confirm/update/unknown，判读归调用方），`front_clear:true` 表示无引导层；绝不点击任何东西。活体验证：「找不到文件」错误框被完整捕获（全文+确定按钮+error 分类）。观察三件套齐备：title-watch（标题瞬态）/ focus-report（焦点争议）/ front-report（前台引导）。
 - **cleanup-tabs 前台弹层白名单与守卫**：弹层轮询从只认「不保存」扩展为白名单——「不保存」与「找不到…文件」错误框的「确定」（文本匹配才点，弹窗全文随快照留证）；收尾守卫：仍有带按钮的弹出窗口即如实失败（`front popup not handled`）保留现场，不硬走固定路线。白名单验证即用事故现场本身：「先删文件后关标签」触发的错误框被自动正确处理。

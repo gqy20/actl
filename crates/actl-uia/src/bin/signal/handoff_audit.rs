@@ -18,6 +18,7 @@ pub(super) fn record(
             serde_json::json!({
                 "request_call":request.call,"approval":request.approval,"stage":stage,
                 "reason":reason,"hook_sequence":hook,"raw_sequence":raw,
+                "input_source":super::input_diagnostics::last_source(),
                 "input_monitor":super::input_watch::diagnostics()
             }),
         );

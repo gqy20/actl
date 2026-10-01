@@ -330,3 +330,16 @@ excel-table-exit 的失败是已知限制（本文件"残壳专项"节已定案�
 excel-table-close-frame 与 excel-table-exit 两步 verify 由严格 `verify-closed` 改为
 `verify-window --state absent`：窗口关闭是可达的最强断言，进程长尾按已知限制接受。
 旧冻结计划不受影响；若未来建立进程纪律绕行路线（如加载项隔离启动），可回退此改动。
+
+## 第五轮遗留两项收口（2026-10-01）
+
+- **交接来源可区分**：consent_decision 新增一等字段 `input_source`（kind:
+  device/foreign_injected/own_injection + age_ms 新鲜度）——钩子层按 injected
+  标志三分，Raw 层按设备句柄+标签映射；决策时刻最近输入来源直读，不再需要
+  从监视器快照深挖。活体验证：预授权授予事件如实记录 kind=own_injection
+  （决策前最近输入为本工具注入）。同日两类样本已在案：用户真点=	device，
+  外来注入让行=foreign_injected。
+- **续跑 journal 并入时间线**：当前构建已修复——ard7 时间线完整交错（首执行器
+  →伴侣探测 control_request→flow_resume_requested→续跑执行器自身 call/step
+  事件全部并入，16 步骤事件横跨 3 波）。第五轮"止于首执行器"缺陷已被 resume
+  journal source guard 工作覆盖，今日数据即验收证据。
