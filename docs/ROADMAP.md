@@ -28,9 +28,8 @@
 ## Phase 2 · M2 v0.2.0 剩余工作
 
 - [ ] 补齐前台交接 v9 的人工接管、进程内嵌套动作及多窗口真机矩阵；保留 Windows 拒绝激活时的可恢复提示。证据与边界见 [62](62-foreground-handoff.md)。
-- [ ] UWP 长时间最小化后的挂起恢复：标题路径身份复核已修（`title_elements` 按类配对，有 `ApplicationFrameWindow` 时只保留框架窗——focus/restore/close 标题路径真机全过，2026-10-01；夹具层同族修复先验证方向）。残留：CoreWindow 因 UWP 挂起对 WM_NULL 探针 window_unresponsive（最小化态恢复），修复方向恢复前解除挂起或对 UWP 帧类走纯 native 通道。
+- [ ] UWP 长时间最小化后的挂起恢复（观察项）：4 分钟最小化后标题路径 restore 正常（2026-10-01 实测 1053ms）——类配对修复后探针只看 ApplicationFrameWindow（宿主进程不挂起），原 CoreWindow 挂起路径疑似已绕开；更长时间放置/内存压力场景待证，出现 window_unresponsive 时再评估解除挂起或纯 native 通道。
 - [ ] 夹具简化机会（低优先）：前台护栏沉降、租约有界重读、忙窗观测判别进引擎后，金任务 2 夹具的阶段化重试可回头瘦身。
-- [ ] 修复检测/auto_resume 真机验收（批次 4 已实现）：构造 action_failed 暂停 + 声明 auto_resume 的演示流程，验证 5s 探测点亮两种判定、自动续跑预算与急停阻断；静默探测确认横条无"后台处理"闪烁。
 
 ### 原生迁移后待验收
 
@@ -61,13 +60,10 @@
   验收：短暂失败可恢复；持续失败有界退出；未知不走否定分支；暂停/停止阻止派发；重启/继续不静默刷新预算；不确定动作不重放；保留每次观察、恢复措施及退出原因。
 - [ ] 简单条件模板逐应用验收：窗口复用/启动、可选控件关闭、已有值跳过；代码与参数预检不代替业务验收，见 [63](63-simple-workflow-conditions.md)。
 
-- [ ] 无干预跑通四软件整批：combined-batch1 第七轮 69/69 completed 含三次人工救场与一次
-  COM 线程修复，救场原因均已定位（user_paused 让行、Zotero-Word 集成模态、重开 STALE_REF），
-  修复后一次通过仍待复验。七轮全程见 [68](68-combined-batch-first-round.md)。
+- [ ] excel-table-exit 进程断言残留（原"无干预四软件整批"目标已达成：2026-09-30 第八轮 70/71 completed、零人工救场，CHANGELOG Unreleased 补记；八轮对照见 [68](68-combined-batch-first-round.md)）：VSTO+输入法加载项在完整流程后钉住 Excel 进程，窗口层关闭正确、进程分钟级长尾自退，verify-closed 进程断言结构性不满足（docs/68 残壳专项已定案）。裁决待定：按已知限制接受（夹具容忍进程长尾）或另立绕行路线。
 - [ ] 显示端为代操作提供 agent 可达通道：实测 CUA SendInput、PostMessage 直投、PowerShell SendInput 均无法驱动面板的开始/继续按钮（合成输入被拒，安全模型按设计工作），AGENTS 的 computer-use 代点授权机械不可达；需设计决策（显示端 agent 白名单通道，或明确收回该授权并修订 AGENTS）。
 
-- [ ] 完成四个已迁移应用 workflow 的真机复验，核对一次交接、组内暂停、不确定结果、独立文件核验及进程归属，见 [57](57-application-workflow-migration.md)。VS Code 已有独立可恢复验证入口，真机状态及边界见 [55](55-resumable-desktop-tasks.md)；旧脚本退出不具备自动续跑能力。
-
+- [ ] 已迁移 workflow 复验收尾（机制已由整批轮次反复验证：verify-applications 四软件 68 步，第七轮 69/69、第八轮 70/71 零救场，不确定结果恢复与独立文件核验均在轮内实证，见 [57](57-application-workflow-migration.md)/[68](68-combined-batch-first-round.md)）：剩**一次交接计数**（与 once_per_run 条目重叠，整批预授权轮不弹卡不计数）与**组内暂停**的组合场景核对；VS Code 独立可恢复入口见 [55](55-resumable-desktop-tasks.md)。
 - [ ] once_per_run 真机确认次数与失效原因验收：跨软件及长等待只确认一次，人工接管后停止，不自动恢复；实现与本轮限制见 [任务交接策略](52-task-handoff-policy.md)。
 
 - [ ] 显示 v7 剩余真机验收：用户关闭显示端、停止后新写任务一次开始、详情窗口核对并继续、状态损坏修复、连续停止竞态与系统重启。隔离桌面的停止/修复按钮和正常替换已测，范围及逐轮证据见 [47](47-execution-recovery.md)；v6 历史证据保留在 [35](35-stop-lifecycle.md)。
@@ -125,10 +121,7 @@
   "模板已改，重试仍跑旧路线"——防止对冻结计划验证新修复（本轮废了两次重试）。
 - [ ] excel paste 中断重放后盘上仍为种子、xlsx subset 断言失败（docs/68 第五轮），
   重放恢复路径复现优先。
-- [ ] 诊断脚本沉淀入 devtools：窗口标题监视器、close→gone 计时器、隔离应用实验台
-  （本轮以 ad-hoc 脚本反复手写）。已沉淀：`diagnose cleanup-tabs`（按名称关标签+
-  弹层「不保存」轮询，ad-hoc 清场脚本三次手写三次出错后入库）、`diagnose snapshot-diff`
-  （历史快照结构化差异）、`focus-report`（焦点三视图），2026-10-01。
+- [ ] 诊断脚本沉淀入 devtools：隔离应用实验台（本轮以 ad-hoc 脚本反复手写的最后一项）。已沉淀：`cleanup-tabs`（按名关标签+弹层轮询）、`snapshot-diff`（快照差异）、`focus-report`（焦点三视图）、`title-watch`（标题瞬态监视）、`close-gone`（关闭→消失计时）——2026-10-01，全部活体验证后入库。
 - [ ] verify 族耐心值可调化（spec，按需推进）：verify-file/rows/clipboard/closed 5s、
   verify-window 15s、`--verify-value` 2s 已被 after_help 承诺为契约；若实际出现按应用调耐心的
   需求，走 Timing 内部旋钮 + help 措辞去具体化 + golden/docs/06/CHANGELOG 同 PR 的 spec 路线，
