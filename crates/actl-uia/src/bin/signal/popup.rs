@@ -111,7 +111,13 @@ unsafe fn open_popup(owner: HWND, lines: Vec<String>, menu: bool, hover: bool) {
         (info.rcWork.bottom - height).max(info.rcWork.top),
     );
     let Ok(hwnd) = CreateWindowExW(
-        WS_EX_TOPMOST | WS_EX_APPWINDOW | WS_EX_CONTROLPARENT | WS_EX_LAYERED,
+        WS_EX_TOPMOST
+            | WS_EX_APPWINDOW
+            | WS_EX_CONTROLPARENT
+            | WS_EX_LAYERED
+            // 悬浮卡按 tooltip 语义:任何交互(含点击)都不激活——纯信息展示
+            // 抢前台会打断自动化目标的前台护栏(2026-10-01 金任务2实证)。
+            | if hover { WS_EX_NOACTIVATE } else { WINDOW_EX_STYLE(0) },
         class,
         if menu {
             w!("actl · 菜单")
@@ -177,30 +183,45 @@ unsafe fn open_popup(owner: HWND, lines: Vec<String>, menu: bool, hover: bool) {
         }
         paint::draw_popup(hwnd, &p.lines, p.menu, p.selected);
     }
-    let _ = ShowWindow(hwnd, SW_SHOW);
-    let requested = SetForegroundWindow(hwnd).as_bool();
-    if !IsWindowVisible(hwnd).as_bool() {
-        report("hidden", "popup was created but is not visible");
-    } else if GetForegroundWindow() != hwnd {
-        report(
-            "foreground_not_acquired",
-            if requested {
-                "activation pending; popup remains visible"
-            } else {
-                "Windows rejected activation; popup remains visible"
-            },
-        );
-        // Draw attention without stealing focus or repeatedly sending activation requests.
-        let flash = FLASHWINFO {
-            cbSize: std::mem::size_of::<FLASHWINFO>() as u32,
-            hwnd,
-            dwFlags: FLASHW_TRAY,
-            uCount: 3,
-            dwTimeout: 0,
-        };
-        let _ = FlashWindowEx(&flash);
+    if hover {
+        // 悬浮卡是被动信息展示:不激活、不抢前台、不闪任务栏——抢走自动化
+        // 目标的前台会让输入护栏读到空标题而误拒(2026-10-01 金任务2实证:
+        // 用户悬浮横条看进度 → 悬浮卡 SetForegroundWindow → type 被拒)。
+        let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+        if IsWindowVisible(hwnd).as_bool() {
+            report(
+                "shown_no_activate",
+                "hover card visible; foreground untouched",
+            );
+        } else {
+            report("hidden", "hover card was created but is not visible");
+        }
     } else {
-        report("ready", "popup visible and foreground");
+        let _ = ShowWindow(hwnd, SW_SHOW);
+        let requested = SetForegroundWindow(hwnd).as_bool();
+        if !IsWindowVisible(hwnd).as_bool() {
+            report("hidden", "popup was created but is not visible");
+        } else if GetForegroundWindow() != hwnd {
+            report(
+                "foreground_not_acquired",
+                if requested {
+                    "activation pending; popup remains visible"
+                } else {
+                    "Windows rejected activation; popup remains visible"
+                },
+            );
+            // Draw attention without stealing focus or repeatedly sending activation requests.
+            let flash = FLASHWINFO {
+                cbSize: std::mem::size_of::<FLASHWINFO>() as u32,
+                hwnd,
+                dwFlags: FLASHW_TRAY,
+                uCount: 3,
+                dwTimeout: 0,
+            };
+            let _ = FlashWindowEx(&flash);
+        } else {
+            report("ready", "popup visible and foreground");
+        }
     }
     if menu && let Ok(button) = GetDlgItem(Some(hwnd), 100) {
         let _ = windows::Win32::UI::Input::KeyboardAndMouse::SetFocus(Some(button));
