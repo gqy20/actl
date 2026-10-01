@@ -46,7 +46,7 @@
 - [ ] winapp 双客户端对照（需 Blender/Photoshop/Minecraft 环境——本机未装，需环境）。
 - [ ] 深化应用业务闭环（VS Code/Excel/Word 已装可测；Zotero 未装——非 M2 阻塞，按需推进）。
 - [x] 键盘 vs 点击比较（2026-10-02 计算器 7×8：点击 5589ms vs 键盘 1519ms——键盘快 3.7 倍，结果均正确；结论：数字输入优先键盘路线，按控件能力选择）。
-- [ ] 夸克/Zotero 控件重建（quark 已复验通过含两处版本漂移修正；Zotero 本机未装）；腾讯会议日期时间控件（draft-date 变体待补）。
+- [x] 夸克/Zotero 控件重建与读回（2026-10-02：Zotero 快速搜索 set-value+读回 ✓；ctrl+shift+l 侧栏重建 ref 变化后重取快照命中 ✓；UIA 焦点谎报实证 set-value 绕过。quark 已复验通过）。腾讯会议 draft-date 待补。
 - [ ] excel paste 中断重放复现（需 Excel 环境构造中断场景——非 M2 阻塞）。
 
 ### P1 已完成（2026-10-01/02）
