@@ -36,6 +36,7 @@
 
 ### Documentation and validation
 
+- **stale_read/resume_check 真机矩阵补全（2026-10-01，预授权轮全自驱）**：四个格子一次收齐——①不确定写入→resume_check 防代做（引擎判 uncertain 暂停、恢复后 attempts 保持 1 零重放）；②目标被改→resume_check_failed 保持暂停、目标步 attempts=0 拒绝盲派发；③只读等待中全局热停→ABORTED 无重放、recover 恢复；④多任务切换→resume 精确绑定自身任务（mB 完成 mA 不受影响）。附带：flow-resume 的 template 陈旧提示字段实战工作。同轮完成交接闭环剩余格子（多任务+急停组合，docs/52/39）。
 - **once_per_run / 组内暂停 / 任务隔离真机验收（用户协作轮，2026-10-01）**：临时关预授权、真人点击同意卡——首卡确认后同任务复用（无重复弹卡、无重复写入）；用户键鼠活动期间重卡（external_input 撤销，人工在场=接管信号，设计行为）；任务与流程各自独立出卡不串授权；流程等待步边界暂停→恢复→completed、attempts 全 1。验收后预授权已恢复并复验。**附带定案**：合成输入经按钮与 Ctrl+Alt+Y 热键均无法自授（注入热键零触发；自有注入器递归死锁）——授权必须真人，为"显示端 agent 通道"设计决策提供实证（docs/52）。
 - **无干预四软件整跑达成（2026-09-30 第八轮，补记）**：v0.1.8 发布构建 + 预授权 standing，70/71 completed、**零人工救场**（对照第七轮 69/69 含三次救场）——YIELD_BUSY 有界等待吸收 user_paused 类中断、recovery 预算吸收冷启动 STALE_REF、预授权消除全部交接卡。唯一 uncertain（excel-table-exit）为已定案的 VSTO+输入法加载项进程钉住限制：窗口层正确关闭、进程分钟级长尾自退，verify-closed 进程断言结构性不满足（docs/68 残壳专项）。当时 docs/68 与提交已录，CHANGELOG/ROADMAP 漏记，2026-10-01 用户指出后补齐。
 - **全部原生夹具复验通过（2026-10-01）**：金任务 1（UWP 类配对归属，3 单轮 + 5 轮批量 + **正式十轮 10/10**）、金任务 2（3 单轮 + **正式十轮 10/10**，合计 13 连胜）、input-target、msinfo32 表格提取、Explorer 虚拟化列表、显示端 readiness/signal-display（含 `--physical` 物理路线活体）、Edge 深树/内容视图、Chrome 内容视图、flow-evaluation（冻结计划不改写）——身份、单次写入、失败保留与优雅清理逐项核过。期间修复：夹具收尾按标签/整窗双路线分流（标签路线对无标签应用是空操作的回归）、Win11 资源管理器地址栏控件消失（面包屑改自定义控件，改由窗口标题+item-container 文件发现承载归属核验）。

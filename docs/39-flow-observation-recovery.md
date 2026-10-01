@@ -81,3 +81,18 @@ history 记录 source=cli、workflow_completed=true、workflow_status=completed�
 日志为 `target/logging-gate-after-signal-close.log`。随后通过 display-start 启动新版，
 display-status 确认 PID 27748、ready=true、responsive=true、stop_requested=false。
 证据为 `target/logging-live/display-restarted.json` 与 `display-verified.json`；没有续跑旧流程。
+
+## 真机矩阵补全（2026-10-01，预授权轮，全自驱）
+
+- **不确定写入 → resume_check 防代做**：步骤交付写入后核验缺失文件 → 引擎判
+  `uncertain` 并暂停（不误判失败）；补齐证据文件后 resume，resume_check 通过、
+  **attempts 保持 1**（零重放，防双重生效实证）。
+- **目标被改 → 拒绝盲派发**：暂停期间篡改核验文件 → resume 操作 ok 但
+  `reason=resume_check_failed`、流程保持暂停、目标步 attempts=0 未派发；
+  恢复文件后 resume 正常完成。
+- **只读重查期间停止**：20s 元素等待中全局热停 → ABORTED、流程 stopped、
+  无重放；execution-recover 后恢复正常。
+- **多任务切换**：双暂停流程，resume mB 后 mA 保持 paused 不受影响，
+  各自完成——恢复精确绑定自身任务。
+- 附带实证：flow-resume 信封的 template 陈旧提示字段（fingerprint 比对）在
+  实战中工作（changed=false 正确输出）。
