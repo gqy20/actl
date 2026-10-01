@@ -34,11 +34,18 @@ fn owner(
     marker: &str,
     program: Option<&str>,
     token: Option<&str>,
+    class: Option<&str>,
 ) -> Result<Value> {
     let list = windows(c)?;
+    // class 过滤:UWP 应用一标题多窗(框架 ApplicationFrameWindow + 应用
+    // CoreWindow + 迟到的 TitleBarWindow),归属唯一性按标题匹配会撞车
+    // (2026-10-01 金任务1第2轮实证)——限定框架窗类才能绑定到可操作顶层窗。
     let candidates: Vec<_> = list
         .iter()
-        .filter(|w| w["title"].as_str().is_some_and(|t| t.contains(marker)))
+        .filter(|w| {
+            w["title"].as_str().is_some_and(|t| t.contains(marker))
+                && class.is_none_or(|k| w["class"].as_str() == Some(k))
+        })
         .collect();
     require(candidates.len() == 1, "task window not unique")?;
     let window = candidates[0];

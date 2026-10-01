@@ -36,7 +36,13 @@ pub(super) fn run(
         &html.to_string_lossy(),
     ])?;
     c.call(&["wait", "--window", &marker, "--timeout", "15000"])?;
-    let own = owner(c, &marker, Some(&program), Some(&profile.to_string_lossy()))?;
+    let own = owner(
+        c,
+        &marker,
+        Some(&program),
+        Some(&profile.to_string_lossy()),
+        None,
+    )?;
     let app = format!("hwnd:{}", own["hwnd"]);
     *owned = Some(own);
     c.call(&[

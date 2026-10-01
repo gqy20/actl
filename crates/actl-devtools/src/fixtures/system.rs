@@ -51,7 +51,16 @@ pub(super) fn run(
     let refs: Vec<_> = call.iter().map(String::as_str).collect();
     let launch = c.call(&refs)?;
     c.call(&["wait", "--window", &marker, "--timeout", "20000"])?;
-    let own = owner(c, &marker, None, None)?;
+    // UWP(计算器):同标题存在框架窗/应用 CoreWindow/标题栏窗多个顶层窗,
+    // 归属唯一性限定 ApplicationFrameWindow(可操作的真顶层窗);普通 Win32
+    // 应用(msinfo32/explorer)无此问题,不过滤。
+    let own = owner(
+        c,
+        &marker,
+        None,
+        None,
+        (case == "golden-task-1").then_some("ApplicationFrameWindow"),
+    )?;
     require(
         !initial.iter().any(|w| w["hwnd"] == own["hwnd"]),
         "existing HWND; ownership unproven",

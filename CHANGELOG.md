@@ -19,7 +19,7 @@
 
 - **金任务 2 全链修通**（Store 记事本连串根因）：① 启动走 `%LOCALAPPDATA%\Microsoft\WindowsApps\notepad.exe` 执行别名（裸名启动失败致"已存在窗口"恒阻塞）；② 收尾清理无论成败统一执行，且 UWP 判定收窄为 ApplicationFrameHost/CalculatorApp——Store 记事本虽在 WindowsApps 但行为是普通应用，须走普通关闭路径（误走 UWP system-close 时未保存窗口关不掉，`retained_for_review` 堵塞下一轮）；③ 另存为文件名框 `id:1001` 同时命中地址 ToolBar，改为快照后按 `role:Edit`+名称定位；④ 文件名改键盘通道（set-value 写 Edit 的 ValuePattern 不更新 ComboBox 提交值，Enter 会按默认旧名保存弹"确认另存为"）；⑤ 文名录入（清空→输入→回车）与其前置快照做成**阶段化有界重试**——对话框提供方忙窗（UIA_E_TIMEOUT）可击中任一环节，注入前观测失败按错误契约重取快照从失败步续起，对话框已消失时交由 verify-file 终裁；⑥ 误传不存在的 `verify-file --normalize-lines` 旗标移除（text 比较内置 CRLF→LF）。
 - **记事本收尾改按标签清理（多标签纪律）**：整窗 WM_CLOSE 在「恢复上次会话」开启时把未关闭标签逐轮带回、磁盘持久化跨进程存活（实证累积 17 个）。改为选中本任务标签（selection-item）→ `ctrl+w` → 未保存的**窗内弹层**按 Button ref 点「不保存」（name 选择器同时命中弹层 Text，AMBIGUOUS）；最后一个标签关闭时窗口随之关闭。收尾核验先 verify-window absent，再给 verify-closed 有界重试；仅剩进程拖尾时如实记录 `window_closed_process_tailed`、不判负（与 UWP 分支同族裁决）。快照失败区分"窗口已关（NOT_FOUND）"与"提供方忙窗（observation_failed）"，后者沉降重试。非本任务标签不碰，窗口因外来标签存活时如实判负。
-- **金任务 1 归属核验放宽（UWP 进程模型）**：计算器窗口属 ApplicationFrameHost 框架宿主、逻辑在 CalculatorApp 子进程，接受两条路径任一；移除"进程创建时间晚于激活"断言（UWP 复用暂停进程是常态）。
+- **金任务 1 修通（UWP 计算器归属唯一性）**：UWP 一标题多顶层窗——框架 `ApplicationFrameWindow`（ApplicationFrameHost 进程）、应用 `Windows.UI.Core.CoreWindow`（CalculatorApp 进程）与迟到的 `ApplicationFrameTitleBarWindow` 同标题并存，按标题找唯一窗在孪生窗出现后即撞车（`task window not unique`，约半数轮次复现）。owner() 新增可选 class 过滤，金任务 1 归属限定 `ApplicationFrameWindow`（可操作真顶层窗）；普通 Win32 应用不过滤。连同上批的归属核验放宽（接受框架宿主/包路径、移除进程创建时间断言——UWP 复用暂停进程是常态）与 UWP 收尾路径（system-close + verify-window absent），金任务 1 连续 8 轮通过（3 单轮 + 5 轮批量），每轮收尾 `closed_verified`、无进程残留。
 
 ## [0.1.8] - 2026-09-30
 

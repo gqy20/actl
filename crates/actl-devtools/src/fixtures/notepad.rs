@@ -27,7 +27,7 @@ pub(super) fn run(c: &mut Context, case: &str, owned: &mut Option<Value>) -> Res
     };
     c.call(&["launch", &notepad, &file.to_string_lossy()])?;
     c.call(&["wait", "--window", &marker, "--timeout", "12000"])?;
-    let own = owner(c, &marker, None, None)?;
+    let own = owner(c, &marker, None, None, None)?;
     require(
         own["created_unix_ms"]
             .as_u64()
