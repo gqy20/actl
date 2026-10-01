@@ -86,7 +86,21 @@ unsafe fn open_popup(owner: HWND, lines: Vec<String>, menu: bool, hover: bool) {
     let _ = GetMonitorInfoW(monitor, &mut info);
     let (mut dx, mut dy) = (96, 96);
     let _ = GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut dx, &mut dy);
-    let width = paint::pixels(if menu { 136 } else { 280 }, dx);
+    // 内容自适应宽度:按最长行的字符数估算(CJK≈14 DIP/字,拉丁≈8 DIP/字),
+    // 加内边距 32;夹在 [菜单最小 200, 详情最小 280, 最大 480] 之间。
+    // 旧值 136 DIP 截断"预授权: 开（关）"和流程 ID(2026-10-01 用户反馈)。
+    let longest = lines
+        .iter()
+        .map(|l| {
+            l.chars()
+                .map(|c| if c.is_ascii() { 8 } else { 14 })
+                .sum::<usize>()
+        })
+        .max()
+        .unwrap_or(100) as i32;
+    let min_width = if menu { 200 } else { 280 };
+    let content_width = (longest + 32).max(min_width).min(480);
+    let width = paint::pixels(content_width, dx);
     let height = paint::pixels(16 + lines.len() as i32 * 28, dx);
     let x = point.x.clamp(
         info.rcWork.left,
@@ -249,7 +263,19 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
             if let Some(p) = state {
                 let dpi = wp.0 as u32 & 0xffff;
                 let rect = &*(lp.0 as *const RECT);
-                let width = paint::pixels(if p.menu { 136 } else { 280 }, dpi);
+                let longest = p
+                    .lines
+                    .iter()
+                    .map(|l| {
+                        l.chars()
+                            .map(|c| if c.is_ascii() { 8 } else { 14 })
+                            .sum::<usize>()
+                    })
+                    .max()
+                    .unwrap_or(100) as i32;
+                let min_width = if p.menu { 200 } else { 280 };
+                let content_width = (longest + 32).max(min_width).min(480);
+                let width = paint::pixels(content_width, dpi);
                 let height = paint::pixels(16 + p.lines.len() as i32 * 28, dpi);
                 let _ = SetWindowPos(
                     hwnd,
@@ -373,8 +399,28 @@ fn row_at(lp: LPARAM, dpi: u32, count: usize) -> Option<usize> {
     let x = (lp.0 as u16 as i16) as i32;
     let y = ((lp.0 >> 16) as u16 as i16) as i32;
     let row = (y - paint::pixels(8, dpi)) / paint::pixels(28, dpi);
+    // 命中区随自适应宽度——从 popup 状态取实际宽度。
+    let width = POPUP
+        .lock()
+        .ok()
+        .and_then(|guard| {
+            let p = guard.as_ref()?;
+            let longest = p
+                .lines
+                .iter()
+                .map(|l| {
+                    l.chars()
+                        .map(|c| if c.is_ascii() { 8 } else { 14 })
+                        .sum::<usize>()
+                })
+                .max()
+                .unwrap_or(100) as i32;
+            let min_width = if p.menu { 200 } else { 280 };
+            Some((longest + 32).max(min_width).min(480))
+        })
+        .unwrap_or(280);
     (x >= 0
-        && x < paint::pixels(136, dpi)
+        && x < paint::pixels(width, dpi)
         && y >= paint::pixels(8, dpi)
         && row >= 0
         && (row as usize) < count)
@@ -423,7 +469,8 @@ mod tests {
             assert_eq!(row_at(point(12, 10), dpi, 5), Some(0));
             assert_eq!(row_at(point(12, 40), dpi, 5), Some(1));
             assert_eq!(row_at(point(12, 4), dpi, 5), None);
-            assert_eq!(row_at(point(140, 40), dpi, 5), None);
+            // 自适应宽度后最大 480 DIP——超出 480 即命中区外。
+            assert_eq!(row_at(point(500, 40), dpi, 5), None);
         }
     }
 }
