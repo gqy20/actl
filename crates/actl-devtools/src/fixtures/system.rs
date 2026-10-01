@@ -85,18 +85,11 @@ pub(super) fn run(
         )?;
     }
     let app = format!("hwnd:{}", own["hwnd"]);
-    if let Some(path) = &token {
-        c.call(&[
-            "verify",
-            "--value",
-            "uia:{\"match\":{\"role\":\"ToolBar\",\"name_contains\":\"地址:\"}}",
-            &format!("地址: {}", path.display()),
-            "--property",
-            "name",
-            "--app",
-            &app,
-        ])?;
-    }
+    // 旧的地址栏核验(role:ToolBar name 含"地址: <路径>")在本机构建已消失:
+    // Win11 资源管理器面包屑是自定义控件,UIA 只暴露 Edit"地址栏"(value 恒空,
+    // 2026-10-01 实测)。文件夹归属由窗口标题唯一 marker(owner 已核)+ 下方
+    // find 走 item-container 找到实际文件承载,不再依赖面包屑控件。
+    let _ = &token;
     *owned = Some(own);
     if case == "golden-task-1" {
         let mut rounds = vec![];

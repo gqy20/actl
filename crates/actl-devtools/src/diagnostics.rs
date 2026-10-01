@@ -68,6 +68,7 @@ pub fn run(kind: &str, args: &Args) -> Result<Value> {
             "timeout",
             "from",
             "to",
+            "match",
         ],
         &[],
     )?;
@@ -76,6 +77,24 @@ pub fn run(kind: &str, args: &Args) -> Result<Value> {
     let outcome = (|| -> Result<Value> {
         if kind == "snapshot-diff" {
             return snapshot_diff(args.get("from")?, args.get("to")?);
+        }
+        if kind == "cleanup-tabs" {
+            // 清场动词:按名称子串关标签(fixtures::close_tabs_where 同路线)。
+            // 沉淀背景:ad-hoc 清场脚本三次手写"选中标签+ctrl+w+弹层点不保存"
+            // 三次出错(单次采样不等弹层渲染、grep 不匹配静默跳过、ref 提取
+            // 残渣),2026-10-01 用户当场截获弹窗后决定永绝手写。
+            let hwnd = args.get("hwnd")?;
+            let pattern = args.get("match")?;
+            let app = format!("hwnd:{hwnd}");
+            let closed = crate::fixtures::close_tabs_where(&mut c, &app, "match", &|n: &str| {
+                n.contains(pattern)
+            })?;
+            let after = c.raw(&["snapshot", "--app", &app])?;
+            return Ok(json!({
+                "status": "cleaned",
+                "closed": closed,
+                "window_present": after["ok"] == true,
+            }));
         }
         let state = c.call(&["execution-status"])?;
         report["execution"] = state;

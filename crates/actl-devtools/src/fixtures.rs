@@ -147,11 +147,55 @@ fn cleanup(c: &mut Context, owner: &Value, browser_tab: bool, browser: bool) -> 
         // 整窗 WM_CLOSE 路线在「恢复上次会话」下残留标签逐轮累积(2026-10-01
         // 实证 17 个);「不保存」必须按 Button ref 点——name 选择器同时命中
         // 弹层 ContentBlock Text(AMBIGUOUS)。
+        // 路线判定:存在本任务/同族标签(notepad-s 夹具世系)→ 标签清理;
+        // 否则整窗优雅关闭——标签路线对无标签应用(msinfo32/explorer)是空
+        // 操作,窗口不会被关(win32-table-extract 回归实证)。
         let marker = owner["marker"]
             .as_str()
             .ok_or_else(|| io("marker missing"))?;
-        close_task_tabs(c, &app, marker)?;
-        // 窗口已随标签清空消失;进程可能拖尾退出(Store 打包应用常态,实测
+        let has_lineage_tabs = c
+            .raw(&["snapshot", "--app", &app])
+            .ok()
+            .filter(|s| s["ok"] == true)
+            .and_then(|s| {
+                elements(&s["data"]).ok().map(|es| {
+                    es.iter().any(|e| {
+                        e["role"] == "TabItem"
+                            && e["name"].as_str().is_some_and(|n| n.contains("notepad-s"))
+                    })
+                })
+            })
+            .unwrap_or(false);
+        if has_lineage_tabs {
+            close_task_tabs(c, &app, marker)?;
+        } else {
+            c.call(&["close-window", "--hwnd", &hwnd])?;
+            std::thread::sleep(std::time::Duration::from_millis(800));
+            // 未保存弹层:窗口仍在则按 Button ref 点「不保存」
+            let remain = c.call(&["list-windows", "--native", "--hwnd", &hwnd])?;
+            if remain["data"]["windows"]
+                .as_array()
+                .is_some_and(|w| !w.is_empty())
+            {
+                let snap = c.raw(&["snapshot", "--app", &app])?;
+                if snap["ok"] == true {
+                    let button = elements(&snap["data"])?.iter().find(|e| {
+                        e["role"] == "Button"
+                            && e["name"].as_str().is_some_and(|n| n.contains("不保存"))
+                    });
+                    if let Some(button) = button {
+                        let sid = snap["snapshot_id"]
+                            .as_str()
+                            .ok_or_else(|| io("snapshot missing"))?;
+                        let bref = button["ref"]
+                            .as_str()
+                            .ok_or_else(|| io("button ref missing"))?;
+                        c.call(&["click", bref, "--snapshot", sid, "--app", &app])?;
+                    }
+                }
+            }
+        }
+        // 窗口已关闭;进程可能拖尾退出(Store 打包应用常态,实测
         // 超过 verify-closed 内置 5s 沉降窗、数十秒内自退)。先核窗口消失,
         // verify-closed 有界串行重试(每次内部沉降 5s,×3 ≈ 15s);仅剩进程
         // 拖尾时如实记录状态、不判负——下一轮 preflight 看窗口不看进程,
@@ -186,7 +230,16 @@ fn cleanup(c: &mut Context, owner: &Value, browser_tab: bool, browser: bool) -> 
 /// 会话」持久化跨进程存活,整窗关闭不清会话——同族前缀是夹具世系的可证
 /// 归属;非本族标签(用户真实内容)不碰。快照失败须区分:NOT_FOUND=窗口
 /// 已关(成功路径),STALE_REF/observation_failed=提供方忙窗(沉降重试)。
-fn close_task_tabs(c: &mut Context, app: &str, marker: &str) -> Result<()> {
+/// 按谓词关闭标签的通用路线(有界 24 个):选中 → ctrl+w → 弹层轮询
+/// 「不保存」Button(按 ref 点,name 选择器同时命中弹层 Text)。返回关闭数。
+/// 公开给 diagnose cleanup-tabs:ad-hoc 清场脚本三次手写三次出错后沉淀
+/// (2026-10-01,AGENTS"诊断脚本不静默吞错"的反面实证),清场不再手写。
+pub(super) fn close_tabs_where(
+    c: &mut Context,
+    app: &str,
+    label: &str,
+    pred: &dyn Fn(&str) -> bool,
+) -> Result<usize> {
     let gone = |v: &Value| v["ok"] != true && v["error"]["code"] == "NOT_FOUND";
     let busy = |v: &Value| {
         v["ok"] != true
@@ -228,70 +281,78 @@ fn close_task_tabs(c: &mut Context, app: &str, marker: &str) -> Result<()> {
         }
         Err(io("cleanup snapshot stayed busy"))
     };
-    // 第一遍严格本任务 marker;第二遍同族前缀(notepad-s = 夹具世系)
-    for (pred, label) in [
-        (
-            &(|n: &str| n.contains(marker)) as &dyn Fn(&str) -> bool,
-            "task",
-        ),
-        (
-            &(|n: &str| n.contains("notepad-s") && !n.contains(marker)),
-            "lineage",
-        ),
-    ] {
-        for _ in 0..24 {
-            let snapshot = observe(c)?;
-            if gone(&snapshot) {
-                return Ok(());
+    let mut closed = 0usize;
+    for _ in 0..24 {
+        let snapshot = observe(c)?;
+        if gone(&snapshot) {
+            return Ok(closed);
+        }
+        let Some(tab_ref) = tabs_matching(&snapshot, pred) else {
+            return Ok(closed); // 无匹配标签
+        };
+        let sid = snapshot["snapshot_id"]
+            .as_str()
+            .ok_or_else(|| io("snapshot missing"))?;
+        c.call(&["click", &tab_ref, "--snapshot", sid, "--app", app])
+            .map_err(|e| {
+                actl_core::CtlError::with_evidence(
+                    e.code,
+                    format!("{label} tab close: {}", e.message),
+                    e.evidence.unwrap_or_else(|| json!({})),
+                )
+            })?;
+        c.call(&["press", "ctrl+w", "--app", app])?;
+        let before = tabs_matching(&snapshot, pred);
+        let _ = before;
+        // 弹层可能迟于 ctrl+w 渲染:有界轮询,「不保存」Button 出现或标签已消失即止
+        for _ in 0..8 {
+            std::thread::sleep(std::time::Duration::from_millis(250));
+            let popup = observe(c)?;
+            if gone(&popup) {
+                closed += 1;
+                break;
             }
-            let Some(tab_ref) = tabs_matching(&snapshot, pred) else {
-                break; // 本遍无匹配标签
-            };
-            let sid = snapshot["snapshot_id"]
-                .as_str()
-                .ok_or_else(|| io("snapshot missing"))?;
-            c.call(&["click", &tab_ref, "--snapshot", sid, "--app", app])
-                .map_err(|e| {
-                    actl_core::CtlError::with_evidence(
-                        e.code,
-                        format!("{label} tab close: {}", e.message),
-                        e.evidence.unwrap_or_else(|| json!({})),
-                    )
-                })?;
-            c.call(&["press", "ctrl+w", "--app", app])?;
-            // 弹层可能迟于 ctrl+w 渲染:有界轮询,「不保存」Button 出现或标签已消失即止
-            for _ in 0..8 {
-                std::thread::sleep(std::time::Duration::from_millis(250));
-                let popup = observe(c)?;
-                if gone(&popup) {
-                    break;
-                }
-                let button = elements(&popup["data"])?.iter().find(|e| {
-                    e["role"] == "Button"
-                        && e["name"].as_str().is_some_and(|n| n.contains("不保存"))
-                });
-                if let Some(button) = button {
-                    let psid = popup["snapshot_id"]
-                        .as_str()
-                        .ok_or_else(|| io("snapshot missing"))?;
-                    let bref = button["ref"]
-                        .as_str()
-                        .ok_or_else(|| io("button ref missing"))?;
-                    c.call(&["click", bref, "--snapshot", psid, "--app", app])?;
-                    break;
-                }
-                // 标签已消失(未修改标签静默关闭)则停止等待弹层
-                if tabs_matching(&popup, pred).is_none() {
-                    break;
-                }
+            let button = elements(&popup["data"])?.iter().find(|e| {
+                e["role"] == "Button" && e["name"].as_str().is_some_and(|n| n.contains("不保存"))
+            });
+            if let Some(button) = button {
+                let psid = popup["snapshot_id"]
+                    .as_str()
+                    .ok_or_else(|| io("snapshot missing"))?;
+                let bref = button["ref"]
+                    .as_str()
+                    .ok_or_else(|| io("button ref missing"))?;
+                c.call(&["click", bref, "--snapshot", psid, "--app", app])?;
+                closed += 1;
+                break;
+            }
+            // 标签已消失(未修改标签静默关闭)则停止等待弹层
+            if tabs_matching(&popup, pred).is_none() {
+                closed += 1;
+                break;
             }
         }
     }
-    let final_snap = observe(c)?;
+    Ok(closed)
+}
+fn close_task_tabs(c: &mut Context, app: &str, marker: &str) -> Result<()> {
+    // 第一遍严格本任务 marker;第二遍同族前缀(notepad-s = 夹具世系)
+    close_tabs_where(c, app, "task", &|n: &str| n.contains(marker))?;
+    close_tabs_where(c, app, "lineage", &|n: &str| {
+        n.contains("notepad-s") && !n.contains(marker)
+    })?;
+    let final_snap = c.raw(&["snapshot", "--app", app])?;
+    let remaining = |pred: &dyn Fn(&str) -> bool| -> bool {
+        final_snap["ok"] == true
+            && elements(&final_snap["data"]).ok().is_some_and(|es| {
+                es.iter()
+                    .any(|e| e["role"] == "TabItem" && e["name"].as_str().is_some_and(pred))
+            })
+    };
     require(
-        gone(&final_snap)
-            || (tabs_matching(&final_snap, &|n| n.contains(marker)).is_none()
-                && tabs_matching(&final_snap, &|n| n.contains("notepad-s")).is_none()),
+        final_snap["ok"] != true
+            || (!remaining(&|n: &str| n.contains(marker))
+                && !remaining(&|n: &str| n.contains("notepad-s"))),
         "task or lineage tabs remain after bounded close attempts",
     )?;
     Ok(())
