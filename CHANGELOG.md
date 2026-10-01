@@ -5,67 +5,59 @@
 0.x 期间破坏性变更在条目中以 **[BC]** 标注。条目只记"变了什么与为什么"；
 过程细节与归因在 git 提交信息与 docs/ 里，不在此重复。
 
-## [Unreleased]
+## [0.1.9] - 2026-10-02
 
-- **始终信任此流程（指纹持久信任）**：授权三部曲收官——全局托盘开关 → 会话级 standing → **指纹持久信任**（跨会话免点击）。声明 `approval: standing` 的流程运行时，执行器计算冻结计划的 FNV-1a 双通道 128 位指纹并附在交接请求中；显示端查 `trusted-flows.json` 信任集（显示端 UI 独占写入，有界 128 条）——匹配则即刻 Standing 授予（审计 reason=flow_trusted），不匹配则正常出卡；用户点「开始」后指纹自动入信任集。**模板变更 → 指纹变 → 信任自动失效 → 下次首跑重新出一次卡**。设计见 [32](docs/32-desktop-handoff.md)。
+本版是可靠性、验收与安全加固的版本：金任务跨日双百达标，全部原生夹具和四场景真机复验通过，输入护栏与显示协议健壮化（前台沉降/租约重读/换行折叠/悬浮卡不抢前台），前台弹层优先体系落地（front-report + 判定树 + 清理白名单），授权通道定案（agent 不可自授、急停压过预授权）。
+
+### Added
+
+- **始终信任此流程（指纹持久信任）**：授权三部曲收官——全局托盘开关 → 会话级 standing → **指纹持久信任**（跨会话免点击）。声明 `approval: standing` 的流程运行时，执行器计算冻结计划的 FNV-1a 双通道 128 位指纹并附在交接请求中；显示端查 `trusted-flows.json` 信任集——匹配即刻 Standing 授予，不匹配正常出卡。**模板变更 → 指纹变 → 信任自动失效**。设计见 [32](docs/32-desktop-handoff.md)。
+- **`front-report` 前台弹层报告（只读）**：应用用最前方的弹窗引导用户——自动化动手前必须先听它说。汇聚原生 owned 可见弹窗与树内子窗表面（文本全文+按钮清单），附朴素分类提示（error/save/confirm/update/unknown），`front_clear:true` 表示无引导层。观察三件套齐备：title-watch / focus-report / front-report。
+- **`focus-report` 只读诊断命令**：UIA 焦点元素、物理焦点根窗（GetGUIThreadInfo）、物理前台窗三视图并列——WinUI 上 UIA focused element 实测会谎报，物理层权威。
+- **consent_decision 一等字段 `input_source`**：决策时刻最近输入来源分类（device/foreign_injected/own_injection + age_ms）——人工物理输入与外来程序注入一眼可辨。
+- **verify-owner 进程树归属**：属主进程命令行不含令牌时沿父链（有界 4 级）找携带令牌的祖先，载荷带 `via_parent` 如实说明。
+- **verify-file IO 失败可区分报错**：`io_kind`（sharing_violation/permission_denied/other）+ `os_code` 入 evidence。
+- **flow-status 陈旧计划提示**：冻结计划旁车记录源模板字节指纹，重读比对不一致时提示"模板已改，重试仍跑旧路线"。
+- **`flow-clean` 批量归档**：归档历史非完结流程（默认 60 分钟阈值），证据全保留。
+- **诊断动词家族（devtools）**：`cleanup-tabs`（按名关标签+弹层白名单）、`snapshot-diff`（快照结构化差异）、`title-watch`（标题瞬态监视）、`close-gone`（关闭→消失计时）、`app-lab`（隔离应用实验台）、`focus-report`、`front-report`——ad-hoc 脚本全部沉淀入库。
+- **`composite-locate` 夹具**：UIA 组合定位真机验收五点（复合唯一化/同名消歧/作用域/重建后重定位/暂停恢复后重定位）。
 
 ### Changed
 
-- **excel-table-exit 进程断言按已知限制收口**：verify-applications.yml 两个 Excel 退出步的 verify 从严格 `verify-closed`（窗口+进程实例）改为 `verify-window --state absent`——VSTO+输入法加载项钉住进程使进程断言结构性不满足（docs/68 残壳专项定案；窗口关闭是可达的最强断言，进程分钟级长尾自退）。旧冻结计划不受影响，下轮整批生效；建立绕行路线后可回退。
-- **verify-owner 进程树归属**：窗口属主进程命令行不含任务令牌时，沿父链（有界 4 级）找携带令牌的祖先——保存/下载/打印对话框常跑在 contentproc 等子进程（zotero 实证），此前只能删除该类核验。直接归属优先，回退成功时载荷带 `via_parent`（祖先 pid/program/start）如实说明；祖先已退出即链断不臆断。
-
-### Added
-- **consent_decision 一等字段 `input_source`**：决策时刻最近输入的来源分类（kind: device/foreign_injected/own_injection + age_ms 新鲜度）——钩子层按 injected 标志三分、Raw 层按设备句柄+标签映射，人工物理输入与外来程序注入一眼可辨（docs/68 第五轮"用户未操作仍让行"的追因不再需要深挖监视器快照）。活体验证：预授权授予事件如实记录 kind=own_injection；同日两类样本（用户真点 / 注入让行）在案。
-- **续跑 journal 时间线并入确认已修复**：ard7 时间线完整交错（首执行器→伴侣探测→flow_resume_requested→续跑执行器 call/step 事件全部并入）——第五轮"止于首执行器"缺陷已被 resume journal source guard 工作覆盖，今日数据为验收证据，无需新代码。
-
-- **`front-report` 前台弹层报告（只读，前台优先纪律）**：应用用最前方的弹窗引导用户——错误框、确认框、保存提示、向导；自动化动手前必须先听它说。`front-report --app <窗口>` 汇聚两层证据：原生 owned 可见弹窗（标题/可见/前台）+ 树内子窗表面（文本全文+按钮清单），附朴素分类提示（error/save/confirm/update/unknown，判读归调用方），`front_clear:true` 表示无引导层；绝不点击任何东西。活体验证：「找不到文件」错误框被完整捕获（全文+确定按钮+error 分类）。观察三件套齐备：title-watch（标题瞬态）/ focus-report（焦点争议）/ front-report（前台引导）。
-- **cleanup-tabs 前台弹层白名单与守卫**：弹层轮询从只认「不保存」扩展为白名单——「不保存」与「找不到…文件」错误框的「确定」（文本匹配才点，弹窗全文随快照留证）；收尾守卫：仍有带按钮的弹出窗口即如实失败（`front popup not handled`）保留现场，不硬走固定路线。白名单验证即用事故现场本身：「先删文件后关标签」触发的错误框被自动正确处理。
-- **`composite-locate` 夹具（UIA 组合定位真机验收）**：五点一次跑完——①role 复合唯一化；②同 id 异类消歧（另存为 `id:1001` 双命中 → AMBIGUOUS 证据 + role+name 复合唯一）；③作用域（深嵌 Edit 在 descendants 命中、children NOT_FOUND；实测保存按钮是 depth-1 直接子级不能当靶）；④控件重建后重定位（对话框开关子树重建，复合选择器再命中）；⑤流程暂停恢复后重定位（--paused 冻结 + resume 重新解析）。活体全绿。
-- **`flow-clean` 补记（文档欠账）**：命令随 20c9726 入库但当时未同步 docs/06 契约与本文件——批量归档历史非完结流程（默认 60 分钟阈值；completed 与存活执行器不动；归档即整目录 rename 到 `flows-archived/`，证据全保留；`--dry-run` 列候选），2026-10-01 整理 roadmap 时发现补齐。
-- **verify-file IO 失败可区分报错**：打不开证据文件时按原因分类入 evidence（`io_kind`: sharing_violation/permission_denied/invalid_filename/other + `os_code` + 原文）——共享冲突（Excel/Word 持句柄）与权限问题一眼可辨；NotFound 维持 ASSERTION_FAILED（settle 窗内可重试）。
-- **flow-status 陈旧计划提示**：flow-run 冻结计划时旁车记录源模板字节指纹（`flows/<id>/source.json`，FNV-1a 双通道与 plan_fingerprint 同族）；flow-status 重读模板比对，不一致时 `template.changed=true` 并提示"模板已改，重试仍跑冻结的旧路线；验证新修复需新任务"——防对冻结计划验证新修复（ROADMAP 实录废过两次重试）。旧流程无记录时字段为 null 零噪音；模板不可读时 changed=null 不臆断。契约测试覆盖改模板→提示链路。
-- **`diagnose title-watch` / `close-gone`（devtools）**：标题瞬态监视（按拍采样记录变化事件，前台护栏 actual="" 类问题取证）与 close→gone 计时（优雅关闭→窗口消失各阶段耗时，收尾拖尾取证标准化），活体验证后入库。诊断动词家族至此：cleanup-tabs/snapshot-diff/title-watch/close-gone + focus-report。
-
-### Documentation and validation
-- **P0 验收推进（2026-10-01/02）**：UIA 组合定位真机验收✓（composite-locate 五点全绿）；显示失联恢复✓（kill 伴侣→自动重启→ready/responsive true）；状态一致性部分完成（display-status 路径核验，伴侣条视觉核对待截屏修正）；Raw Input/多屏 DPI/系统重启需用户配合。
-- **NFR 验收与发布产物核对（2026-10-01 晚间）**：冷启动 PowerShell Stopwatch 口径 P50=67ms/P95=94ms（超 PRD 目标 34%/18%，timing 纪律不跨日比绝对值，基线当日为轻负载）；snapshot 记事本 P50=433ms（达标 <500ms）；输出体积 status 135B / get 245B（达标 <2KB）；skeleton 削减 45%（基线 38%）。发布产物：gate 159.8s 全绿、二进制 5.3MB 零依赖、契约测试 79 个/94 全过、golden 22 文件。非开发机 US3 需用户提供环境（docs/timing-data/nfr-20261001-evening.md）。
-- **金任务跨日重复双百（2026-10-01 晚间）**：GT1 10/10（UWP 挂起就绪等待修复后；双日合计上午+晚间各 10/10）；GT2 10/10（7+3，中途一次前台护栏拒绝——用户发消息夺焦点，清残后续 3 轮补齐）。NFR timing profile 43 calls 完成。
-- **tencent-meeting-draft 真机复验全绿（2026-10-01，四场景收官）**：${run.dir} 路径展开引擎缺陷已修——input default 的 ${run.dir}/${run.id}/${env:} 展开此前仅在模板声明 resources 块时生效，无资源模板中原样传给命令致 screenshot ERROR_PATH_NOT_FOUND（quark/wemeet 两场景同源复现）；修复后展开不依赖 resources 声明，flow-run 额外确保 run.dir 存在。修复后流程四步全绿（check-date/topic/confirm-date/evidence，attempts 全 1，result.png 自动落盘 ${run.dir}；flow id wg4）。首页入口按档案走截图+physical（首页 UIA 仅 1 个可交互元素），表单语义选择器当前版本直接可用。对话框关闭→主窗优雅退出，无真实会议产生。draft-date 变体与 inputs 格式陷阱（app 须带 hwnd: 前缀且不会被自动补）已记 pack。
-- **quark-search 真机复验通过（2026-10-01）**：修两处应用版本漂移后业务链全绿——①侧栏入口定案新路线：UIA 桥接 Button 几何退化（bounds 零/clickable point 原点）且 Invoke 不导航，改用页面渲染的 Text 节点（几何完整）preview 读 bounds + 中心物理点击（传统 RPA 能定位是走 MSAA/IA2 legacy 树，与 UIA 两套桥——已记录 pack）；②模板选择器修正：搜网盘 Edit 精确名→name_contains、search/evidence 的 URL query 断言→结果页内容断言（uccd:// 内部页不带 keyword 参数）。empty-count 渲染竞态经 resume 重试通过；evidence 步 screenshot 的 ${run.dir} 展开报路径不存在（待查，手工截图补证）。flow id quark-recheck3。
-- **cloudmusic-playback 真机复验通过（2026-10-01，用户授权轮）**：托盘模式唤起主窗后全链通过——baseline 核对 → UIA click 与 ctrl+p 键盘两通道各两轮 toggle-restore（9 步 attempts 全 1），播放状态每轮切回基线；时间线 14 组逐调用证据、consent_decision 带一等字段 input_source 实战工作（preauthorized 授予时如实分类）。窗口按最小化处理未关闭（用户正在使用）。flow id cloudmusic-recheck1。
-- **场景轨探测与 app-launch-observe 复验（2026-10-01）**：本机探测——网易云已装（正以托盘模式运行、无主窗）、夸克/腾讯会议未装。app-launch-observe 以记事本为目标复验通过（launch→wait→observe→verify 全链、2 步 attempts 全 1、逐调用与 consent 证据齐、现场清零；flow id alo-recheck1）。cloudmusic-playback 留待用户方便时执行（需唤起主窗并 toggle 播放四轮）；quark/tencent 需安装或换机。
-
-- **修复检测/auto_resume 全链真机验收（纯文件流零桌面依赖演示）**：action_failed 暂停 → 5s 静默探测 → **Retriable**（before_ok 且 verify 未过）自动续 #1 → **AlreadyDone**（verify 已过）自动续 #2 推进至下一步 → 第 3 次判定满足但**预算（2 次）耗尽不再派发** → 手动 resume 收口；**急停在场时判定满足也零派发**，recover 后手动续跑正常。证据落 `flows/<id>/probe.jsonl`。关键语义实录：探测的是失败步骤的 before/verify 谓词，run-only 步骤（无谓词）永远 pending 不自动续；带 before 的步骤首败 reason=precondition_failed，不进探测目标。横条"无后台处理闪烁"的视觉确认仍待用户顺带观察。
-- **UWP 最小化挂起观察**：4 分钟最小化后标题路径 restore 正常（1053ms）——类配对修复后探针只看宿主窗（不挂起），原 CoreWindow 挂起路径疑似绕开；更长放置场景留观察项。
-- **`diagnose cleanup-tabs` 清场动词（devtools）**：按名称子串关标签+弹层「不保存」有界轮询（与夹具 close_task_tabs 同路线泛化）。沉淀背景：ad-hoc 清场脚本三次手写"选中标签+ctrl+w+弹层点不保存"三次出错（单次采样不等弹层渲染、grep 不匹配静默跳过、ref 提取残渣），用户当场截获未处理弹窗后入库——清场不再手写。活体验证：未保存标签弹层正确轮询处理、窗口随末标签关闭、无残留。
-- **UWP 标题路径类配对下沉引擎**：同一标题下框架窗（`ApplicationFrameWindow`）与应用 `CoreWindow`/标题栏装饰窗并存时，`focus-window`/`restore-window`/`close-window` 按标题解析在 native→UIA 身份复核处恒 STALE_REF（provider 报告进程/名称与 native 层不一致）。`title_elements` 现按类配对：有框架窗时只保留框架窗（可操作真顶层窗，CoreWindow 托管其内），无框架窗的候选集不受影响。活体验证：计算器 focus/minimize→restore/close 标题路径全部通过（此前恒败）；夹具层同族修复（金任务 1 owner class 过滤）先验证了方向。残留：长时间最小化后 UWP 挂起导致 WM_NULL 探针 window_unresponsive 的恢复前解除挂起，另行推进。
-- **preview 框语义澄清（操作矩形，非视觉标注）**：黄框渲染的是 UIA provider 报告的操作矩形（`--physical` 点击落点为其中心，pointer 物理链同源）——与视觉边框的偏差是**物理点击风险信号**而非渲染缺陷，把框"修"得贴合视觉等于藏掉风险。默认 message、help、docs/06 契约、docs/31 判定树同步该语义；核对闭环 = preview 输出的 bounds 数字 + `screenshot --rect` 区域截图（窗口模式抓不到独立置顶的预览框，实测确认）。记事本编辑器实测贴合 1–3px、粘贴前后 bounds 稳定。
-- **`focus-report` 只读诊断命令**：三视图并列——UIA 焦点元素、物理焦点根窗（GetGUIThreadInfo）、物理前台窗（各带 hwnd/title/pid 身份），附进程一致性事实信号。用途：元素选择与焦点争议的交叉比对——WinUI 上 UIA focused element 实测会谎报，此前要读引擎源码才能理解护栏拒绝，现在一条命令出全部证据；判读规则（物理层权威）见 docs/31 组件选择判定树。
-- **`snapshot-diff` 诊断动词（devtools）**：`cargo xtask diagnose snapshot-diff --from <id> --to <id>` 按 runtime_id 对比两份历史快照，输出消失/新增/同身份但元数据变化三类差异（列表截断 20、计数完整）——回答"组件去哪了"，替代人工 diff 两份 JSON。
-
-### Documentation and validation
-
-- **agent 代操作通道定案（2026-10-01）**：四条合成通道实测全部无法授予（面板按钮/注入热键/自有注入器，docs/32 定案记录）——授权必须真人；AGENTS 代点措辞按"机械不可达"修订（仅真实输入驱动可用、不作依赖）；白名单通道挂 Phase 3 条件立项。
-- **有界只读恢复六判据真机验收（docs/64）**：短暂失败可恢复（迟来文件在沉降窗内吸收）、持续失败有界退出（observe→failed→requires_review 无死循环）、未知不走否定分支（NOT_FOUND 如实保留）、暂停/停止阻止派发（当日实证）、预算持久（auto_resume 耗尽拒派发）、不确定不重放+恢复事件留档。
-- **条件模板写入侧三模板真机验收（docs/63）**：窗口复用/启动（次轮 launch 步 attempts=0、窗口唯一）、已有值跳过（attempts 1→0）、可选控件关闭（无框跳过/有框关闭）；途经实录：窗口后台化+对话框滞留时流程内 type 被前台护栏正确拒绝。
-- **stale_read/resume_check 真机矩阵补全（2026-10-01，预授权轮全自驱）**：四个格子一次收齐——①不确定写入→resume_check 防代做（引擎判 uncertain 暂停、恢复后 attempts 保持 1 零重放）；②目标被改→resume_check_failed 保持暂停、目标步 attempts=0 拒绝盲派发；③只读等待中全局热停→ABORTED 无重放、recover 恢复；④多任务切换→resume 精确绑定自身任务（mB 完成 mA 不受影响）。附带：flow-resume 的 template 陈旧提示字段实战工作。同轮完成交接闭环剩余格子（多任务+急停组合，docs/52/39）。
-- **once_per_run / 组内暂停 / 任务隔离真机验收（用户协作轮，2026-10-01）**：临时关预授权、真人点击同意卡——首卡确认后同任务复用（无重复弹卡、无重复写入）；用户键鼠活动期间重卡（external_input 撤销，人工在场=接管信号，设计行为）；任务与流程各自独立出卡不串授权；流程等待步边界暂停→恢复→completed、attempts 全 1。验收后预授权已恢复并复验。**附带定案**：合成输入经按钮与 Ctrl+Alt+Y 热键均无法自授（注入热键零触发；自有注入器递归死锁）——授权必须真人，为"显示端 agent 通道"设计决策提供实证（docs/52）。
-- **无干预四软件整跑达成（2026-09-30 第八轮，补记）**：v0.1.8 发布构建 + 预授权 standing，70/71 completed、**零人工救场**（对照第七轮 69/69 含三次救场）——YIELD_BUSY 有界等待吸收 user_paused 类中断、recovery 预算吸收冷启动 STALE_REF、预授权消除全部交接卡。唯一 uncertain（excel-table-exit）为已定案的 VSTO+输入法加载项进程钉住限制：窗口层正确关闭、进程分钟级长尾自退，verify-closed 进程断言结构性不满足（docs/68 残壳专项）。当时 docs/68 与提交已录，CHANGELOG/ROADMAP 漏记，2026-10-01 用户指出后补齐。
-- **全部原生夹具复验通过（2026-10-01）**：金任务 1（UWP 类配对归属，3 单轮 + 5 轮批量 + **正式十轮 10/10**）、金任务 2（3 单轮 + **正式十轮 10/10**，合计 13 连胜）、input-target、msinfo32 表格提取、Explorer 虚拟化列表、显示端 readiness/signal-display（含 `--physical` 物理路线活体）、Edge 深树/内容视图、Chrome 内容视图、flow-evaluation（冻结计划不改写）——身份、单次写入、失败保留与优雅清理逐项核过。期间修复：夹具收尾按标签/整窗双路线分流（标签路线对无标签应用是空操作的回归）、Win11 资源管理器地址栏控件消失（面包屑改自定义控件，改由窗口标题+item-container 文件发现承载归属核验）。
-- **预授权下急停仍生效（显式真机验证）**：standing 开启 → 写直过（无卡）→ Ctrl+Alt+F12 全局热停 → 新代次 stopped → 写被拒（"never clear emergency stop automatically"）→ execution-recover 恢复 → 写路径正常。授权三层（托盘/会话/指纹）之上，急停仍是最高优先级撤销通道；让行自动恢复此前已由 round8 零救场覆盖。
+- **excel-table-exit 进程断言按已知限制收口**：两个 Excel 退出步 verify 改为 `verify-window absent`（VSTO+输入法加载项钉住进程使进程断言结构性不满足；窗口关闭是可达的最强断言）。
+- **preview 框语义澄清**：黄框 = 自动化操作矩形（`--physical` 点击落点为其中心），与视觉边框的偏差是风险信号而非渲染缺陷。
 
 ### Fixed
 
-- **`type --verify-value` 失败证据补齐差异本体**：比对失败信封新增 `expected`/`actual`/`comparison`（newline_folded_exact），与 `verify` 命令的证据标准对齐——此前只报 `delivered/value_verified` 布尔，换行根因（孤立 `\r`）需活体 `get` 才能看见，多花一整轮修复周期（2026-10-01 金任务2教训）。
-- **悬浮卡不再抢前台（显示层非侵入修复）**：横条悬浮信息卡（dwell 500ms 触发的只读卡）此前走 `SetForegroundWindow` 主动激活——用户在看横条进度时会偷走自动化目标的前台，输入护栏读到空标题即误拒（金任务 2 实证）。改为 tooltip 语义：`SW_SHOWNOACTIVATE` + `WS_EX_NOACTIVATE`，任何交互都不激活；菜单/详情弹窗保持原激活行为。
-- **`type --verify-value` 换行表示误判**：回读比较前把 `\n`/`\r`/`\r\n` 三种换行表示统一折叠为 `\n`——Store 记事本的 ValuePattern 实测把换行报告为孤立 `\r`（不是剪贴板的 `\r\n`），严格字节比较在中英混排多行文本上必误报 ASSERTION_FAILED。语义（行内容）不变、表示无关。
-- **前台护栏激活过渡误拒**：type/press/paste 的物理前台闸门从一次性标题比对改为有界沉降轮询（新时序旋钮 `foreground_settle_ms`，默认 600ms，`ACTL_FOREGROUND_SETTLE_MS` 可覆盖）——窗口激活过渡期的空标题过渡窗（ForegroundStaging）或标题未就位不再被误判为抢焦；标题稳定地不是目标时照拒不误。注入前瞬时复查维持严格。
+- **前台护栏激活过渡误拒**：type/press/paste 物理前台闸门改为有界沉降轮询（新旋钮 `foreground_settle_ms` 600ms）——激活过渡期空标题窗不再误判为抢焦。
+- **显示租约有界重读**：check_active 改为 1500ms 预算内重读——租约新鲜度窗与渲染 tick 贴近导致截图捕获/DWM 打嗝时误报"显示不可用"。
+- **`type --verify-value` 换行表示误判**：回读比较前 `\n`/`\r`/`\r\n` 统一折叠为 `\n`——Store 记事本 ValuePattern 实测报孤立 `\r`，严格字节比较必误报。
+- **`type --verify-value` 失败证据补齐**：新增 `expected`/`actual`/`comparison`——差异本体首份信封可见。
+- **悬浮卡不再抢前台**：横条悬浮信息卡改 `SW_SHOWNOACTIVATE` + `WS_EX_NOACTIVATE`——此前 `SetForegroundWindow` 会偷走自动化目标前台。
+- **UWP 标题路径类配对**：同标题多窗时 `focus-window`/`restore-window`/`close-window` 限定 `ApplicationFrameWindow` 框架窗。
+- **`${run.dir}` 路径展开**：input default 的路径展开不再依赖 resources 声明——无资源模板中原样传给命令致 screenshot 路径不存在。
 
 ### Fixed（夹具，devtools）
 
-- **金任务 2 全链修通**（Store 记事本连串根因）：① 启动走 `%LOCALAPPDATA%\Microsoft\WindowsApps\notepad.exe` 执行别名（裸名启动失败致"已存在窗口"恒阻塞）；② 收尾清理无论成败统一执行，且 UWP 判定收窄为 ApplicationFrameHost/CalculatorApp——Store 记事本虽在 WindowsApps 但行为是普通应用，须走普通关闭路径（误走 UWP system-close 时未保存窗口关不掉，`retained_for_review` 堵塞下一轮）；③ 另存为文件名框 `id:1001` 同时命中地址 ToolBar，改为快照后按 `role:Edit`+名称定位；④ 文件名改键盘通道（set-value 写 Edit 的 ValuePattern 不更新 ComboBox 提交值，Enter 会按默认旧名保存弹"确认另存为"）；⑤ 文名录入（清空→输入→回车）与其前置快照做成**阶段化有界重试**——对话框提供方忙窗（UIA_E_TIMEOUT）可击中任一环节，注入前观测失败按错误契约重取快照从失败步续起，对话框已消失时交由 verify-file 终裁；⑥ 误传不存在的 `verify-file --normalize-lines` 旗标移除（text 比较内置 CRLF→LF）。
-- **记事本收尾改按标签清理（多标签纪律）**：整窗 WM_CLOSE 在「恢复上次会话」开启时把未关闭标签逐轮带回、磁盘持久化跨进程存活（实证累积 17 个）。改为选中本任务标签（selection-item）→ `ctrl+w` → 未保存的**窗内弹层**按 Button ref 点「不保存」（name 选择器同时命中弹层 Text，AMBIGUOUS）；最后一个标签关闭时窗口随之关闭。收尾核验先 verify-window absent，再给 verify-closed 有界重试；仅剩进程拖尾时如实记录 `window_closed_process_tailed`、不判负（与 UWP 分支同族裁决）。快照失败区分"窗口已关（NOT_FOUND）"与"提供方忙窗（observation_failed）"，后者沉降重试。非本任务标签不碰，窗口因外来标签存活时如实判负。
-- **金任务 1 修通（UWP 计算器归属唯一性）**：UWP 一标题多顶层窗——框架 `ApplicationFrameWindow`（ApplicationFrameHost 进程）、应用 `Windows.UI.Core.CoreWindow`（CalculatorApp 进程）与迟到的 `ApplicationFrameTitleBarWindow` 同标题并存，按标题找唯一窗在孪生窗出现后即撞车（`task window not unique`，约半数轮次复现）。owner() 新增可选 class 过滤，金任务 1 归属限定 `ApplicationFrameWindow`（可操作真顶层窗）；普通 Win32 应用不过滤。连同上批的归属核验放宽（接受框架宿主/包路径、移除进程创建时间断言——UWP 复用暂停进程是常态）与 UWP 收尾路径（system-close + verify-window absent），金任务 1 连续 8 轮通过（3 单轮 + 5 轮批量），每轮收尾 `closed_verified`、无进程残留。
+- **金任务 2 全链修通**（Store 记事本连串根因）：启动走执行别名、收尾按标签清理+弹层白名单、另存为文件名改键盘通道+阶段化有界重试、UWP 判定收窄、多标签纪律。
+- **金任务 1 修通**（UWP 计算器归属唯一性）：owner() 新增 class 过滤限定 ApplicationFrameWindow。
+- **夹具收尾双路线分流**：有多任务/同族标签走标签清理，无标签应用走整窗优雅关闭。
+
+### Documentation and validation
+
+- **金任务跨日双百**：GT1 10/10 + GT2 10/10（2026-10-01 晚间）。
+- **NFR 数据**：冷启动 P50=67ms/P95=94ms、snapshot P50=433ms、输出体积 <2KB、skeleton 削减 45%。
+- **发布产物核对**：gate 全绿、5.3MB 零依赖、79 契约测试 94 全过、golden 22 文件。
+- **全部原生夹具复验通过**（11 项）：金 1/金 2/input-target/msinfo32/Explorer/显示端×2/Edge×2/Chrome/flow-evaluation。
+- **场景轨四场景真机复验通过**：app-launch-observe、cloudmusic-playback、quark-search（含两处版本漂移修正）、tencent-meeting-draft。
+- **修复检测/auto_resume 全链真机验收**：两判定+预算+急停阻断。
+- **once_per_run / 组内暂停 / 任务隔离真机验收**（用户协作轮）。
+- **stale_read/resume_check 真机矩阵补全**（四格收齐）。
+- **有界只读恢复六判据真机验收**。
+- **条件模板写入侧三模板真机验收**。
+- **agent 代操作通道定案**（docs/32）：四条合成通道全部无法授予——授权必须真人。
+- **预授权下急停仍生效（显式验证）**：standing 开启 → 热停 → 写被拒 → recover → 恢复正常。
+- **无干预四软件整跑达成（第八轮补记）**：70/71 completed、零人工救场。
 
 ## [0.1.8] - 2026-09-30
 
