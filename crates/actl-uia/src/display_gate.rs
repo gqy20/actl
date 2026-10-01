@@ -266,16 +266,28 @@ pub(crate) fn check_active() -> Result<(), CtlError> {
         if let Some(epoch) = e.borrow().as_ref() {
             let paths = SignalPaths::default();
             // Brief acknowledged screenshot hiding is not a broken display.
-            let valid = paths.display_lease().is_some_and(|l| {
+            let healthy = |l: &actl_core::display::DisplayLease| {
                 l.compatible(unix_ms())
-                    && alive(&l)
+                    && alive(l)
                     && &l.epoch == epoch
                     && matches!(l.state.as_str(), "ready" | "capture")
-            });
-            if !valid {
-                return Err(unavailable(
-                    "display became unavailable; subsequent input stopped",
-                ));
+            };
+            // 租约新鲜度窗 1500ms 与渲染 tick(~1s)贴得很近:截图捕获/DWM
+            // 打嗝会让单次读取撞上过期租约(2026-10-01 金任务2收尾 click 实证,
+            // 伴侣未死、下一 tick 自愈)。有界沉降重读——真死的伴侣在窗口末端
+            // 仍读不到健康租约,照样如实报错。
+            let start = std::time::Instant::now();
+            loop {
+                let current = paths.display_lease();
+                if current.as_ref().is_some_and(healthy) {
+                    return Ok(());
+                }
+                if start.elapsed() >= std::time::Duration::from_millis(1500) {
+                    return Err(unavailable(
+                        "display became unavailable; subsequent input stopped",
+                    ));
+                }
+                std::thread::sleep(Duration::from_millis(crate::timing().fast_poll_ms));
             }
         }
         Ok(())
