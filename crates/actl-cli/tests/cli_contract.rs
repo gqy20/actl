@@ -219,6 +219,18 @@ fn focus_report_help_documents_three_views() {
 }
 
 #[test]
+fn front_report_help_documents_guidance_layer_discipline() {
+    // spec:前台弹层优先(docs/31)——应用用最前方弹窗引导用户,动手前先读;
+    // 只读、不点击、分类提示不裁决、front_clear 语义进 help 四要素。
+    let (code, stdout) = actl(&["front-report", "--help"]);
+    assert_eq!(code, 0);
+    assert!(stdout.contains("front guidance layer"), "help: {stdout}");
+    assert!(stdout.contains("Never clicks anything"), "help: {stdout}");
+    assert!(stdout.contains("front_clear"), "help: {stdout}");
+    assert!(stdout.contains("Errors:"), "help: {stdout}");
+}
+
+#[test]
 fn get_property_whitelist_includes_text_channel() {
     // value/text 分工(spec):text = TextPattern 文档正文专用通道,
     // 白名单外属性 → PROTOCOL exit 2,错误信息须列出 text(离线可测)

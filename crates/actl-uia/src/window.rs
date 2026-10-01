@@ -1014,6 +1014,87 @@ fn runtime_ids_match(recorded: &[i32], current: &[i32]) -> bool {
     !recorded.is_empty() && recorded == current
 }
 
+/// 朴素分类提示(不裁决,判读归调用方):按弹窗文本关键词给类别。
+fn classify_front_text(text: &str) -> &'static str {
+    if text.contains("找不到") || text.contains("错误") || text.contains("失败") {
+        "error"
+    } else if text.contains("保存") {
+        "save"
+    } else if text.contains("确认") || text.contains("是否") {
+        "confirm"
+    } else if text.contains("更新") || text.contains("升级") {
+        "update"
+    } else {
+        "unknown"
+    }
+}
+
+/// 前台弹层报告(只读,docs/31 前台优先纪律):应用用最前方的弹窗引导用户
+/// ——错误框、确认框、保存提示、向导。自动化动手前必须先听它说。汇聚两层
+/// 证据:原生 owned 弹窗(标题/可见/前台)与树内子窗(文本全文+按钮清单),
+/// 附朴素分类提示;front_clear 表示当前无前台引导层。本命令不点击任何东西。
+pub fn front_report(app: &str) -> Result<serde_json::Value, CtlError> {
+    let cap = capture(Some(app))?;
+    let title = cap.window.title.clone();
+    let all = crate::native_windows::native_windows()?;
+    let main = all.iter().find(|w| w.title == title);
+    let owned: Vec<serde_json::Value> = all
+        .iter()
+        // 只报可见弹窗:Default IME 等隐形宿主是噪音(实测两枚)。
+        .filter(|w| w.owner_title.as_deref() == Some(title.as_str()) && w.visible)
+        .map(|w| {
+            serde_json::json!({"hwnd": w.hwnd, "title": w.title, "class": w.class,
+                   "visible": w.visible, "foreground": w.foreground})
+        })
+        .collect();
+    // 树内子窗(depth>0 的 Window):整棵子树的文本与按钮归入该层;
+    // 无文本也无按钮的宿主壳不报(降噪)。
+    let nodes = &cap.nodes;
+    let mut surfaces = Vec::new();
+    let mut i = 0;
+    while i < nodes.len() {
+        let node = &nodes[i];
+        if node.role != "Window" || node.depth == 0 {
+            i += 1;
+            continue;
+        }
+        let mut texts: Vec<String> = Vec::new();
+        let mut buttons: Vec<String> = Vec::new();
+        if let Some(name) = node.name.as_deref().filter(|s| !s.is_empty()) {
+            texts.push(name.to_owned());
+        }
+        let mut j = i + 1;
+        while j < nodes.len() && nodes[j].depth > node.depth {
+            let inner = &nodes[j];
+            if let Some(name) = inner.name.as_deref().filter(|s| !s.is_empty()) {
+                if inner.role == "Button" {
+                    buttons.push(name.to_owned());
+                } else if inner.role == "Text" {
+                    texts.push(name.to_owned());
+                }
+            }
+            j += 1;
+        }
+        if !texts.is_empty() || !buttons.is_empty() {
+            let joined = texts.join(" ");
+            surfaces.push(serde_json::json!({
+                "name": node.name.clone().unwrap_or_default(),
+                "text": joined,
+                "buttons": buttons,
+                "classification": classify_front_text(&joined),
+            }));
+        }
+        i = j;
+    }
+    let front_clear = owned.is_empty() && surfaces.is_empty();
+    Ok(serde_json::json!({
+        "window": {"title": title, "class": cap.window.class, "pid": cap.window.pid,
+                   "hwnd": main.and_then(|w| w.hwnd), "foreground": main.map(|w| w.foreground)},
+        "owned": owned,
+        "in_tree": surfaces,
+        "front_clear": front_clear,
+    }))
+}
 #[cfg(test)]
 mod identity_regression_tests {
     #[test]

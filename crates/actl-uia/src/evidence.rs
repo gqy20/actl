@@ -336,6 +336,32 @@ pub fn office(path: &str, kind: &str) -> Result<Value, CtlError> {
     Ok(result)
 }
 
+/// 父进程 PID(ToolHelp 快照;None = 查不到/已退出)。verify-owner 进程树
+/// 归属用:保存/下载对话框常跑在 contentproc 等子进程,命令行不含任务令牌
+/// (zotero 实证)——沿父链找令牌。
+pub fn parent_pid(pid: u32) -> Option<u32> {
+    use windows::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW,
+        TH32CS_SNAPPROCESS,
+    };
+    unsafe {
+        let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0).ok()?;
+        let mut entry = PROCESSENTRY32W {
+            dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+            ..Default::default()
+        };
+        let mut first = Process32FirstW(snapshot, &mut entry).is_ok();
+        while first {
+            if entry.th32ProcessID == pid {
+                let _ = windows::Win32::Foundation::CloseHandle(snapshot);
+                return (entry.th32ParentProcessID != 0).then_some(entry.th32ParentProcessID);
+            }
+            first = Process32NextW(snapshot, &mut entry).is_ok();
+        }
+        let _ = windows::Win32::Foundation::CloseHandle(snapshot);
+        None
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -30,6 +30,11 @@ pub(crate) enum DesktopCommand {
     ExecutionRecover,
     /// Report the three focus views (UIA focused element, physical focus root, foreground window) for selection diagnostics
     FocusReport,
+    /// Report the app's front guidance layer (owned popups + in-tree dialog surfaces); read-only
+    FrontReport {
+        /// Target window by title substring or hwnd:<n>
+        app: String,
+    },
     /// Read recent local call events, newest calls first
     History {
         /// Filter by the caller-provided ACTL_TASK_ID
@@ -778,6 +783,7 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
         Command::Desktop(DesktopCommand::DisplayStatus) => "display-status",
         Command::Desktop(DesktopCommand::ExecutionStatus) => "execution-status",
         Command::Desktop(DesktopCommand::FocusReport) => "focus-report",
+        Command::Desktop(DesktopCommand::FrontReport { .. }) => "front-report",
         Command::Desktop(DesktopCommand::ExecutionRecover) => "execution-recover",
         Command::Desktop(DesktopCommand::TaskArchive { .. }) => "task-archive",
         Command::Flow(FlowCommand::Validate { .. }) => "flow-validate",
@@ -884,6 +890,9 @@ fn after_help_for(name: &str) -> Option<&'static str> {
         }
         "focus-report" => {
             "Example:\n  actl focus-report\nRead-only diagnostic: reports the UIA focused element, the physical focus root window (GetGUIThreadInfo) and the foreground window in one envelope, plus a process-agreement fact signal; use to arbitrate element-selection and focus disputes (UIA focus can misreport on WinUI; the physical layer is authoritative).\nErrors: INTERNAL UIA unavailable"
+        }
+        "front-report" => {
+            "Example:\n  actl front-report --app 记事本\n  actl front-report --app hwnd:12345\nRead-only: reports the app's front guidance layer — owned native popups (title/visible/foreground) and in-tree dialog surfaces with full text and button labels, plus a naive classification hint (error/save/confirm/update/unknown; judgement stays with the caller). Apps guide the user through front popups: read this BEFORE acting; front_clear=true means no guidance layer. Never clicks anything.\nErrors: NOT_FOUND no window | INTERNAL observation failure"
         }
         "display-start" => {
             "Example:\n  actl display-start\nStarts sibling actl-signal.exe if missing; restores a hidden/offscreen matching display; waits up to 4s for a matching visible frame. Does not clear stop.\nErrors: NOT_ACTIONABLE missing/hidden/incompatible display | INTERNAL launch failure"

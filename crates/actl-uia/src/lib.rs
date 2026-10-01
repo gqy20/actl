@@ -45,6 +45,7 @@ mod scoped_locate;
 mod table;
 pub use table::{TableResult, extract_table};
 mod window;
+pub use window::front_report;
 pub mod window_check;
 mod window_observation;
 mod window_ready;

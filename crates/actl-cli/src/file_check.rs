@@ -143,6 +143,38 @@ fn element_text_once(
     Ok(json!({"verified":true,"channel":property,"comparison":"normalized_exact"}))
 }
 
+/// 进程树归属判定(纯函数,可测):一份进程证据是否同时满足 program 与令牌。
+fn lineage_match(data: &serde_json::Value, program: &str, token: &str) -> bool {
+    let normalize = |text: &str| text.replace('/', "\\").to_lowercase();
+    data["program"]
+        .as_str()
+        .is_some_and(|path| normalize(path) == normalize(program))
+        && data["command_line"]
+            .as_str()
+            .is_some_and(|line| command_has_path(&normalize(line), &normalize(token)))
+}
+
+/// 窗口属主进程的命令行不含任务令牌时,沿父链(有界 4 级)找携带令牌的祖先:
+/// 保存/下载/打印对话框常跑在 contentproc 等子进程,令牌只在主进程命令行
+/// (zotero 保存对话框实证)。返回祖先证据供成功载荷说明。
+fn lineage_token_owner(start_pid: u32, program: &str, token: &str) -> Option<serde_json::Value> {
+    let mut pid = start_pid;
+    for _ in 0..4 {
+        let parent = actl_uia::evidence::parent_pid(pid)?;
+        let data = inspect_office(&parent.to_string(), "process").ok()?;
+        if data["state"].as_str() == Some("absent") {
+            return None;
+        }
+        if lineage_match(&data, program, token) {
+            return Some(
+                json!({"pid": parent, "program": data["program"], "start": data["start"]}),
+            );
+        }
+        pid = parent;
+    }
+    None
+}
+
 pub fn owner(
     app: &str,
     program: &str,
@@ -193,20 +225,24 @@ pub fn owner(
             "process instance changed",
         ));
     }
-    let normalize = |text: &str| text.replace('/', "\\").to_lowercase();
-    if data["program"]
-        .as_str()
-        .is_none_or(|path| normalize(path) != normalize(program))
-        || data["command_line"]
-            .as_str()
-            .is_none_or(|line| !command_has_path(&normalize(line), &normalize(token)))
-    {
-        return Err(CtlError::new(
-            ErrorCode::NotActionable,
-            "process task ownership unconfirmed",
-        ));
-    }
-    Ok(json!({"verified":true,"hwnd":window.hwnd,"pid":window.pid,"process_start":data["start"]}))
+    // 直接归属失败时按进程树回退:子进程对话框的令牌在祖先命令行。
+    let direct = lineage_match(&data, program, token);
+    let via_parent = if direct {
+        None
+    } else {
+        let lineage = lineage_token_owner(window.pid, program, token);
+        if lineage.is_none() {
+            return Err(CtlError::with_evidence(
+                ErrorCode::NotActionable,
+                "process task ownership unconfirmed",
+                json!({"direct":false,"lineage_searched":true}),
+            ));
+        }
+        lineage
+    };
+    Ok(
+        json!({"verified":true,"hwnd":window.hwnd,"pid":window.pid,"process_start":data["start"],"via_parent":via_parent}),
+    )
 }
 
 pub fn closed(hwnd: &str, pid: u32, instance: &str) -> Result<Value, CtlError> {
@@ -507,6 +543,30 @@ mod tests {
         let ev = e.evidence.clone().unwrap();
         assert_eq!(ev["io_kind"], "other");
         assert_eq!(ev["os_code"], 1234);
+    }
+    #[test]
+    fn lineage_match_requires_both_program_and_token() {
+        // 进程树归属纯函数:program 与令牌须同时满足(路径分隔与大小写归一)
+        let data = json!({
+            "program": "C:/App/bin/main.EXE",
+            "command_line": "\"C:\\App\\bin\\main.EXE\" --task C:\\work\\token-file.txt"
+        });
+        assert!(lineage_match(
+            &data,
+            "c:\\app\\bin\\main.exe",
+            "c:/work/token-file.txt"
+        ));
+        assert!(!lineage_match(
+            &data,
+            "c:\\app\\bin\\other.exe",
+            "c:/work/token-file.txt"
+        ));
+        assert!(!lineage_match(
+            &data,
+            "c:\\app\\bin\\main.exe",
+            "c:/work/absent.txt"
+        ));
+        assert!(!lineage_match(&json!({"program": "x"}), "x", "y"));
     }
     #[test]
     fn ownership_requires_a_complete_path_argument() {
