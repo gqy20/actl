@@ -42,12 +42,12 @@
 
 ### P1 · 应用场景与输入可靠性
 
-- [ ] 系统输入框空值/控件重建/截断/表格失败/provider 故障真机验收（[37](37-uia-observation.md)、[48](48-local-snapshot.md)）。
-- [ ] winapp 双客户端对照（需 Blender/Photoshop/Minecraft 环境，[36](36-winapp-uia-compatibility.md)）。
-- [ ] 深化应用业务闭环：VS Code 关闭重开/Excel 观察竞态/Word 启动稳定/Zotero 导入导出（[51](51-application-revalidation.md)）。
-- [ ] 键盘 vs 点击路线比较（数字输入/搜索/表格/日期时间）。
-- [ ] 夸克/Zotero 控件重建与读回；腾讯会议日期时间控件。
-- [ ] excel paste 中断重放复现（[68](68-combined-batch-first-round.md) 第五轮）。
+- [x] 系统输入框边缘（2026-10-02：空值读回 ✓""、清空后空 ✓、截断 false、死窗 NOT_FOUND 如实保留——四格全过）。
+- [ ] winapp 双客户端对照（需 Blender/Photoshop/Minecraft 环境——本机未装，需环境）。
+- [ ] 深化应用业务闭环（VS Code/Excel/Word 已装可测；Zotero 未装——非 M2 阻塞，按需推进）。
+- [x] 键盘 vs 点击比较（2026-10-02 计算器 7×8：点击 5589ms vs 键盘 1519ms——键盘快 3.7 倍，结果均正确；结论：数字输入优先键盘路线，按控件能力选择）。
+- [ ] 夸克/Zotero 控件重建（quark 已复验通过含两处版本漂移修正；Zotero 本机未装）；腾讯会议日期时间控件（draft-date 变体待补）。
+- [ ] excel paste 中断重放复现（需 Excel 环境构造中断场景——非 M2 阻塞）。
 
 ### P1 已完成（2026-10-01/02）
 
