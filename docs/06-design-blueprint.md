@@ -253,6 +253,35 @@ get-clipboard / set-clipboard   # 遵守 get-*/set-* 命名规则(原草案 clip
 list-notifications              # 系统通知读取
 ```
 
+#### 浏览器会话(browser,CDP 通道 v1,2026-10-02 spec)
+```
+browser-launch --browser-executable <abs> [--url U] [--profile name] [--visible] [--timeout ms]
+                                     # 启动 actl 自有的隔离浏览器(系统 Edge/Chrome 二进制,
+                                     # 专用 user-data-dir——默认 profile 被 Chrome/Edge 136+
+                                     # 禁调试端口,永不附着用户会话)并绑定一个 tab 为会话;
+                                     # --profile 持久 profile(一次性人工登录复用),缺省一次性;
+                                     # headless 除非 --visible;DevToolsActivePort 出现=启动成功,
+                                     # 否则 fail-fast 回收自启进程;stdio 继承守卫防管道挂死
+browser-navigate --session <id> --url U  # 重核绑定 target 存活→导航→等主 frame 的
+                                     # Page.frameNavigated(读线程事件,导航竞态判定地基)
+browser-read --session <id> (--css S | --xpath X) [--iframe]
+                                     # 唯一匹配读文本(0→NOT_FOUND,>1→AMBIGUOUS 带 matches 证据;
+                                     # --iframe 经子 frame 执行上下文,跨源同权);文本 64KiB 截断
+browser-click --session <id> (--css S | --xpath X) [--iframe] [--expect-text substr]
+                                     # 守卫写:停止代次核验→绑定重核→唯一匹配→派发→读回;
+                                     # --expect-text 断言被点击元素自身文本(ASSERTION_FAILED);
+                                     # 效果断言用 browser-read;失败不盲重放
+browser-close --session <id>     # CDP Browser.close 优雅关闭自有浏览器+注销会话文件;
+                                     # ephemeral profile 删除、persistent 保留;幂等(端点已死→如实行)
+```
+会话状态落 `%LOCALAPPDATA%\actl\browser\`(sessions/*.json + profiles/);错误码复用全集
+(PROTOCOL/NOT_FOUND/AMBIGUOUS/ASSERTION_FAILED/ABORTED/TIMEOUT/INTERNAL),无新增码。
+安全边界(docs/72 §8):客户端只实现 Target/Runtime/Page/Browser 白名单域,cookie 读取域
+构造性不可达,命令面无 cookie 导出动词;不附着用户已有浏览器。stdio 继承守卫
+(actl-uia::process_io)保证调用方管道在 actl 退出后正常 EOF。已知边界(v1):写入的
+uncertain 状态不跨进程持久化(崩溃后由调用方 browser-read 裁决);flow/YAML 通道声明、
+batch 组合、pipe 传输(docs/72 §8.2)待后续 spec。设计全文见 [72](72-browser-cdp-integration.md)。
+
 #### 可靠性(reliability,RPA 借鉴)
 ```
 wait --element @e3 [--timeout 5000]                # 等元素可解析(存在性)

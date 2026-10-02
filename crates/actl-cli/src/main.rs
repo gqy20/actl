@@ -5,6 +5,7 @@
 //! 参数面在 `cli`(clap 树,help 文本与其 doc comment 同源);命令执行体在
 //! `interact`(操作类)与 `query`(观察/编排类);本文件只做入口、分发与 envelope 落盘。
 
+mod browser;
 mod cli;
 mod condition;
 mod file_check;
@@ -547,6 +548,47 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             app.as_deref(),
             *limit,
         ),
+        Command::BrowserLaunch {
+            browser_executable,
+            url,
+            profile,
+            visible,
+            timeout,
+        } => browser::launch_cmd(
+            browser_executable,
+            url.as_deref(),
+            profile.as_deref(),
+            *visible,
+            *timeout,
+        ),
+        Command::BrowserNavigate {
+            session,
+            url,
+            timeout,
+        } => browser::navigate_cmd(session, url, *timeout),
+        Command::BrowserRead {
+            session,
+            css,
+            xpath,
+            iframe,
+            timeout,
+        } => browser::read_cmd(session, css.as_deref(), xpath.as_deref(), *iframe, *timeout),
+        Command::BrowserClick {
+            session,
+            css,
+            xpath,
+            iframe,
+            expect_text,
+            timeout,
+        } => browser::click_cmd(
+            session,
+            css.as_deref(),
+            xpath.as_deref(),
+            *iframe,
+            expect_text.as_deref(),
+            *timeout,
+        ),
+        Command::BrowserClose { session, timeout } => browser::close_cmd(session, *timeout),
         Command::GetClipboard => get_clipboard_cmd(),
         Command::SetClipboard { text } => set_clipboard_cmd(text),
         Command::Wait {

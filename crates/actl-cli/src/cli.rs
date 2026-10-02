@@ -670,6 +670,84 @@ pub(crate) enum Command {
         #[arg(long)]
         limit: Option<usize>,
     },
+    /// Launch an isolated Chromium-family browser (Edge/Chrome) and bind one tab as an actl session (CDP channel, docs/72)
+    BrowserLaunch {
+        /// Browser executable path (absolute), e.g. C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe
+        #[arg(long)]
+        browser_executable: String,
+        /// Initial page URL (default about:blank)
+        #[arg(long)]
+        url: Option<String>,
+        /// Persistent profile name for login reuse (default: throwaway ephemeral profile)
+        #[arg(long)]
+        profile: Option<String>,
+        /// Show the browser window (default: headless)
+        #[arg(long)]
+        visible: bool,
+        /// Startup timeout in milliseconds (default 15000)
+        #[arg(long)]
+        timeout: Option<u64>,
+    },
+    /// Navigate the session's tab to a URL and wait for the main frame load event
+    BrowserNavigate {
+        /// Session id from browser-launch
+        #[arg(long)]
+        session: String,
+        /// Destination URL (http:// https:// file:// about:blank)
+        #[arg(long)]
+        url: String,
+        /// Timeout in milliseconds (default 10000)
+        #[arg(long)]
+        timeout: Option<u64>,
+    },
+    /// Read the text of a unique element in the session's tab (CSS or XPath; no writes)
+    BrowserRead {
+        /// Session id from browser-launch
+        #[arg(long)]
+        session: String,
+        /// CSS selector (mutually exclusive with --xpath)
+        #[arg(long, conflicts_with = "r_x")]
+        css: Option<String>,
+        /// XPath expression (mutually exclusive with --css)
+        #[arg(long, id = "r_x", conflicts_with = "css")]
+        xpath: Option<String>,
+        /// Locate inside the (cross-origin) child iframe instead of the main frame
+        #[arg(long)]
+        iframe: bool,
+        /// Timeout in milliseconds (default 10000)
+        #[arg(long)]
+        timeout: Option<u64>,
+    },
+    /// Click a unique element — guarded write: stop check, target re-verify, unique match, dispatch, read-back
+    BrowserClick {
+        /// Session id from browser-launch
+        #[arg(long)]
+        session: String,
+        /// CSS selector (mutually exclusive with --xpath)
+        #[arg(long, conflicts_with = "c_x")]
+        css: Option<String>,
+        /// XPath expression (mutually exclusive with --css)
+        #[arg(long, id = "c_x", conflicts_with = "css")]
+        xpath: Option<String>,
+        /// Locate inside the (cross-origin) child iframe instead of the main frame
+        #[arg(long)]
+        iframe: bool,
+        /// Assert the element text contains this substring after the click (post-write verification)
+        #[arg(long)]
+        expect_text: Option<String>,
+        /// Timeout in milliseconds (default 10000)
+        #[arg(long)]
+        timeout: Option<u64>,
+    },
+    /// Gracefully close the session's browser (CDP Browser.close) and retire the session
+    BrowserClose {
+        /// Session id from browser-launch
+        #[arg(long)]
+        session: String,
+        /// Timeout in milliseconds (default 10000)
+        #[arg(long)]
+        timeout: Option<u64>,
+    },
     /// Read the clipboard as text (null if it holds no text)
     GetClipboard,
     /// Write text to the clipboard (replaces current content)
@@ -831,6 +909,11 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
         Command::CloseWindow { .. } => "close-window",
         Command::ListWindows { .. } => "list-windows",
         Command::Find { .. } => "find",
+        Command::BrowserLaunch { .. } => "browser-launch",
+        Command::BrowserNavigate { .. } => "browser-navigate",
+        Command::BrowserRead { .. } => "browser-read",
+        Command::BrowserClick { .. } => "browser-click",
+        Command::BrowserClose { .. } => "browser-close",
         Command::GetClipboard => "get-clipboard",
         Command::SetClipboard { .. } => "set-clipboard",
         Command::Wait { .. } => "wait",
@@ -843,6 +926,21 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
 /// 与 doc comment 同为 help 单一事实来源的一部分(改这里 = 改 -h)。
 fn after_help_for(name: &str) -> Option<&'static str> {
     Some(match name {
+        "browser-launch" => {
+            "Example:\n  actl browser-launch --browser-executable \"C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe\" --url about:blank\nLaunches an OWNED isolated browser (never the user's default profile — Chrome/Edge 136+ disables the debug port there) and binds one tab as the session. --profile <name> keeps a persistent profile for one-time manual logins; default is a throwaway profile. Headless unless --visible. Startup succeeds only when the devtools endpoint appears; otherwise the owned process is reclaimed.\nErrors: PROTOCOL bad executable/url/profile name | INTERNAL endpoint never appeared (reclaimed)"
+        }
+        "browser-navigate" => {
+            "Example:\n  actl browser-navigate --session s1a2b3 --url https://example.com\nConnects to the session's browser, re-verifies the bound tab still exists, navigates and waits for the main-frame Page.frameNavigated event. Reports url/title/frame_id.\nErrors: PROTOCOL bad url | NOT_FOUND unknown session / endpoint unreachable / target lost | TIMEOUT navigation event missing"
+        }
+        "browser-read" => {
+            "Example:\n  actl browser-read --session s1a2b3 --css \"#result span\"\n  actl browser-read --session s1a2b3 --xpath \"//button[@id='go']\" --iframe\nReads the text of exactly one element (hard uniqueness). --iframe addresses the cross-origin child iframe via its execution context. Text is capped at 64 KiB with a truncated flag.\nErrors: PROTOCOL selector 1-4096 chars / neither --css nor --xpath | NOT_FOUND no match / no iframe | AMBIGUOUS multiple matches | INTERNAL CDP layer"
+        }
+        "browser-click" => {
+            "Example:\n  actl browser-click --session s1a2b3 --css \"#submit\" --expect-text \"Saved\"\nGuarded write: stop-generation check, bound-target re-verify, unique-match locate, dispatch, then read-back. --expect-text turns the read-back into an assertion. A failed click is never replayed blindly — re-read to adjudicate first.\nErrors: PROTOCOL selector/expect-text invalid | ABORTED stop active | NOT_FOUND no match/target lost | AMBIGUOUS multiple matches | NOT_ACTIONABLE dispatch failed | ASSERTION_FAILED expectation unmet | INTERNAL CDP layer"
+        }
+        "browser-close" => {
+            "Example:\n  actl browser-close --session s1a2b3\nCloses the OWNED browser via CDP Browser.close (graceful; never taskkill), removes the session file, and deletes ephemeral profiles. Persistent profiles are kept for reuse. If the endpoint is already unreachable the close is idempotent and reported as such.\nErrors: NOT_FOUND unknown session | INTERNAL endpoint still answers after close (session kept)"
+        }
         "flow-validate" => {
             "Example:\n  actl flow-validate --file task.yml\nOptional --inputs values.yml resolves declared whole-argument inputs before validating every step. Resources are checked without creating files; data.resources uses the validation-preview context. --emit-plan includes the concrete preview plan and input values, not initialized resources. when/unless select run or otherwise using immediate assertions; unknown observations stop. Both routes are prevalidated. run/otherwise.sequence groups up to 16 calls with one result check. outputs select typed read-only data via JSON Pointer; bind replaces a whole args entry by index. Resolved CLI arguments are revalidated before execution.\nErrors: PROTOCOL invalid YAML/command/policy/resource | INTERNAL file error"
         }

@@ -1,7 +1,8 @@
-# 72 · 浏览器 CDP 正式接入设计(A1 自研最小客户端)与 spike 验收
+# 72 · 浏览器 CDP 正式接入设计(A1 自研最小客户端)与实现验收
 
-日期:2026-10-02。用户授权:路线 A(自研同步最小 CDP 客户端)+ 系统 Edge 二进制 + actl 专用持久 profile;本轮交付设计与 spike 取证,协议面 spec 与实现另行授权(实现归 M3)。
-关联:[34 浏览器原型](34-browser-connection-prototype.md) · [16 浏览器场景](16-browser-scenarios.md) · [PRD §1.3](PRD.md) · [47 执行恢复](47-execution-recovery.md) · [60 流程资源](60-workflow-resources.md) · 原型代码 [prototypes/browser-rs](../prototypes/browser-rs/)
+日期:2026-10-02(设计+spike)/2026-10-02(同日 v1 实现落地,用户授权"继续实现")。
+用户授权:路线 A(自研同步最小 CDP 客户端)+ 系统 Edge 二进制 + actl 专用持久 profile;协议面 spec 同 PR 落地。
+关联:[34 浏览器原型](34-browser-connection-prototype.md) · [16 浏览器场景](16-browser-scenarios.md) · [06 §3 浏览器会话命令族](06-design-blueprint.md) · [PRD §1.3](PRD.md) · [47 执行恢复](47-execution-recovery.md) · [60 流程资源](60-workflow-resources.md) · 原型 [prototypes/browser-rs](../prototypes/browser-rs/) · 实现 `crates/actl-browser`
 
 ## 1. 决策摘要
 
@@ -119,10 +120,35 @@ actl CLI / flow(统一 envelope、错误码、人工交接、急停)
 2. **优雅关闭可达性是启动承诺的一部分**:actl-browser 必须保证自己启动的实例总能经 CDP 关闭;debug port 被禁用视为启动失败而非降级运行。
 3. 偏差如实记录:run-1 遗留实例在 close-window 被显示端版本失配拒绝、两次 WM_CLOSE 被无头窗口忽略后,经归属核实(命令行/启动时间/空 profile/about:blank/无会话状态可复活)以 Stop-Process 终止——与 AGENTS taskkill 禁令的字面冲突在此记录;该类实例的"会话复活"风险不存在,但正式实现以 §11.1/§11.2 不变量杜绝再次出现。
 
-## 12. 开放项
+## 12. v1 实现(2026-10-02 spec 同日落地)
 
-- [ ] spike:Windows + Rust std 句柄继承实现 `--remote-debugging-pipe`(失败退路 port+127.0.0.1)
-- [ ] 协议面 spec PR(§9 范围,golden+docs/06+CHANGELOG 三位一体)
-- [ ] 正式实现 `crates/actl-browser`(M3):连接层移植 + uncertain 持久化 + 人工交接/急停接线 + cookie 域负面清单
-- [ ] 验收:对齐 docs/34 Phase-2 清单在正式命令面上重跑;持久 profile 登录复用真机验收
+按 §9 范围实现完整命令族:`crates/actl-browser`(连接层=cdp.rs 单属主事件循环移植、
+session.rs 会话文件原子落 `%LOCALAPPDATA%\actl\browser\`、ops.rs 五操作)+ actl-cli
+`browser.rs` + help 四要素 + 契约 golden 8 项(离线,CI 安全)。tungstenite 登记
+TECH_STACK §3(直接依赖 8/9)。错误码复用全集:CONNECT→NOT_FOUND(端点死=会话失效)、
+TIMEOUT→Timeout、其余→Internal;无新增码。
+
+**真机验收(14 步全绿)**:launch(Edg/154.0.4258.48)→read "0"→守卫写+expect-text
+"clicked-1"→效果读 "1"→XPath 读→AMBIGUOUS(3 matches)→NOT_FOUND→iframe 读"0"→
+iframe 守卫写+核验→iframe 读"1"→navigate(标题+计数归零证明新鲜加载)→close
+(closed:true+ephemeral profile 删除)→二次 close 幂等 NOT_FOUND。证据:
+`target/browser-cli-accept/acceptance.jsonl`、管道行为 `pipe-test.ps1` 复验。
+
+**新增设计教训(v1 实现期实证)**:
+
+4. **stdio 继承泄漏是分离式子进程的产品级 bug**:浏览器进程树继承调用方管道写端,
+   actl 退出后 `$()`/`ReadToEnd`(原生 Windows 管道实测复现)永不 EOF——所有管道捕获型
+   agent 调用方都会挂死;`Stdio::null()` 三件套(interact.rs launch 对 Word 的既有修法)
+   对 Edge 多子进程树不够。修复=派生前清自身三件 stdio 的 INHERIT 标志
+   (`actl-uia::process_io::clear_stdio_inheritance`,Win32 直调集中于 actl-uia)。
+   此守卫应作为今后一切长命子进程派生的固定前置。
+5. `--expect-text` 契约澄清:断言**被点击元素自身**的写后文本(写后核验的"验"落在
+   被驱动对象上);效果断言(计数变化等)归 browser-read,两层分开。
+
+## 13. 开放项
+
+- [ ] spike:Windows + Rust std 句柄继承实现 `--remote-debugging-pipe`(失败退路 port+127.0.0.1;§8.2)
+- [ ] flow/YAML 通道声明(browser 会话作为流程资源)+ 写入 uncertain 跨进程持久化(对齐 docs/47)
+- [ ] 持久 profile 登录复用真机验收(一次性人工登录场景)
+- [ ] batch 组合验收;browser-type 等写动词扩展(按需)
 - [ ] WebView2 内嵌形态评估(并入 M3 WebView2 专项验收后)

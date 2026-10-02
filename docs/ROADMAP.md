@@ -14,7 +14,7 @@
 
 - [ ] **非开发机 US3 复现**（唯一阻塞项，需用户提供另一台机器）
 - [ ] 综合任务编排：首条 release-review-draft 写段联测待用户授权（[43](43-release-review-draft.md)）
-- [ ] 浏览器正式 CLI/YAML 接入设计（设计初稿与 A1 最小客户端 spike 真机取证完成，待评审；spec 与实现归 M3，[72](72-browser-cdp-integration.md)、原型 [34](34-browser-connection-prototype.md)）
+- [ ] 浏览器 CDP 通道收尾：v1 命令族与真机验收已落地（[72](72-browser-cdp-integration.md)、CHANGELOG Unreleased）；余量=flow 通道声明、持久 profile 登录验收、pipe spike
 
 ## M3 v0.3.0 — 候选方向
 

@@ -39,6 +39,8 @@ serde-saphyr 与标准文件锁要求的 MSRV 已同步根 Cargo.toml；实际�
 2026-09-29 前台交接：signal/foreground 的 unsafe 限于查询并持有执行进程句柄、核对同目录 actl.exe 路径与请求 PID、调用 AllowSetForegroundWindow；RAII 关闭句柄，不使用 ASFW_ANY、不注入 Alt、不改变系统前台锁。沿用已有 windows 依赖。
 客户端 handoff 的动作租约核验显示端 PID/版本/租约，在最外层动作退出时通过同一原生 API 归还资格；不授予任务权限。foreground 消息沿用有界同步 IPC，版本提升为 v9。
 
+2026-10-02 用户授权浏览器 CDP 通道 v1（docs/72）：新增 `actl-browser` crate 与 tungstenite（=0.29，仅 `handshake` feature，同步阻塞 IO，无 TLS/async）；直接 Rust 依赖 8/9（上限内）。只实现 Target/Runtime/Page/Browser 白名单域——cookie 读取域构造性不可达是安全边界而非功能取舍。stdio 继承守卫复用既有 `windows` 依赖（actl-uia 新增 `Win32_System_Console` feature）。
+
 2026-09-28 浏览器接入原型：`prototypes/browser` 使用 Python 同步 Playwright 1.54.0，
 以 uv 项目单独管理。复用本机已安装环境进行验证，不加入 Rust workspace/发布包；Rust 外部直接依赖仍为 7，
 另登记 1 个可选原型直接依赖。Python/浏览器为原型运行前提，无新增 Rust async/tokio 或常驻服务。
@@ -49,6 +51,7 @@ serde-saphyr 与标准文件锁要求的 MSRV 已同步根 Cargo.toml；实际�
 | 详情内容宿主 | `webview2-com` | =0.39.1 | 仅 actl-signal 的按需详情窗口；共享 Evergreen 运行时，失败回退原生内容；新增 1 个直接 Rust 依赖 |
 | UIA 高层封装 | `uiautomation`(**0.25,M0 评估期**:actl-uia 的 dev-dep,供 examples/probe 使用) | 评估结论(M1 采用或自写薄封装)写入 [spike-findings](spike-findings.md) |
 | CLI | `clap`(derive) | 4.6 | 子命令即契约;help 文本与 `commands` schema 从 doc comment 同源生成(06 §3.5) |
+| CDP websocket | `tungstenite` | =0.29(仅 handshake) | actl-browser 专用；同步阻塞 IO 无 tokio(ADR-001 兼容)；白名单域外不实现(安全边界,docs/72 §8) |
 | 序列化 | `serde` + `serde_json` | 跟 stable | envelope 唯一出口 |
 | 流程 YAML | `serde-saphyr` | =1.3.0 | actl-flow；预算限制、重复键拒绝；不启用 include/robotics；实际外部直接依赖去重为 7（含 UIA 开发依赖） |
 | ZIP/OOXML | `zip` | =8.2.0 | 仅 deflate-flate2-zlib-rs；运行时检查与开发打包共用 |

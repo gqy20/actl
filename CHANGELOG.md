@@ -5,6 +5,13 @@
 0.x 期间破坏性变更在条目中以 **[BC]** 标注。条目只记"变了什么与为什么"；
 过程细节与归因在 git 提交信息与 docs/ 里，不在此重复。
 
+## [Unreleased]
+
+### Added
+
+- **浏览器 CDP 通道 v1（`browser-*` 命令族，spec）**：actl 自有浏览器会话的最小同步 CDP 客户端（新 crate `actl-browser`，tungstenite 为唯一新增直接依赖）+ 五命令：`browser-launch`（隔离 Edge/Chrome + 专用 profile，DevToolsActivePort 出现=启动成功，失败回收自启进程）、`browser-navigate`（绑定重核 + 主 frame 导航事件等待）、`browser-read`（CSS/XPath 唯一匹配读文本，`--iframe` 经子 frame 执行上下文跨源可达）、`browser-click`（守卫写：停止核验→绑定重核→唯一匹配→派发→读回，`--expect-text` 断言）、`browser-close`（CDP 优雅关闭 + 幂等注销）。错误码复用现有全集，无新增。安全边界：客户端只实现 Target/Runtime/Page/Browser 白名单域——cookie 读取域构造性不可达，无 cookie 导出动词，永不附着用户默认 profile（136+ 禁端口）。设计文档 [72](docs/72-browser-cdp-integration.md)，真机验收 14 步全绿。
+- **stdio 继承守卫（`actl-uia::process_io`）**：浏览器进程树会继承调用方管道写端致 `$()`/`ReadToEnd` 永不 EOF（原生管道实测复现；`Stdio::null()` 三件套对 Edge 多子进程树不够）——长命子进程派生前清自身 stdio 的 INHERIT 标志。此修复同时兜底未来一切分离式子进程派生。
+
 ## [0.1.9] - 2026-10-02
 
 本版是可靠性、验收与安全加固的版本：金任务跨日双百达标，全部原生夹具和四场景真机复验通过，输入护栏与显示协议健壮化（前台沉降/租约重读/换行折叠/悬浮卡不抢前台），前台弹层优先体系落地（front-report + 判定树 + 清理白名单），授权通道定案（agent 不可自授、急停压过预授权）。

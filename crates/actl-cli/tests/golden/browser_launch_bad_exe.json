@@ -1,0 +1,1 @@
+{"version":"1","ok":false,"command":"browser-launch","error":{"code":"PROTOCOL","message":"browser executable not found: Z:/definitely/not/here/msedge.exe","hint":"fix the command arguments (see `actl <cmd> -h`)"}}

@@ -1,0 +1,1 @@
+{"version":"1","ok":false,"command":"browser-read","error":{"code":"NOT_FOUND","message":"unknown browser session nope123; run browser-launch to create one","hint":"relax the selector or run `find` to inspect candidates"}}

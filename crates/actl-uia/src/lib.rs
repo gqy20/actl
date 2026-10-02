@@ -40,6 +40,8 @@ pub mod preview;
 mod preview_window;
 mod read;
 pub use read::focus_report;
+/// 分离式子进程派生前的 stdio 继承守卫(浏览器通道等长命子进程;docs/72)。
+pub mod process_io;
 mod read_channel;
 mod scoped_locate;
 mod table;

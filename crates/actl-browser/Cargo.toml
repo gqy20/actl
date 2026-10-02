@@ -1,0 +1,18 @@
+[package]
+name = "actl-browser"
+description = "actl CDP channel: minimal synchronous Chrome DevTools Protocol client for actl-owned browser sessions"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+actl-core = { path = "../actl-core", version = "0.1.8" }
+actl-uia = { path = "../actl-uia", version = "0.1.8" }
+serde.workspace = true
+serde_json.workspace = true
+tungstenite.workspace = true
+
+[lints]
+workspace = true
