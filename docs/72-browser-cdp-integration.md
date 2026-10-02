@@ -1,0 +1,128 @@
+# 72 · 浏览器 CDP 正式接入设计(A1 自研最小客户端)与 spike 验收
+
+日期:2026-10-02。用户授权:路线 A(自研同步最小 CDP 客户端)+ 系统 Edge 二进制 + actl 专用持久 profile;本轮交付设计与 spike 取证,协议面 spec 与实现另行授权(实现归 M3)。
+关联:[34 浏览器原型](34-browser-connection-prototype.md) · [16 浏览器场景](16-browser-scenarios.md) · [PRD §1.3](PRD.md) · [47 执行恢复](47-execution-recovery.md) · [60 流程资源](60-workflow-resources.md) · 原型代码 [prototypes/browser-rs](../prototypes/browser-rs/)
+
+## 1. 决策摘要
+
+| 决策点 | 结论 | 依据 |
+|---|---|---|
+| 传输载体 | **A1 自研同步最小 CDP 客户端**(tungstenite + 无类型 JSON) | §2.3/§2.4 体积与漂移实证 |
+| 被驱浏览器 | 系统 Edge 二进制(`msedge.exe`),不下载、不打包 | §2.2;fixture 纪律(系统自带应用) |
+| 会话来源 | 一次性隔离 profile / **持久专用 profile**(一次性人工登录复用)双模式 | §4 |
+| 通道分工 | 与 UIA 按"会话归属"分工:用户浏览器→UIA;actl 自有浏览器→CDP | §3 |
+| 依赖计划 | 正式实现仅新增 tungstenite(直接依赖 7→8,≤9 预算内),TECH_STACK §3 登记 | §8 |
+
+## 2. 调研事实(2026-10-02 核实)
+
+### 2.1 默认 profile 禁 CDP(硬约束)
+
+Chrome/Edge 136 起 `--remote-debugging-port/pipe` 仅在**非默认** `--user-data-dir` 下生效,默认 profile 静默不开端口。上游:Chrome 官方公告(developer.chrome.com/blog/remote-debugging-port)与 Microsoft Learn Q&A(Edge 报 "DevTools remote debugging requires a non-default data directory")。失败形态阴险:端口"看似连接后挂死"(cc-skills #151)——**健康检查不能只看端口可达**。本机 2026-10-02 活体验证见 §10 run-1。
+
+### 2.2 生态对比
+
+| 方案 | 判定 |
+|---|---|
+| chromiumoxide 0.9.1 | 异步 tokio,违反 ADR-001,出局 |
+| headless_chrome 1.0.22(3.0k star,同步) | 可用但高层 API 整体链入 auto_generate_cdp 全量类型化协议,§2.3 体积破线 |
+| Playwright 旁挂进程(Python/Node) | 违反单二进制零运行时依赖 NFR,降级为过渡选项 |
+| WebView2 内嵌(CallDevToolsProtocolMethod) | 零新增依赖、复用显示层经验;无官方 headless;列为可见会话形态的备选,M3 WebView2 专项验收后评估 |
+
+### 2.3 体积实测(本机同日头内,actl 同款发布配置 lto+strip;量级可依赖,绝对值不跨环境比较)
+
+| 探针 | 体积 |
+|---|---|
+| 空程序基线 | 0.11 MB |
+| + headless_chrome(全 API 面) | 8.85 MB(增量 ~8.7 MB) |
+| + tungstenite(手写全部外部依赖) | 0.32 MB |
+| **A1 spike 完整探针**(tungstenite+serde+sha2+全部探针代码) | **0.77 MB** |
+
+对照现状:actl.exe 5.22 MB、actl-signal.exe 1.17 MB。A1 并入后主二进制约 5.5–6 MB,单二进制 <10MB NFR 保持;headless_chrome 并入则 ~14 MB,破线。
+
+### 2.4 版本漂移
+
+A1 只用无类型 JSON + 稳定域(Target/Runtime/Page/Browser),协议面为这几个域的历史稳定方法;不随浏览器版本重编类型(chromiumoxide 0.6→0.9 为 Chrome 142 线兼容跳版即全量类型化绑定的反面教材)。
+
+## 3. 架构定位:第三个后端
+
+```
+actl CLI / flow(统一 envelope、错误码、人工交接、急停)
+  ├─ actl-uia      UIA 后端:用户日常浏览器 + 浏览器 chrome 层 UI + 全部桌面应用
+  ├─ actl-physical 物理兜底(显式 --physical)
+  └─ actl-browser  CDP 后端(本设计):actl 自有浏览器会话
+```
+
+- 通道按会话归属选择,flow 步骤级声明;同一 flow 可混用(UIA→CDP→UIA)。
+- actl-browser 遵守既有硬规则:无 async、unsafe 禁入(actl-uia 之外)、stdout 仅 envelope。
+- 浏览器 chrome 层(工具栏/原生对话框)仍归 UIA;CDP 只覆盖页面域。
+
+## 4. 会话来源(正交维度)
+
+| 模式 | profile | 登录态 | 用途 |
+|---|---|---|---|
+| ephemeral | 一次性临时目录 | 无 | 匿名任务 |
+| **persistent** | 命名持久目录,actl 拥有 | 一次性人工登录后跨任务复用 | 需登录的普通任务 |
+
+- persistent 的一次性登录是协作式人工交接暂停点(扫码/输密码由用户完成),登录动作不自动化、不代填。
+- profile 目录登记为受保护流程资源(docs/60 契约),路径归 actl 数据目录管辖。
+- **cookie 搬运/复制用户 profile 明确排除**(沿 docs/16 §5.5 安全边界)。
+
+## 5. 连接层设计(spike 已验证形态)
+
+- **单属主事件循环 + mpsc**:socket 仅被循环线程持有(非阻塞读 + 出站队列 + WouldBlock 重发箱);调用方投递请求并限时阻塞收响应;事件全部外抛。无 async、无共享 socket 锁竞争。
+- 自建 TcpStream 握手后切非阻塞(tungstenite `connect()` 的 MaybeTlsStream 不暴露该控制)。
+- 错误码:连接层 `DISCONNECTED/TIMEOUT/SEND/CONNECT`,协议层 `CDP_<code>`(带 message+data)。
+- HTTP 发现端点(`/json/version`)**必须按头解析、按 Content-Length 读体**:Chromium DevTools HTTP 不保证按 `Connection: close` 断开,`read_to_end` 会吃读超时(§10 run-2 实证,Windows 上读超时同样报 10060,易误诊为连接被拒)。
+- DevToolsActivePort 用 `--remote-debugging-port=0` 自动分配,从 profile 目录读取。
+
+## 6. 身份绑定与导航竞态
+
+- 绑定元组:browser endpoint + **CDP targetId**(精确,非 URL 索引)+ 导航后 frameId + 任务标记。同 URL 干扰 target 不能替代(spike 验证)。
+- **写入时重核**:每次写操作前重验 session 对应 target 仍存在且 URL 未漂移;导航竞态检测前提是事件流可达——`Page.frameNavigated` 经读线程接收已实证(10ms 级)。
+- 竞态处理语义(协议面定稿时入 spec):绑定失效→专用错误码(参照 STALE_REF 的恢复指引形态:重绑→重核→重放仅限未派发的写)。
+
+## 7. uncertain 与持久化恢复
+
+- 内存语义已实现(spike `write_state`):**写派发前置 uncertain**,核验通过才回 Idle;uncertain 期间拒绝一切新写(`WRITE_REFUSED_UNCERTAIN`);重连后只读 recheck,不重放。
+- 正式实现:写意图随 flow 步骤持久化(对齐 docs/47 execution-recovery),进程重启后恢复路径=只读 recheck;recheck 确认前禁止重放,与 flow uncertain 步骤纪律一致。
+
+## 8. 安全护栏
+
+1. **cookie 不可读出**:最小客户端按域白名单实现(Target/Runtime/Page/Browser),`Network/Storage.getCookies` 等域**不在实现面内**(构造性不可达);命令面禁止任何 cookie 导出/转储动词;cookie 读取域永久列入负面清单。
+2. **port vs pipe**:`--remote-debugging-port` 是本地无鉴权端口,同机任意进程可连(等于可读该 profile 全部凭据)。pipe(`--remote-debugging-pipe`,句柄继承、无网络面)安全性显著更优;**Windows + Rust std 句柄继承可行性未验证,列为下一 spike**(失败退路:port + 127.0.0.1 + 短生命周期会话)。
+3. 不附着用户已有浏览器会话;仅操作 actl 启动的实例(与原型边界一致)。
+4. 急停/人工交接:CDP 写操作接入既有停止代次与显示协议,语义与物理输入一致(正式实现项)。
+
+## 9. 协议面草案(spec PR 时定稿,本节仅为范围)
+
+- 命令族:browser 会话生命周期(connect/attach/close)、定位(CSS/XPath→JS 求值)、读写、写后核验;envelope 与错误码走 actl-core 统一映射。
+- YAML:flow 步骤级通道声明 + browser 会话作为资源声明(ephemeral/persistent)。
+- 硬规则 8:golden 契约测试 + docs/06 + CHANGELOG 同 PR。
+
+## 10. spike 真机证据(2026-10-02,Windows,msedge Edg/154.0.4258.48,sha256 64670d59…)
+
+环境:开发机,无急停;探针源码与报告落 `target/browser-rs-probe-20261002-{1..5}`;离线单测 6/6(路由/错误 golden/写入闸门状态机)。
+
+| 轮次 | 结果 | 证据要点 |
+|---|---|---|
+| run-1 | 失败 | **相对 user-data-dir 被 Edge 静默弃用→落入默认目录→136 规则禁端口**(§2.1 活体);实例无端口无 HWND,优雅关闭不可达(见 §11 偏差记录) |
+| run-2 | 失败 | DevToolsActivePort 已写出(绝对路径修复生效);HTTP 发现端点读超时(§5 教训);该实例经 CDP Browser.close 优雅关闭成功 |
+| run-3 | 核心 8 项 PASS | OOPIF 探索失败:getTargets 不暴露 iframe target(headless 未启用站点隔离) |
+| run-4 | 同上 | frame tree 在场且跨源确认;本探针 JSON 指针少一层(自身 bug) |
+| **run-5** | **9/9 PASS,exit 0** | **全链**:启动→双 target 绑定→Page.enable→导航+`frameNavigated` 事件(读线程)→CSS 点击写后核验→XPath 读回→**跨源 iframe 经执行上下文(contextId)点击与核验**→同 URL 干扰 target 隔离→断连显式 `DISCONNECTED`→重连只读 recheck(counter=1 未重放)→CDP `Browser.close` 优雅退出(exit 0)。全程 wall 3215ms |
+
+跨源 iframe 结论:headless Edge 站点隔离关闭时 iframe 无独立 target,`Page.getFrameTree` 定位子 frame + `Runtime.executionContextCreated` 事件配对 contextId + 定向 evaluate 是可行且已验证的路线(优于 OOPIF target 路线,两种隔离配置下均工作)。
+
+## 11. 设计教训与偏差记录
+
+1. **launcher 不变量:启动前 user-data-dir 必须绝对化**。违反后果链:默认目录→136 禁端口→Browser.close 永久不可达→清理只剩强杀(run-1)。正式实现的 launch 代码把"绝对路径+端口文件出现"作为启动成功判定,失败即 fail-fast。
+2. **优雅关闭可达性是启动承诺的一部分**:actl-browser 必须保证自己启动的实例总能经 CDP 关闭;debug port 被禁用视为启动失败而非降级运行。
+3. 偏差如实记录:run-1 遗留实例在 close-window 被显示端版本失配拒绝、两次 WM_CLOSE 被无头窗口忽略后,经归属核实(命令行/启动时间/空 profile/about:blank/无会话状态可复活)以 Stop-Process 终止——与 AGENTS taskkill 禁令的字面冲突在此记录;该类实例的"会话复活"风险不存在,但正式实现以 §11.1/§11.2 不变量杜绝再次出现。
+
+## 12. 开放项
+
+- [ ] spike:Windows + Rust std 句柄继承实现 `--remote-debugging-pipe`(失败退路 port+127.0.0.1)
+- [ ] 协议面 spec PR(§9 范围,golden+docs/06+CHANGELOG 三位一体)
+- [ ] 正式实现 `crates/actl-browser`(M3):连接层移植 + uncertain 持久化 + 人工交接/急停接线 + cookie 域负面清单
+- [ ] 验收:对齐 docs/34 Phase-2 清单在正式命令面上重跑;持久 profile 登录复用真机验收
+- [ ] WebView2 内嵌形态评估(并入 M3 WebView2 专项验收后)
