@@ -11,6 +11,8 @@ pub mod cdp;
 pub mod ops;
 pub mod session;
 
+pub use ops::VerifyMode;
+
 /// 定位方式(CSS 或 XPath;唯一匹配为硬条件)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SelectorKind {

@@ -28,3 +28,13 @@ actl flow-run --file skills/actl/workflows/vscode-edit.yml --id vscode-001
 本次资源初始化与只读核验测试不启动真实应用，不作为 VS Code 22 步或四软件 64 步真机验收。此前失败记录见 docs/58 和 docs/59。
 
 完整 cargo xtask gate 通过：target/workflow-resources-final-gate.log，包含发布包资产完整性检查。安装路径 C:/Users/gqy17/.cargo/bin/actl.exe 已更新，SHA256 为 88C235CAF4A447D33124761D631B3E8435A3E1838714B760C3B438F90B6EFE31；显示端同目录 CLI 同步更新，未启动桌面任务。安装后二进制预检 VS Code 模板为 valid=true、22 步，证据 target/workflow-resources-installed-validation.json；安装记录 target/workflow-resources-install.json。
+
+## 持久浏览器 profile 资产（2026-10-02）
+
+`resources.browser_profiles: [{name: <1-64 [A-Za-z0-9_-]>}]` 声明持久浏览器 profile（CDP 轨，docs/72）：
+
+- **全局命名资产**，不属于 run 目录生命周期——创建幂等（`%LOCALAPPDATA%\actl\browser\profiles\<name>`），任务结束**永不删除**；恢复/清理/flow-clean 不触碰。
+- **声明治理**：flow 中 `browser-launch --profile <name>` 只允许使用已声明的名字，未声明在预检即 PROTOCOL 拒绝（凭据资产显式归属；直接 CLI 使用不受此限）。
+- 与 run 目录资源同受 128 项总量上限；summary 以 `browser_profiles` 上报。
+
+定向测试：名称校验/重名拒绝/创建幂等/无声明根缺失容错；契约测试覆盖未声明拒绝与已声明放行。登录暂停点组合用法见 docs/06 §3 浏览器会话节与 `skills/actl/workflows/browser-login-session.yml`。

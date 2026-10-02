@@ -27,6 +27,10 @@ pub struct LaunchSpec {
     /// 出站代理(HOST:PORT,无 scheme);显式本地代理路径,非任意参数注入
     pub proxy: Option<String>,
     pub headless: bool,
+    /// 显式禁用扩展(持久 profile 用;ephemeral 恒为禁用——隔离目录本无插件,
+    /// 显式化是为确定性与防指纹方差。持久 profile 默认允许扩展:猫抓/沉浸式
+    /// 翻译类扩展驱动流程正是自动化 profile 的合法资产,docs/16 §5.5)
+    pub disable_extensions: bool,
     pub timeout_ms: Option<u64>,
 }
 
@@ -352,6 +356,15 @@ pub fn launch(paths: &Paths, spec: LaunchSpec) -> Result<Value, CtlError> {
     }
     let timeout = dur(spec.timeout_ms, LAUNCH_DEFAULT_TIMEOUT_MS);
 
+    // 持久 profile 并发治理(§13.4):同 profile 已有活跃会话→复用(幂等 launch);
+    // 记录在但端点已死→陈旧接管(注销旧记录后照常新启)。两个 CLI 进程同时竞启
+    // 同一 profile 时,后到者的 Edge 会被先到者锁住退出→端口不出现→启动失败,如实报错。
+    if let Mode::Persistent { name } = &mode
+        && let Some(reused) = reuse_persistent_session(paths, name, timeout)?
+    {
+        return Ok(reused);
+    }
+
     let session_id = actl_core::new_snapshot_id();
     let profile_dir = match &mode {
         Mode::Persistent { name } => paths.profiles_dir().join(name),
@@ -375,6 +388,11 @@ pub fn launch(paths: &Paths, spec: LaunchSpec) -> Result<Value, CtlError> {
     if spec.headless {
         edge_args.insert(0, "--headless=new".to_string());
     }
+    // 扩展策略:ephemeral 恒禁用;持久 profile 默认允许(扩展是合法资产),
+    // 显式 --disable-extensions 才禁
+    if spec.disable_extensions || matches!(mode, Mode::Ephemeral) {
+        edge_args.push("--disable-extensions".to_string());
+    }
     if let Some(proxy) = &spec.proxy {
         edge_args.push(format!("--proxy-server={proxy}"));
     }
@@ -384,6 +402,8 @@ pub fn launch(paths: &Paths, spec: LaunchSpec) -> Result<Value, CtlError> {
     // 调用方管道的写端,$()/ReadToEnd 永远等不到 EOF。实测 null 三件套对 Edge 多子
     // 进程树仍不够,派生前先清自身 stdio 的 INHERIT 标志(actl-uia::process_io,docs/72)。
     actl_uia::process_io::clear_stdio_inheritance();
+    // 持久 profile 会残留上次退出的 DevToolsActivePort(陈旧端口假阳的温床),先清掉
+    let _ = std::fs::remove_file(profile_dir.join("DevToolsActivePort"));
     let mut child = Command::new(&exe)
         .args(&edge_args)
         .stdin(Stdio::null())
@@ -477,6 +497,57 @@ pub fn launch(paths: &Paths, spec: LaunchSpec) -> Result<Value, CtlError> {
     }))
 }
 
+/// 同名持久 profile 的活跃会话查找:活→Some(复用载荷);死→注销陈旧记录后 None。
+fn reuse_persistent_session(
+    paths: &Paths,
+    name: &str,
+    timeout: Duration,
+) -> Result<Option<Value>, CtlError> {
+    let sessions = list(paths)?;
+    let Some(arr) = sessions.get("sessions").and_then(Value::as_array) else {
+        return Ok(None);
+    };
+    for entry in arr {
+        // mode 序列化为 {"persistent":{"name":...}}
+        let is_same = entry
+            .pointer("/mode/persistent/name")
+            .and_then(Value::as_str)
+            .is_some_and(|n| n == name);
+        if !is_same {
+            continue;
+        }
+        let id = entry
+            .get("session_id")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let Ok(record) = session::load(paths, id) else {
+            continue;
+        };
+        let alive = (|| {
+            let conn = connect_browser(&record).ok()?;
+            attach_target(&conn, &record.target_id, timeout).ok()?;
+            verify_target_alive(&conn, &record.target_id, timeout).ok()
+        })()
+        .is_some();
+        if alive {
+            return Ok(Some(json!({
+                "session_id": record.session_id,
+                "target_id": record.target_id,
+                "browser_pid": record.pid,
+                "devtools_port": record.devtools_port,
+                "url": record.bound_url,
+                "mode": record.mode,
+                "headless": record.headless,
+                "profile_dir": record.profile_dir,
+                "reused": true,
+            })));
+        }
+        // 端点已死:陈旧接管,注销后走全新启动
+        let _ = session::remove(paths, id);
+    }
+    Ok(None)
+}
+
 fn reclaim_on_failure(child: &mut Child, mode: &Mode, profile_dir: &Path) {
     let _ = child.kill();
     let _ = child.wait();
@@ -491,8 +562,12 @@ fn wait_devtools_port(profile_dir: &Path, timeout: Duration) -> Option<(u16, Str
         if let Ok(text) = std::fs::read_to_string(profile_dir.join("DevToolsActivePort")) {
             let mut lines = text.lines();
             if let Some(port) = lines.next().and_then(|l| l.trim().parse::<u16>().ok()) {
-                let ws_path = lines.next().unwrap_or("").trim().to_string();
-                return Some((port, ws_path));
+                // 文件出现 ≠ 端点就绪:陈旧文件(上次退出残留)与竞态启动都会假阳,
+                // 必须以 /json/version 实答为准
+                if cdp::http_get_json(port, "/json/version", Duration::from_millis(1000)).is_ok() {
+                    let ws_path = lines.next().unwrap_or("").trim().to_string();
+                    return Some((port, ws_path));
+                }
             }
         }
         std::thread::sleep(Duration::from_millis(100));
@@ -795,84 +870,145 @@ pub fn close(paths: &Paths, session_id: &str, timeout_ms: Option<u64>) -> Result
 
 /// 只读枚举活跃会话(新→旧排序)。flow 的 outputs 只允许只读生产者,
 /// browser-launch 是生命周期命令——会话句柄经本命令以观察者身份产出(docs/20 治理模型)。
+/// browser-verify 的断言模式(CLI 层负责互斥校验后构造)。
+pub enum VerifyMode {
+    /// 最新会话 target 应答(launch 后)
+    NewestAlive,
+    /// 零活跃会话(close 后)
+    NoneActive,
+    /// 按 id:target 存活
+    SessionAlive(String),
+    /// 按 id:会话记录已注销
+    SessionGone(String),
+    /// 登录态核验谓词:选择器唯一解析(+文本包含)——resume_check 与例行登录检查的判据
+    Selector {
+        session: String,
+        kind: SelectorKind,
+        value: String,
+        contains: Option<String>,
+    },
+}
+
 /// 只读断言动词(flow 的 verify 位只认断言族;浏览器步骤的副作用核验入口)。
-/// 四模式互斥:newest_alive=最新会话 target 存活(launch 后) | none=零活跃会话(close 后)
-/// | alive/gone=按 session id 断言 target 存活/会话记录已注销。
-pub fn verify(
-    paths: &Paths,
-    session_id: Option<&str>,
-    alive: bool,
-    gone: bool,
-    none: bool,
-    newest_alive: bool,
-    timeout_ms: Option<u64>,
-) -> Result<Value, CtlError> {
-    let picked = [alive, gone, none, newest_alive]
-        .iter()
-        .filter(|b| **b)
-        .count();
-    let session_bound = alive || gone;
-    if picked != 1 || session_bound != session_id.is_some() {
-        return Err(CtlError::protocol(
-            "browser-verify requires exactly one of --alive/--gone (with --session), --none, --newest-alive",
-        ));
-    }
+pub fn verify(paths: &Paths, mode: VerifyMode, timeout_ms: Option<u64>) -> Result<Value, CtlError> {
     let timeout = dur(timeout_ms, OP_DEFAULT_TIMEOUT_MS);
-    if none {
-        let total = list(paths)?
-            .get("total")
-            .and_then(Value::as_u64)
-            .unwrap_or(0);
-        if total != 0 {
-            return Err(CtlError::with_evidence(
-                ErrorCode::AssertionFailed,
-                format!("{total} browser sessions still active"),
-                json!({ "total": total }),
-            ));
-        }
-        return Ok(json!({ "assertion": "none", "passed": true }));
-    }
-    if newest_alive {
-        let sessions = list(paths)?;
-        let newest = sessions.pointer("/sessions/0").cloned().ok_or_else(|| {
-            CtlError::with_evidence(
-                ErrorCode::AssertionFailed,
-                "no active browser session to assert",
-                json!({ "total": 0 }),
-            )
-        })?;
-        let id = newest["session_id"]
-            .as_str()
-            .unwrap_or_default()
-            .to_string();
-        let record = session::load(paths, &id)?;
-        let conn = connect_browser(&record)?;
-        // attach 本身即端点+target 存活的第一重核验
-        attach_target(&conn, &record.target_id, timeout)?;
-        verify_target_alive(&conn, &record.target_id, timeout)?;
-        return Ok(json!({ "assertion": "newest_alive", "passed": true, "session_id": id }));
-    }
-    let session_id = session_id.unwrap_or_default();
-    if gone {
-        return match session::load(paths, session_id) {
-            Err(e) if e.code == ErrorCode::NotFound => {
-                Ok(json!({ "assertion": "gone", "passed": true, "session_id": session_id }))
+    match mode {
+        VerifyMode::NoneActive => {
+            let total = list(paths)?
+                .get("total")
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
+            if total != 0 {
+                return Err(CtlError::with_evidence(
+                    ErrorCode::AssertionFailed,
+                    format!("{total} browser sessions still active"),
+                    json!({ "total": total }),
+                ));
             }
+            Ok(json!({ "assertion": "none", "passed": true }))
+        }
+        VerifyMode::NewestAlive => {
+            let sessions = list(paths)?;
+            let newest = sessions.pointer("/sessions/0").cloned().ok_or_else(|| {
+                CtlError::with_evidence(
+                    ErrorCode::AssertionFailed,
+                    "no active browser session to assert",
+                    json!({ "total": 0 }),
+                )
+            })?;
+            let id = newest["session_id"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string();
+            let record = session::load(paths, &id)?;
+            let conn = connect_browser(&record)?;
+            // attach 本身即端点+target 存活的第一重核验
+            attach_target(&conn, &record.target_id, timeout)?;
+            verify_target_alive(&conn, &record.target_id, timeout)?;
+            Ok(json!({ "assertion": "newest_alive", "passed": true, "session_id": id }))
+        }
+        VerifyMode::SessionGone(session_id) => match session::load(paths, &session_id) {
+            Err(e) if e.code == ErrorCode::NotFound => Ok(json!({
+                "assertion": "gone",
+                "passed": true,
+                "session_id": session_id
+            })),
             Ok(_) => Err(CtlError::with_evidence(
                 ErrorCode::AssertionFailed,
                 format!("browser session {session_id} still registered"),
                 json!({ "session_id": session_id }),
             )),
             Err(e) => Err(e),
-        };
+        },
+        VerifyMode::SessionAlive(session_id) => {
+            let record = session::load(paths, &session_id)?;
+            let conn = connect_browser(&record)?;
+            attach_target(&conn, &record.target_id, timeout)?;
+            verify_target_alive(&conn, &record.target_id, timeout)?;
+            Ok(json!({ "assertion": "alive", "passed": true, "session_id": session_id }))
+        }
+        VerifyMode::Selector {
+            session,
+            kind,
+            value,
+            contains,
+        } => {
+            validate_selector(kind, &value)?;
+            let record = session::load(paths, &session)?;
+            let conn = connect_browser(&record)?;
+            let cdp_session = attach_target(&conn, &record.target_id, timeout)?;
+            verify_target_alive(&conn, &record.target_id, timeout)?;
+            let located = eval_json(
+                &conn,
+                &cdp_session,
+                &locate_script(kind, &value),
+                None,
+                timeout,
+            )?;
+            let matches = located.get("matches").and_then(Value::as_u64).unwrap_or(0);
+            if matches != 1 {
+                return Err(CtlError::with_evidence(
+                    ErrorCode::AssertionFailed,
+                    format!(
+                        "login-state selector did not resolve uniquely ({matches} matches; expected 1)"
+                    ),
+                    json!({
+                        "selector_kind": kind.as_str(),
+                        "selector": value,
+                        "matches": matches,
+                    }),
+                ));
+            }
+            let (text, truncated) = truncate_text(
+                located
+                    .get("text")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default(),
+            );
+            if let Some(expected) = &contains
+                && !text.contains(expected.as_str())
+            {
+                return Err(CtlError::with_evidence(
+                    ErrorCode::AssertionFailed,
+                    "login-state selector text does not contain the expected substring",
+                    json!({
+                        "selector_kind": kind.as_str(),
+                        "selector": value,
+                        "expected_contains": expected,
+                        "actual": text,
+                        "truncated": truncated,
+                    }),
+                ));
+            }
+            Ok(json!({
+                "assertion": "selector",
+                "passed": true,
+                "session_id": session,
+                "text": text,
+                "truncated": truncated,
+            }))
+        }
     }
-    // alive
-    let record = session::load(paths, session_id)?;
-    let conn = connect_browser(&record)?;
-    let cdp_session = attach_target(&conn, &record.target_id, timeout)?;
-    let _ = cdp_session;
-    verify_target_alive(&conn, &record.target_id, timeout)?;
-    Ok(json!({ "assertion": "alive", "passed": true, "session_id": session_id }))
 }
 
 pub fn list(paths: &Paths) -> Result<Value, CtlError> {

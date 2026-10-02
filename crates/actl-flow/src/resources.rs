@@ -15,6 +15,10 @@ struct Resources {
     directories: Vec<String>,
     #[serde(default)]
     files: Vec<File>,
+    /// 持久浏览器 profile 资产(docs/60/72):全局命名资产,创建幂等、永不随任务删除;
+    /// flow 中 browser-launch --profile 只允许使用已声明的名字(CLI 适配层交叉核验)。
+    #[serde(default)]
+    browser_profiles: Vec<BrowserProfile>,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -23,12 +27,18 @@ struct File {
     text: Option<String>,
     copy: Option<String>,
 }
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BrowserProfile {
+    name: String,
+}
 pub struct Prepared {
     pub text: String,
     pub root: PathBuf,
     enabled: bool,
     directories: Vec<PathBuf>,
     files: Vec<(PathBuf, Vec<u8>)>,
+    browser_profiles: Vec<String>,
 }
 
 fn error(message: impl Into<String>) -> CtlError {
@@ -128,7 +138,8 @@ pub fn prepare(text: &str, template: &Path, root: &Path, id: &str) -> Result<Pre
         .transpose()
         .map_err(|e| error(format!("invalid resources: {e}")))?
         .unwrap_or_default();
-    if resources.files.len() + resources.directories.len() > 128 {
+    if resources.files.len() + resources.directories.len() + resources.browser_profiles.len() > 128
+    {
         return Err(error("too many workflow resources"));
     }
     // input default 的 ${run.dir}/${run.id}/${env:...} 展开不依赖 resources 声明——
@@ -148,6 +159,7 @@ pub fn prepare(text: &str, template: &Path, root: &Path, id: &str) -> Result<Pre
         enabled,
         directories: vec![],
         files: vec![],
+        browser_profiles: vec![],
     };
     let mut names = BTreeSet::new();
     for dir in resources.directories {
@@ -156,6 +168,24 @@ pub fn prepare(text: &str, template: &Path, root: &Path, id: &str) -> Result<Pre
             return Err(error("duplicate resource path"));
         }
         prepared.directories.push(path);
+    }
+    // 持久浏览器 profile:命名资产(1-64 [A-Za-z0-9_-],与 actl-browser 同规),
+    // 不参与 run 目录生命周期——创建幂等、永不删除
+    let mut profile_names = BTreeSet::new();
+    for profile in resources.browser_profiles {
+        let name = profile.name;
+        if name.is_empty()
+            || name.len() > 64
+            || !name
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+        {
+            return Err(error("browser profile name must be 1-64 of [A-Za-z0-9_-]"));
+        }
+        if !profile_names.insert(name.clone()) {
+            return Err(error("duplicate browser profile name"));
+        }
+        prepared.browser_profiles.push(name);
     }
     let mut total = 0;
     for file in resources.files {
@@ -213,14 +243,25 @@ pub fn prepare(text: &str, template: &Path, root: &Path, id: &str) -> Result<Pre
 
 impl Prepared {
     pub fn summary(&self) -> serde_json::Value {
-        serde_json::json!({"root":self.root,"directories":self.directories,"files":self.files.iter().map(|(p,b)| serde_json::json!({"path":p,"bytes":b.len()})).collect::<Vec<_>>()})
+        serde_json::json!({
+            "root": self.root,
+            "directories": self.directories,
+            "files": self.files.iter().map(|(p, b)| serde_json::json!({"path": p, "bytes": b.len()})).collect::<Vec<_>>(),
+            "browser_profiles": self.browser_profiles,
+        })
+    }
+    /// 已声明的持久浏览器 profile 名(交叉核验用)。
+    pub fn browser_profiles(&self) -> &[String] {
+        &self.browser_profiles
     }
     pub fn enabled(&self) -> bool {
         self.enabled
     }
     /// Called only after full command preflight, under the global runner lock.
     /// A failed/partial initialization is retained; never overwrite or auto-retry it.
-    pub fn create(&self) -> Result<(), CtlError> {
+    /// `browser_profiles_root`:持久浏览器 profile 的基目录(由 CLI 适配层注入,
+    /// actl-flow 保持平台无关)。profile 目录创建幂等且**永不**随任务删除。
+    pub fn create_at(&self, browser_profiles_root: Option<&Path>) -> Result<(), CtlError> {
         if !self.enabled {
             return Ok(());
         }
@@ -255,13 +296,87 @@ impl Prepared {
             output.write_all(bytes).map_err(io)?;
             output.sync_all().map_err(io)?;
         }
+        if !self.browser_profiles.is_empty() {
+            let base = browser_profiles_root
+                .ok_or_else(|| error("browser profiles root not provided by host"))?;
+            for name in &self.browser_profiles {
+                fs::create_dir_all(base.join(name)).map_err(io)?;
+            }
+        }
         Ok(())
+    }
+
+    /// 兼容旧调用(无浏览器 profile 资产)。
+    pub fn create(&self) -> Result<(), CtlError> {
+        self.create_at(None)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn browser_profiles_parse_validate_and_create_idempotently() {
+        let yaml = "version: 1\nname: t\nresources:\n  browser_profiles:\n    - name: work\n    - name: personal-2\nsteps: []\n";
+        let dir = std::env::temp_dir().join("actl-flow-profiles-test");
+        let _ = std::fs::remove_dir_all(&dir); // 失败残留清场
+        std::fs::create_dir_all(&dir).unwrap();
+        let template = dir.join("t.yml");
+        std::fs::write(&template, yaml).unwrap();
+        let root = dir.join("root");
+        let prepared = prepare(yaml, &template, &root, "run1").unwrap();
+        assert_eq!(prepared.browser_profiles(), ["work", "personal-2"]);
+        let summary = prepared.summary();
+        assert_eq!(summary["browser_profiles"][0], "work");
+
+        // create_at:profile 目录创建幂等、不随 run 目录生命周期删除。
+        // run 目录本身一次性(create_new),故第二次用新 root 验证 profile 幂等
+        let profiles_root = dir.join("profiles");
+        prepared.create_at(Some(&profiles_root)).unwrap();
+        assert!(profiles_root.join("work").is_dir());
+        assert!(profiles_root.join("personal-2").is_dir());
+        let prepared_again = prepare(yaml, &template, &root.join("r2"), "run1b").unwrap();
+        prepared_again.create_at(Some(&profiles_root)).unwrap();
+        assert!(profiles_root.join("work").is_dir());
+        // 无声明时根缺失也 OK
+        let no_profiles = "version: 1\nname: t\nsteps: []\n";
+        let prepared2 = prepare(no_profiles, &template, &root.join("r3"), "run2").unwrap();
+        prepared2.create_at(None).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn browser_profiles_reject_bad_and_duplicate_names() {
+        let dir = std::env::temp_dir().join("actl-flow-profiles-bad");
+        std::fs::create_dir_all(&dir).unwrap();
+        let template = dir.join("t.yml");
+        for (label, yaml) in [
+            (
+                "traversal",
+                "version: 1\nname: t\nresources:\n  browser_profiles:\n    - name: ../evil\nsteps: []\n",
+            ),
+            (
+                "empty",
+                "version: 1\nname: t\nresources:\n  browser_profiles:\n    - name: ''\nsteps: []\n",
+            ),
+            (
+                "space",
+                "version: 1\nname: t\nresources:\n  browser_profiles:\n    - name: has space\nsteps: []\n",
+            ),
+            (
+                "dup",
+                "version: 1\nname: t\nresources:\n  browser_profiles:\n    - name: work\n    - name: work\nsteps: []\n",
+            ),
+        ] {
+            std::fs::write(&template, yaml).unwrap();
+            assert!(
+                prepare(yaml, &template, &dir.join("root"), "runx").is_err(),
+                "{label} must be rejected"
+            );
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn input_defaults_expand_without_resources_block() {

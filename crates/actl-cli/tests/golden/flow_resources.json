@@ -1,1 +1,1 @@
-{"version":"1","ok":true,"command":"flow-validate","data":{"valid":true,"version":1,"name":"Seed verification","steps":1,"resources":{"root":"<resources>/validation-preview","directories":[],"files":[{"path":"validation-preview.txt","bytes":4}]}}}
+{"version":"1","ok":true,"command":"flow-validate","data":{"valid":true,"version":1,"name":"Seed verification","steps":1,"resources":{"browser_profiles":[],"root":"<resources>/validation-preview","directories":[],"files":[{"path":"validation-preview.txt","bytes":4}]}}}

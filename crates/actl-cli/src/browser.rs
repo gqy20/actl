@@ -29,6 +29,7 @@ pub(crate) fn launch_cmd(
     profile: Option<&str>,
     proxy: Option<&str>,
     headless: bool,
+    disable_extensions: bool,
     timeout: Option<u64>,
 ) -> Result<CommandOutput, CtlError> {
     ops::launch(
@@ -39,6 +40,7 @@ pub(crate) fn launch_cmd(
             profile: profile.map(str::to_string),
             proxy: proxy.map(str::to_string),
             headless,
+            disable_extensions,
             timeout_ms: timeout,
         },
     )
@@ -84,13 +86,58 @@ pub(crate) fn list_cmd() -> Result<CommandOutput, CtlError> {
     ops::list(&paths()).map(Into::into)
 }
 
-pub(crate) fn verify_cmd(
-    session: Option<&str>,
-    alive: bool,
-    gone: bool,
-    none: bool,
-    newest_alive: bool,
-    timeout: Option<u64>,
-) -> Result<CommandOutput, CtlError> {
-    ops::verify(&paths(), session, alive, gone, none, newest_alive, timeout).map(Into::into)
+/// browser-verify 的 CLI 参数束(避开多参数告警;main.rs 从 clap 变体直构)。
+pub(crate) struct VerifyArgs<'a> {
+    pub session: Option<&'a str>,
+    pub alive: bool,
+    pub gone: bool,
+    pub css: Option<&'a str>,
+    pub xpath: Option<&'a str>,
+    pub contains: Option<&'a str>,
+    pub none: bool,
+    pub newest_alive: bool,
+    pub timeout: Option<u64>,
+}
+
+pub(crate) fn verify_cmd(args: VerifyArgs<'_>) -> Result<CommandOutput, CtlError> {
+    use actl_browser::VerifyMode;
+    let VerifyArgs {
+        session,
+        alive,
+        gone,
+        css,
+        xpath,
+        contains,
+        none,
+        newest_alive,
+        timeout,
+    } = args;
+    let mode = match (session, alive, gone, css, xpath, none, newest_alive) {
+        (Some(id), true, false, None, None, false, false) => {
+            VerifyMode::SessionAlive(id.to_string())
+        }
+        (Some(id), false, true, None, None, false, false) => {
+            VerifyMode::SessionGone(id.to_string())
+        }
+        (Some(id), false, false, Some(css), None, false, false) => VerifyMode::Selector {
+            session: id.to_string(),
+            kind: SelectorKind::Css,
+            value: css.to_string(),
+            contains: contains.map(str::to_string),
+        },
+        (Some(id), false, false, None, Some(xpath), false, false) => VerifyMode::Selector {
+            session: id.to_string(),
+            kind: SelectorKind::Xpath,
+            value: xpath.to_string(),
+            contains: contains.map(str::to_string),
+        },
+        (None, false, false, None, None, true, false) => VerifyMode::NoneActive,
+        (None, false, false, None, None, false, true) => VerifyMode::NewestAlive,
+        _ => {
+            return Err(CtlError::protocol(
+                "browser-verify requires exactly one mode: --newest-alive | --none | --session+--alive | --session+--gone | --session+--css/--xpath [--contains]",
+            ));
+        }
+    };
+    ops::verify(&paths(), mode, timeout).map(Into::into)
 }

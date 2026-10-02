@@ -689,6 +689,11 @@ pub(crate) enum Command {
         /// session is invisible to the user; default is a visible window)
         #[arg(long)]
         headless: bool,
+        /// Disable extensions in a persistent profile (ephemeral sessions always run
+        /// extension-free; persistent profiles keep extensions by default — they are legitimate
+        /// automation assets, e.g. media sniffers)
+        #[arg(long)]
+        disable_extensions: bool,
         /// Startup timeout in milliseconds (default 15000)
         #[arg(long)]
         timeout: Option<u64>,
@@ -757,15 +762,30 @@ pub(crate) enum Command {
     BrowserList,
     /// Read-only browser assertions for flow verify steps (exactly one mode)
     BrowserVerify {
-        /// Assert this session's bound target still responds (with --alive) or is deregistered (with --gone)
+        /// Assert this session's bound target still responds (--alive), is deregistered (--gone),
+        /// or carries a logged-in state (--css/--xpath with optional --contains)
         #[arg(long)]
         session: Option<String>,
         /// With --session: the bound tab target answers (implies browser + endpoint alive)
-        #[arg(long, requires = "session", conflicts_with = "bv_gone")]
+        #[arg(long, requires = "session", conflicts_with_all = ["bv_gone", "bv_css", "bv_xpath"])]
         alive: bool,
         /// With --session: the session record no longer exists
-        #[arg(long, requires = "session", id = "bv_gone", conflicts_with = "alive")]
+        #[arg(long, requires = "session", id = "bv_gone", conflicts_with_all = ["alive", "bv_css", "bv_xpath"])]
         gone: bool,
+        /// Login-state predicate: with --session, assert this CSS selector resolves uniquely
+        #[arg(long, requires = "session", id = "bv_css", conflicts_with_all = ["alive", "bv_gone", "bv_xpath"])]
+        css: Option<String>,
+        /// Login-state predicate: with --session, assert this XPath resolves uniquely
+        #[arg(
+            long,
+            requires = "session",
+            id = "bv_xpath",
+            conflicts_with_all = ["alive", "bv_gone", "bv_css"]
+        )]
+        xpath: Option<String>,
+        /// With --css/--xpath: also assert the resolved element text contains this substring
+        #[arg(long, requires = "session")]
+        contains: Option<String>,
         /// Assert zero active sessions (post-close in a flow-owned lifecycle)
         #[arg(long, conflicts_with_all = ["session"])]
         none: bool,
@@ -957,7 +977,7 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
 fn after_help_for(name: &str) -> Option<&'static str> {
     Some(match name {
         "browser-launch" => {
-            "Example:\n  actl browser-launch --browser-executable \"C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe\" --url about:blank --proxy 127.0.0.1:7890\nLaunches an OWNED isolated browser (never the user's default profile — Chrome/Edge 136+ disables the debug port there) and binds one tab as the session. Default is a VISIBLE window (normal UA, user-visible automation, manual-login ready); --headless opts into a hidden session for background tasks (HeadlessChrome UA — many sites serve 403 to it, and no UIA fallback surface exists). --profile <name> keeps a persistent profile for one-time manual logins; default is a throwaway profile. --proxy HOST:PORT routes via an explicit local proxy (browser DoH can bypass system TUN fake-ip routing — the fix for silently unreachable sites). Startup succeeds only when the devtools endpoint appears; otherwise the owned process is reclaimed.\nErrors: PROTOCOL bad executable/url/profile/proxy | INTERNAL endpoint never appeared (reclaimed)"
+            "Example:\n  actl browser-launch --browser-executable \"C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe\" --url about:blank --proxy 127.0.0.1:7890\nLaunches an OWNED isolated browser (never the user's default profile — Chrome/Edge 136+ disables the debug port there; the daily browser's extensions/settings/cookies are untouched, separate data worlds) and binds one tab as the session. Default is a VISIBLE window (normal UA, user-visible automation, manual-login ready); --headless opts into a hidden session for background tasks (HeadlessChrome UA — many sites serve 403 to it, and no UIA fallback surface exists). --profile <name> keeps a persistent profile for one-time manual logins; same-profile relaunch REUSES the live session (reused:true). Extensions: ephemeral sessions always run extension-free; persistent profiles keep extensions (legitimate automation assets, e.g. media sniffers) unless --disable-extensions. --proxy HOST:PORT routes via an explicit local proxy (browser DoH can bypass system TUN fake-ip routing — the fix for silently unreachable sites). Startup succeeds only when the devtools endpoint answers; otherwise the owned process is reclaimed.\nErrors: PROTOCOL bad executable/url/profile/proxy | INTERNAL endpoint never appeared (reclaimed)"
         }
         "browser-navigate" => {
             "Example:\n  actl browser-navigate --session s1a2b3 --url https://example.com\nConnects to the session's browser, re-verifies the bound tab still exists, navigates and waits for the main-frame Page.frameNavigated event. Reports url/title/frame_id. Network-level load failures (chrome-error pages) fail explicitly with the net error in evidence — never silently reported as success.\nErrors: PROTOCOL bad url | NOT_FOUND unknown session / endpoint unreachable / target lost | TIMEOUT navigation event missing | INTERNAL network-level load failure"
@@ -975,7 +995,7 @@ fn after_help_for(name: &str) -> Option<&'static str> {
             "Example:\n  actl browser-list\nRead-only enumeration of active sessions (newest first): session_id/target_id/url/pid/port/mode. In YAML flows browser-launch cannot carry outputs (lifecycle command, not a read-only producer) — bind the session handle from this command instead (e.g. pointer /sessions/0/session_id).\nErrors: INTERNAL sessions dir unreadable"
         }
         "browser-verify" => {
-            "Example:\n  actl browser-verify --newest-alive\n  actl browser-verify --session s1a2b3 --alive\n  actl browser-verify --none\nRead-only assertion family for flow verify steps: --newest-alive (post-launch), --none (post-close in a flow-owned lifecycle), --session+--alive (target responds), --session+--gone (record deregistered). Value-level assertions live on the write itself (browser-click --expect-text).\nErrors: PROTOCOL mode/args | ASSERTION_FAILED assertion unmet | NOT_FOUND unknown session (alive)"
+            "Example:\n  actl browser-verify --newest-alive\n  actl browser-verify --session s1a2b3 --css '[data-testid=\"app-bar-user\"]'\n  actl browser-verify --session s1a2b3 --css '#avatar' --contains work\n  actl browser-verify --none\nRead-only assertion family for flow verify steps: --newest-alive (post-launch), --none (post-close in a flow-owned lifecycle), --session+--alive/--gone (target responds / record deregistered), and the login-state predicate --session+--css/--xpath [--contains] (unique resolution + optional text substring; the resume_check for login pause points). Value assertions on writes live on browser-click --expect-text.\nErrors: PROTOCOL mode/args | ASSERTION_FAILED assertion unmet (incl. non-unique login selector) | NOT_FOUND unknown session"
         }
         "flow-validate" => {
             "Example:\n  actl flow-validate --file task.yml\nOptional --inputs values.yml resolves declared whole-argument inputs before validating every step. Resources are checked without creating files; data.resources uses the validation-preview context. --emit-plan includes the concrete preview plan and input values, not initialized resources. when/unless select run or otherwise using immediate assertions; unknown observations stop. Both routes are prevalidated. run/otherwise.sequence groups up to 16 calls with one result check. outputs select typed read-only data via JSON Pointer; bind replaces a whole args entry by index. Resolved CLI arguments are revalidated before execution.\nErrors: PROTOCOL invalid YAML/command/policy/resource | INTERNAL file error"

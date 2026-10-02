@@ -622,10 +622,35 @@ fn load_plan(
         .as_ref()
         .map(|file| actl_flow::store::read_text(std::path::Path::new(file)))
         .transpose()?;
-    Ok((
-        actl_flow::inputs::resolve(&prepared.text, values.as_deref())?,
-        prepared,
-    ))
+    let plan = actl_flow::inputs::resolve(&prepared.text, values.as_deref())?;
+    // 持久 profile 声明治理(docs/60/72):flow 中 browser-launch --profile <name>
+    // 只允许使用 resources.browser_profiles 已声明的名字——凭据资产显式归属
+    validate_profile_declarations(&plan, prepared.browser_profiles())?;
+    Ok((plan, prepared))
+}
+
+fn validate_profile_declarations(plan: &Plan, declared: &[String]) -> Result<(), CtlError> {
+    for step in &plan.steps {
+        let Ok(command) = parse(&step.run) else {
+            continue;
+        };
+        if let Command::BrowserLaunch {
+            profile: Some(name),
+            ..
+        } = command
+            && !declared.contains(&name)
+        {
+            return Err(CtlError::with_evidence(
+                ErrorCode::Protocol,
+                format!(
+                    "step {} uses persistent browser profile {name:?} without declaring it in resources.browser_profiles",
+                    step.id
+                ),
+                json!({"step_id": step.id, "profile": name, "declared": declared}),
+            ));
+        }
+    }
+    Ok(())
 }
 
 pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
@@ -686,7 +711,9 @@ pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
                 ));
             }
             actl_core::stop::check_current()?;
-            resources.create()?;
+            resources.create_at(Some(
+                &actl_browser::session::Paths::default().profiles_dir(),
+            ))?;
             // 无资源声明时 ${run.dir} 仍可能被 input default 引用(screenshot
             // 输出等)——确保 run.dir 存在,否则写文件报路径不存在。
             let run_dir = actl_core::state::SignalPaths::default()

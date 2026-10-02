@@ -159,8 +159,19 @@ iframe 守卫写+核验→iframe 读"1"→navigate(标题+计数归零证明新�
   会话句柄贯穿,收尾 browser-list 归零、零残留进程)。**治理发现**:未声明 handoff 的
   流程里浏览器写不触发审批门(CDP 写非桌面物理输入,引擎按命令分类裁决)——授权语义
   =停止代次核验(browser-click 已过);动作卡/审批卡与显示端的接线归显示层待办(§13)。
-  余量:值级断言动词(--contains 类)、会话作为声明式流程资源(生命周期归 flow 而非步骤)
-  、写入 uncertain 跨进程持久化(对齐 docs/47)。
-- [ ] 持久 profile 登录复用真机验收(一次性人工登录场景)
+  余量:写入 uncertain 跨进程持久化(对齐 docs/47)。
+- [x] **持久 profile 四件套(2026-10-02 实测通过)**:① 登录暂停点——`pause_before: true` +
+  `resume_check: browser-verify --session X --css <登录标记>`(本地页全链:暂停→恢复通过→
+  完成;谓词不满足→`reason: resume_check_failed` 保持 paused);② 登录态核验谓词——
+  browser-verify 选择器模式(--session+--css/--xpath [--contains],唯一解析+文本包含,
+  不满足 ASSERTION_FAILED);③ profile 资产治理——flow 资源新种类 `browser_profiles`
+  (docs/60:全局命名资产、创建幂等、永不删除;流程内 --profile 未声明即 PROTOCOL 拒);
+  ④ 并发治理——同名持久 profile 再启=复用活跃会话(reused:true),端点已死的陈旧记录自动
+  接管。示例流程 `skills/actl/workflows/browser-login-session.yml`。**真实站点登录验收仍待
+  用户选站**(本地页已验机制,登录动作本身归用户)。新增教训:**持久 profile 目录会残留
+  上次退出的 DevToolsActivePort**——启动成功判定必须"文件出现且端点应答 /json/version"
+  双条件,且 spawn 前清除陈旧文件(ephemeral 每次新目录故从未暴露)。扩展策略:ephemeral
+  恒 --disable-extensions;持久 profile 默认保留扩展(合法自动化资产,如猫抓),
+  --disable-extensions 显式禁。用户日常浏览器与 CDP 会话是两个数据世界,互不影响。
 - [ ] batch 组合验收;写动词扩展(browser-type)与读通道补全(`--property`:value/href 等——x.com 场景实证 input 值读不到,docs/73);headless 的 `--user-agent` 覆盖(UA 壁垒站点);选择器索引消歧助手;close 后 ephemeral profile 延迟重删(7 轮 2 次竞争失败)
 - [ ] WebView2 内嵌形态评估(并入 M3 WebView2 专项验收后)

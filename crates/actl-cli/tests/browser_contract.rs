@@ -221,3 +221,52 @@ fn navigate_rejects_bad_url_before_touching_the_browser() {
     let v: Value = serde_json::from_str(&stdout).unwrap();
     assert_eq!(v["error"]["code"], "PROTOCOL");
 }
+
+#[test]
+fn verify_selector_mode_requires_session() {
+    // clap 层:--css 依赖 --session;组合互斥仅断言退出码(stderr 无 envelope)
+    assert_eq!(actl(&["browser-verify", "--css", "#avatar"]).0, 2);
+    assert_eq!(
+        actl(&[
+            "browser-verify",
+            "--session",
+            "x",
+            "--css",
+            "a",
+            "--xpath",
+            "b"
+        ])
+        .0,
+        2
+    );
+    assert_eq!(actl(&["browser-verify", "--contains", "me"]).0, 2);
+}
+
+#[test]
+fn flow_rejects_undeclared_persistent_profile() {
+    let dir = std::env::temp_dir().join(format!("actl-browser-flow-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let undeclared = dir.join("undeclared.yml");
+    std::fs::write(
+        &undeclared,
+        "version: 1\nname: undeclared\nsteps:\n  - id: launch\n    title: t\n    run:\n      command: browser-launch\n      args: ['--browser-executable', 'C:/e/msedge.exe', '--profile', 'sneaky']\n    verify:\n      command: browser-verify\n      args: ['--newest-alive']\n",
+    )
+    .unwrap();
+    let (code, stdout) = actl(&["flow-validate", "--file", undeclared.to_str().unwrap()]);
+    assert_eq!(code, 2, "{stdout}");
+    let v: Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(v["error"]["code"], "PROTOCOL");
+    assert!(v["error"]["message"].as_str().unwrap().contains("sneaky"));
+
+    let declared = dir.join("declared.yml");
+    std::fs::write(
+        &declared,
+        "version: 1\nname: declared\nresources:\n  browser_profiles:\n    - name: ok-profile\nsteps:\n  - id: launch\n    title: t\n    run:\n      command: browser-launch\n      args: ['--browser-executable', 'C:/e/msedge.exe', '--profile', 'ok-profile']\n    verify:\n      command: browser-verify\n      args: ['--newest-alive']\n",
+    )
+    .unwrap();
+    let (code, stdout) = actl(&["flow-validate", "--file", declared.to_str().unwrap()]);
+    assert_eq!(code, 0, "{stdout}");
+    let v: Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(v["data"]["resources"]["browser_profiles"][0], "ok-profile");
+    let _ = std::fs::remove_dir_all(&dir);
+}

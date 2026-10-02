@@ -255,19 +255,24 @@ list-notifications              # 系统通知读取
 
 #### 浏览器会话(browser,CDP 通道 v1,2026-10-02 spec)
 ```
-browser-launch --browser-executable <abs> [--url U] [--profile name] [--proxy host:port] [--headless] [--timeout ms]
+browser-launch --browser-executable <abs> [--url U] [--profile name] [--proxy host:port] [--headless] [--disable-extensions] [--timeout ms]
                                      # 启动 actl 自有的隔离浏览器(系统 Edge/Chrome 二进制,
                                      # 专用 user-data-dir——默认 profile 被 Chrome/Edge 136+
-                                     # 禁调试端口,永不附着用户会话)并绑定一个 tab 为会话;
+                                     # 禁调试端口,永不附着用户会话;用户日常浏览器的插件/
+                                     # 设置/cookie 属另一数据世界,互不影响)并绑定一个 tab;
                                      # **默认有头**(可见窗口):常规 UA 过 UA 壁垒站点、用户
                                      # 可全程旁观(非隐身执行立场)、持久 profile 人工登录就绪,
                                      # 且浏览器 chrome 层的 UIA 兜底面在场;--headless 才是无
                                      # 窗口后台形态(HeadlessChrome UA 会被部分站点拒服务,
                                      # 无 UIA 面,代价自担);--profile 持久 profile(一次性
-                                     # 人工登录复用),缺省一次性;--proxy 裸 HOST:PORT 显式
+                                     # 人工登录复用),**同名再启=复用活跃会话**(reused:true,
+                                     # 陈旧记录自动接管);扩展策略:ephemeral 恒禁用,
+                                     # 持久 profile 默认保留(合法自动化资产,如猫抓),
+                                     # --disable-extensions 显式禁;--proxy 裸 HOST:PORT 显式
                                      # 代理(浏览器 DoH 会绕过系统 TUN fake-ip 路由,是
                                      # "站点不可达"的解药;2026-10-02 x.com 场景实证);
-                                     # DevToolsActivePort 出现=启动成功,否则 fail-fast 回收
+                                     # DevToolsActivePort 出现**且端点应答**=启动成功(持久
+                                     # profile 的陈旧端口文件会假阳,先清再用),否则 fail-fast 回收
                                      # 自启进程;stdio 继承守卫防管道挂死
 browser-navigate --session <id> --url U  # 重核绑定 target 存活→导航→等主 frame 的
                                      # Page.frameNavigated(读线程事件,导航竞态判定地基);
@@ -283,10 +288,12 @@ browser-click --session <id> (--css S | --xpath X) [--iframe] [--expect-text sub
 browser-close --session <id>     # CDP Browser.close 优雅关闭自有浏览器+注销会话文件;
                                      # ephemeral profile 删除、persistent 保留;幂等(端点已死→如实行)
 browser-list                      # 只读枚举活跃会话(新→旧):session_id/target/url/pid/mode
-browser-verify [--newest-alive | --none | --session <id> --alive|--gone]
+browser-verify [--newest-alive | --none | --session <id> --alive|--gone | --session <id> (--css S|--xpath X) [--contains T]]
                                      # 只读断言族(flow verify 位专用):launch 后 --newest-alive、
-                                     # close 后 --none、按会话 --alive/--gone;值级断言在写动词上
-                                     # (--expect-text),本族管生命周期与存活
+                                     # close 后 --none、按会话 --alive/--gone;**登录态谓词**
+                                     # --session+--css/--xpath [--contains]:选择器唯一解析
+                                     # (+文本包含)——登录暂停点的 resume_check 判据;值级
+                                     # 断言在写动词上(--expect-text)
 ```
 **YAML 流程接入(2026-10-02 实测通过)**:browser 命令进 flow 的治理模型走三件套——
 ① `browser-launch` 是生命周期命令,不能带 outputs(outputs 只允许只读生产者);
@@ -294,6 +301,12 @@ browser-verify [--newest-alive | --none | --session <id> --alive|--gone]
    后续步骤 `bind` 注入 `--session` 值位(下标须指向值字面量,不能指到旗标上);
 ③ 有副作用的步骤必须带 verify——`browser-verify` 族即为此而生(launch→--newest-alive,
    click→--session X --alive,close→--none)。探针流程六步真机全通(见 docs/72 §13)。
+**持久 profile 治理(2026-10-02)**:flow 中 `browser-launch --profile <name>` 必须在
+`resources.browser_profiles` 声明(未声明即 PROTOCOL 拒绝)——凭据资产显式归属;该资源
+创建幂等、永不随任务删除。**登录暂停点**:`pause_before: true` + `resume_check:
+browser-verify --session X --css <登录标记>`(用户在可见窗口完成登录后恢复;谓词不满足
+则保持 paused,`reason: resume_check_failed`)。示例流程
+`skills/actl/workflows/browser-login-session.yml`,本地页全链实测(暂停/恢复/拒未登/复用)。
 会话状态落 `%LOCALAPPDATA%\actl\browser\`(sessions/*.json + profiles/);错误码复用全集
 (PROTOCOL/NOT_FOUND/AMBIGUOUS/ASSERTION_FAILED/ABORTED/TIMEOUT/INTERNAL),无新增码。
 安全边界(docs/72 §8):客户端只实现 Target/Runtime/Page/Browser 白名单域,cookie 读取域

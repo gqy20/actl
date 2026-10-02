@@ -1,0 +1,41 @@
+version: 1
+name: browser-login-session
+resources:
+  browser_profiles:
+    - name: default-login
+inputs:
+  browser_executable:
+    default: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'
+  start_url:
+    default: 'about:blank'
+  login_selector:
+    default: '#count'
+steps:
+  - id: launch_browser
+    title: launch persistent-profile browser (reuses a logged-in session)
+    run:
+      command: browser-launch
+      args: ['--browser-executable', {input: browser_executable}, '--url', {input: start_url}, '--profile', 'default-login', '--timeout', '20000']
+    verify:
+      command: browser-verify
+      args: ['--newest-alive']
+  - id: observe_session
+    title: read-only discovery of the session handle
+    run:
+      command: browser-list
+      args: []
+    outputs:
+      session_id:
+        type: string
+        pointer: /sessions/0/session_id
+  - id: ensure_login
+    title: login pause point - complete the login in the visible window
+    pause_before: true
+    resume_check:
+      command: browser-verify
+      args: ['--session', 'placeholder', '--css', {input: login_selector}]
+      bind: {'1': observe_session.session_id}
+    run:
+      command: browser-verify
+      args: ['--session', 'placeholder', '--css', {input: login_selector}]
+      bind: {'1': observe_session.session_id}
