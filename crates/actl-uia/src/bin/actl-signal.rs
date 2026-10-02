@@ -1,6 +1,8 @@
 //! Compact native display. Execution facts arrive exclusively through the side channel.
 #![allow(unsafe_code, unsafe_op_in_unsafe_fn)]
 #![windows_subsystem = "windows"]
+#[path = "signal/action_flash.rs"]
+mod action_flash;
 #[path = "signal/controls.rs"]
 mod controls;
 #[path = "signal/flow_display.rs"]

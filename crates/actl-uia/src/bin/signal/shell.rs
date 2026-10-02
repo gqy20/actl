@@ -504,6 +504,8 @@ unsafe fn tick(hwnd: HWND) {
         overlay::hide();
         if let Some((_, a)) = preparing {
             overlay::show(a);
+            // 动作开始:触发中心闪现(preparing → executing 的转换)
+            crate::action_flash::show(&a.kind, &a.kind.replace('-', " "));
         }
     }
     // Coalesce bursts to the most recent delivered spatial action; never accumulate a screenful.
