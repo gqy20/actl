@@ -279,29 +279,40 @@ pub(crate) fn top_windows(
     auto: &UIAutomation,
     _walker: &UITreeWalker,
 ) -> Result<Vec<UIElement>, CtlError> {
-    let roots = crate::observation::desktop_children(auto)?;
+    let query = crate::observation::ChildrenQuery::new(
+        auto,
+        &[
+            uiautomation::types::UIProperty::NativeWindowHandle,
+            uiautomation::types::UIProperty::ControlType,
+        ],
+    )?;
+    let roots = query.desktop_children(auto)?;
     let roots = crate::window_observation::select(roots, |w| {
         let hwnd = crate::observation_diagnostics::observe(
             crate::observation_diagnostics::Stage::WindowHandle,
             crate::observation::cached_hwnd(w),
             || {
-                w.get_native_window_handle()
+                w.get_cached_native_window_handle()
                     .map_err(|e| crate::read_channel::failure("window.hwnd", e))
             },
         )?;
         Ok(!crate::display_support::is_display_window(hwnd.into()))
     })?;
-    crate::window_observation::inventory(Ok(roots), crate::observation::children, |w| {
-        crate::observation_diagnostics::observe(
-            crate::observation_diagnostics::Stage::WindowRole,
-            crate::observation::cached_hwnd(w),
-            || {
-                w.get_control_type()
-                    .map(|t| t == ControlType::Window)
-                    .map_err(|e| crate::read_channel::failure("window.role", e))
-            },
-        )
-    })
+    crate::window_observation::inventory(
+        Ok(roots),
+        |root| query.children(root),
+        |w| {
+            crate::observation_diagnostics::observe(
+                crate::observation_diagnostics::Stage::WindowRole,
+                crate::observation::cached_hwnd(w),
+                || {
+                    w.get_cached_control_type()
+                        .map(|t| t == ControlType::Window)
+                        .map_err(|e| crate::read_channel::failure("window.role", e))
+                },
+            )
+        },
+    )
 }
 
 /// WinUI 同一可见窗口的辅助 HWND(标题相同;实测计算器 3 个同名"计算器":
@@ -612,6 +623,7 @@ fn list_windows_inner() -> Result<Vec<WindowEntry>, CtlError> {
             Ok((auto, walker))
         },
     )?;
+    let metadata_query = crate::window_metadata::Query::new(&auto)?;
     // rect 统一物理像素(PMv2 线程上下文):与 screenshot / xy: 坐标寻址同
     // 坐标系——视觉兜底换算("窗口左上角 + PNG 坐标")不再跨缩放混层
     // (2026-09-27 实测踩坑:逻辑 rect × 200% 缩放屏差点点错,守卫拦下)
@@ -652,17 +664,11 @@ fn list_windows_inner() -> Result<Vec<WindowEntry>, CtlError> {
                 crate::observation_diagnostics::Stage::WindowProperties,
                 crate::observation::cached_hwnd(&w),
                 || {
-                    let title = w
-                        .get_name()
-                        .map_err(|e| crate::read_channel::failure("window.name", e))?;
-                    if title.is_empty() {
+                    let Some(metadata) = metadata_query.read(&w)? else {
                         return Ok(None);
-                    }
-                    let handle = w
-                        .get_native_window_handle()
-                        .map_err(|e| crate::read_channel::failure("window.hwnd", e))?;
-                    let handle: HWND = handle.into();
-                    let hwnd = (!handle.0.is_null()).then_some(handle);
+                    };
+                    let title = metadata.title;
+                    let hwnd = metadata.hwnd.map(|raw| HWND(raw as *mut _));
                     let (foreground, topmost, minimized, visible, z_order, rect, owner_title) =
                         match hwnd {
                             Some(h) => unsafe {
@@ -692,12 +698,8 @@ fn list_windows_inner() -> Result<Vec<WindowEntry>, CtlError> {
                         };
                     Ok(Some(WindowEntry {
                         title,
-                        class: w
-                            .get_classname()
-                            .map_err(|e| crate::read_channel::failure("window.class", e))?,
-                        pid: w
-                            .get_process_id()
-                            .map_err(|e| crate::read_channel::failure("window.pid", e))?,
+                        class: metadata.class,
+                        pid: metadata.pid,
                         hwnd: hwnd.map(|h| h.0 as isize),
                         foreground,
                         topmost,

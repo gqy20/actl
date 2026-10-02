@@ -260,11 +260,12 @@ fn batch_reports_per_step_results_and_durations() {
 
 #[test]
 fn batch_failure_carries_partial_steps_in_evidence() {
-    // 第 2 步必败(窗口不存在),部分结果须随 evidence 带出且 stdout 仍是单 envelope
+    // PID 上界不是 Windows 进程，可由原生清单确认不存在；不要为离线契约遍历 UIA 桌面。
+    // 第 2 步必败，部分结果须随 evidence 带出且 stdout 仍是单 envelope。
     let (code, stdout) = actl(&[
         "batch",
         "--json",
-        r#"["status","close-window definitely-no-such-window-xyz"]"#,
+        r#"["status","close-window --pid 4294967295"]"#,
     ]);
     assert_eq!(code, 1);
     let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");

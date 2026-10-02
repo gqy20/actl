@@ -51,6 +51,7 @@ pub use table::{TableResult, extract_table};
 mod window;
 pub use window::front_report;
 pub mod window_check;
+mod window_metadata;
 mod window_observation;
 mod window_ready;
 pub use window_ready::wait_window_ready;

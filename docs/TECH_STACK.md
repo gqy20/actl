@@ -165,6 +165,18 @@ perimeter 内 unsafe 用于显示器枚举、各屏 DPI、窗口生命周期与�
 同步回调及读取 HWND 的原生属性。回调 LPARAM 指向调用栈中存活的 Vec，不保留指针，
 不取得窗口所有权、不发送消息、不更改前台。原生枚举错误向上传播，不伪装为空列表。
 
+手动观察诊断 `actl-uia/tests/provider_probe.rs` 复用现有依赖，默认 ignore，不进入 CI 桌面操作。
+unsafe 仅用于 MTA/COM 客户端创建、只读查询与数组转换、前台及输入 tick 元数据读取；
+可比较 CUIAutomation/CUIAutomation8 和最小/句柄缓存，不设置超时、不调用动作模式、
+不激活窗口或授予权限。结果只保存阶段、原生身份和错误，不保存键值、坐标或窗口正文。
+
+窗口观察在单次调用内复用现有 UIAutomation 客户端、RawView 条件与 UICacheRequest。
+`window_metadata` 使用既有安全封装：先读标题，仅对有标题的元素批量刷新 Class/PID/HWND；
+窗口及挂靠弹窗的句柄/类型从本次 FindAllBuildCache 返回值读取，必需缓存字段失败向上传播。
+不跨调用缓存元素、不把缓存当作授权或长期身份依据，不新增依赖、unsafe 或超时策略。
+默认 ignore 的缓存一致性用例在已有窗口核对实时值、RuntimeId 与原生进程实例，
+不注入输入、不恢复窗口、不创建业务资源；纯逻辑回归仍进入普通门禁。
+
 
 桌面交接复用现有 std + serde_json + windows，无新增依赖。纯授权逻辑位于 actl-core/handoff。
 actl-uia/bin/signal/handoff 的 unsafe 用于原生非激活提示窗口和低级输入 hook：回调仅读取

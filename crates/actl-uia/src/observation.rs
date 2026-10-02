@@ -3,6 +3,7 @@ use crate::observation_diagnostics::{Stage, observe};
 use actl_core::{CtlError, ErrorCode};
 use uiautomation::{
     UIAutomation, UIElement,
+    core::{UICacheRequest, UICondition},
     types::{TreeScope, UIProperty},
 };
 
@@ -108,26 +109,46 @@ pub(crate) fn tree_bounded(
 }
 
 pub(crate) fn children(root: &UIElement) -> Result<Vec<UIElement>, CtlError> {
-    observe(Stage::Children, cached_hwnd(root), || children_inner(root))
+    let auto = UIAutomation::new().map_err(crate::internal)?;
+    ChildrenQuery::new(&auto, &[UIProperty::NativeWindowHandle])?.children(root)
 }
 
-fn children_inner(root: &UIElement) -> Result<Vec<UIElement>, CtlError> {
-    let auto = UIAutomation::new().map_err(crate::internal)?;
-    let condition = auto.create_true_condition().map_err(crate::internal)?;
-    let cache = auto.create_cache_request().map_err(crate::internal)?;
-    // Native identity is returned by this existing batch, never fetched by an
-    // additional live provider call merely to populate diagnostic metadata.
-    cache
-        .add_property(UIProperty::NativeWindowHandle)
-        .map_err(crate::internal)?;
-    cache
-        .set_tree_filter(condition.clone())
-        .map_err(crate::internal)?;
-    cache
-        .set_tree_scope(TreeScope::Element)
-        .map_err(crate::internal)?;
-    root.find_all_build_cache(TreeScope::Children, &condition, &cache)
-        .map_err(|e| crate::read_channel::failure("children", e))
+/// One condition/cache request per observation, with no cross-call element reuse.
+pub(crate) struct ChildrenQuery {
+    condition: UICondition,
+    cache: UICacheRequest,
+}
+impl ChildrenQuery {
+    pub fn new(auto: &UIAutomation, properties: &[UIProperty]) -> Result<Self, CtlError> {
+        let condition = auto.create_true_condition().map_err(crate::internal)?;
+        let cache = auto.create_cache_request().map_err(crate::internal)?;
+        for property in properties {
+            cache.add_property(*property).map_err(crate::internal)?;
+        }
+        cache
+            .set_tree_filter(condition.clone())
+            .map_err(crate::internal)?;
+        cache
+            .set_tree_scope(TreeScope::Element)
+            .map_err(crate::internal)?;
+        Ok(Self { condition, cache })
+    }
+    pub fn children(&self, root: &UIElement) -> Result<Vec<UIElement>, CtlError> {
+        observe(Stage::Children, cached_hwnd(root), || {
+            root.find_all_build_cache(TreeScope::Children, &self.condition, &self.cache)
+                .map_err(|e| crate::read_channel::failure("children", e))
+        })
+    }
+    pub fn desktop_children(&self, auto: &UIAutomation) -> Result<Vec<UIElement>, CtlError> {
+        let _t = actl_core::trace::scope("window.desktop_children");
+        with_transient_retry(|| {
+            let root = observe(Stage::DesktopRoot, None, || {
+                auto.get_root_element()
+                    .map_err(|e| crate::read_channel::failure("desktop.root", e))
+            })?;
+            self.children(&root)
+        })
+    }
 }
 
 /// 桌面根整批枚举的有界瞬态重试。一次 FindAll(Children) 是全有或全无:
@@ -165,14 +186,7 @@ pub(crate) fn with_transient_retry<T>(
 
 /// 桌面根的直接子窗口(带瞬态重试);标题定位与 uia: 作用域解析共用。
 pub(crate) fn desktop_children(auto: &UIAutomation) -> Result<Vec<UIElement>, CtlError> {
-    let _t = actl_core::trace::scope("window.desktop_children");
-    with_transient_retry(|| {
-        let root = observe(Stage::DesktopRoot, None, || {
-            auto.get_root_element()
-                .map_err(|e| crate::read_channel::failure("desktop.root", e))
-        })?;
-        children(&root)
-    })
+    ChildrenQuery::new(auto, &[UIProperty::NativeWindowHandle])?.desktop_children(auto)
 }
 
 pub(crate) fn parent(
