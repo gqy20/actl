@@ -51,7 +51,7 @@ static TEXT_FORMATS: OnceLock<(Option<IDWriteTextFormat>, Option<IDWriteTextForm
     OnceLock::new();
 
 /// (拉丁主字体, 中文伴随字体) 两个 TextFormat,进程内首用构建、此后复用。
-unsafe fn text_formats(
+pub(super) unsafe fn text_formats(
     write: &IDWriteFactory,
 ) -> Result<(&'static IDWriteTextFormat, &'static IDWriteTextFormat)> {
     let (latin, cjk) = TEXT_FORMATS.get_or_init(|| {
@@ -181,10 +181,10 @@ fn has_cjk(text: &str) -> bool {
         )
     })
 }
-fn color(rgb: u32) -> D2D1_COLOR_F {
+pub(super) fn color(rgb: u32) -> D2D1_COLOR_F {
     color_a(rgb, 1.)
 }
-fn color_a(rgb: u32, a: f32) -> D2D1_COLOR_F {
+pub(super) fn color_a(rgb: u32, a: f32) -> D2D1_COLOR_F {
     D2D1_COLOR_F {
         r: ((rgb >> 16) & 255) as f32 / 255.,
         g: ((rgb >> 8) & 255) as f32 / 255.,
@@ -200,7 +200,7 @@ fn rect(x: f32, y: f32, w: f32, h: f32) -> D2D_RECT_F {
         bottom: y + h,
     }
 }
-fn rounded(x: f32, y: f32, w: f32, h: f32, radius: f32) -> D2D1_ROUNDED_RECT {
+pub(super) fn rounded(x: f32, y: f32, w: f32, h: f32, radius: f32) -> D2D1_ROUNDED_RECT {
     D2D1_ROUNDED_RECT {
         rect: rect(x, y, w, h),
         radiusX: radius,
@@ -254,7 +254,7 @@ fn border_channel(mode: Mode, preauth: bool) -> (u32, Option<(u64, f32, f32)>) {
 }
 
 // COM objects and native bitmap handles remain on the display thread.
-struct ComScope;
+pub(super) struct ComScope;
 impl Drop for ComScope {
     fn drop(&mut self) {
         unsafe { CoUninitialize() };
@@ -477,138 +477,6 @@ pub(super) unsafe fn present_alpha(
     })();
     let _ = DeleteDC(dc);
     result
-}
-
-/// Task notice: rasterized once, then reused for position/opacity/scale frames.
-pub(super) struct FlashRaster {
-    pub width: i32,
-    pub height: i32,
-    pub dpi: u32,
-    pub data: Vec<u8>,
-}
-/// Bilinear sampling in premultiplied alpha keeps rounded edges free of dark fringes.
-pub(super) fn scaled_flash(raster: &FlashRaster, scale: f32) -> (Vec<u8>, i32, i32) {
-    let sw = pixels(raster.width, raster.dpi);
-    let sh = pixels(raster.height, raster.dpi);
-    let dw = (sw as f32 * scale).round().max(1.) as i32;
-    let dh = (sh as f32 * scale).round().max(1.) as i32;
-    let mut data = vec![0; (dw * dh * 4) as usize];
-    for y in 0..dh {
-        let sy = ((y as f32 + 0.5) * sh as f32 / dh as f32 - 0.5).clamp(0., (sh - 1) as f32);
-        let y0 = sy.floor() as i32;
-        let y1 = (y0 + 1).min(sh - 1);
-        let fy = sy - y0 as f32;
-        for x in 0..dw {
-            let sx = ((x as f32 + 0.5) * sw as f32 / dw as f32 - 0.5).clamp(0., (sw - 1) as f32);
-            let x0 = sx.floor() as i32;
-            let x1 = (x0 + 1).min(sw - 1);
-            let fx = sx - x0 as f32;
-            for channel in 0..4 {
-                let sample = |px, py| raster.data[((py * sw + px) * 4 + channel) as usize] as f32;
-                let top = sample(x0, y0) * (1. - fx) + sample(x1, y0) * fx;
-                let bottom = sample(x0, y1) * (1. - fx) + sample(x1, y1) * fx;
-                data[((y * dw + x) * 4 + channel) as usize] =
-                    (top * (1. - fy) + bottom * fy).round() as u8;
-            }
-        }
-    }
-    (data, dw, dh)
-}
-pub(super) unsafe fn raster_flash(
-    text: &str,
-    dpi: u32,
-    kind: super::task_notice::Kind,
-) -> Result<FlashRaster> {
-    let dpi = dpi.max(96);
-    CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok()?;
-    let _com = ComScope;
-    let write: IDWriteFactory = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED)?;
-    let (latin, cjk) = text_formats(&write)?;
-    let format = if has_cjk(text) { cjk } else { latin };
-    let text = text.encode_utf16().collect::<Vec<_>>();
-    let layout = write.CreateTextLayout(&text, format, 356., 44.)?;
-    let range = DWRITE_TEXT_RANGE {
-        startPosition: 0,
-        length: text.len() as u32,
-    };
-    layout.SetFontSize(20., range)?;
-    layout.SetFontWeight(DWRITE_FONT_WEIGHT_SEMI_BOLD, range)?;
-    let mut metrics = DWRITE_TEXT_METRICS::default();
-    layout.GetMetrics(&mut metrics)?;
-    let width = (metrics.width.ceil() as i32 + 64).clamp(196, 420);
-    layout.SetMaxWidth(width as f32 - 64.)?;
-    let height = 52;
-    let (pw, ph) = (pixels(width, dpi) as u32, pixels(height, dpi) as u32);
-    let wic: IWICImagingFactory =
-        CoCreateInstance(&CLSID_WICImagingFactory, None, CLSCTX_INPROC_SERVER)?;
-    let bitmap = wic.CreateBitmap(pw, ph, &GUID_WICPixelFormat32bppPBGRA, WICBitmapCacheOnLoad)?;
-    let factory: ID2D1Factory = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, None)?;
-    let target = factory.CreateWicBitmapRenderTarget(
-        &bitmap,
-        &D2D1_RENDER_TARGET_PROPERTIES {
-            r#type: D2D1_RENDER_TARGET_TYPE_SOFTWARE,
-            pixelFormat: D2D1_PIXEL_FORMAT {
-                format: DXGI_FORMAT_B8G8R8A8_UNORM,
-                alphaMode: D2D1_ALPHA_MODE_PREMULTIPLIED,
-            },
-            dpiX: dpi as f32,
-            dpiY: dpi as f32,
-            ..Default::default()
-        },
-    )?;
-    target.SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
-    target.SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
-    let brush = target.CreateSolidColorBrush(&color(0x25282B), None)?;
-    target.BeginDraw();
-    target.Clear(Some(&D2D1_COLOR_F::default()));
-    target.FillRoundedRectangle(&rounded(4., 4., width as f32 - 8., 44., 12.), &brush);
-    brush.SetColor(&color(0x3B3F43));
-    target.DrawRoundedRectangle(
-        &rounded(4.5, 4.5, width as f32 - 9., 43., 11.5),
-        &brush,
-        0.75,
-        None,
-    );
-    // A 16 DIP northeast arrow, without a surrounding badge or independent surface.
-    brush.SetColor(&color(kind.color()));
-    // Obtain the point type through the existing Windows ABI, without a new dependency.
-    let point = |x, y| {
-        let mut p = D2D1_BEZIER_SEGMENT::default().point1;
-        p.X = x;
-        p.Y = y;
-        p
-    };
-    let strokes: &[(f32, f32, f32, f32)] = match kind {
-        super::task_notice::Kind::Started => &[
-            (20., 32., 32., 20.),
-            (23., 20., 32., 20.),
-            (32., 20., 32., 29.),
-        ],
-        super::task_notice::Kind::Completed => &[(19., 26., 24., 31.), (24., 31., 33., 21.)],
-        super::task_notice::Kind::Failed => &[(20., 20., 32., 32.), (20., 32., 32., 20.)],
-        super::task_notice::Kind::Stopped => &[
-            (20., 20., 32., 20.),
-            (32., 20., 32., 32.),
-            (32., 32., 20., 32.),
-            (20., 32., 20., 20.),
-        ],
-        super::task_notice::Kind::Paused => &[(22., 20., 22., 32.), (30., 20., 30., 32.)],
-        super::task_notice::Kind::Attention => &[(26., 19., 26., 28.), (26., 31., 26., 33.)],
-    };
-    for &(x1, y1, x2, y2) in strokes {
-        target.DrawLine(point(x1, y1), point(x2, y2), &brush, 1.6, None);
-    }
-    brush.SetColor(&color(0xE8EBED));
-    target.DrawTextLayout(point(48., 4.), &layout, &brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
-    target.EndDraw(None, None)?;
-    let mut data = vec![0; pw as usize * ph as usize * 4];
-    bitmap.CopyPixels(std::ptr::null(), pw * 4, &mut data)?;
-    Ok(FlashRaster {
-        width,
-        height,
-        dpi,
-        data,
-    })
 }
 
 pub unsafe fn draw(hwnd: HWND, view: &View, hover: u8, expanded: bool) -> bool {

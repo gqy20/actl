@@ -31,6 +31,11 @@ impl Kind {
         }
     }
 }
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Notice {
+    pub run_id: String,
+    pub kind: Kind,
+}
 #[derive(Default)]
 struct Seen {
     started: bool,
@@ -49,7 +54,7 @@ impl Cursor {
             seen: HashMap::new(),
         }
     }
-    pub fn take(&mut self, states: &[SessionState]) -> Vec<Kind> {
+    pub fn take_named(&mut self, states: &[SessionState]) -> Vec<Notice> {
         let mut states = states
             .iter()
             .filter(|s| s.workflow.is_some())
@@ -59,6 +64,10 @@ impl Cursor {
         for state in states {
             let Some(flow) = &state.workflow else {
                 continue;
+            };
+            let notice = |kind| Notice {
+                run_id: flow.run_id.clone(),
+                kind,
             };
             let seen = self.seen.entry(flow.run_id.clone()).or_default();
             if state.ts_ms < seen.timestamp {
@@ -80,13 +89,13 @@ impl Cursor {
                 _ => None,
             };
             if !seen.started && (flow.status == "running" || end.is_some()) {
-                events.push(Kind::Started);
+                events.push(notice(Kind::Started));
                 seen.started = true;
             }
             if !seen.finished
                 && let Some(end) = end
             {
-                events.push(end);
+                events.push(notice(end));
                 seen.finished = true;
             }
             if changed && flow.status == "running" {
@@ -100,14 +109,21 @@ impl Cursor {
                             Some("checkpoint" | "start_paused")
                         ) =>
                     {
-                        events.push(Kind::Paused)
+                        events.push(notice(Kind::Paused))
                     }
-                    "needs_review" => events.push(Kind::Attention),
+                    "needs_review" => events.push(notice(Kind::Attention)),
                     _ => (),
                 }
             }
         }
         events
+    }
+    #[cfg(test)]
+    fn take(&mut self, states: &[SessionState]) -> Vec<Kind> {
+        self.take_named(states)
+            .into_iter()
+            .map(|event| event.kind)
+            .collect()
     }
 }
 
@@ -129,6 +145,22 @@ mod tests {
             actions: vec![],
         });
         s
+    }
+    #[test]
+    fn queued_boundaries_keep_their_own_task_identity() {
+        let mut cursor = Cursor::new(100);
+        let events = cursor.take_named(&[
+            state("first", "completed", 120),
+            state("second", "running", 130),
+        ]);
+        assert_eq!(
+            events.iter().map(|e| e.run_id.as_str()).collect::<Vec<_>>(),
+            ["first", "first", "second"]
+        );
+        assert_eq!(
+            events.iter().map(|e| e.kind).collect::<Vec<_>>(),
+            [Kind::Started, Kind::Completed, Kind::Started]
+        );
     }
     #[test]
     fn step_updates_pause_resume_and_new_calls_only_notify_once_per_task() {

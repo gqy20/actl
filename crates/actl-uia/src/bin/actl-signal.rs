@@ -5,6 +5,8 @@
 mod action_flash;
 #[path = "signal/controls.rs"]
 mod controls;
+#[path = "signal/flash_paint.rs"]
+mod flash_paint;
 #[path = "signal/flow_display.rs"]
 mod flow_display;
 #[path = "signal/flow_start.rs"]

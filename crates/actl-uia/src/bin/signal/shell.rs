@@ -485,13 +485,13 @@ unsafe fn tick(hwnd: HWND) {
         })
         .unwrap_or_default();
     if suppressed || !visible {
-        crate::action_flash::update(&states, now, false);
+        crate::action_flash::update(&paths, &states, now, false);
         overlay::hide();
         super::perimeter::hide();
         return;
     }
     super::perimeter::update(hwnd, &v, &states, now, ready);
-    crate::action_flash::update(&states, now, true);
+    crate::action_flash::update(&paths, &states, now, true);
     let key = preparing
         .map(|(s, a)| format!("{}:{}", s.call_id, a.id))
         .unwrap_or_default();

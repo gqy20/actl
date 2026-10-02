@@ -43,6 +43,7 @@
 | [verify-text.yml](verify-text.yml) | 已打开应用的完整文本只读核验；输入 app/target/expected | 参数预检及 VS Code 真实全文只读核验通过；见 docs/56 |
 | [edit-value.yml](edit-value.yml) | 核对 previous 后 set-value，再核对 value；输入 app/target/previous/value | 参数预检测试；需要 ValuePattern，真实应用分别验收 |
 | [browser-login-session.yml](browser-login-session.yml) | CDP 轨登录会话：持久 profile（resources.browser_profiles 声明）+ 登录暂停点（pause_before + browser-verify 选择器断言为 resume_check）；输入 browser_executable/start_url/login_selector | 本地页暂停/恢复/谓词不满足保持暂停/同 profile 复用全链实测通过（2026-10-02，docs/72）；真实站点登录验收待选站 |
+| [inspect-desktop-native.yml](inspect-desktop-native.yml) | 只读系统状态与 Win32 原生窗口清单；无需应用、输入或资源准备，输出窗口数量；清单不代表任务资源归属 | 预检与两步只读现场执行通过（2026-10-02）；用于桌面检查和显示层起止演示，不证明 UIA 查询正常 |
 | [release-review-draft.yml](release-review-draft.yml) | 读取已打开的 actl Releases 页(Chrome),在 Word 新文档生成核对草稿并落盘 | 协议预检通过;读段与时效拒绝路径真机验证;写段联测待执行。验证记录见开发仓库 docs/43(技能包不含 docs) |
 
 ### release-review-draft.yml

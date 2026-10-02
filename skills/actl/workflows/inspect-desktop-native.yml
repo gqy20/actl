@@ -1,0 +1,17 @@
+# Read-only desktop inspection; no UIA providers, input, application resources or cleanup.
+version: 1
+name: 检查桌面状态
+steps:
+  - id: system
+    title: 读取系统与协议版本
+    run:
+      command: status
+  - id: windows
+    title: 读取原生窗口清单
+    run:
+      command: list-windows
+      args: ["--native"]
+    outputs:
+      window_count:
+        pointer: /count
+        type: number

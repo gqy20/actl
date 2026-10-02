@@ -1,7 +1,8 @@
 //! Task lifecycle notifications; no per-action prompts or execution/consent state writes.
-use super::paint::{self, FlashRaster};
-use super::task_notice::{Cursor, Kind};
-use actl_core::state::SessionState;
+use super::flash_paint::{self, FlashRaster};
+use super::paint;
+use super::task_notice::{Cursor, Kind, Notice};
+use actl_core::state::{SessionState, SignalPaths};
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use windows::Win32::Foundation::*;
@@ -10,20 +11,21 @@ use windows::Win32::UI::{HiDpi::GetDpiForWindow, WindowsAndMessaging::*};
 use windows::core::{BOOL, w};
 
 const TIMER_ID: usize = 42;
-const SLIDE_IN_MS: u32 = 320;
-const HOLD_MS: u32 = 1600;
-const SLIDE_OUT_MS: u32 = 180;
-const SLIDE_DISTANCE: i32 = 12;
+const SLIDE_IN_MS: u32 = 600;
+const HOLD_MS: u32 = 1800;
+const SLIDE_OUT_MS: u32 = 500;
 
 #[derive(Clone)]
 struct Flash {
     hwnd: usize,
     target_x: i32,
     y: i32,
+    distance: i32,
+    hold_ms: u32,
     started: std::time::Instant,
     raster: Arc<FlashRaster>,
     reduced: bool,
-    last_frame: Option<(i32, i32, i32, i32, u8)>,
+    last_frame: Option<(i32, i32, u8, u8)>,
 }
 static FLASH: Mutex<Option<Flash>> = Mutex::new(None);
 
@@ -31,60 +33,59 @@ static FLASH: Mutex<Option<Flash>> = Mutex::new(None);
 struct Motion {
     offset: i32,
     alpha: u8,
-    scale: f32,
+    light: u8,
 }
-/// Small spring settling on entry; faster withdrawal. Reduced motion stays static.
-fn frame(elapsed: u32, reduced: bool, distance: i32) -> Option<Motion> {
-    if elapsed >= SLIDE_IN_MS + HOLD_MS + SLIDE_OUT_MS {
+/// One-third -> center -> two-thirds. Text never scales or blurs during travel.
+fn frame(elapsed: u32, reduced: bool, distance: i32, hold: u32) -> Option<Motion> {
+    if elapsed >= SLIDE_IN_MS + hold + SLIDE_OUT_MS {
         return None;
     }
     if reduced {
         return Some(Motion {
             offset: 0,
             alpha: 255,
-            scale: 1.,
+            light: 63,
         });
     }
     if elapsed < SLIDE_IN_MS {
         let t = elapsed as f32 / SLIDE_IN_MS as f32;
-        let p = t - 1.;
-        let spring = 1. + 1.8 * p.powi(3) + 0.8 * p.powi(2);
-        let fade = 1. - (1. - (t / 0.7).min(1.)).powi(3);
+        let ease = 1. - (1. - t).powi(5);
+        let fade = 1. - (1. - (t / 0.35).min(1.)).powi(3);
         Some(Motion {
-            offset: (distance as f32 * (1. - spring)).round() as i32,
+            offset: -(distance as f32 * (1. - ease)).round() as i32,
             alpha: (fade * 255.) as u8,
-            scale: 0.94 + 0.06 * spring,
+            light: (elapsed / 32).min(63) as u8,
         })
-    } else if elapsed < SLIDE_IN_MS + HOLD_MS {
+    } else if elapsed < SLIDE_IN_MS + hold {
         Some(Motion {
             offset: 0,
             alpha: 255,
-            scale: 1.,
+            light: (elapsed / 32).min(63) as u8,
         })
     } else {
-        let t = (elapsed - SLIDE_IN_MS - HOLD_MS) as f32 / SLIDE_OUT_MS as f32;
-        let ease = t * t;
+        let t = (elapsed - SLIDE_IN_MS - hold) as f32 / SLIDE_OUT_MS as f32;
+        let ease = t.powi(3);
         Some(Motion {
-            offset: (distance as f32 * 0.5 * ease).round() as i32,
-            alpha: ((1. - ease) * 255.) as u8,
-            scale: 1. - 0.02 * ease,
+            offset: (distance as f32 * ease).round() as i32,
+            alpha: ((1. - t * t) * 255.) as u8,
+            light: 63,
         })
     }
 }
 
 struct Notices {
     cursor: Cursor,
-    pending: VecDeque<Kind>,
+    pending: VecDeque<Notice>,
 }
 static NOTICES: Mutex<Option<Notices>> = Mutex::new(None);
 
-pub unsafe fn update(states: &[SessionState], now: u64, visible: bool) {
+pub unsafe fn update(paths: &SignalPaths, states: &[SessionState], now: u64, visible: bool) {
     let next = if let Ok(mut slot) = NOTICES.lock() {
         let notices = slot.get_or_insert_with(|| Notices {
             cursor: Cursor::new(now),
             pending: VecDeque::new(),
         });
-        let events = notices.cursor.take(states);
+        let events = notices.cursor.take_named(states);
         if visible {
             notices.pending.extend(events);
             if FLASH.lock().ok().is_some_and(|f| f.is_none()) {
@@ -100,12 +101,22 @@ pub unsafe fn update(states: &[SessionState], now: u64, visible: bool) {
     } else {
         None
     };
-    if let Some(kind) = next
-        && let Err(error) = create(kind.label(), kind)
-    {
-        eprintln!("INTERNAL: task notification failed: {error}");
-        hide();
+    if let Some(notice) = next {
+        let title = task_text(paths, &notice);
+        if let Err(error) = create(&title, notice.kind) {
+            eprintln!("INTERNAL: task notification failed: {error}");
+            hide();
+        }
     }
+}
+
+fn task_text(paths: &SignalPaths, notice: &Notice) -> String {
+    let plan = super::ui_text::plan(paths, &notice.run_id);
+    plan.as_ref()
+        .and_then(|p| p["name"].as_str())
+        .map(|name| name.split_whitespace().collect::<Vec<_>>().join(" "))
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| "任务名称未确认".into())
 }
 
 unsafe fn create(text: &str, kind: Kind) -> windows::core::Result<()> {
@@ -125,7 +136,7 @@ unsafe fn create(text: &str, kind: Kind) -> windows::core::Result<()> {
         SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
     )?;
     let cx = work.left + (work.right - work.left) / 2;
-    let cy = work.top + ((work.bottom - work.top) as f32 * 0.28) as i32;
+    let cy = work.top + ((work.bottom - work.top) as f32 * 0.4) as i32;
     let hwnd = CreateWindowExW(
         WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
         class,
@@ -149,7 +160,9 @@ unsafe fn create(text: &str, kind: Kind) -> windows::core::Result<()> {
     )
     .is_ok()
         && !animation.as_bool();
-    let raster = match paint::raster_flash(text, GetDpiForWindow(hwnd), kind) {
+    let dpi = GetDpiForWindow(hwnd).max(96);
+    let available = (((work.right - work.left) * 2 / 3 - 64) * 96 / dpi as i32).clamp(300, 760);
+    let raster = match flash_paint::raster(text, dpi, kind, available) {
         Ok(raster) => Arc::new(raster),
         Err(error) => {
             let _ = DestroyWindow(hwnd);
@@ -157,12 +170,18 @@ unsafe fn create(text: &str, kind: Kind) -> windows::core::Result<()> {
         }
     };
     let target_x = cx - paint::pixels(raster.width, raster.dpi) / 2;
-    let y = cy - paint::pixels(raster.height, raster.dpi) / 2;
+    let y = cy - paint::pixels(flash_paint::HEIGHT, raster.dpi) / 2;
     if let Ok(mut state) = FLASH.lock() {
         *state = Some(Flash {
             hwnd: hwnd.0 as usize,
             target_x,
             y,
+            distance: (work.right - work.left) / 6,
+            hold_ms: if matches!(kind, Kind::Started | Kind::Completed) {
+                HOLD_MS
+            } else {
+                3000
+            },
             started: std::time::Instant::now(),
             raster,
             reduced,
@@ -193,21 +212,13 @@ unsafe fn advance(hwnd: HWND) -> windows::core::Result<()> {
         return Ok(());
     };
     let elapsed = flash.started.elapsed().as_millis().min(u32::MAX as u128) as u32;
-    let Some(motion) = frame(
-        elapsed,
-        flash.reduced,
-        paint::pixels(SLIDE_DISTANCE, flash.raster.dpi),
-    ) else {
+    let Some(motion) = frame(elapsed, flash.reduced, flash.distance, flash.hold_ms) else {
         hide();
         return Ok(());
     };
-    let sw = paint::pixels(flash.raster.width, flash.raster.dpi);
-    let sh = paint::pixels(flash.raster.height, flash.raster.dpi);
-    let dw = (sw as f32 * motion.scale).round() as i32;
-    let dh = (sh as f32 * motion.scale).round() as i32;
-    let x = flash.target_x + (sw - dw) / 2;
-    let y = flash.y + motion.offset + (sh - dh) / 2;
-    let key = (x, y, dw, dh, motion.alpha);
+    let x = flash.target_x + motion.offset;
+    let y = flash.y;
+    let key = (x, y, motion.alpha, motion.light);
     if flash.last_frame == Some(key) {
         return Ok(());
     }
@@ -220,19 +231,15 @@ unsafe fn advance(hwnd: HWND) -> windows::core::Result<()> {
         0,
         SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
     )?;
-    if dw == sw && dh == sh {
-        paint::present_alpha(
-            hwnd,
-            &flash.raster.data,
-            flash.raster.dpi,
-            flash.raster.width,
-            flash.raster.height,
-            motion.alpha,
-        )?;
-    } else {
-        let (data, w, h) = paint::scaled_flash(&flash.raster, motion.scale);
-        paint::present_alpha(hwnd, &data, 96, w, h, motion.alpha)?;
-    }
+    let data = flash_paint::illuminate(&flash.raster, motion.light);
+    paint::present_alpha(
+        hwnd,
+        &data,
+        flash.raster.dpi,
+        flash.raster.width,
+        flash_paint::HEIGHT,
+        motion.alpha,
+    )?;
     if let Ok(mut state) = FLASH.lock()
         && let Some(current) = state.as_mut().filter(|f| f.hwnd == hwnd.0 as usize)
     {
@@ -247,7 +254,7 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
         WM_MOUSEACTIVATE => LRESULT(MA_NOACTIVATE as isize),
         WM_TIMER if wp.0 == TIMER_ID => {
             if let Err(error) = advance(hwnd) {
-                eprintln!("INTERNAL: action-start animation failed: {error}");
+                eprintln!("INTERNAL: task ribbon animation failed: {error}");
                 hide();
             }
             LRESULT(0)
@@ -269,92 +276,154 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
 mod tests {
     use super::*;
     #[test]
-    fn motion_settles_and_reduced_motion_has_no_translation_scaling_or_fade() {
+    fn task_ribbon_is_large_enough_to_read_over_a_terminal() {
+        let raster =
+            unsafe { flash_paint::raster("整理会议记录", 96, Kind::Started, 760) }.unwrap();
+        assert!(
+            raster.width >= 640,
+            "task notice must have a substantial reading surface"
+        );
+        assert!(
+            raster.data.len() / (raster.width as usize * 4) >= 100,
+            "room for a single large line and an open light ribbon"
+        );
+    }
+    #[test]
+    fn motion_crosses_screen_thirds_and_reduced_motion_stays_still() {
+        let total = SLIDE_IN_MS + HOLD_MS + SLIDE_OUT_MS;
         assert_eq!(
-            frame(0, false, 12),
+            frame(0, false, 320, HOLD_MS),
             Some(Motion {
-                offset: 12,
+                offset: -320,
                 alpha: 0,
-                scale: 0.94
+                light: 0
             })
         );
-        assert_eq!(
-            frame(320, false, 12),
-            Some(Motion {
-                offset: 0,
-                alpha: 255,
-                scale: 1.
-            })
-        );
-        for elapsed in 0..2100 {
-            let motion = frame(elapsed, false, 12).unwrap();
-            assert!((-1..=12).contains(&motion.offset));
-            assert!((0.939..=1.004).contains(&motion.scale));
+        assert_eq!(frame(SLIDE_IN_MS, false, 320, HOLD_MS).unwrap().offset, 0);
+        let mut previous = -320;
+        for ms in 0..total {
+            let motion = frame(ms, false, 320, HOLD_MS).unwrap();
+            assert!(motion.offset >= previous && motion.offset <= 320);
+            previous = motion.offset;
             assert_eq!(
-                frame(elapsed, true, 12),
+                frame(ms, true, 320, HOLD_MS),
                 Some(Motion {
                     offset: 0,
                     alpha: 255,
-                    scale: 1.
+                    light: 63
                 })
             );
         }
-        assert_eq!(frame(2100, false, 12), None);
-        assert_eq!(frame(2100, true, 12), None);
+        assert!(previous >= 315);
+        assert_eq!(frame(total, false, 320, HOLD_MS), None);
+        assert_eq!(frame(total, true, 320, HOLD_MS), None);
+        assert!(
+            frame(total, false, 320, 3000).is_some(),
+            "exceptions stay readable for longer"
+        );
     }
     #[test]
-    fn raster_scales_and_clips_long_text_with_smooth_transparent_corners() {
+    fn text_uses_saved_task_name_and_never_step_title_or_another_task() {
+        let paths =
+            SignalPaths::at(std::env::temp_dir().join(actl_core::snapshot::new_snapshot_id()));
+        let dir = paths.dir.join("flows").join("meeting");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("plan.json"),
+            serde_json::to_vec(
+                &serde_json::json!({"name":"整理\n会议记录", "steps":[{"title":"读取窗口"}]}),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let notice = |kind| Notice {
+            run_id: "meeting".into(),
+            kind,
+        };
+        assert_eq!(task_text(&paths, &notice(Kind::Started)), "整理 会议记录");
+        assert_eq!(task_text(&paths, &notice(Kind::Completed)), "整理 会议记录");
+        assert_eq!(task_text(&paths, &notice(Kind::Failed)), "整理 会议记录");
+        assert_eq!(task_text(&paths, &notice(Kind::Stopped)), "整理 会议记录");
+        assert_eq!(
+            task_text(
+                &paths,
+                &Notice {
+                    run_id: "missing".into(),
+                    kind: Kind::Started
+                }
+            ),
+            "任务名称未确认"
+        );
+        std::fs::remove_dir_all(paths.dir).unwrap();
+    }
+    #[test]
+    fn raster_handles_dpi_and_long_names_and_light_does_not_repaint_text() {
         for dpi in [96, 120, 144, 192] {
-            let short = unsafe { paint::raster_flash("任务开始", dpi, Kind::Started) }.unwrap();
-            let long =
-                unsafe { paint::raster_flash(&"任务完成".repeat(20), dpi, Kind::Completed) }
+            let raster =
+                unsafe { flash_paint::raster(&"会议记录".repeat(30), dpi, Kind::Started, 760) }
                     .unwrap();
-            assert!(long.width > short.width && long.width <= 420);
-            assert_eq!(short.height, long.height);
+            let pw = paint::pixels(raster.width, dpi) as usize;
             assert_eq!(
-                short.data.len(),
-                (paint::pixels(short.width, dpi) * paint::pixels(short.height, dpi) * 4) as usize
+                raster.data.len(),
+                pw * paint::pixels(flash_paint::HEIGHT, dpi) as usize * 4
             );
-            assert_eq!(short.data[3], 0);
-            assert!(short.data.as_chunks::<4>().0.iter().any(|p| p[3] == 255));
+            assert_eq!(raster.data[3], 0);
             assert!(
-                short
+                raster
                     .data
                     .as_chunks::<4>()
                     .0
                     .iter()
                     .any(|p| p[3] > 0 && p[3] < 255)
             );
-            assert!(
-                short
-                    .data
-                    .as_chunks::<4>()
-                    .0
-                    .iter()
-                    .all(|p| p[..3].iter().all(|c| *c <= p[3]))
-            );
-            for scale in [0.94, 0.98, 1.002] {
-                let (scaled, w, h) = paint::scaled_flash(&short, scale);
-                assert_eq!(scaled.len(), (w * h * 4) as usize);
+            for phase in [0, 31, 63] {
+                let lit = flash_paint::illuminate(&raster, phase);
                 assert!(
-                    scaled
-                        .as_chunks::<4>()
+                    lit.as_chunks::<4>()
                         .0
                         .iter()
                         .all(|p| p[..3].iter().all(|c| *c <= p[3]))
                 );
+                let end = paint::pixels(73, dpi) as usize * pw * 4;
+                assert_eq!(
+                    lit[..end],
+                    raster.data[..end],
+                    "the traveling light must leave the glyphs unchanged"
+                );
+                assert_ne!(lit, raster.data);
             }
+            let narrow =
+                unsafe { flash_paint::raster("任务名称", dpi, Kind::Failed, 460) }.unwrap();
+            assert_eq!(narrow.width, 460);
+        }
+    }
+    #[test]
+    fn long_task_names_cannot_push_exception_text_off_the_ribbon() {
+        for kind in [Kind::Failed, Kind::Stopped] {
+            let raster =
+                unsafe { flash_paint::raster(&"整理会议记录".repeat(20), 96, kind, 760) }.unwrap();
+            let pixels = raster.data.as_chunks::<4>().0;
+            let colored_text = (30..70).any(|y| {
+                (600..735).any(|x| {
+                    let pixel = pixels[y * raster.width as usize + x];
+                    pixel[2] > pixel[0].saturating_add(30) && pixel[3] > 180
+                })
+            });
+            assert!(
+                colored_text,
+                "exception suffix must remain visible after a trimmed long name"
+            );
         }
     }
     #[test]
     #[ignore = "exports production raster without showing a window or granting consent"]
     fn export_flash_previews() {
         let dir =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/flash-review");
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/ribbon-review");
         std::fs::create_dir_all(&dir).unwrap();
-        let frames = (0..=2100)
+        let frames = (0..=2900)
             .step_by(40)
-            .map(|ms| frame(ms, false, 24))
+            .map(|ms| frame(ms, false, 320, HOLD_MS))
             .collect::<Vec<_>>();
         std::fs::write(
             dir.join("frames.json"),
@@ -365,15 +434,20 @@ mod tests {
             ("started", Kind::Started),
             ("completed", Kind::Completed),
             ("failed", Kind::Failed),
+            ("stopped", Kind::Stopped),
         ] {
-            let raster = unsafe { paint::raster_flash(kind.label(), 192, kind) }.unwrap();
-            std::fs::write(dir.join(format!("{name}.bgra")), &raster.data).unwrap();
+            let raster = unsafe { flash_paint::raster("整理会议记录", 144, kind, 760) }.unwrap();
+            std::fs::write(
+                dir.join(format!("{name}.bgra")),
+                flash_paint::illuminate(&raster, 48),
+            )
+            .unwrap();
             std::fs::write(
                 dir.join(format!("{name}.size")),
                 format!(
                     "{} {}",
                     paint::pixels(raster.width, raster.dpi),
-                    paint::pixels(raster.height, raster.dpi)
+                    paint::pixels(flash_paint::HEIGHT, raster.dpi)
                 ),
             )
             .unwrap();
