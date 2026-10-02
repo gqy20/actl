@@ -24,6 +24,12 @@ pub enum PointerSpec {
     Drag {
         to: (i32, i32),
     },
+    /// 轨迹拖拽(--path):首点按下、末点抬起,路径点为绝对物理像素。
+    /// 两点退化为直线(但走插值路径,与 Drag 的四事件直线不同——
+    /// DragPath 面向画布采样,Drag 保持既有直线行为零变更)。
+    DragPath {
+        points: Vec<(i32, i32)>,
+    },
     Wheel {
         notches: i32,
     },
@@ -224,6 +230,10 @@ fn inject_pointer_at(
         PointerSpec::Click { modifiers, .. } => ("click", !modifiers.is_empty(), None),
         PointerSpec::Hover => ("hover", false, None),
         PointerSpec::Drag { to } => ("drag", false, Some([to.0, to.1])),
+        PointerSpec::DragPath { points } => {
+            let last = points.last().copied().unwrap_or((px, py));
+            ("drag", false, Some([last.0, last.1]))
+        }
         PointerSpec::Wheel { .. } => ("scroll", false, None),
     };
     let mut action = crate::feedback::prepare(
@@ -253,7 +263,10 @@ fn inject_pointer_at(
         })
         .transpose()?;
     let saved_cursor = bg_hwnd.is_some().then(mouse::cursor_pos).flatten();
-    let is_drag = matches!(spec, PointerSpec::Drag { .. });
+    let is_drag = matches!(
+        spec,
+        PointerSpec::Drag { .. } | PointerSpec::DragPath { .. }
+    );
     action.executing();
     match spec {
         PointerSpec::Click {
@@ -271,6 +284,7 @@ fn inject_pointer_at(
         }
         PointerSpec::Hover => mouse::move_to(px, py)?,
         PointerSpec::Drag { to: (tx, ty) } => mouse::drag_to(px, py, tx, ty)?,
+        PointerSpec::DragPath { points } => mouse::drag_path(&points)?,
         PointerSpec::Wheel { notches } => mouse::wheel_at(px, py, notches)?,
     }
     action.delivered();
@@ -432,6 +446,203 @@ pub fn click_physical(
     near: Option<&str>,
 ) -> Result<(Located, (i32, i32), bool), CtlError> {
     pointer_physical(app, target, near, PointerAction::LeftClick, false)
+}
+
+/// 轨迹拖拽的结果载荷。
+pub struct DragPathOutcome {
+    pub from: String,
+    pub start: (i32, i32),
+    pub end: (i32, i32),
+    pub window: String,
+}
+
+/// 轨迹拖拽(--path):from/to 可为元素或 `xy:` 坐标(坐标对坐标=框选/画布直连,
+/// 两端均过窗口边界守卫);路径点为绝对物理像素,插值后一批注入。
+/// 返回 DragPathOutcome(见 struct)。
+pub fn drag_path_physical(
+    app: Option<&str>,
+    from: &Target,
+    to: &Target,
+    waypoints: &[(i32, i32)],
+) -> Result<DragPathOutcome, CtlError> {
+    if waypoints.is_empty() && !matches!((from, to), (Target::Coord(_, _), Target::Coord(_, _))) {
+        return Err(CtlError::protocol(
+            "drag --path requires at least one waypoint (xy:→xy: drags may omit it)",
+        ));
+    }
+    let (start, end, window) = match (from, to) {
+        (Target::Coord(fx, fy), Target::Coord(tx, ty)) => {
+            let app = app.ok_or_else(|| {
+                CtlError::protocol(
+                    "coordinate drag (marquee/canvas) requires --app for the window guard",
+                )
+            })?;
+            let (title, rect) = window_bounds_for_coords(app, *fx, *fy)?;
+            guard_point(&title, &rect, *tx, *ty)?;
+            ((*fx, *fy), (*tx, *ty), title)
+        }
+        _ => {
+            // 元素模式:沿用 drag_physical 的定位语义,取两端 clickable point
+            let (_, (fx, fy), _) = pointer_physical(app, from, None, PointerAction::Hover, false)?;
+            let to_loc = locate(app, to, None)?;
+            let _ = ensure_visible(&to_loc.element);
+            let Some(dest) = to_loc.element.get_clickable_point().ok().flatten() else {
+                return Err(CtlError::new(
+                    ErrorCode::NotActionable,
+                    format!(
+                        "{} exposes no clickable point for drag destination",
+                        to.describe()
+                    ),
+                ));
+            };
+            let end = (dest.get_x(), dest.get_y());
+            let win = to_loc.window_title.clone();
+            ((fx, fy), end, win)
+        }
+    };
+    let mut points = Vec::with_capacity(waypoints.len() + 2);
+    points.push(start);
+    points.extend_from_slice(waypoints);
+    points.push(end);
+    inject_pointer_at(
+        start.0,
+        start.1,
+        PointerSpec::DragPath { points },
+        &window,
+        None,
+        || {
+            crate::feedback::check_stop()?;
+            // 与坐标点击同源的准备期复核:窗口未动且路径点仍在窗内
+            let current = window_bounds_by_title(&window)?;
+            for (x, y) in waypoints {
+                if *x < current.left
+                    || *x >= current.right
+                    || *y < current.top
+                    || *y >= current.bottom
+                {
+                    return Err(CtlError::new(
+                        ErrorCode::NotActionable,
+                        "window moved: a drag waypoint now lies outside the target window",
+                    ));
+                }
+            }
+            Ok(())
+        },
+    )?;
+    Ok(DragPathOutcome {
+        from: from.describe(),
+        start,
+        end,
+        window,
+    })
+}
+
+/// 按 --app 解析窗口并返回标题与 DWM 边界(坐标守卫共用)。
+fn window_bounds_for_coords(
+    app: &str,
+    x: i32,
+    y: i32,
+) -> Result<(String, windows::Win32::Foundation::RECT), CtlError> {
+    use windows::Win32::Foundation::RECT;
+    use windows::Win32::Graphics::Dwm::{DWMWA_EXTENDED_FRAME_BOUNDS, DwmGetWindowAttribute};
+    use windows::Win32::UI::WindowsAndMessaging::{GetWindowRect, IsIconic};
+    let auto = uiautomation::UIAutomation::new().map_err(internal)?;
+    let walker = auto.create_tree_walker().map_err(internal)?;
+    let win = find_window(&auto, &walker, app)?;
+    let title = win.get_name().unwrap_or_default();
+    let hwnd = native_hwnd(&win).ok_or_else(|| {
+        CtlError::new(
+            ErrorCode::NotActionable,
+            "target window has no native handle for the coordinate guard",
+        )
+    })?;
+    if unsafe { IsIconic(hwnd) }.as_bool() {
+        return Err(CtlError::new(
+            ErrorCode::NotActionable,
+            "target window is minimized - restore it before coordinate drags",
+        ));
+    }
+    let mut r = RECT::default();
+    let dwm_ok = unsafe {
+        DwmGetWindowAttribute(
+            hwnd,
+            DWMWA_EXTENDED_FRAME_BOUNDS,
+            &mut r as *mut RECT as *mut _,
+            std::mem::size_of::<RECT>() as u32,
+        )
+    }
+    .is_ok()
+        && r.right > r.left;
+    if !dwm_ok {
+        unsafe { GetWindowRect(hwnd, &mut r) }
+            .map_err(|e| CtlError::internal(format!("GetWindowRect: {e}")))?;
+    }
+    guard_point(&title, &r, x, y)?;
+    Ok((title, r))
+}
+
+/// 单点守卫:边界内 + 未被它窗遮挡;返回守卫后的边界供复用。
+fn guard_point(
+    title: &str,
+    rect: &windows::Win32::Foundation::RECT,
+    x: i32,
+    y: i32,
+) -> Result<windows::Win32::Foundation::RECT, CtlError> {
+    use windows::Win32::Foundation::POINT;
+    use windows::Win32::UI::WindowsAndMessaging::{GA_ROOT, GetAncestor, WindowFromPoint};
+    if x < rect.left || x >= rect.right || y < rect.top || y >= rect.bottom {
+        return Err(CtlError::new(
+            ErrorCode::NotActionable,
+            format!(
+                "point ({x},{y}) lies outside target window bounds [{},{}) x [{},{}) - the window may have moved; re-screenshot and recompute the coordinate",
+                rect.left, rect.right, rect.top, rect.bottom
+            ),
+        ));
+    }
+    let hit = unsafe { WindowFromPoint(POINT { x, y }) };
+    let hit_title = (!hit.0.is_null()).then_some(hit).and_then(|h| {
+        let root = unsafe { GetAncestor(h, GA_ROOT) };
+        (!root.0.is_null())
+            .then_some(root)
+            .and_then(window_title_of)
+    });
+    if hit_title.as_deref() != Some(title) {
+        return Err(CtlError::new(
+            ErrorCode::NotActionable,
+            format!(
+                "point ({x},{y}) is occupied by another window (occluded); refusing physical drag"
+            ),
+        ));
+    }
+    Ok(*rect)
+}
+
+/// 按标题重取窗口边界(准备期复核用;找不到窗=目标已消失)。
+fn window_bounds_by_title(title: &str) -> Result<windows::Win32::Foundation::RECT, CtlError> {
+    use windows::Win32::Foundation::RECT;
+    use windows::Win32::Graphics::Dwm::{DWMWA_EXTENDED_FRAME_BOUNDS, DwmGetWindowAttribute};
+    use windows::Win32::UI::WindowsAndMessaging::GetWindowRect;
+    let auto = uiautomation::UIAutomation::new().map_err(internal)?;
+    let walker = auto.create_tree_walker().map_err(internal)?;
+    let win = find_window(&auto, &walker, title)?;
+    let hwnd = native_hwnd(&win)
+        .ok_or_else(|| CtlError::new(ErrorCode::NotActionable, "target window handle gone"))?;
+    let mut r = RECT::default();
+    let dwm_ok = unsafe {
+        DwmGetWindowAttribute(
+            hwnd,
+            DWMWA_EXTENDED_FRAME_BOUNDS,
+            &mut r as *mut RECT as *mut _,
+            std::mem::size_of::<RECT>() as u32,
+        )
+    }
+    .is_ok()
+        && r.right > r.left;
+    if !dwm_ok {
+        unsafe { GetWindowRect(hwnd, &mut r) }
+            .map_err(|e| CtlError::internal(format!("GetWindowRect: {e}")))?;
+    }
+    Ok(r)
 }
 
 /// 拖拽:from/to 各自定位取 clickable point,from 侧命中检查后一批注入。

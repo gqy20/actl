@@ -475,15 +475,63 @@ pub(crate) fn pointer_cmd(
     .into())
 }
 
+/// "x,y" 路径点解析(绝对物理像素;≤64 个,总插值量由 drag_path 上界把关)。
+pub(crate) fn parse_waypoints(raw: &[String]) -> Result<Vec<(i32, i32)>, CtlError> {
+    if raw.len() > 64 {
+        return Err(CtlError::protocol(format!(
+            "at most 64 --path waypoints, got {}",
+            raw.len()
+        )));
+    }
+    raw.iter()
+        .map(|p| {
+            let (x, y) = p.split_once(',').ok_or_else(|| {
+                CtlError::protocol(format!("--path waypoint must be X,Y, got {p:?}"))
+            })?;
+            let x: i32 = x.trim().parse().map_err(|_| {
+                CtlError::protocol(format!("--path X must be an integer, got {x:?}"))
+            })?;
+            let y: i32 = y.trim().parse().map_err(|_| {
+                CtlError::protocol(format!("--path Y must be an integer, got {y:?}"))
+            })?;
+            Ok((x, y))
+        })
+        .collect()
+}
+
 pub(crate) fn drag_cmd(
     from_raw: &str,
     to_raw: &str,
+    path: &[String],
     app: Option<&str>,
     near: Option<&str>,
     to_near: Option<&str>,
 ) -> Result<CommandOutput, CtlError> {
     let from = actl_core::parse_target(from_raw)?;
     let to = actl_core::parse_target(to_raw)?;
+    let waypoints = parse_waypoints(path)?;
+    let coord_pair = matches!(
+        (&from, &to),
+        (
+            actl_core::Target::Coord(_, _),
+            actl_core::Target::Coord(_, _)
+        )
+    );
+    if !waypoints.is_empty() || coord_pair {
+        let drag = actl_uia::drag_path_physical(app, &from, &to, &waypoints)?;
+        return Ok(json!({
+            "action": "drag",
+            "mode": "path",
+            "from": drag.from,
+            "to": to.describe(),
+            "waypoints": waypoints.len(),
+            "point": [drag.start.0, drag.start.1],
+            "destination": [drag.end.0, drag.end.1],
+            "input_effects": { "keyboard": "none", "clipboard": "untouched", "pointer": "move_drag_click" },
+            "window": drag.window,
+        })
+        .into());
+    }
     let (loc, (fx, fy), scrolled) = actl_uia::drag_physical(app, &from, near, &to, to_near)?;
     Ok(json!({
         "action": "drag",
@@ -534,12 +582,52 @@ pub(crate) fn key_half_cmd(
     name: &str,
     keys: &str,
     app: Option<&str>,
+    duration: Option<u64>,
     down: bool,
 ) -> Result<CommandOutput, CtlError> {
     let app = require_app(app, name)?;
     let spec = actl_core::parse_key_expr(keys)?;
+    if !down && duration.is_some() {
+        return Err(CtlError::protocol("--duration applies to key-down only"));
+    }
     // 与 press 相同的护栏链:置焦 + 物理前台核对
     actl_uia::press_half_with_direction(&spec, Some(app), down)?;
+    // 长按:按住→分片睡眠(急停即释放)→抬起。两半各自持锁(与跨进程
+    // key-down/key-up 对同纪律),持有期靠停止核验中断。
+    if let Some(ms) = duration {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(ms);
+        let mut interrupted = false;
+        while std::time::Instant::now() < deadline {
+            let slice =
+                std::time::Duration::from_millis(100).min(deadline - std::time::Instant::now());
+            std::thread::sleep(slice);
+            if actl_core::stop::check_current().is_err() {
+                interrupted = true;
+                break;
+            }
+        }
+        let _ = actl_uia::press_half_with_direction(&spec, Some(app), false);
+        if interrupted {
+            return Err(CtlError::new(
+                actl_core::ErrorCode::Aborted,
+                format!(
+                    "long press interrupted by a stop request; the key was released after {}ms of the requested {ms}ms",
+                    ms.saturating_sub((deadline - std::time::Instant::now()).as_millis() as u64)
+                ),
+            ));
+        }
+        return Ok(json!({
+            "action": name,
+            "keys": keys,
+            "held_ms": ms,
+            "input_effects": {
+                "keyboard": "key-down held + auto key-up",
+                "clipboard": "untouched",
+                "pointer": "none",
+            },
+        })
+        .into());
+    }
     Ok(json!({
         "action": name,
         "keys": keys,

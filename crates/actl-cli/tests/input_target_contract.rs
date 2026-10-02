@@ -56,3 +56,62 @@ fn launch_readiness_options_precede_the_program() {
         .unwrap();
     assert_eq!(invalid.status.code(), Some(2));
 }
+
+#[test]
+fn drag_path_and_key_duration_arg_contract() {
+    let run = |args: &[&str]| -> (i32, String) {
+        let out = support::IsolatedCommand::new()
+            .command
+            .args(args)
+            .output()
+            .unwrap();
+        (
+            out.status.code().unwrap_or(-1),
+            String::from_utf8_lossy(&out.stdout).into_owned(),
+        )
+    };
+    // --path 解析(handler 层 PROTOCOL envelope,发生在任何桌面交互前)
+    let (code, stdout) = run(&[
+        "drag", "xy:10,10", "xy:20,20", "--app", "w", "--path", "abc",
+    ]);
+    assert_eq!(code, 2);
+    assert!(stdout.contains("PROTOCOL"), "{stdout}");
+    // xy 对必须带 --app
+    let (code, stdout) = run(&["drag", "xy:10,10", "xy:20,20", "--path", "15,15"]);
+    assert_eq!(code, 2);
+    assert!(stdout.contains("--app"), "{stdout}");
+    // duration 边界走 clap(仅退出码)
+    assert_eq!(
+        run(&["key-down", "shift", "--app", "w", "--duration", "10"]).0,
+        2
+    );
+    assert_eq!(
+        run(&["key-down", "shift", "--app", "w", "--duration", "70000"]).0,
+        2
+    );
+    assert_eq!(
+        run(&["key-down", "shift", "--app", "w", "--duration", "x"]).0,
+        2
+    );
+    // key-up 不接受 duration
+    let (code, stdout) = run(&["key-up", "shift", "--app", "w", "--duration", "500"]);
+    assert_eq!(code, 2);
+    assert!(stdout.contains("PROTOCOL") || stdout.is_empty());
+}
+
+#[test]
+fn parse_waypoints_unit() {
+    // interact::parse_waypoints 的纯逻辑(经由 bin 内单测不可,走行为断言代替:
+    // 多点合法组合应在参数层通过,进入桌面路径前由 --app 守卫拦截)
+    let out = support::IsolatedCommand::new()
+        .command
+        .args([
+            "drag", "xy:1,1", "xy:2,2", "--path", "1,2", "--path", "3,4", "--path", "5,6",
+        ])
+        .output()
+        .unwrap();
+    // 无 --app:坐标对守卫拒绝(PROTOCOL),证明多点解析本身通过
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(stdout.contains("--app"), "{stdout}");
+}

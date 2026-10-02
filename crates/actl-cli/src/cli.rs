@@ -449,11 +449,16 @@ pub(crate) enum Command {
     },
     /// Drag from one element onto another (physical, left button held)
     Drag {
-        /// Drag source target
+        /// Drag source target (element, or xy:x,y for coordinate/marquee drags)
         target: String,
-        /// Drag destination target
+        /// Drag destination target (element, or xy:x,y)
         to: String,
-        /// Target window by title substring, or hwnd:<n> (0x ok; survives SPA title changes)
+        /// Absolute physical waypoints x,y (repeatable; canvas/signature trajectories —
+        /// the drag traverses start → waypoints → destination with linear interpolation)
+        #[arg(long = "path", value_name = "X,Y")]
+        path: Vec<String>,
+        /// Target window by title substring, or hwnd:<n> (0x ok; survives SPA title changes);
+        /// required for xy:→xy: drags (both endpoints guarded against the window bounds)
         #[arg(long)]
         app: Option<String>,
         /// Anchor disambiguation for the source
@@ -484,6 +489,10 @@ pub(crate) enum Command {
     KeyDown {
         /// Key expression (single key or combo, e.g. shift, ctrl+a)
         keys: String,
+        /// Hold the key down for this many milliseconds, then release (long press;
+        /// 50-60000; stop requests interrupt the hold and release immediately)
+        #[arg(long, value_parser = clap::value_parser!(u64).range(50..=60_000))]
+        duration: Option<u64>,
         /// Target window by title substring or hwnd:<n> (required: injection is fail-closed)
         #[arg(long)]
         app: Option<String>,
@@ -1174,13 +1183,13 @@ Errors: NOT_FOUND / AMBIGUOUS | NOT_ACTIONABLE no clickable point or occluded"
             "Example:\n  actl hover name:菜单 --app 应用\nMoves the real pointer onto the element (tooltips, hover menus).\nErrors: NOT_FOUND / AMBIGUOUS | NOT_ACTIONABLE no clickable point or occluded"
         }
         "drag" => {
-            "Example:\n  actl drag name:slider --to name:max --app 设置\nErrors: NOT_FOUND / AMBIGUOUS either end | NOT_ACTIONABLE no clickable point"
+            "Example:\n  actl drag name:slider --to name:max --app 设置\n  actl drag xy:120,340 --to xy:540,360 --app 画图 --path 300,300 --path 420,420\n--path X,Y (repeatable, ≤64, absolute physical px) traverses start → waypoints → destination with 8px linear interpolation (canvas/signature trajectories). xy:→xy: drags are marquee/coordinate drags: BOTH endpoints are guarded against the --app window bounds and occlusion (--app required).\nErrors: PROTOCOL bad waypoint / xy pair without --app | NOT_FOUND / AMBIGUOUS element end | NOT_ACTIONABLE outside bounds / occluded / no clickable point / window moved"
         }
         "scroll" => {
             "Example:\n  actl scroll role:Document --down 3 --app Notepad\nUIA Scroll pattern first, physical wheel fallback (via reported).\nErrors: NOT_FOUND / AMBIGUOUS | NOT_ACTIONABLE neither channel works"
         }
         "key-down" => {
-            "Example:\n  actl key-down shift --app Notepad\nHOLD semantics: must pair with key-up; abnormal exit leaves the key held.\nErrors: PROTOCOL --app required | PERM_DENIED foreground guard"
+            "Example:\n  actl key-down shift --app Notepad\n  actl key-down space --app MyApp --duration 800\nHOLD semantics: must pair with key-up; abnormal exit leaves the key held. --duration Ms (50-60000) turns it into a long press: down → hold → automatic up; a stop request interrupts the hold and releases immediately (ABORTED, the key IS released).\nErrors: PROTOCOL --app required / bad duration | PERM_DENIED foreground guard | ABORTED interrupted hold (released)"
         }
         "key-up" => {
             "Example:\n  actl key-up shift --app Notepad\nMust be the same expression as the paired key-down.\nErrors: PROTOCOL --app required | PERM_DENIED foreground guard"

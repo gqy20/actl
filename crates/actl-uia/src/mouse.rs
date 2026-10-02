@@ -142,6 +142,67 @@ pub fn drag_to(x1: i32, y1: i32, x2: i32, y2: i32) -> Result<(), CtlError> {
     result
 }
 
+/// 轨迹插值的步长(物理像素):画布/签名类应用按 MOVE 事件采样轨迹,
+/// 过粗丢细节、过细撑大批次;8px 是肉眼平滑与批次规模的折中。
+const PATH_STEP_PX: i32 = 8;
+
+/// 路径点插值(纯函数,离线可测):相邻点间按 PATH_STEP_PX 线性补齐,端点保持精确。
+pub(crate) fn interpolate_path(points: &[(i32, i32)]) -> Vec<(i32, i32)> {
+    let mut out = Vec::new();
+    let Some(&first) = points.first() else {
+        return out;
+    };
+    out.push(first);
+    for i in 1..points.len() {
+        let (a, b) = (points[i - 1], points[i]);
+        let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+        let dist = (dx as f64).hypot(dy as f64).ceil() as i32;
+        let steps = (dist / PATH_STEP_PX).max(1);
+        for s in 1..=steps {
+            let t = s as f64 / steps as f64;
+            out.push((
+                a.0 + (dx as f64 * t).round() as i32,
+                a.1 + (dy as f64 * t).round() as i32,
+            ));
+        }
+    }
+    out
+}
+
+/// 轨迹拖拽:按下→沿路径点(绝对物理像素,内部按 8px 步长插值)移动→抬起。
+/// 失败时尽力补发 LEFTUP(与 drag_to 同纪律)。
+pub fn drag_path(points: &[(i32, i32)]) -> Result<(), CtlError> {
+    let Some(&(sx, sy)) = points.first() else {
+        return Err(CtlError::protocol("drag path requires at least one point"));
+    };
+    let Some(&(ex, ey)) = points.last() else {
+        return Err(CtlError::protocol("drag path requires at least one point"));
+    };
+    let interpolated = interpolate_path(points);
+    if interpolated.len() > 32_768 {
+        return Err(CtlError::protocol(format!(
+            "drag path interpolates to {} move events (max 32768); reduce waypoints or span",
+            interpolated.len()
+        )));
+    }
+    let (nsx, nsy) = normalize(sx, sy);
+    let mut events = vec![
+        mouse_event(abs(MOUSEEVENTF_MOVE), nsx, nsy, 0),
+        mouse_event(abs(MOUSEEVENTF_LEFTDOWN), nsx, nsy, 0),
+    ];
+    for (x, y) in &interpolated {
+        let (nx, ny) = normalize(*x, *y);
+        events.push(mouse_event(abs(MOUSEEVENTF_MOVE), nx, ny, 0));
+    }
+    let (nex, ney) = normalize(ex, ey);
+    events.push(mouse_event(MOUSEEVENTF_LEFTUP, nex, ney, 0));
+    let result = send_all(&events);
+    if result.is_err() {
+        let _ = send_raw(&[mouse_event(MOUSEEVENTF_LEFTUP, nex, ney, 0)]);
+    }
+    result
+}
+
 /// 滚轮:notches 为正向上滚、负向下滚(每格 120)。
 pub fn wheel_at(x: i32, y: i32, notches: i32) -> Result<(), CtlError> {
     let (nx, ny) = normalize(x, y);
@@ -205,6 +266,22 @@ pub(crate) fn click_events_for(button: &crate::pointer::MouseButton, x: i32, y: 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn interpolate_path_covers_endpoints_and_respects_step() {
+        let pts = interpolate_path(&[(0, 0), (16, 0), (16, 8)]);
+        assert_eq!(pts.first(), Some(&(0, 0)));
+        assert_eq!(pts.last(), Some(&(16, 8)));
+        // 0→16(2 步)→16,8(1 步):含首共 4 点,步长不超过 PATH_STEP_PX
+        assert!(pts.len() >= 4 && pts.len() <= 6, "{pts:?}");
+        for w in pts.windows(2) {
+            let d = ((w[1].0 - w[0].0) as f64).hypot((w[1].1 - w[0].1) as f64);
+            assert!(d <= PATH_STEP_PX as f64 + 1.0, "{w:?}");
+        }
+        // 单点/空路径:原样返回
+        assert_eq!(interpolate_path(&[]), Vec::<(i32, i32)>::new());
+        assert_eq!(interpolate_path(&[(5, 5)]), vec![(5, 5)]);
+    }
 
     #[test]
     fn normalize_maps_primary_origin_to_zero() {

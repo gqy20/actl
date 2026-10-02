@@ -438,12 +438,14 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
         Command::Drag {
             target,
             to,
+            path,
             app,
             near,
             to_near,
         } => drag_cmd(
             target,
             to,
+            path,
             app.as_deref(),
             near.as_deref(),
             to_near.as_deref(),
@@ -455,8 +457,12 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             app,
             near,
         } => scroll_cmd(target, *down, *up, app.as_deref(), near.as_deref()),
-        Command::KeyDown { keys, app } => key_half_cmd("key-down", keys, app.as_deref(), true),
-        Command::KeyUp { keys, app } => key_half_cmd("key-up", keys, app.as_deref(), false),
+        Command::KeyDown {
+            keys,
+            duration,
+            app,
+        } => key_half_cmd("key-down", keys, app.as_deref(), *duration, true),
+        Command::KeyUp { keys, app } => key_half_cmd("key-up", keys, app.as_deref(), None, false),
         Command::ResizeWindow {
             pattern,
             width,

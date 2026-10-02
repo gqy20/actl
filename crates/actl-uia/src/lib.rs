@@ -73,8 +73,8 @@ pub use locate::{
     wait_property, wait_stable,
 };
 pub use pointer::{
-    CoordOutcome, PointerAction, click_physical, drag_physical, pointer_at_physical,
-    pointer_physical, scroll_element,
+    CoordOutcome, DragPathOutcome, PointerAction, PointerSpec, click_physical, drag_path_physical,
+    drag_physical, pointer_at_physical, pointer_physical, scroll_element,
 };
 pub use read::{
     PROPS, PropertyInfo, VerifyKind, VerifyOutcome, get_clipboard_text, read_property,

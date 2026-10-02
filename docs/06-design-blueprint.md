@@ -234,8 +234,15 @@ type @e5 "text"            set-value @e5 "v"    # UIA Value pattern 优先
 press ctrl+s               key-down shift / key-up shift  # 状态保持键必须成对
 paste --app Excel                                 # ctrl+v 到当前选中(无元素落点;pack 路线原语)
 select @e7 "选项"          toggle @e8
-scroll @e9 --down 3        drag --from @e3 --to @e8       # drag/hover 无 UIA pattern,默认物理执行
+scroll @e9 --down 3        drag @e3 @e8                   # drag/hover 无 UIA pattern,默认物理执行
 hover @e3                  (其余物理兜底:同参数 + --physical)
+key-down space --app X --duration 800             # 长按:按下→持有→自动抬起(50-60000ms;
+                                                   # 急停即释放并 ABORTED)
+drag xy:120,340 xy:540,360 --app X                # 坐标框选/画布直连:两端窗口边界+遮挡守卫
+drag xy:100,100 xy:400,300 --app X --path 200,200 --path 300,150
+                                                   # 轨迹拖拽:路径点(绝对物理px,≤64)8px 线性
+                                                   # 插值成一批 MOVE(画布/签名);无 --path 保持
+                                                   # 既有直线四事件行为零变更(docs/74)
 ```
 
 #### 窗口/应用(window)
