@@ -485,11 +485,13 @@ unsafe fn tick(hwnd: HWND) {
         })
         .unwrap_or_default();
     if suppressed || !visible {
+        crate::action_flash::update(&states, now, false);
         overlay::hide();
         super::perimeter::hide();
         return;
     }
     super::perimeter::update(hwnd, &v, &states, now, ready);
+    crate::action_flash::update(&states, now, true);
     let key = preparing
         .map(|(s, a)| format!("{}:{}", s.call_id, a.id))
         .unwrap_or_default();
@@ -504,8 +506,6 @@ unsafe fn tick(hwnd: HWND) {
         overlay::hide();
         if let Some((_, a)) = preparing {
             overlay::show(a);
-            // 动作开始:触发中心闪现(preparing → executing 的转换)
-            crate::action_flash::show(&a.kind, &a.kind.replace('-', " "));
         }
     }
     // Coalesce bursts to the most recent delivered spatial action; never accumulate a screenful.

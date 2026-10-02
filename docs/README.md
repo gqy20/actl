@@ -84,6 +84,7 @@
 - [68 · 四软件整批实测战记](68-combined-batch-first-round.md)：整批六轮与单链攻坚全过程——失败定案、路线修复与验收口径。
 - [70 · 调试手册](70-debug-playbook.md)：调试阶梯、观察瞬态耐心对照、正斜杠原生表面、转义纪律与症状速查。
 - [71 · 详情 TypeScript 内容层](71-signal-webview-details.md)：pnpm 预览、按需 WebView2 宿主、原生操作边界、体积与验收证据。
+- [75 · 任务起止与异常提示](75-action-start-notification.md)：中央短时提示的触发范围、原生动效、去重边界与 YAML 演示证据。
 
 
 ## 发布包与技能说明

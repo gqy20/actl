@@ -46,6 +46,8 @@ mod popup;
 mod probe;
 #[path = "signal/shell.rs"]
 mod shell;
+#[path = "signal/task_notice.rs"]
+mod task_notice;
 #[path = "signal/ui_text.rs"]
 mod ui_text;
 #[path = "signal/web_details.rs"]
