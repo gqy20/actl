@@ -14,6 +14,7 @@ categories = ["os::windows-apis"]
 actl-core = { path = "../actl-core", version = "0.1.8" }
 # M0 评估通过,升为正式依赖(docs/spike-findings.md);版本统一由根 Cargo.toml 管理(ADR-003)
 uiautomation.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 zip.workspace = true
 webview2-com.workspace = true

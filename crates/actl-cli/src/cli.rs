@@ -800,6 +800,24 @@ pub(crate) enum Command {
     },
     /// List active browser sessions, newest first (read-only; safe discovery for flows and agents)
     BrowserList,
+    /// Register a local application path (stable) or pattern (Store apps with version wildcards)
+    AppRegister {
+        /// Short name for the app (1-64 [a-zA-Z0-9_-])
+        name: String,
+        /// Absolute executable path, or a glob pattern with * for Store version directories
+        /// (e.g. C:/Program Files/WindowsApps/Microsoft.Paint_*/PaintApp/mspaint.exe)
+        path: String,
+        /// Treat the path as a glob pattern (Store apps; implies version-tolerant resolution)
+        #[arg(long)]
+        pattern: bool,
+    },
+    /// List registered local applications and their resolution status
+    AppList,
+    /// Remove a registered application by name
+    AppRemove {
+        /// The registered name to remove
+        name: String,
+    },
     /// Read-only browser assertions for flow verify steps (exactly one mode)
     BrowserVerify {
         /// Assert this session's bound target still responds (--alive), is deregistered (--gone),
@@ -1004,6 +1022,9 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
         Command::BrowserClick { .. } => "browser-click",
         Command::BrowserClose { .. } => "browser-close",
         Command::BrowserList => "browser-list",
+        Command::AppRegister { .. } => "app-register",
+        Command::AppList => "app-list",
+        Command::AppRemove { .. } => "app-remove",
         Command::BrowserVerify { .. } => "browser-verify",
         Command::GetClipboard => "get-clipboard",
         Command::SetClipboard { .. } => "set-clipboard",
@@ -1037,6 +1058,15 @@ fn after_help_for(name: &str) -> Option<&'static str> {
         }
         "browser-list" => {
             "Example:\n  actl browser-list\nRead-only enumeration of active sessions (newest first): session_id/target_id/url/pid/port/mode. In YAML flows browser-launch cannot carry outputs (lifecycle command, not a read-only producer) — bind the session handle from this command instead (e.g. pointer /sessions/0/session_id).\nErrors: INTERNAL sessions dir unreadable"
+        }
+        "app-register" => {
+            "Example:\n  actl app-register edge 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'\n  actl app-register paint 'C:/Program Files/WindowsApps/Microsoft.Paint_*/PaintApp/mspaint.exe' --pattern\nRegisters a local application in %LOCALAPPDATA%/actl/apps.json so `launch <name>` and `browser-launch --browser-executable <name>` resolve via alias. Stable paths for regular apps; --pattern for Store apps whose version directory changes on update (glob re-resolves automatically when the cached path goes stale).\nErrors: PROTOCOL invalid name/path/pattern | INTERNAL storage failure"
+        }
+        "app-list" => {
+            "Example:\n  actl app-list\nLists all registered apps with name, path/pattern, resolved cache, and discovery source. Read-only.\nErrors: INTERNAL apps.json unreadable"
+        }
+        "app-remove" => {
+            "Example:\n  actl app-remove my-tool\nRemoves a registration by name. The underlying application is untouched.\nErrors: NOT_FOUND unknown name | INTERNAL storage failure"
         }
         "browser-verify" => {
             "Example:\n  actl browser-verify --newest-alive\n  actl browser-verify --session s1a2b3 --css '[data-testid=\"app-bar-user\"]'\n  actl browser-verify --session s1a2b3 --css '#avatar' --contains work\n  actl browser-verify --none\nRead-only assertion family for flow verify steps: --newest-alive (post-launch), --none (post-close in a flow-owned lifecycle), --session+--alive/--gone (target responds / record deregistered), and the login-state predicate --session+--css/--xpath [--contains] (unique resolution + optional text substring; the resume_check for login pause points). Value assertions on writes live on browser-click --expect-text.\nErrors: PROTOCOL mode/args | ASSERTION_FAILED assertion unmet (incl. non-unique login selector) | NOT_FOUND unknown session"

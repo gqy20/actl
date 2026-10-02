@@ -330,7 +330,12 @@ pub(crate) fn launch(
     let Some(program) = args.first() else {
         return Err(CtlError::protocol("launch requires a program name"));
     };
-    let candidate = actl_uia::resolve_app_path(program).unwrap_or_else(|| program.clone());
+    // 解析优先级:app-registry 别名 → App Paths 注册表 → 原样(继续走 PATH)
+    let program = actl_uia::app_registry::resolve(program)
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| program.clone());
+    let candidate = actl_uia::resolve_app_path(&program).unwrap_or_else(|| program.clone());
     let direct = std::path::PathBuf::from(&candidate);
     let resolved_path = if direct.is_file() {
         Some(direct)

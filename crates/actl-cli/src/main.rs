@@ -625,6 +625,21 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
         ),
         Command::BrowserClose { session, timeout } => browser::close_cmd(session, *timeout),
         Command::BrowserList => browser::list_cmd(),
+        Command::AppRegister {
+            name,
+            path,
+            pattern,
+        } => {
+            let result = if *pattern {
+                actl_uia::app_registry::register_pattern(name, path)
+            } else {
+                actl_uia::app_registry::register(name, path, true)
+            };
+            result.map(|_| serde_json::json!({"registered": name}).into())
+        }
+        Command::AppList => actl_uia::app_registry::list().map(Into::into),
+        Command::AppRemove { name } => actl_uia::app_registry::remove(name)
+            .map(|_| serde_json::json!({"removed": name}).into()),
         Command::BrowserVerify {
             session,
             alive,

@@ -643,3 +643,64 @@ fn snapshot_keywords_help_surface() {
         "zero-hit semantics must be documented"
     );
 }
+
+#[test]
+fn app_registry_contract() {
+    // 共享同一隔离 LOCALAPPDATA(手动管理,不走 IsolatedCommand 的单次语义)
+    let dir = std::env::temp_dir().join(format!("actl-appreg-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let run = |args: &[&str]| -> (i32, String) {
+        let out = std::process::Command::new(env!("CARGO_BIN_EXE_actl"))
+            .env("LOCALAPPDATA", &dir)
+            .env_remove("ACTL_TASK_ID")
+            .args(args)
+            .output()
+            .unwrap();
+        (
+            out.status.code().unwrap_or(-1),
+            String::from_utf8_lossy(&out.stdout).into_owned(),
+        )
+    };
+
+    let (code, stdout) = run(&["app-register", "test-app", "C:/Windows/System32/cmd.exe"]);
+    assert_eq!(code, 0, "{stdout}");
+    let v: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(v["data"]["registered"], "test-app");
+
+    let (code, stdout) = run(&["app-list"]);
+    assert_eq!(code, 0);
+    let v: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    let names: Vec<&str> = v["data"]["apps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|a| a["name"].as_str())
+        .collect();
+    assert!(
+        names.contains(&"test-app"),
+        "app-list must show registered app"
+    );
+
+    let (code, stdout) = run(&["app-remove", "test-app"]);
+    assert_eq!(code, 0, "{stdout}");
+
+    let (code, stdout) = run(&["app-remove", "test-app"]);
+    assert_eq!(code, 1);
+    let v: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(v["error"]["code"], "NOT_FOUND");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn app_registry_validation_contract() {
+    assert_eq!(actl(&["app-register", "", "C:/x.exe"]).0, 2);
+    assert_eq!(actl(&["app-register", "has space", "C:/x.exe"]).0, 2);
+    assert_eq!(actl(&["app-register", "../evil", "C:/x.exe"]).0, 2);
+    assert_eq!(actl(&["app-register", "ok", "relative/path.exe"]).0, 2);
+    // pattern without * is rejected
+    assert_eq!(
+        actl(&["app-register", "ok", "C:/no-wildcard.exe", "--pattern"]).0,
+        2
+    );
+}
