@@ -23,9 +23,19 @@ pub(crate) enum Stage {
     AutomationInitialize,
     DesktopRoot,
     Children,
+    FindAllBuildCache,
+    ArrayLength,
+    ArrayElements,
     WindowHandle,
     WindowRole,
     WindowProperties,
+}
+
+#[derive(Default)]
+pub(crate) struct Counts {
+    pub result_count: Option<u32>,
+    pub processed_count: Option<u32>,
+    pub failed_index: Option<u32>,
 }
 
 #[derive(Default)]
@@ -95,6 +105,26 @@ pub(crate) fn observe<T>(
     target_hwnd: Option<isize>,
     operation: impl FnOnce() -> Result<T, CtlError>,
 ) -> Result<T, CtlError> {
+    observe_inner(stage, target_hwnd, None, operation, |_| Counts::default())
+}
+
+pub(crate) fn observe_query<T>(
+    stage: Stage,
+    target_hwnd: Option<isize>,
+    scope: crate::observation_query::Scope,
+    operation: impl FnOnce() -> Result<T, CtlError>,
+    counts: impl FnOnce(&Result<T, CtlError>) -> Counts,
+) -> Result<T, CtlError> {
+    observe_inner(stage, target_hwnd, Some(scope), operation, counts)
+}
+
+fn observe_inner<T>(
+    stage: Stage,
+    target_hwnd: Option<isize>,
+    scope: Option<crate::observation_query::Scope>,
+    operation: impl FnOnce() -> Result<T, CtlError>,
+    counts: impl FnOnce(&Result<T, CtlError>) -> Counts,
+) -> Result<T, CtlError> {
     let Some((paths, call)) = signal_session::diagnostic_context() else {
         return operation();
     };
@@ -120,13 +150,14 @@ pub(crate) fn observe<T>(
         (thread != 0 && pid != 0).then_some(pid)
     });
     if retained {
-        signal_session::flow_event(
-            "observation_started",
-            json!({
-                "span_id":span,"stage":stage,"target_hwnd":target_hwnd,"target_pid":target_pid,
-                "before":before
-            }),
-        );
+        let mut event = json!({
+            "span_id":span,"stage":stage,"target_hwnd":target_hwnd,"target_pid":target_pid,
+            "before":before
+        });
+        if let Some(scope) = scope {
+            event["query_scope"] = json!(scope);
+        }
+        signal_session::flow_event("observation_started", event);
     }
     // Exclude diagnostic sampling and journal I/O from the provider phase duration.
     let started = Instant::now();
@@ -137,20 +168,25 @@ pub(crate) fn observe<T>(
     if log_finish {
         let after = endpoint(&paths, true);
         let error = result.as_ref().err();
-        signal_session::flow_event(
-            "observation_finished",
-            json!({
-                "span_id":span,"stage":stage,"target_hwnd":target_hwnd,"target_pid":target_pid,
-                "started_recorded":retained,"duration_ms":duration_ms,
-                "outcome":if error.is_some() { "failed" } else { "succeeded" },
-                "error_code":error.map(|e| e.code),
-            "native_code":error.and_then(|e| e.evidence.as_ref()).and_then(|e| e["native_code"].as_i64()),
-            "sampled_input_delta":crate::observation_metadata::delta(before.input.as_ref(), after.input.as_ref()),
-                "session_input_changed":before.last_input_tick.zip(after.last_input_tick).map(|(a,b)| a != b),
-                "foreground_changed":before.foreground_hwnd.zip(after.foreground_hwnd).map(|(a,b)| a != b),
-                "before":before,"after":after
-            }),
-        );
+        let mut event = json!({
+            "span_id":span,"stage":stage,"target_hwnd":target_hwnd,"target_pid":target_pid,
+            "started_recorded":retained,"duration_ms":duration_ms,
+            "outcome":if error.is_some() { "failed" } else { "succeeded" },
+            "error_code":error.map(|e| e.code),
+        "native_code":error.and_then(|e| e.evidence.as_ref()).and_then(|e| e["native_code"].as_i64()),
+        "sampled_input_delta":crate::observation_metadata::delta(before.input.as_ref(), after.input.as_ref()),
+            "session_input_changed":before.last_input_tick.zip(after.last_input_tick).map(|(a,b)| a != b),
+            "foreground_changed":before.foreground_hwnd.zip(after.foreground_hwnd).map(|(a,b)| a != b),
+            "before":before,"after":after
+        });
+        if let Some(scope) = scope {
+            let counts = counts(&result);
+            event["query_scope"] = json!(scope);
+            event["result_count"] = json!(counts.result_count);
+            event["processed_count"] = json!(counts.processed_count);
+            event["failed_index"] = json!(counts.failed_index);
+        }
+        signal_session::flow_event("observation_finished", event);
     }
     if let Err(error) = &mut result {
         let evidence = error.evidence.get_or_insert_with(|| json!({}));

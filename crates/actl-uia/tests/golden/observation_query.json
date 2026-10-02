@@ -1,0 +1,6 @@
+[
+  {"stage":"find_all_build_cache","query_scope":"desktop_children","result_count":null,"processed_count":null,"failed_index":null,"outcome":"succeeded"},
+  {"stage":"array_length","query_scope":"desktop_children","result_count":2,"processed_count":null,"failed_index":null,"outcome":"succeeded"},
+  {"stage":"array_elements","query_scope":"desktop_children","result_count":2,"processed_count":2,"failed_index":null,"outcome":"succeeded"},
+  {"stage":"children","query_scope":"desktop_children","result_count":2,"processed_count":null,"failed_index":null,"outcome":"succeeded"}
+]

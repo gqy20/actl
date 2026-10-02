@@ -177,6 +177,13 @@ unsafe 仅用于 MTA/COM 客户端创建、只读查询与数组转换、前台�
 默认 ignore 的缓存一致性用例在已有窗口核对实时值、RuntimeId 与原生进程实例，
 不注入输入、不恢复窗口、不创建业务资源；纯逻辑回归仍进入普通门禁。
 
+`actl-uia/observation_query` 在同一 MTA 内直调 FindAllBuildCache、数组 Length/GetElement，
+以区分提供程序查询与转换阶段；复用既有 windows 依赖，unsafe 仅在该模块，
+COM 数组和元素按现有智能接口所有权释放，不传递裸指针、不额外读取属性，不返回部分树。
+负长度拒绝为 INTERNAL，索引由成功读取的非负 i32 长度限定。
+开发工具的默认 ignore 捕获用例只派生自有 CLI 执行一次 list-windows，复用现有 std 进程留证，
+30 秒到期仅终止该只读 CLI，原始日志保留；该期限不是生产 UIA 超时策略。
+
 
 桌面交接复用现有 std + serde_json + windows，无新增依赖。纯授权逻辑位于 actl-core/handoff。
 actl-uia/bin/signal/handoff 的 unsafe 用于原生非激活提示窗口和低级输入 hook：回调仅读取

@@ -36,6 +36,7 @@ mod native_windows;
 mod observation;
 mod observation_diagnostics;
 pub mod observation_metadata;
+mod observation_query;
 mod pointer;
 pub mod preview;
 #[allow(unsafe_op_in_unsafe_fn)] // Temporary no-activate preview windows and GDI resources.

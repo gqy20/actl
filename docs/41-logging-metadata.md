@@ -1,6 +1,6 @@
 # 41 · 日志健康与控制元数据
 
-更新：2026-10-02。现行字段见 [设计蓝图](06-design-blueprint.md)，流程语义见 [20](20-yaml-workflow-protocol.md)。
+更新：2026-10-03。现行字段见 [设计蓝图](06-design-blueprint.md)，流程语义见 [20](20-yaml-workflow-protocol.md)。
 
 ## 实现范围
 
@@ -57,6 +57,17 @@ Phase 2 性能修订：每次 Journal 打开不再整目录扫描历史日志；
 排障先把失败步骤的 observation 事件与 control_request/flow_pause_observed 对齐，再检查监听健康与活动时间。
 TIMEOUT、pause_requested、会话输入变化分别是错误、控制原因和相关活动，不能互相替代。
 同步 UIA 提供程序调用仍可能阻塞；本轮增强定位证据，不改变执行取消、授权或重试策略。
+
+### 查询与数组阶段（2026-10-03，spec）
+
+生产 children 路径细分 find_all_build_cache、array_length、array_elements；包含
+query_scope=desktop_children/element_children，结束事件记录 result_count、processed_count、failed_index。
+只有 Length 成功后总数才已知；转换失败记录零起始索引和已取得数，返回错误，不返回部分树。
+0 是已观察空数组，null 是未知或该阶段不适用；负长度为无效提供程序数据，返回 INTERNAL。
+不为日志增加提供程序属性读取。children 外层包含嵌套诊断开销，不能与内层耗时相加。
+所有层仍共用原 32/8 预算，可能更早耗尽；错误 evidence 保留最内层阶段，flow metadata 同步放行三个新阶段。
+无新动作、授权、重试或生产硬超时。默认 ignore 的开发工具捕获用例复用现有只读 CLI
+进程留证器，30 秒上限仅用于诊断，截断时保留未完成日志，不伪造结束或重跑。
 
 本轮真机日志目录含约 2.1 万个 journal，初次 timeline 查询耗时约 49 秒。
 按任务提前筛选有效首条，并缓存首条任务身份、大小和修改时刻，避免重复打开未变化的非目标日志。

@@ -1,6 +1,29 @@
 use actl_core::{CtlError, ErrorCode};
 
 #[test]
+fn native_query_phases_survive_metadata_redaction() {
+    let expected: serde_json::Value =
+        serde_json::from_str(include_str!("golden/observation_query_metadata.json")).unwrap();
+    for stage in ["find_all_build_cache", "array_length", "array_elements"] {
+        let error = CtlError::with_evidence(
+            ErrorCode::Timeout,
+            "PRIVATE",
+            serde_json::json!({
+                "channel":"children","native_code":-2146233083i64,
+                "observation_stage":stage,"observation_span_id":4,"observation_duration_ms":776,
+                "detail":"PRIVATE ERROR","query_scope":"PRIVATE","failed_index":"PRIVATE"
+            }),
+        );
+        let mut wanted = expected.clone();
+        wanted["observation_stage"] = serde_json::json!(stage);
+        let actual =
+            actl_flow::failure_evidence(actl_flow::EvidencePolicy::Metadata, &error).unwrap();
+        assert_eq!(actual, wanted);
+        assert!(!actual.to_string().contains("PRIVATE"));
+    }
+}
+
+#[test]
 fn observation_failure_keeps_phase_link_but_excludes_input_content() {
     let error = CtlError::with_evidence(
         ErrorCode::Timeout,

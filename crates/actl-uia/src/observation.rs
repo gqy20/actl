@@ -100,11 +100,12 @@ pub(crate) fn tree_bounded(
         .set_tree_scope(TreeScope::Element)
         .map_err(crate::internal)?;
     collect(root.clone(), depth, limit, |element| {
-        observe(Stage::Children, cached_hwnd(element), || {
-            element
-                .find_all_build_cache(TreeScope::Children, &condition, &cache)
-                .map_err(|e| crate::read_channel::failure("children", e))
-        })
+        crate::observation_query::children(
+            element,
+            &condition,
+            &cache,
+            crate::observation_query::Scope::ElementChildren,
+        )
     })
 }
 
@@ -134,10 +135,12 @@ impl ChildrenQuery {
         Ok(Self { condition, cache })
     }
     pub fn children(&self, root: &UIElement) -> Result<Vec<UIElement>, CtlError> {
-        observe(Stage::Children, cached_hwnd(root), || {
-            root.find_all_build_cache(TreeScope::Children, &self.condition, &self.cache)
-                .map_err(|e| crate::read_channel::failure("children", e))
-        })
+        crate::observation_query::children(
+            root,
+            &self.condition,
+            &self.cache,
+            crate::observation_query::Scope::ElementChildren,
+        )
     }
     pub fn desktop_children(&self, auto: &UIAutomation) -> Result<Vec<UIElement>, CtlError> {
         let _t = actl_core::trace::scope("window.desktop_children");
@@ -146,7 +149,12 @@ impl ChildrenQuery {
                 auto.get_root_element()
                     .map_err(|e| crate::read_channel::failure("desktop.root", e))
             })?;
-            self.children(&root)
+            crate::observation_query::children(
+                &root,
+                &self.condition,
+                &self.cache,
+                crate::observation_query::Scope::DesktopChildren,
+            )
         })
     }
 }

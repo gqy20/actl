@@ -585,7 +585,15 @@ UIA 观察默认增加 `observation_started` / `observation_finished` 和预算�
 `observation_budget` 事件，使用原有 call_id/task_id/run_id/step_id 关联，不新增命令。
 每调用前 32 个观察区间保存开始和结束，之后最多保留 8 个耗时 ≥250ms 或失败的结束事件；
 `started_recorded:false` 表示该区间未保留开始事件，不代表调用没有执行。
-阶段为 window_inventory/automation_initialize/desktop_root/children/window_handle/window_role/window_properties。
+阶段为 window_inventory/automation_initialize/desktop_root/children/find_all_build_cache/array_length/array_elements/window_handle/window_role/window_properties。
+children 查询另含 query_scope（desktop_children 或 element_children）；原生 FindAllBuildCache、
+数组 Length 与逐项 GetElement 分别记录首尾，children 保留外层区间。完成事件另含
+result_count/processed_count/failed_index：数组长度读取成功后才知总数，转换阶段记录已取得的元素数
+及零起始失败索引，无适用值或未知为 null，成功空数组明确为 0。原生查询阶段不额外读 Length
+填计数，目标身份仍只从已有缓存和原生查询取得。
+叶阶段计时排除自身诊断采样与写日志，外层计时包含嵌套诊断成本；嵌套阶段不可相加。
+这些区间共用既有 32/8 预算，预算外失败仍保留最内层错误阶段链接，不保证所有成功区间完整留证。
+数组负长度返回 INTERNAL，不把无效提供程序数据作为空树；GetElement 失败不返回已转换的部分结果。
 事件含 span_id、已缓存的目标 HWND 及其原生 PID（未知为 null）、duration_ms、outcome、error_code/native_code；
 前后端点含 ts_ms、foreground_hwnd/foreground_pid、last_input_tick 及输入诊断采样。
 session_input_changed / foreground_changed 是端点差异（观察失败为 null），不证明人工操作或错误因果。

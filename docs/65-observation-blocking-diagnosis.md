@@ -86,7 +86,7 @@
    已知目标优先绑定新观察且经过身份核验的 HWND，使用已有 within/depth/limit 和 batch，
    控件变化后重新观察；不为了观察一个应用而先枚举所有应用。
 2. 窗口清单的客户端/缓存请求复用、属性批量刷新与缓存读取已实现，验证见下节；
-   生产观察诊断进一步拆分原生查询与数组处理仍待完成。
+   生产 children 的原生查询与数组处理诊断也已拆分，2026-10-03 证据见下节。
    缓存错误必须传播，缓存不是授权或跨窗口长期身份依据。
 3. 收敛只读客户端创建入口后再评估 CUIAutomation8 与明确的 provider 时限。
    本轮对照没有证明换客户端可以治好慢查询；不得顺便改变动作模式的焦点策略、输入授权或全局重试。
@@ -165,3 +165,56 @@ cargo test -p actl-uia --test provider_probe -- --ignored --nocapture --test-thr
 
 代码回归与局部缓存核对通过，完整清单的有效现场对照仍待完成；原始 TIMEOUT 未复现、未记修复。
 没有续跑或覆盖 `observation-final-20261002-01`，也没有切换输入授权或清理历史停止状态。
+
+## 2026-10-03：生产查询与数组处理分层（spec）
+
+`observation_query` 在原有 children 外层内分别记录 find_all_build_cache、array_length、
+array_elements；query_scope 区分桌面根与元素子节点，Length 成功后才记录 result_count，
+转换阶段记录 processed_count 和零起始 failed_index。失败不返回部分树，负长度返回 INTERNAL，
+0 与未知/null 分开。flow metadata 的阶段白名单、docs/06 与新增 golden 同步。
+既有 32/8 日志预算、RawView 范围、瞬态重试、停止和授权保持不变。
+最内层阶段排除自身采样/日志成本，外层包含嵌套成本，不能相加或据此计算优化比例。
+
+本轮留证于 `target/observation-query/`：
+
+- `before.log` 的六项测试先复现阶段缺失、失败索引缺失与负长度成为空树；修正后
+  `after.log` 六项通过，`uia-tests.log` 的 actl-uia 测试通过。
+  `metadata-before.log` 复现三个新阶段被删去；`metadata-after.log` 的 15 项协议测试通过。
+- 默认 ignore 的 `actl-devtools/tests/observation_query_capture.rs` 只捕获一次生产 list-windows，
+  使用已有 std 进程留证器，30 秒到期仅终止自有只读 CLI；不运行 flow、不激活应用或授予权限。
+  正常捕获会保存完整时间线、原生前后上下文及二进制哈希；observed 只表示查询返回，
+  不保证发现完整，也不是业务验收。时间线读取和前后留证不在这 30 秒截止内。
+- debug 样本 `debug-01/`、任务 `s18dac3518f7bd74c0`：生产桌面 FindAllBuildCache 为 122ms；
+  Length 为 1，GetElement 成功取得 1 个元素，子元素 Length 为 0，最终窗口清单为 0。
+  由唯一一次 window_properties 成功及代码返回路径可知，该元素因空标题被跳过；
+  这不是本次数组转换失败，也没有负长度或 TIMEOUT。该元素缓存 HWND 为 13242656，
+  阶段中的原生 PID 为 null，之后原生指定句柄查询返回空；不能凭失效句柄推断具体提供程序。
+  原生前后上下文仍可见前台 ChatGPT HWND 5508086/PID 44488，完整清单未记验收通过。
+- 此次命令 duration 为 12381ms，trace 的 session.start 为 12020ms，其中 history.retention
+  为 11975ms；进程捕获总耗时 13932ms。查询慢、启动清理慢和外部捕获耗时是不同层，
+  不把它们都归为 UIA。采样期间存在 foreign_injected 活动且部分输入 tick 变化，
+  不认定人工输入导致结果，也不作为静态环境性能对照。
+- 随后已有可见 ChatGPT 的 `window-metadata-01.json/.log` 核对通过：HWND/PID/进程实例与
+  RuntimeId 稳定，窗口属性及两个直接子元素的缓存值与实时值一致。元数据读取 1ms，
+  仅是局部属性读取，不与完整清单或前日数字计算加速比。无输入注入、应用资源或清理。
+- debug CLI 哈希为 `577d47d1dcac4d74191838dd559e842d9c0b02d21cdf14158d86d184a3a82fd7`；
+  Windows 版本与显示端环境见 `environment.json`，测试程序路径/哈希见 `test-binaries.json`。
+  旧任务和停止代次均保留，本轮没有续跑或覆盖历史失败。
+
+最终 `cargo xtask gate` 通过（`gate.log`），包括前端检查、fmt、clippy、workspace 测试与
+lint-packs。release 只读复核见 `live-release.log`、`release-01/`，任务
+`s18dac4497cc3ac580`：桌面查询 264ms、Length=1、转换成功 1 个元素，最终清单仍为 0；
+命令 461ms、历史清理 4ms。新阶段完整记录，无 TIMEOUT，仍不算窗口发现或业务验收通过。
+debug 与 release 的启动清理耗时只说明此次采样不同，不据此归因或计算代码加速比例。
+release CLI SHA-256 为 `A60FDCFBF040205589D1CCD9603243B2217A3D12F0A2E738FA896CAA7802D7CF`。
+
+构建前核对显示端 PID 57084/路径/窗口并正常关闭（`display-close.json`），构建后启动
+PID 46644、epoch `s18dac43fc9f84d800`。首次 `display-restored.json` 响应检查为
+companion_unresponsive，保留该记录；随后 `display-restored-recheck.json` 确认
+ready/responsive=true，没有循环重启。最终二进制路径/哈希及状态见 `installed-binaries.json`；
+停止代次仍为 `s18daa5225ceedbdc0`，原任务仍为 paused/action_failed，没有续跑或授予权限。
+
+当前能把这次空清单收敛到桌面发现/匿名元素路径，并确认经身份核验的 HWND 路线可读；
+还不能确定导致桌面根只返回一个元素的提供程序或条件。原 TIMEOUT 仍未复现、未记修复。
+后续应独立验证桌面根身份、窗口重建和客户端上下文，并单独评估历史日志清理的启动开销。
+只读子进程强截止仍是待设计的生产策略，不把诊断捕获截止当作已实现。
