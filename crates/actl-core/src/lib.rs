@@ -11,6 +11,7 @@ pub mod diff;
 pub mod display;
 pub mod handoff;
 pub mod history;
+mod history_index;
 pub mod keys;
 pub mod log_health;
 pub mod log_integrity;

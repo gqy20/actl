@@ -1,0 +1,1 @@
+{"version":"1","ok":false,"command":"list-windows","error":{"code":"TIMEOUT","message":"UIA observation failed","hint":"re-evaluate preconditions; the UI may be busy or slow","evidence":{"reason":"observation_failed","channel":"children","native_code":-2146233083,"detail":"Operation timed out"}},"duration_ms":0}

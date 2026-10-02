@@ -128,7 +128,7 @@ pub(super) fn diagnostics() -> serde_json::Value {
         "raw":super::input_diagnostics::snapshot()})
 }
 
-fn health_reason() -> &'static str {
+pub(super) fn health_reason() -> &'static str {
     let target = TARGET.load(Ordering::SeqCst);
     if target == 0 {
         return "watcher_missing";

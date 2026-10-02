@@ -1,6 +1,16 @@
 //! Bounded raw-tree observation. Missing children and failed enumeration are distinct.
+use crate::observation_diagnostics::{Stage, observe};
 use actl_core::{CtlError, ErrorCode};
-use uiautomation::{UIAutomation, UIElement, types::TreeScope};
+use uiautomation::{
+    UIAutomation, UIElement,
+    types::{TreeScope, UIProperty},
+};
+
+pub(crate) fn cached_hwnd(element: &UIElement) -> Option<isize> {
+    let handle: windows::Win32::Foundation::HWND =
+        element.get_cached_native_window_handle().ok()?.into();
+    (!handle.0.is_null()).then_some(handle.0 as isize)
+}
 
 pub(crate) struct Entry<T> {
     pub element: T,
@@ -89,16 +99,27 @@ pub(crate) fn tree_bounded(
         .set_tree_scope(TreeScope::Element)
         .map_err(crate::internal)?;
     collect(root.clone(), depth, limit, |element| {
-        element
-            .find_all_build_cache(TreeScope::Children, &condition, &cache)
-            .map_err(|e| crate::read_channel::failure("children", e))
+        observe(Stage::Children, cached_hwnd(element), || {
+            element
+                .find_all_build_cache(TreeScope::Children, &condition, &cache)
+                .map_err(|e| crate::read_channel::failure("children", e))
+        })
     })
 }
 
 pub(crate) fn children(root: &UIElement) -> Result<Vec<UIElement>, CtlError> {
+    observe(Stage::Children, cached_hwnd(root), || children_inner(root))
+}
+
+fn children_inner(root: &UIElement) -> Result<Vec<UIElement>, CtlError> {
     let auto = UIAutomation::new().map_err(crate::internal)?;
     let condition = auto.create_true_condition().map_err(crate::internal)?;
     let cache = auto.create_cache_request().map_err(crate::internal)?;
+    // Native identity is returned by this existing batch, never fetched by an
+    // additional live provider call merely to populate diagnostic metadata.
+    cache
+        .add_property(UIProperty::NativeWindowHandle)
+        .map_err(crate::internal)?;
     cache
         .set_tree_filter(condition.clone())
         .map_err(crate::internal)?;
@@ -146,7 +167,10 @@ pub(crate) fn with_transient_retry<T>(
 pub(crate) fn desktop_children(auto: &UIAutomation) -> Result<Vec<UIElement>, CtlError> {
     let _t = actl_core::trace::scope("window.desktop_children");
     with_transient_retry(|| {
-        let root = auto.get_root_element().map_err(crate::internal)?;
+        let root = observe(Stage::DesktopRoot, None, || {
+            auto.get_root_element()
+                .map_err(|e| crate::read_channel::failure("desktop.root", e))
+        })?;
         children(&root)
     })
 }

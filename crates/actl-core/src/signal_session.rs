@@ -218,6 +218,16 @@ pub fn flow_event(event: &str, data: serde_json::Value) {
     }
 }
 
+/// Metadata-only observation diagnostics use this invocation's paths and identity.
+/// Silent repair probes neither sample nor publish ordinary execution journals.
+pub fn diagnostic_context() -> Option<(SignalPaths, String)> {
+    CURRENT.with(|c| {
+        let shared = c.borrow().upgrade()?;
+        let publisher = shared.lock().ok()?;
+        (!publisher.silent).then(|| (publisher.paths.clone(), publisher.state.call_id.clone()))
+    })
+}
+
 /// Guard owns exactly one resolved action. Nested helpers share their enclosing action.
 pub struct ActionGuard {
     shared: Option<Arc<Mutex<Publisher>>>,

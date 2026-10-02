@@ -449,7 +449,7 @@ L2  actl commands     机器 schema:全命令+参数的 JSON(agent 自发现入�
 | `STALE_REF` | ref 失效(fallback 链已穷尽) | 重新 snapshot(错误里已附变化线索) |
 | `NOT_FOUND` | 选择器无匹配 | 用 find 放宽条件 |
 | `PERM_DENIED` | 权限不足(UIPI/管理员窗口) | 提示用户以管理员重开,勿重试 |
-| `TIMEOUT` | wait/谓词超时 | 重估前置状态 |
+| `TIMEOUT` | wait/谓词或 UIA 提供程序明确超时（`UIA_E_TIMEOUT`） | 重估前置状态 |
 | `AMBIGUOUS` | 匹配到多个元素(附候选 evidence,含可重放 @eN) | 收紧条件 / `--near` 锚点 / `role:X#N` 序数 |
 | `NOT_ACTIONABLE` | 元素存在但不可操作(disabled/offscreen) | 先 scroll/focus;hint 会指向 `set-value` |
 | `ASSERTION_FAILED` | `verify`/`--expect` 断言未成立 | 检查前置步骤(`--expect` 默认 2s 轮询后判定) |
@@ -573,8 +573,34 @@ unfinished 不证明进程仍在运行或已经崩溃。incomplete_files 统计�
 返回的无终态调用；过期记录可能尚未清理。非法 ID/limit 返回 PROTOCOL，读取失败返回 INTERNAL。
 `--timeline` 把任务（或全部，不建议）的 journal 事件按 ts_ms/seq 合并为单一时间线，
 data 为 `{events,total,truncated,incomplete_files}`，旧事件在前，超限时保留最新窗口；
+指定 task 时先核对有效的调用首条身份，非目标调用不继续解析尾部；incomplete_files
+统计目标调用以及首条无法判定归属的文件，无 task 查询仍检查全部文件。
+有效首条的 task_id、文件大小及修改时刻缓存在 `history/cache/task-headers.json`（最大 8 MiB），
+后续按 task 查询可跳过未变化的非目标文件。文件变化、未知首条、缓存缺失/损坏均回到原始日志；
+目标调用始终读取原始事件。缓存仅加速读取，不提供完整性或防篡改保证，不修改原日志或执行状态。
 用于重建暂停、交接与步骤失败过程，免去手工拼接多个调用文件。显示端触发的执行器通过
 `ACTL_TRACE_FILE` 把阶段 trace 追加写入 `history/executor-<request_id>.trace`，stdout 契约不变。
+
+UIA 观察默认增加 `observation_started` / `observation_finished` 和预算达到时的
+`observation_budget` 事件，使用原有 call_id/task_id/run_id/step_id 关联，不新增命令。
+每调用前 32 个观察区间保存开始和结束，之后最多保留 8 个耗时 ≥250ms 或失败的结束事件；
+`started_recorded:false` 表示该区间未保留开始事件，不代表调用没有执行。
+阶段为 window_inventory/automation_initialize/desktop_root/children/window_handle/window_role/window_properties。
+事件含 span_id、已缓存的目标 HWND 及其原生 PID（未知为 null）、duration_ms、outcome、error_code/native_code；
+前后端点含 ts_ms、foreground_hwnd/foreground_pid、last_input_tick 及输入诊断采样。
+session_input_changed / foreground_changed 是端点差异（观察失败为 null），不证明人工操作或错误因果。
+错误 evidence 增加 observation_stage/observation_span_id/observation_duration_ms，保留最内层失败，
+flow 默认 metadata 仅放行规定阶段及无符号数值，不保留输入或错误正文。
+
+显示端后台每 200ms 替换 `observation-input.json`（独立诊断采样 v1，非显示授权协议），
+含显示端 pid/epoch、ts_ms、输入监听健康和 device/foreign_injected/own_injection 的 signals/last_ms。
+Hook 与 Raw 可重复观测同一次输入，signals 不是键数或点击数；不记录键值、坐标、设备句柄或业务正文。
+读取校验显示端身份、版本和 <1500ms 新鲜度；missing/unreadable_or_invalid/invalid/stale/
+display_unavailable_or_changed/monitor_unavailable 不作为“没有输入”的证明。
+sampled_input_delta 仅在两个健康采样身份一致且计数未回退时提供，from_ms/to_ms 是采样区间，
+可滞后于观察边界；零差值和不变的输入 tick 均不能证明用户未操作。
+采样与日志故障不改变命令结果或授权，写入/线程启动失败尽力记 log-health；
+诊断不改急停、暂停边界、授权或重试，不强行取消同步 COM 调用。
 
 logging_health 包含 status、complete_logging_guaranteed（始终 false）、failure_count、truncated、failures。
 status 为 no_recorded_failure/degraded/unknown；未发现失败记录不保证没有丢日志。

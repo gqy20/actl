@@ -12,6 +12,69 @@ fn root() -> std::path::PathBuf {
 }
 
 #[test]
+fn task_timeline_skips_foreign_call_tails_but_reports_unknown_headers() {
+    let root = root();
+    let mut own = Journal::open(&root, "own", Some("mine".into())).unwrap();
+    own.record("call_started", json!({"command":"status"}));
+    own.record("call_finished", json!({}));
+    let foreign = json!({"version":1,"call_id":"foreign","task_id":"other","seq":1,"ts_ms":1,
+        "event":"call_started","data":{}});
+    // A valid non-target identity allows skipping its entire payload. This is
+    // task-scoped diagnostics, not a filesystem-wide integrity audit.
+    std::fs::write(
+        root.join("history/foreign.jsonl"),
+        format!("{foreign}\n{{broken foreign tail\n"),
+    )
+    .unwrap();
+    let result = read_timeline(&root, Some("mine"), 500).unwrap();
+    assert_eq!(result["events"].as_array().unwrap().len(), 2);
+    assert_eq!(result["incomplete_files"], 0);
+    let expected: Value =
+        serde_json::from_str(include_str!("golden/task_timeline_scope.json")).unwrap();
+    assert_eq!(
+        json!({"total":result["total"],"truncated":result["truncated"],
+        "incomplete_files":result["incomplete_files"]}),
+        expected
+    );
+    std::fs::write(root.join("history/unknown.jsonl"), "{broken header\n").unwrap();
+    assert_eq!(
+        read_timeline(&root, Some("mine"), 500).unwrap()["incomplete_files"],
+        1
+    );
+    assert_eq!(
+        read_timeline(&root, None, 500).unwrap()["incomplete_files"],
+        2
+    );
+    drop(own);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn task_header_cache_invalidates_changed_files_and_falls_back_when_corrupt() {
+    let root = root();
+    std::fs::create_dir_all(root.join("history")).unwrap();
+    let first = json!({"version":1,"call_id":"foreign","task_id":"other","seq":1,"ts_ms":1,
+        "event":"call_started","data":{}});
+    let path = root.join("history/foreign.jsonl");
+    std::fs::write(&path, format!("{first}\n")).unwrap();
+    assert_eq!(read_timeline(&root, Some("mine"), 500).unwrap()["total"], 0);
+    assert!(root.join("history/cache/task-headers.json").exists());
+    assert_eq!(read_timeline(&root, Some("mine"), 500).unwrap()["total"], 0);
+    let mut changed = first;
+    changed["task_id"] = json!("mine");
+    changed["data"] = json!({"command":"status"});
+    std::fs::write(&path, format!("{changed}\n")).unwrap();
+    assert_eq!(read_timeline(&root, Some("mine"), 500).unwrap()["total"], 1);
+    std::fs::write(
+        root.join("history/cache/task-headers.json"),
+        "{broken index",
+    )
+    .unwrap();
+    assert_eq!(read_timeline(&root, Some("mine"), 500).unwrap()["total"], 1);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn finished_call_distinguishes_paused_workflow_from_completion() {
     let root = root();
     let mut session = SignalSession::start_with_task(

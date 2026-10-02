@@ -49,14 +49,14 @@
 
 ## 长期观察项
 
-- [ ] UIA 观察长阻塞（60s NOT_FOUND，等复现，[65](65-observation-blocking-diagnosis.md)）
+- [ ] UIA 观察长阻塞及提供程序超时定位（60s NOT_FOUND 仍待复现；2026-10-02 已捕获桌面 children 枚举 TIMEOUT，故障提供程序与修复仍待确认，见 [41](41-logging-metadata.md)、[65](65-observation-blocking-diagnosis.md)）
 - [ ] UWP 挂起恢复（类配对后疑似绕开，更长放置待证）
 - [ ] 前台交接 v9 人工接管/嵌套/多窗口真机矩阵（[62](62-foreground-handoff.md)）
 
 ## 维护
 
 - [ ] 显示端按钮触发的暂停/继续 request_id 核对
-- [ ] 构建指纹与逐阶段耗时诊断表达
+- [ ] 构建指纹与非 UIA 观察阶段的耗时诊断表达
 - [ ] 存储目录不可写/磁盘耗尽/进程中断验收
 
 ---

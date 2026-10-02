@@ -25,6 +25,8 @@ mod handoff_audit;
 mod icon;
 #[path = "signal/input_diagnostics.rs"]
 mod input_diagnostics;
+#[path = "signal/input_sampler.rs"]
+mod input_sampler;
 #[path = "signal/input_watch.rs"]
 mod input_watch;
 #[path = "signal/model.rs"]

@@ -11,6 +11,8 @@ static OWN_HOOKS: AtomicU64 = AtomicU64::new(0);
 /// 「外来程序注入」(docs/68 第五轮:用户未操作仍让行;两类事件今日均已实证)。
 static LAST_KIND: AtomicU64 = AtomicU64::new(0);
 static LAST_TS: AtomicU64 = AtomicU64::new(0);
+static SIGNALS: [AtomicU64; 3] = [const { AtomicU64::new(0) }; 3];
+static LAST_CLASS_TS: [AtomicU64; 3] = [const { AtomicU64::new(0) }; 3];
 
 pub(super) fn hook(injected: bool, tag: usize) {
     let counter = if !injected {
@@ -27,8 +29,25 @@ pub(super) fn hook(injected: bool, tag: usize) {
 }
 
 fn note_last(kind: u64) {
+    let now = actl_core::state::unix_ms();
+    if let Some(index) = kind.checked_sub(1).map(|n| n as usize).filter(|n| *n < 3) {
+        LAST_CLASS_TS[index].store(now, Ordering::SeqCst);
+        SIGNALS[index].fetch_add(1, Ordering::SeqCst);
+    }
     LAST_KIND.store(kind, Ordering::SeqCst);
-    LAST_TS.store(actl_core::state::unix_ms(), Ordering::SeqCst);
+    LAST_TS.store(now, Ordering::SeqCst);
+}
+
+/// Hook and raw signals may both observe the same input. Counts are diagnostic
+/// activity, never the number of clicks/keys, and never authorization evidence.
+pub(super) fn activity() -> [actl_uia::observation_metadata::Activity; 3] {
+    std::array::from_fn(|index| {
+        let last = LAST_CLASS_TS[index].load(Ordering::SeqCst);
+        actl_uia::observation_metadata::Activity {
+            signals: SIGNALS[index].load(Ordering::SeqCst),
+            last_ms: (last != 0).then_some(last),
+        }
+    })
 }
 
 /// 决策时刻的最近输入来源(None=尚无输入记录)。age_ms 供新鲜度判断:

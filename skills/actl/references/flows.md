@@ -149,6 +149,15 @@ expected: 预期完整文本
 
 文件/行集合/关闭断言对已知不匹配在 5 秒观察窗口内复查，未知错误不转为空或成功。文件内容上限 4 MiB、单个 XML part 上限 4 MiB、expected 参数上限 16 KiB。OOXML 由 zip 解压指定 XML part，再经 Windows.Data.Xml.Dom 只读解析；进程身份通过 Win32 句柄读取，完整命令行通过 WMI 读取。运行时不启动 PowerShell，不使用 Office COM。XML 禁用 DTD/外部实体，最大深度 128；WMI 枚举等待上限 5 秒，无独立可中断的硬超时，断言不保证 5 秒硬实时。依赖登记见 TECH_STACK §3。
 
+### 暂停与 UIA 超时排障（2026-10-02）
+
+先保留失败 envelope 和冻结运行记录，再用 `actl history --task <run_id> --timeline --limit 500`
+合并查询阶段与控制请求；不要只看最后一次返回。检查 total/truncated，仍截断可把 limit 增至 2000。
+`observation_finished` 的阶段、耗时、native_code 与 observation_span_id 可关联失败步骤；
+TIMEOUT 表示明确超时，pause_requested 表示已观察到暂停请求，二者不能互相归因。
+前台/输入变化是相关证据，输入监听缺失、过期或显示端重启时保留未知；信号计数不等于键数/点击数。
+`source_verified:false` 的控制来源仅供诊断，不作为用户授权。
+
 ### 紧邻检查复用（2026-09-29）
 
 恢复执行时，只有仍为 pending 的步骤，且解析后的 resume_check 与 before 完全相同时，成功的恢复检查才直接满足此次前置检查。两者之间仍检查暂停/停止；不跨步骤、跨暂停或跨执行器缓存。uncertain/running/verifying 步骤仍先核验结果，显式重试前重新执行 before。不同参数或不同命令不合并。

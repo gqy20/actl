@@ -156,21 +156,22 @@ fn fast_actions_survive_poll_gaps_are_deduplicated_and_not_replayed() {
         a.delivered();
     }
     session.finish(Phase::Done, None);
-    let states = p.read_calls();
+    let mut states = p.read_calls();
     assert_eq!(states[0].recent_actions.len(), 32);
+    // Publication/retention is checked on the real persisted state above.
+    // Cursor freshness models a burst independently of disk latency: forty
+    // journal/state writes need not complete inside the two-second TTL.
+    let now = 10_040;
+    for (index, action) in states[0].recent_actions.iter_mut().enumerate() {
+        action.ts_ms = 10_000 + index as u64;
+        action.expires_ms = now + 2000;
+    }
+    states[0].action = states[0].recent_actions.last().cloned();
     let mut cursor = ActionCursor::new(0);
-    assert_eq!(cursor.take(&states, unix_ms()).len(), 32);
-    assert!(cursor.take(&states, unix_ms()).is_empty());
-    assert!(
-        ActionCursor::new(unix_ms() + 1)
-            .take(&states, unix_ms() + 1)
-            .is_empty()
-    );
-    assert!(
-        ActionCursor::new(0)
-            .take(&states, unix_ms() + 3000)
-            .is_empty()
-    );
+    assert_eq!(cursor.take(&states, now).len(), 32);
+    assert!(cursor.take(&states, now).is_empty());
+    assert!(ActionCursor::new(now + 1).take(&states, now + 1).is_empty());
+    assert!(ActionCursor::new(0).take(&states, now + 3000).is_empty());
     let _ = std::fs::remove_dir_all(p.dir);
 }
 

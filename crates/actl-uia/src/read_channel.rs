@@ -5,12 +5,16 @@ use uiautomation::{
     patterns::{UITextPattern, UITogglePattern, UIValuePattern},
     types::UIProperty,
 };
-use windows::Win32::{Foundation::E_ACCESSDENIED, UI::Accessibility::UIA_E_ELEMENTNOTAVAILABLE};
+use windows::Win32::{
+    Foundation::E_ACCESSDENIED,
+    UI::Accessibility::{UIA_E_ELEMENTNOTAVAILABLE, UIA_E_TIMEOUT},
+};
 
 pub(crate) fn failure(channel: &str, error: uiautomation::errors::Error) -> CtlError {
     let code = match error.code() {
         n if n == UIA_E_ELEMENTNOTAVAILABLE as i32 => ErrorCode::StaleRef,
         n if n == E_ACCESSDENIED.0 => ErrorCode::PermDenied,
+        n if n == UIA_E_TIMEOUT as i32 => ErrorCode::Timeout,
         _ => ErrorCode::Internal,
     };
     CtlError::with_evidence(
@@ -122,6 +126,22 @@ pub(crate) fn choose(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn provider_timeout_has_a_timeout_envelope() {
+        let error = failure(
+            "children",
+            uiautomation::errors::Error::new(-2146233083, "Operation timed out"),
+        );
+        assert_eq!(error.code, ErrorCode::Timeout);
+        let expected: serde_json::Value = serde_json::from_str(include_str!(
+            "../tests/golden/window_inventory_timeout.json"
+        ))
+        .unwrap();
+        assert_eq!(
+            serde_json::to_value(actl_core::ErrorEnvelope::new("list-windows", &error, 0)).unwrap(),
+            expected
+        );
+    }
     #[test]
     fn failed_value_read_never_falls_back() {
         let error = choose(Err(CtlError::internal("provider failed")), || {

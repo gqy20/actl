@@ -106,6 +106,27 @@ pub fn failure_evidence(policy: EvidencePolicy, error: &CtlError) -> Option<serd
             value[key] = v.clone();
         }
     }
+    for key in ["observation_span_id", "observation_duration_ms"] {
+        if let Some(v) = source.get(key).filter(|v| v.is_u64()) {
+            value[key] = v.clone();
+        }
+    }
+    if let Some(stage) = source.get("observation_stage").filter(|v| {
+        matches!(
+            v.as_str(),
+            Some(
+                "window_inventory"
+                    | "automation_initialize"
+                    | "desktop_root"
+                    | "children"
+                    | "window_handle"
+                    | "window_role"
+                    | "window_properties"
+            )
+        )
+    }) {
+        value["observation_stage"] = stage.clone();
+    }
     if let Some(v) = source.get("action_started").filter(|v| v.is_boolean()) {
         value["action_started"] = v.clone();
     }

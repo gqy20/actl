@@ -281,15 +281,26 @@ pub(crate) fn top_windows(
 ) -> Result<Vec<UIElement>, CtlError> {
     let roots = crate::observation::desktop_children(auto)?;
     let roots = crate::window_observation::select(roots, |w| {
-        let hwnd = w
-            .get_native_window_handle()
-            .map_err(|e| crate::read_channel::failure("window.hwnd", e))?;
+        let hwnd = crate::observation_diagnostics::observe(
+            crate::observation_diagnostics::Stage::WindowHandle,
+            crate::observation::cached_hwnd(w),
+            || {
+                w.get_native_window_handle()
+                    .map_err(|e| crate::read_channel::failure("window.hwnd", e))
+            },
+        )?;
         Ok(!crate::display_support::is_display_window(hwnd.into()))
     })?;
     crate::window_observation::inventory(Ok(roots), crate::observation::children, |w| {
-        w.get_control_type()
-            .map(|t| t == ControlType::Window)
-            .map_err(|e| crate::read_channel::failure("window.role", e))
+        crate::observation_diagnostics::observe(
+            crate::observation_diagnostics::Stage::WindowRole,
+            crate::observation::cached_hwnd(w),
+            || {
+                w.get_control_type()
+                    .map(|t| t == ControlType::Window)
+                    .map_err(|e| crate::read_channel::failure("window.role", e))
+            },
+        )
     })
 }
 
@@ -573,6 +584,14 @@ pub struct WindowEntry {
 /// Z 序 = GetTopWindow→GetWindow(GW_HWNDNEXT) 链的位次;前台比对沿用
 /// 标题兜底先例(WinUI 三件套分属不同 HWND,严格比对会漏)。
 pub fn list_windows() -> Result<Vec<WindowEntry>, CtlError> {
+    crate::observation_diagnostics::observe(
+        crate::observation_diagnostics::Stage::WindowInventory,
+        None,
+        list_windows_inner,
+    )
+}
+
+fn list_windows_inner() -> Result<Vec<WindowEntry>, CtlError> {
     use std::collections::HashMap;
     use windows::Win32::Foundation::{HWND, RECT};
     use windows::Win32::UI::WindowsAndMessaging::{
@@ -581,8 +600,18 @@ pub fn list_windows() -> Result<Vec<WindowEntry>, CtlError> {
         WS_EX_TOPMOST,
     };
 
-    let auto = UIAutomation::new().map_err(internal)?;
-    let walker = auto.create_tree_walker().map_err(internal)?;
+    let (auto, walker) = crate::observation_diagnostics::observe(
+        crate::observation_diagnostics::Stage::AutomationInitialize,
+        None,
+        || {
+            let auto = UIAutomation::new()
+                .map_err(|e| crate::read_channel::failure("automation.initialize", e))?;
+            let walker = auto
+                .create_tree_walker()
+                .map_err(|e| crate::read_channel::failure("automation.walker", e))?;
+            Ok((auto, walker))
+        },
+    )?;
     // rect 统一物理像素(PMv2 线程上下文):与 screenshot / xy: 坐标寻址同
     // 坐标系——视觉兜底换算("窗口左上角 + PNG 坐标")不再跨缩放混层
     // (2026-09-27 实测踩坑:逻辑 rect × 200% 缩放屏差点点错,守卫拦下)
@@ -619,60 +648,67 @@ pub fn list_windows() -> Result<Vec<WindowEntry>, CtlError> {
     top_windows(&auto, &walker)?
         .into_iter()
         .map(|w| {
-            let title = w
-                .get_name()
-                .map_err(|e| crate::read_channel::failure("window.name", e))?;
-            if title.is_empty() {
-                return Ok(None);
-            }
-            let handle = w
-                .get_native_window_handle()
-                .map_err(|e| crate::read_channel::failure("window.hwnd", e))?;
-            let handle: HWND = handle.into();
-            let hwnd = (!handle.0.is_null()).then_some(handle);
-            let (foreground, topmost, minimized, visible, z_order, rect, owner_title) = match hwnd {
-                Some(h) => unsafe {
-                    let root = GetAncestor(h, GA_ROOT);
-                    let root = if root.0.is_null() { h } else { root };
-                    let is_fg = root.0 == fg_root.0
-                        || window_title_of(h)
-                            .zip(Some(fg_title.clone()))
-                            .is_some_and(|(t, f)| !f.is_empty() && t == f);
-                    let ex_style = GetWindowLongW(h, GWL_EXSTYLE);
-                    let mut r = RECT::default();
-                    let has_rect = GetWindowRect(h, &mut r).is_ok();
-                    let owner = GetWindow(h, GW_OWNER).unwrap_or_default();
-                    (
-                        is_fg,
-                        (ex_style as u32) & WS_EX_TOPMOST.0 != 0,
-                        IsIconic(h).as_bool(),
-                        IsWindowVisible(h).as_bool(),
-                        rank_of_root(h),
-                        has_rect.then_some([r.left, r.top, r.right, r.bottom]),
-                        (!owner.0.is_null())
-                            .then(|| window_title_of(owner).unwrap_or_default())
-                            .filter(|t| !t.is_empty()),
-                    )
+            crate::observation_diagnostics::observe(
+                crate::observation_diagnostics::Stage::WindowProperties,
+                crate::observation::cached_hwnd(&w),
+                || {
+                    let title = w
+                        .get_name()
+                        .map_err(|e| crate::read_channel::failure("window.name", e))?;
+                    if title.is_empty() {
+                        return Ok(None);
+                    }
+                    let handle = w
+                        .get_native_window_handle()
+                        .map_err(|e| crate::read_channel::failure("window.hwnd", e))?;
+                    let handle: HWND = handle.into();
+                    let hwnd = (!handle.0.is_null()).then_some(handle);
+                    let (foreground, topmost, minimized, visible, z_order, rect, owner_title) =
+                        match hwnd {
+                            Some(h) => unsafe {
+                                let root = GetAncestor(h, GA_ROOT);
+                                let root = if root.0.is_null() { h } else { root };
+                                let is_fg = root.0 == fg_root.0
+                                    || window_title_of(h)
+                                        .zip(Some(fg_title.clone()))
+                                        .is_some_and(|(t, f)| !f.is_empty() && t == f);
+                                let ex_style = GetWindowLongW(h, GWL_EXSTYLE);
+                                let mut r = RECT::default();
+                                let has_rect = GetWindowRect(h, &mut r).is_ok();
+                                let owner = GetWindow(h, GW_OWNER).unwrap_or_default();
+                                (
+                                    is_fg,
+                                    (ex_style as u32) & WS_EX_TOPMOST.0 != 0,
+                                    IsIconic(h).as_bool(),
+                                    IsWindowVisible(h).as_bool(),
+                                    rank_of_root(h),
+                                    has_rect.then_some([r.left, r.top, r.right, r.bottom]),
+                                    (!owner.0.is_null())
+                                        .then(|| window_title_of(owner).unwrap_or_default())
+                                        .filter(|t| !t.is_empty()),
+                                )
+                            },
+                            None => (false, false, false, true, None, None, None),
+                        };
+                    Ok(Some(WindowEntry {
+                        title,
+                        class: w
+                            .get_classname()
+                            .map_err(|e| crate::read_channel::failure("window.class", e))?,
+                        pid: w
+                            .get_process_id()
+                            .map_err(|e| crate::read_channel::failure("window.pid", e))?,
+                        hwnd: hwnd.map(|h| h.0 as isize),
+                        foreground,
+                        topmost,
+                        minimized,
+                        visible,
+                        z_order,
+                        rect,
+                        owner_title,
+                    }))
                 },
-                None => (false, false, false, true, None, None, None),
-            };
-            Ok(Some(WindowEntry {
-                title,
-                class: w
-                    .get_classname()
-                    .map_err(|e| crate::read_channel::failure("window.class", e))?,
-                pid: w
-                    .get_process_id()
-                    .map_err(|e| crate::read_channel::failure("window.pid", e))?,
-                hwnd: hwnd.map(|h| h.0 as isize),
-                foreground,
-                topmost,
-                minimized,
-                visible,
-                z_order,
-                rect,
-                owner_title,
-            }))
+            )
         })
         .collect::<Result<Vec<_>, CtlError>>()
         .map(|items| items.into_iter().flatten().collect())

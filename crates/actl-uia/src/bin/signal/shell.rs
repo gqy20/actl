@@ -127,6 +127,9 @@ fn publish_lease(paths: &SignalPaths, state: &str) {
         ts_ms: unix_ms(),
     };
     let _ = paths.write_display("display.json", &lease);
+    if state != "closed" {
+        super::input_sampler::start(paths, &lease.epoch);
+    }
 }
 
 pub(super) fn stop_timestamp(paths: &SignalPaths) -> Option<u64> {

@@ -1,4 +1,34 @@
 use actl_core::{CtlError, ErrorCode};
+
+#[test]
+fn observation_failure_keeps_phase_link_but_excludes_input_content() {
+    let error = CtlError::with_evidence(
+        ErrorCode::Timeout,
+        "provider timeout",
+        serde_json::json!({
+            "reason":"observation_failed","channel":"children","native_code":-2146233083i64,
+            "observation_stage":"children","observation_span_id":4,"observation_duration_ms":776,
+            "detail":"PRIVATE ERROR","keys":"PRIVATE INPUT","target_title":"PRIVATE TITLE"
+        }),
+    );
+    let metadata =
+        actl_flow::failure_evidence(actl_flow::EvidencePolicy::Metadata, &error).unwrap();
+    let expected: serde_json::Value =
+        serde_json::from_str(include_str!("golden/observation_metadata.json")).unwrap();
+    assert_eq!(metadata, expected);
+    assert!(!metadata.to_string().contains("PRIVATE"));
+    let invalid = CtlError::with_evidence(
+        ErrorCode::Timeout,
+        "timeout",
+        serde_json::json!({
+            "observation_stage":"PRIVATE STAGE","observation_span_id":-1,"observation_duration_ms":"PRIVATE TIME"
+        }),
+    );
+    assert_eq!(
+        actl_flow::failure_evidence(actl_flow::EvidencePolicy::Metadata, &invalid).unwrap(),
+        serde_json::json!({"redacted":true})
+    );
+}
 use actl_flow::{engine::*, store::Store, *};
 fn plan() -> Plan {
     parse("version: 1\nname: test\nsteps:\n  - id: write\n    title: Write\n    run: {command: write}\n    verify: {command: check}\n  - id: read\n    title: Read\n    run: {command: read}\n").unwrap()

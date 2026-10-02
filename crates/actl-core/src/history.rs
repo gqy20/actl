@@ -296,6 +296,7 @@ pub fn read_timeline(
     }
     let mut events: Vec<(u64, u64, serde_json::Value)> = Vec::new();
     let mut incomplete = 0u32;
+    let mut index = crate::history_index::Index::load(&dir);
     for entry in fs::read_dir(&dir).map_err(io_error)? {
         let entry = entry.map_err(io_error)?;
         if !entry.file_type().map_err(io_error)?.is_file()
@@ -303,16 +304,28 @@ pub fn read_timeline(
         {
             continue;
         }
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let stamp = crate::history_index::Index::stamp(&entry.metadata().map_err(io_error)?);
+        if task.is_some_and(|id| index.foreign(&name, stamp, id)) {
+            continue;
+        }
         use std::io::{BufRead, BufReader, Read};
         let file = File::open(entry.path()).map_err(io_error)?;
-        for line in BufReader::new(file.take(CALL_LIMIT + 1)).lines() {
+        for (line_index, line) in BufReader::new(file.take(CALL_LIMIT + 1))
+            .lines()
+            .enumerate()
+        {
             let Ok(line) = line else {
                 incomplete += 1;
                 break;
             };
             match serde_json::from_str::<serde_json::Value>(&line) {
                 Ok(event) => {
+                    let known_header = line_index == 0 && index.remember(&name, stamp, &event);
                     if task.is_some_and(|id| event["task_id"].as_str() != Some(id)) {
+                        if known_header {
+                            break;
+                        }
                         continue;
                     }
                     let ts = event["ts_ms"].as_u64().unwrap_or(0);
@@ -326,6 +339,7 @@ pub fn read_timeline(
             }
         }
     }
+    index.save(&dir);
     events.sort_by_key(|(ts, seq, _)| (*ts, *seq));
     let total = events.len();
     let truncated = total > limit;
