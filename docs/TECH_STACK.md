@@ -185,6 +185,11 @@ COM 数组和元素按现有智能接口所有权释放，不传递裸指针、�
 负长度拒绝为 INTERNAL，索引由成功读取的非负 i32 长度限定。
 开发工具的默认 ignore 捕获用例只派生自有 CLI 执行一次 list-windows，复用现有 std 进程留证，
 30 秒到期仅终止该只读 CLI，原始日志保留；该期限不是生产 UIA 超时策略。
+新增桌面根身份探针的 unsafe 同样只在 actl-uia 测试中：GetDesktopWindow、前台与输入 tick
+读取、同一 MTA 内的根对象和 COM 数组读取。最多采样 16 个直接子元素的缓存身份，不读标题，
+不激活或注入输入。开发工具使用相同 30 秒进程留证器约束自有探针，保留逐阶段 JSONL；
+缓存模式通过 ACTL_ROOT_PROBE_CACHE 显式选择 handle/metadata，无默认兜底；
+取根方式/缓存属性对照仅用于诊断，不切换生产客户端、授权或查询路线。
 
 
 桌面交接复用现有 std + serde_json + windows，无新增依赖。纯授权逻辑位于 actl-core/handoff。

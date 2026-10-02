@@ -4,6 +4,55 @@ use actl_devtools::{capture, save};
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, path::PathBuf, time::Duration};
 
+#[test]
+#[ignore = "manual bounded root comparison; set ACTL_ROOT_PROBE_BINARY/CACHE and ACTL_ROOT_CAPTURE_OUTPUT"]
+fn desktop_root_capture() -> Result<(), Box<dyn std::error::Error>> {
+    let binary = PathBuf::from(std::env::var("ACTL_ROOT_PROBE_BINARY")?).canonicalize()?;
+    let name = binary
+        .file_name()
+        .and_then(|s| s.to_str())
+        .ok_or("invalid probe path")?;
+    if !name.starts_with("desktop_root_probe-") || !name.ends_with(".exe") {
+        return Err("only the read-only root probe may be captured".into());
+    }
+    let output = std::path::absolute(std::env::var("ACTL_ROOT_CAPTURE_OUTPUT")?)?;
+    let mode = std::env::var("ACTL_ROOT_PROBE_CACHE")?;
+    std::fs::create_dir(&output)?;
+    let mut env = BTreeMap::new();
+    env.insert(
+        "ACTL_ROOT_PROBE_OUTPUT".into(),
+        output.join("phases.jsonl").to_string_lossy().into_owned(),
+    );
+    env.insert("ACTL_ROOT_PROBE_CACHE".into(), mode);
+    let capture = capture::process(
+        &binary,
+        &[
+            "--ignored".into(),
+            "--exact".into(),
+            "root_sources".into(),
+            "--nocapture".into(),
+            "--test-threads=1".into(),
+        ],
+        &output,
+        &output.join("harness"),
+        &env,
+        Duration::from_secs(30),
+    )?;
+    save(
+        &output.join("report.json"),
+        &json!({"binary":binary,
+        "sha256":actl_uia::evidence::sha256(&std::fs::read(&binary)?)?,
+        "capture":capture,"capture_deadline_ms":30000,"input_injected":false,
+        "cleanup":"no_business_resources_created","inventory_completeness":"not_verified"}),
+    )?;
+    if capture["status"] != "exited" || capture["exit_code"] != 0 {
+        return Err(
+            "root probe failed or reached capture deadline; inspect retained phases".into(),
+        );
+    }
+    Ok(())
+}
+
 fn native_context() -> Result<Value, Box<dyn std::error::Error>> {
     let windows = actl_uia::native_windows()?;
     let visible: Vec<_> = windows
