@@ -12,11 +12,12 @@
 ## 测试与真机证据
 
 - 离线：插值单测（actl-uia）；契约 5/5（`input_target_contract`：--path 解析错误/xy 对缺 --app/duration 边界/key-up 拒 duration，全部在桌面交互前拦截）。
-- 真机已通过：**长按**（Paint 窗口 `key-down v --duration 300` → `held_ms:300` + 自动释放，见 p3-paint-accept）。
-- 真机**受阻如实记录**：轨迹/坐标拖拽的正路径验收两次尝试（Paint 画布、自有浏览器 canvas 跨通道方案）均被**遮挡守卫正确拒绝**——用户桌面被全屏视频占用，物理拖拽若强行执行会落进用户窗口（如拖动视频进度）。按让行纪律不与用户抢前台；守卫的负路径拒绝本身即为有效验收证据（`target/p3-cross-accept/acceptance.jsonl` 步骤 3/5）。**正路径待桌面空闲复验**（canvas 记录页与脚本已备好，跑一次即收）。
+- 真机（Paint，2026-10-02 `target/p3-paint-final/`，用户授权桌面时段）**三项正路径全通过**：轨迹拖拽（zig-zag `--path` 两路径点，`mode:"path"` 载荷）、坐标拖拽（`xy:450,880 → xy:1350,980`，前后截图字节差 155930→153333 证新笔画）、长按（`key-down b --duration 400`，`held_ms:400` 自动释放）。截图证据 `paint-strokes.png`。
+- 负路径证据同样保留：遮挡守卫对被覆盖坐标的多次拒绝（`p3-cross-accept/`）——其中一次"探测说暴露、执行说遮挡"的假矛盾由 **DPI 坐标系差**解释：非 PMv2 观测脚本的 (x,y) 是虚拟坐标，与 actl PMv2 物理坐标不同指；actl 侧守卫始终正确。教训：外部观测脚本核对坐标时必须同为 PMv2 口径（list-windows rect 是物理口径，勿与系统 DPI 工具混用）。
 
 ## 过程教训
 
 1. **launch 的 `--wait-window` 是 actl 侧旗标不是应用参数**——误传导致 Paint 打开"找不到 --wait-window.png"模态框；按前台弹层纪律先 `list-windows --native --hwnd` + `snapshot` 读全文（确认属清理白名单的「找不到文件+确定」形态）再 close-window 解锁。脚本传参应只传应用自身参数。
 2. 显示端伴侣长期未跑 + `target/release/actl-signal.exe` 陈旧（gate 发布构建走 `target/validation` 目录）会造成 lease 失配循环：`display-start` 反复拉起旧二进制并锁住 exe。解法：停掉运行中的 signal → `cargo build --release --bin actl-signal` → `display-start`（本轮已重建并就绪）。
 3. 隔离 LOCALAPPDATA 会连显示 lease 一起隔离——需要显示门的命令（launch 等）验收时必须用真实环境。
+4. **关闭带未保存内容的 GUI 应用会弹保存框**：close-window 后用 front-report 读引导层（「是否要保存? 保存/不保存/取消」），按清理白名单点击「不保存」（find @ref + click + snapshot 绑定）完成退出——本轮即为该机制的设计用例闭环。
