@@ -79,3 +79,18 @@ pub(crate) fn click_cmd(
 pub(crate) fn close_cmd(session: &str, timeout: Option<u64>) -> Result<CommandOutput, CtlError> {
     ops::close(&paths(), session, timeout).map(Into::into)
 }
+
+pub(crate) fn list_cmd() -> Result<CommandOutput, CtlError> {
+    ops::list(&paths()).map(Into::into)
+}
+
+pub(crate) fn verify_cmd(
+    session: Option<&str>,
+    alive: bool,
+    gone: bool,
+    none: bool,
+    newest_alive: bool,
+    timeout: Option<u64>,
+) -> Result<CommandOutput, CtlError> {
+    ops::verify(&paths(), session, alive, gone, none, newest_alive, timeout).map(Into::into)
+}

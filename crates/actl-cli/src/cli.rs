@@ -753,6 +753,29 @@ pub(crate) enum Command {
         #[arg(long)]
         timeout: Option<u64>,
     },
+    /// List active browser sessions, newest first (read-only; safe discovery for flows and agents)
+    BrowserList,
+    /// Read-only browser assertions for flow verify steps (exactly one mode)
+    BrowserVerify {
+        /// Assert this session's bound target still responds (with --alive) or is deregistered (with --gone)
+        #[arg(long)]
+        session: Option<String>,
+        /// With --session: the bound tab target answers (implies browser + endpoint alive)
+        #[arg(long, requires = "session", conflicts_with = "bv_gone")]
+        alive: bool,
+        /// With --session: the session record no longer exists
+        #[arg(long, requires = "session", id = "bv_gone", conflicts_with = "alive")]
+        gone: bool,
+        /// Assert zero active sessions (post-close in a flow-owned lifecycle)
+        #[arg(long, conflicts_with_all = ["session"])]
+        none: bool,
+        /// Assert the newest session's target responds (post-launch, before its id is known)
+        #[arg(long, conflicts_with_all = ["session", "none"])]
+        newest_alive: bool,
+        /// Timeout in milliseconds (default 10000)
+        #[arg(long)]
+        timeout: Option<u64>,
+    },
     /// Read the clipboard as text (null if it holds no text)
     GetClipboard,
     /// Write text to the clipboard (replaces current content)
@@ -919,6 +942,8 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
         Command::BrowserRead { .. } => "browser-read",
         Command::BrowserClick { .. } => "browser-click",
         Command::BrowserClose { .. } => "browser-close",
+        Command::BrowserList => "browser-list",
+        Command::BrowserVerify { .. } => "browser-verify",
         Command::GetClipboard => "get-clipboard",
         Command::SetClipboard { .. } => "set-clipboard",
         Command::Wait { .. } => "wait",
@@ -945,6 +970,12 @@ fn after_help_for(name: &str) -> Option<&'static str> {
         }
         "browser-close" => {
             "Example:\n  actl browser-close --session s1a2b3\nCloses the OWNED browser via CDP Browser.close (graceful; never taskkill), removes the session file, and deletes ephemeral profiles. Persistent profiles are kept for reuse. If the endpoint is already unreachable the close is idempotent and reported as such.\nErrors: NOT_FOUND unknown session | INTERNAL endpoint still answers after close (session kept)"
+        }
+        "browser-list" => {
+            "Example:\n  actl browser-list\nRead-only enumeration of active sessions (newest first): session_id/target_id/url/pid/port/mode. In YAML flows browser-launch cannot carry outputs (lifecycle command, not a read-only producer) — bind the session handle from this command instead (e.g. pointer /sessions/0/session_id).\nErrors: INTERNAL sessions dir unreadable"
+        }
+        "browser-verify" => {
+            "Example:\n  actl browser-verify --newest-alive\n  actl browser-verify --session s1a2b3 --alive\n  actl browser-verify --none\nRead-only assertion family for flow verify steps: --newest-alive (post-launch), --none (post-close in a flow-owned lifecycle), --session+--alive (target responds), --session+--gone (record deregistered). Value-level assertions live on the write itself (browser-click --expect-text).\nErrors: PROTOCOL mode/args | ASSERTION_FAILED assertion unmet | NOT_FOUND unknown session (alive)"
         }
         "flow-validate" => {
             "Example:\n  actl flow-validate --file task.yml\nOptional --inputs values.yml resolves declared whole-argument inputs before validating every step. Resources are checked without creating files; data.resources uses the validation-preview context. --emit-plan includes the concrete preview plan and input values, not initialized resources. when/unless select run or otherwise using immediate assertions; unknown observations stop. Both routes are prevalidated. run/otherwise.sequence groups up to 16 calls with one result check. outputs select typed read-only data via JSON Pointer; bind replaces a whole args entry by index. Resolved CLI arguments are revalidated before execution.\nErrors: PROTOCOL invalid YAML/command/policy/resource | INTERNAL file error"

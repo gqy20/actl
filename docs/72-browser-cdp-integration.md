@@ -149,7 +149,18 @@ iframe 守卫写+核验→iframe 读"1"→navigate(标题+计数归零证明新�
 ## 13. 开放项
 
 - [ ] spike:Windows + Rust std 句柄继承实现 `--remote-debugging-pipe`(失败退路 port+127.0.0.1;§8.2)
-- [ ] flow/YAML 通道声明(browser 会话作为流程资源)+ 写入 uncertain 跨进程持久化(对齐 docs/47)
+- [x] **flow/YAML 通道接入(2026-10-02 实测通过)**:browser 命令可入 YAML 流程,治理三件套
+  各就各位——① outputs 只允许只读生产者→补 `browser-list`(只读枚举,新→旧)承载会话句柄
+  产出(pointer /sessions/0/session_id),`browser-launch` 保持生命周期命令不带 outputs;
+  ② 副作用步骤必须带 verify→补 `browser-verify` 断言族(--newest-alive/--none/
+  --session+--alive|--gone,全只读);③ `read_only` 分类纳入 BrowserList/BrowserRead/
+  BrowserVerify。bind 注入 `--session` 值位(下标须指值字面量)。探针流程
+  `target/browser-flow-test/browser-flow-probe.yml` 六步真机全通(completed+verified,
+  会话句柄贯穿,收尾 browser-list 归零、零残留进程)。**治理发现**:未声明 handoff 的
+  流程里浏览器写不触发审批门(CDP 写非桌面物理输入,引擎按命令分类裁决)——授权语义
+  =停止代次核验(browser-click 已过);动作卡/审批卡与显示端的接线归显示层待办(§13)。
+  余量:值级断言动词(--contains 类)、会话作为声明式流程资源(生命周期归 flow 而非步骤)
+  、写入 uncertain 跨进程持久化(对齐 docs/47)。
 - [ ] 持久 profile 登录复用真机验收(一次性人工登录场景)
 - [ ] batch 组合验收;写动词扩展(browser-type)与读通道补全(`--property`:value/href 等——x.com 场景实证 input 值读不到,docs/73);headless 的 `--user-agent` 覆盖(UA 壁垒站点);选择器索引消歧助手;close 后 ephemeral profile 延迟重删(7 轮 2 次竞争失败)
 - [ ] WebView2 内嵌形态评估(并入 M3 WebView2 专项验收后)

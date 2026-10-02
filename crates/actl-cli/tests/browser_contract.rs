@@ -61,9 +61,36 @@ fn commands_schema_contains_browser_family() {
         "browser-read",
         "browser-click",
         "browser-close",
+        "browser-list",
+        "browser-verify",
     ] {
         assert!(names.contains(&cmd), "commands schema lacks {cmd}");
     }
+}
+
+#[test]
+fn browser_verify_requires_exactly_one_mode() {
+    // 零模式:clap 放行,handler 出 PROTOCOL envelope
+    let (code, stdout) = actl(&["browser-verify"]);
+    assert_eq!(code, 2);
+    let v: Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(v["error"]["code"], "PROTOCOL");
+    // 组合冲突/缺依赖:clap 层拒绝(仅 stderr,无 envelope),断言退出码即可
+    assert_eq!(actl(&["browser-verify", "--none", "--newest-alive"]).0, 2);
+    assert_eq!(actl(&["browser-verify", "--alive"]).0, 2);
+    assert_eq!(
+        actl(&["browser-verify", "--gone", "--session", "x", "--alive"]).0,
+        2
+    );
+}
+
+#[test]
+fn browser_list_reports_empty_without_sessions() {
+    let (code, stdout) = actl(&["browser-list"]);
+    assert_eq!(code, 0);
+    let v: Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(v["data"]["sessions"].as_array().map(Vec::len), Some(0));
+    assert_eq!(v["data"]["total"], 0);
 }
 
 #[test]

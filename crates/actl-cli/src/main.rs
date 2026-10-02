@@ -591,6 +591,22 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             *timeout,
         ),
         Command::BrowserClose { session, timeout } => browser::close_cmd(session, *timeout),
+        Command::BrowserList => browser::list_cmd(),
+        Command::BrowserVerify {
+            session,
+            alive,
+            gone,
+            none,
+            newest_alive,
+            timeout,
+        } => browser::verify_cmd(
+            session.as_deref(),
+            *alive,
+            *gone,
+            *none,
+            *newest_alive,
+            *timeout,
+        ),
         Command::GetClipboard => get_clipboard_cmd(),
         Command::SetClipboard { text } => set_clipboard_cmd(text),
         Command::Wait {

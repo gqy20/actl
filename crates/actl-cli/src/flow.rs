@@ -50,6 +50,9 @@ fn read_only(cmd: &Command) -> bool {
             | Command::VerifyClipboard { .. }
             | Command::Wait { .. }
             | Command::GetClipboard
+            | Command::BrowserList
+            | Command::BrowserRead { .. }
+            | Command::BrowserVerify { .. }
     )
 }
 
@@ -230,6 +233,7 @@ pub fn validate(plan: &Plan) -> Result<(), CtlError> {
                         | Command::VerifyClosed { .. }
                         | Command::VerifyWindow { .. }
                         | Command::VerifyClipboard { .. }
+                        | Command::BrowserVerify { .. }
                 )
             {
                 return Err(context(

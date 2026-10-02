@@ -793,6 +793,132 @@ pub fn close(paths: &Paths, session_id: &str, timeout_ms: Option<u64>) -> Result
     })
 }
 
+/// 只读枚举活跃会话(新→旧排序)。flow 的 outputs 只允许只读生产者,
+/// browser-launch 是生命周期命令——会话句柄经本命令以观察者身份产出(docs/20 治理模型)。
+/// 只读断言动词(flow 的 verify 位只认断言族;浏览器步骤的副作用核验入口)。
+/// 四模式互斥:newest_alive=最新会话 target 存活(launch 后) | none=零活跃会话(close 后)
+/// | alive/gone=按 session id 断言 target 存活/会话记录已注销。
+pub fn verify(
+    paths: &Paths,
+    session_id: Option<&str>,
+    alive: bool,
+    gone: bool,
+    none: bool,
+    newest_alive: bool,
+    timeout_ms: Option<u64>,
+) -> Result<Value, CtlError> {
+    let picked = [alive, gone, none, newest_alive]
+        .iter()
+        .filter(|b| **b)
+        .count();
+    let session_bound = alive || gone;
+    if picked != 1 || session_bound != session_id.is_some() {
+        return Err(CtlError::protocol(
+            "browser-verify requires exactly one of --alive/--gone (with --session), --none, --newest-alive",
+        ));
+    }
+    let timeout = dur(timeout_ms, OP_DEFAULT_TIMEOUT_MS);
+    if none {
+        let total = list(paths)?
+            .get("total")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        if total != 0 {
+            return Err(CtlError::with_evidence(
+                ErrorCode::AssertionFailed,
+                format!("{total} browser sessions still active"),
+                json!({ "total": total }),
+            ));
+        }
+        return Ok(json!({ "assertion": "none", "passed": true }));
+    }
+    if newest_alive {
+        let sessions = list(paths)?;
+        let newest = sessions.pointer("/sessions/0").cloned().ok_or_else(|| {
+            CtlError::with_evidence(
+                ErrorCode::AssertionFailed,
+                "no active browser session to assert",
+                json!({ "total": 0 }),
+            )
+        })?;
+        let id = newest["session_id"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string();
+        let record = session::load(paths, &id)?;
+        let conn = connect_browser(&record)?;
+        // attach 本身即端点+target 存活的第一重核验
+        attach_target(&conn, &record.target_id, timeout)?;
+        verify_target_alive(&conn, &record.target_id, timeout)?;
+        return Ok(json!({ "assertion": "newest_alive", "passed": true, "session_id": id }));
+    }
+    let session_id = session_id.unwrap_or_default();
+    if gone {
+        return match session::load(paths, session_id) {
+            Err(e) if e.code == ErrorCode::NotFound => {
+                Ok(json!({ "assertion": "gone", "passed": true, "session_id": session_id }))
+            }
+            Ok(_) => Err(CtlError::with_evidence(
+                ErrorCode::AssertionFailed,
+                format!("browser session {session_id} still registered"),
+                json!({ "session_id": session_id }),
+            )),
+            Err(e) => Err(e),
+        };
+    }
+    // alive
+    let record = session::load(paths, session_id)?;
+    let conn = connect_browser(&record)?;
+    let cdp_session = attach_target(&conn, &record.target_id, timeout)?;
+    let _ = cdp_session;
+    verify_target_alive(&conn, &record.target_id, timeout)?;
+    Ok(json!({ "assertion": "alive", "passed": true, "session_id": session_id }))
+}
+
+pub fn list(paths: &Paths) -> Result<Value, CtlError> {
+    let dir = paths.sessions_dir();
+    let mut sessions: Vec<BrowserSession> = Vec::new();
+    let entries = match std::fs::read_dir(&dir) {
+        Ok(e) => e,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(json!({ "sessions": [], "total": 0 }));
+        }
+        Err(e) => return Err(CtlError::internal(format!("cannot read sessions dir: {e}"))),
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().is_none_or(|x| x != "json") {
+            continue;
+        }
+        let Some(id) = path.file_stem().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        // load 失败的损坏文件跳过:枚举不因单条坏记录失败
+        if let Ok(s) = session::load(paths, id) {
+            sessions.push(s);
+        }
+    }
+    sessions.sort_by_key(|s| std::cmp::Reverse(s.created_unix));
+    let list: Vec<Value> = sessions
+        .iter()
+        .map(|s| {
+            json!({
+                "session_id": s.session_id,
+                "target_id": s.target_id,
+                "url": s.bound_url,
+                "browser_pid": s.pid,
+                "devtools_port": s.devtools_port,
+                "mode": s.mode,
+                "headless": s.headless,
+                "profile_dir": s.profile_dir,
+                "created_unix": s.created_unix,
+            })
+        })
+        .collect();
+    let total = list.len();
+    Ok(json!({ "sessions": list, "total": total }))
+}
+
 fn finish_close(paths: &Paths, record: &BrowserSession) -> Result<Value, CtlError> {
     session::remove(paths, &record.session_id)?;
     let (kept, removed) = match &record.mode {

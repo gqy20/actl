@@ -282,14 +282,26 @@ browser-click --session <id> (--css S | --xpath X) [--iframe] [--expect-text sub
                                      # 效果断言用 browser-read;失败不盲重放
 browser-close --session <id>     # CDP Browser.close 优雅关闭自有浏览器+注销会话文件;
                                      # ephemeral profile 删除、persistent 保留;幂等(端点已死→如实行)
+browser-list                      # 只读枚举活跃会话(新→旧):session_id/target/url/pid/mode
+browser-verify [--newest-alive | --none | --session <id> --alive|--gone]
+                                     # 只读断言族(flow verify 位专用):launch 后 --newest-alive、
+                                     # close 后 --none、按会话 --alive/--gone;值级断言在写动词上
+                                     # (--expect-text),本族管生命周期与存活
 ```
+**YAML 流程接入(2026-10-02 实测通过)**:browser 命令进 flow 的治理模型走三件套——
+① `browser-launch` 是生命周期命令,不能带 outputs(outputs 只允许只读生产者);
+② 会话句柄经 `browser-list` 以观察者身份产出(outputs.pointer=/sessions/0/session_id),
+   后续步骤 `bind` 注入 `--session` 值位(下标须指向值字面量,不能指到旗标上);
+③ 有副作用的步骤必须带 verify——`browser-verify` 族即为此而生(launch→--newest-alive,
+   click→--session X --alive,close→--none)。探针流程六步真机全通(见 docs/72 §13)。
 会话状态落 `%LOCALAPPDATA%\actl\browser\`(sessions/*.json + profiles/);错误码复用全集
 (PROTOCOL/NOT_FOUND/AMBIGUOUS/ASSERTION_FAILED/ABORTED/TIMEOUT/INTERNAL),无新增码。
 安全边界(docs/72 §8):客户端只实现 Target/Runtime/Page/Browser 白名单域,cookie 读取域
 构造性不可达,命令面无 cookie 导出动词;不附着用户已有浏览器。stdio 继承守卫
 (actl-uia::process_io)保证调用方管道在 actl 退出后正常 EOF。已知边界(v1):写入的
-uncertain 状态不跨进程持久化(崩溃后由调用方 browser-read 裁决);flow/YAML 通道声明、
-batch 组合、pipe 传输(docs/72 §8.2)待后续 spec。设计全文见 [72](72-browser-cdp-integration.md)。
+uncertain 状态不跨进程持久化(崩溃后由调用方 browser-read 裁决);值级断言动词
+(browser-verify --contains 类)、batch 组合、pipe 传输(docs/72 §8.2)待后续 spec。
+设计全文见 [72](72-browser-cdp-integration.md)。
 
 #### 可靠性(reliability,RPA 借鉴)
 ```
