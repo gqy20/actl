@@ -12,7 +12,7 @@
 
 出口标准已达标（金任务跨日双百 / NFR / 发布产物核对，见 CHANGELOG）。
 
-- [ ] **非开发机 US3 复现**（唯一阻塞项，需用户提供另一台机器）
+- [ ] **非开发机 US3 复现**（用户裁定 2026-10-02 搁置——发版时作为已知限制记录，机器到位后补验）
 - [ ] 综合任务编排：首条 release-review-draft 写段联测待用户授权（[43](43-release-review-draft.md)）
 - [ ] 浏览器 CDP 通道收尾：v1 命令族与真机验收已落地（[72](72-browser-cdp-integration.md)、CHANGELOG Unreleased）；余量=flow 通道声明、持久 profile 登录验收、pipe spike
 
@@ -36,7 +36,7 @@
 - [ ] agent 自驱授权白名单通道（仅真实需求时立项，[32](32-desktop-handoff.md)）
 - [ ] MCP 远程访问适配
 - [ ] 本地 serve 与增量观察
-- [ ] 探索模式（算法主导、决策卡协议）
+- [ ] **探索模式（用户标记关键，优先启动；已有设计提案 [42](42-exploration-mode.md)，实施前走 spec 评审）**
 - [ ] 游戏场景（Minecraft 命令通道）
 
 ### 应用深化

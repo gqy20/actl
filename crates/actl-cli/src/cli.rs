@@ -710,7 +710,7 @@ pub(crate) enum Command {
         #[arg(long)]
         timeout: Option<u64>,
     },
-    /// Read the text of a unique element in the session's tab (CSS or XPath; no writes)
+    /// Read the text (or a whitelisted property) of a unique element in the session's tab
     BrowserRead {
         /// Session id from browser-launch
         #[arg(long)]
@@ -721,6 +721,31 @@ pub(crate) enum Command {
         /// XPath expression (mutually exclusive with --css)
         #[arg(long, id = "r_x", conflicts_with = "css")]
         xpath: Option<String>,
+        /// Whitelisted property instead of text: value | href | name | id | checked | tag
+        /// (value covers input fields — textContent is empty for them)
+        #[arg(long)]
+        property: Option<String>,
+        /// Locate inside the (cross-origin) child iframe instead of the main frame
+        #[arg(long)]
+        iframe: bool,
+        /// Timeout in milliseconds (default 10000)
+        #[arg(long)]
+        timeout: Option<u64>,
+    },
+    /// Type text into a unique input/textarea — guarded write with value read-back
+    BrowserType {
+        /// Session id from browser-launch
+        #[arg(long)]
+        session: String,
+        /// CSS selector (mutually exclusive with --xpath)
+        #[arg(long, conflicts_with = "t_x")]
+        css: Option<String>,
+        /// XPath expression (mutually exclusive with --css)
+        #[arg(long, id = "t_x", conflicts_with = "css")]
+        xpath: Option<String>,
+        /// Text to type (1-65536 chars; not echoed in output or evidence)
+        #[arg(long)]
+        text: String,
         /// Locate inside the (cross-origin) child iframe instead of the main frame
         #[arg(long)]
         iframe: bool,
@@ -960,6 +985,7 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
         Command::BrowserLaunch { .. } => "browser-launch",
         Command::BrowserNavigate { .. } => "browser-navigate",
         Command::BrowserRead { .. } => "browser-read",
+        Command::BrowserType { .. } => "browser-type",
         Command::BrowserClick { .. } => "browser-click",
         Command::BrowserClose { .. } => "browser-close",
         Command::BrowserList => "browser-list",
@@ -983,7 +1009,10 @@ fn after_help_for(name: &str) -> Option<&'static str> {
             "Example:\n  actl browser-navigate --session s1a2b3 --url https://example.com\nConnects to the session's browser, re-verifies the bound tab still exists, navigates and waits for the main-frame Page.frameNavigated event. Reports url/title/frame_id. Network-level load failures (chrome-error pages) fail explicitly with the net error in evidence — never silently reported as success.\nErrors: PROTOCOL bad url | NOT_FOUND unknown session / endpoint unreachable / target lost | TIMEOUT navigation event missing | INTERNAL network-level load failure"
         }
         "browser-read" => {
-            "Example:\n  actl browser-read --session s1a2b3 --css \"#result span\"\n  actl browser-read --session s1a2b3 --xpath \"//button[@id='go']\" --iframe\nReads the text of exactly one element (hard uniqueness). --iframe addresses the cross-origin child iframe via its execution context. Text is capped at 64 KiB with a truncated flag.\nErrors: PROTOCOL selector 1-4096 chars / neither --css nor --xpath | NOT_FOUND no match / no iframe | AMBIGUOUS multiple matches | INTERNAL CDP layer"
+            "Example:\n  actl browser-read --session s1a2b3 --css \"#result span\"\n  actl browser-read --session s1a2b3 --css \"#username\" --property value\n  actl browser-read --session s1a2b3 --xpath \"//button[@id='go']\" --iframe\nReads the text (or a whitelisted property via --property: value/href/name/id/checked/tag) of exactly one element (hard uniqueness; value covers input fields — textContent is empty for them). --iframe addresses the cross-origin child iframe via its execution context. Text is capped at 64 KiB with a truncated flag.\nErrors: PROTOCOL selector 1-4096 chars / unknown --property / neither --css nor --xpath | NOT_FOUND no match / no iframe | AMBIGUOUS multiple matches | INTERNAL CDP layer"
+        }
+        "browser-type" => {
+            "Example:\n  actl browser-type --session s1a2b3 --css \"input[name='text']\" --text \"hello world\"\nGuarded input write targeting a unique input/textarea: stop check, target re-verify, unique match, native-setter assignment + input/change events (React-compatible), then value read-back must equal the request (controlled-input rewrites fail as ASSERTION_FAILED). The typed text is never echoed in output or evidence; verify with browser-read --property value.\nErrors: PROTOCOL selector/text invalid | ABORTED stop active | NOT_FOUND no match/target lost | AMBIGUOUS multiple matches | NOT_ACTIONABLE not an input / dispatch failed | ASSERTION_FAILED value mismatch | INTERNAL CDP layer"
         }
         "browser-click" => {
             "Example:\n  actl browser-click --session s1a2b3 --css \"#submit\" --expect-text \"Saved\"\nGuarded write: stop-generation check, bound-target re-verify, unique-match locate, dispatch, then read-back. --expect-text turns the read-back into an assertion. A failed click is never replayed blindly — re-read to adjudicate first.\nErrors: PROTOCOL selector/expect-text invalid | ABORTED stop active | NOT_FOUND no match/target lost | AMBIGUOUS multiple matches | NOT_ACTIONABLE dispatch failed | ASSERTION_FAILED expectation unmet | INTERNAL CDP layer"

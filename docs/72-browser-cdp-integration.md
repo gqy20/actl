@@ -173,5 +173,12 @@ iframe 守卫写+核验→iframe 读"1"→navigate(标题+计数归零证明新�
   双条件,且 spawn 前清除陈旧文件(ephemeral 每次新目录故从未暴露)。扩展策略:ephemeral
   恒 --disable-extensions;持久 profile 默认保留扩展(合法自动化资产,如猫抓),
   --disable-extensions 显式禁。用户日常浏览器与 CDP 会话是两个数据世界,互不影响。
-- [ ] batch 组合验收;写动词扩展(browser-type)与读通道补全(`--property`:value/href 等——x.com 场景实证 input 值读不到,docs/73);headless 的 `--user-agent` 覆盖(UA 壁垒站点);选择器索引消歧助手;close 后 ephemeral profile 延迟重删(7 轮 2 次竞争失败)
+- [x] **读写补全与显示协同(P1+P2,2026-10-02 实测通过)**:`browser-type`(守卫输入写:
+  input/textarea 唯一匹配→native setter+input/change 事件→读回值核验,内容不回显只报长度,
+  非 input/受控组件改写分别 NOT_ACTIONABLE/ASSERTION_FAILED)与 `browser-read --property`
+  (白名单 value/href/name/id/checked/tag——x.com 场景的 input 值缺口闭合);P2=写与生命周期
+  命令声明信号动作卡(launch/navigate/click/type/close,kind+cdp 会话标记 target,
+  InputEffects 全空,无租约门——展示透明性而非权限门;动作日志验证 preparing/executing/
+  delivered/failed 全周期在场)。真机 13 步验收 `target/browser-p1p2-accept/`。
+- [ ] batch 组合验收;headless 的 `--user-agent` 覆盖(UA 壁垒站点);选择器索引消歧助手;close 后 ephemeral profile 延迟重删(7 轮 2 次竞争失败);显示端会话卡(常驻浏览器会话 UI,非动作流)
 - [ ] WebView2 内嵌形态评估(并入 M3 WebView2 专项验收后)

@@ -59,11 +59,24 @@ pub(crate) fn read_cmd(
     session: &str,
     css: Option<&str>,
     xpath: Option<&str>,
+    property: Option<&str>,
     iframe: bool,
     timeout: Option<u64>,
 ) -> Result<CommandOutput, CtlError> {
     let (kind, value) = selector_of(css, xpath)?;
-    ops::read(&paths(), session, kind, value, iframe, timeout).map(Into::into)
+    ops::read(&paths(), session, kind, value, property, iframe, timeout).map(Into::into)
+}
+
+pub(crate) fn type_cmd(
+    session: &str,
+    css: Option<&str>,
+    xpath: Option<&str>,
+    text: &str,
+    iframe: bool,
+    timeout: Option<u64>,
+) -> Result<CommandOutput, CtlError> {
+    let (kind, value) = selector_of(css, xpath)?;
+    ops::type_text(&paths(), session, kind, value, text, iframe, timeout).map(Into::into)
 }
 
 pub(crate) fn click_cmd(

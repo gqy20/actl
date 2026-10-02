@@ -34,6 +34,21 @@ pub struct LaunchSpec {
     pub timeout_ms: Option<u64>,
 }
 
+/// 显示层动作卡声明(P2 协同):CDP 写/生命周期命令在信号流可见。与 UIA 轨的
+/// display_gate 不同——不经显示租约门(展示是透明性而非权限门,docs/72 §13 治理发现),
+/// InputEffects 全空(CDP 写无物理键鼠/焦点/剪贴板效应,如实申报);target 只带会话
+/// 标记,不含选择器/URL/文本(动作日志内容省略纪律)。
+fn declare_action(kind: &str, session_tag: &str) -> actl_core::signal_session::ActionGuard {
+    actl_core::signal_session::ActionGuard::begin(
+        kind,
+        actl_core::activity::InputEffects::default(),
+        actl_core::activity::ActionTarget {
+            window: Some(session_tag.to_string()),
+            ..Default::default()
+        },
+    )
+}
+
 fn protocol(message: impl Into<String>) -> CtlError {
     CtlError::new(ErrorCode::Protocol, message)
 }
@@ -109,10 +124,43 @@ fn validate_proxy(value: &str) -> Result<(), CtlError> {
     Ok(())
 }
 
+/// 属性读取白名单(docs/06 §3;--property 的合法值)。text 为缺省行为。
+pub(crate) const READ_PROPERTIES: &[&str] =
+    &["text", "value", "href", "name", "id", "checked", "tag"];
+
+fn validate_property(property: &str) -> Result<(), CtlError> {
+    if READ_PROPERTIES.contains(&property) {
+        Ok(())
+    } else {
+        Err(protocol(format!(
+            "unknown --property {property:?}; allowed: {}",
+            READ_PROPERTIES.join(", ")
+        )))
+    }
+}
+
+/// 白名单属性 → 固定 JS 表达式(非用户输入,无注入面)
+fn property_expr(property: &str) -> &'static str {
+    match property {
+        "value" => "(e.value===undefined?null:String(e.value))",
+        "href" => "(e.href?String(e.href):null)",
+        "name" => "(e.getAttribute('name'))",
+        "id" => "(e.id||null)",
+        "checked" => "(e.checked===undefined?null:(e.checked?'true':'false'))",
+        "tag" => "(e.tagName||null)",
+        _ => "(e.textContent==null?'':String(e.textContent))",
+    }
+}
+
 /// JS 定位脚本:唯一匹配为硬条件,返回 JSON.stringify 的结果对象。
-/// 选择器以 JSON 字符串字面量嵌入(serde_json 转义,防注入)。
-fn locate_script(kind: SelectorKind, value: &str) -> String {
+/// 选择器以 JSON 字符串字面量嵌入(serde_json 转义,防注入);
+/// property 附带白名单属性值(value/href 等,textContent 之外的读取通道)。
+fn locate_script(kind: SelectorKind, value: &str, property: Option<&str>) -> String {
     let embedded = serde_json::to_string(value).unwrap_or_default();
+    let prop_field = match property {
+        Some(p) => format!(",property:{}", property_expr(p)),
+        None => String::new(),
+    };
     match kind {
         SelectorKind::Css => format!(
             "(function(){{var els=document.querySelectorAll({embedded});\
@@ -120,7 +168,7 @@ fn locate_script(kind: SelectorKind, value: &str) -> String {
              if(els.length>1)return JSON.stringify({{matches:els.length}});\
              var e=els[0];\
              return JSON.stringify({{matches:1,text:e.textContent==null?'':String(e.textContent),\
-             tag:e.tagName,id:e.id||null,name:e.getAttribute('name')||null}});}})()"
+             tag:e.tagName,id:e.id||null,name:e.getAttribute('name')||null{prop_field}}});}})()"
         ),
         SelectorKind::Xpath => format!(
             "(function(){{var it=document.evaluate({embedded},document,null,\
@@ -129,7 +177,7 @@ fn locate_script(kind: SelectorKind, value: &str) -> String {
              if(it.snapshotLength>1)return JSON.stringify({{matches:it.snapshotLength}});\
              var e=it.snapshotItem(0);\
              return JSON.stringify({{matches:1,text:e.textContent==null?'':String(e.textContent),\
-             tag:e.tagName||null}});}})()"
+             tag:e.tagName||null{prop_field}}});}})()"
         ),
     }
 }
@@ -357,11 +405,21 @@ pub fn launch(paths: &Paths, spec: LaunchSpec) -> Result<Value, CtlError> {
     let timeout = dur(spec.timeout_ms, LAUNCH_DEFAULT_TIMEOUT_MS);
 
     // 持久 profile 并发治理(§13.4):同 profile 已有活跃会话→复用(幂等 launch);
+    // 显示层动作卡(P2):生命周期命令对用户可见
+    let mut action = declare_action(
+        "browser-launch",
+        &match &mode {
+            Mode::Persistent { name } => format!("cdp-profile:{name}"),
+            Mode::Ephemeral => "cdp:ephemeral".to_string(),
+        },
+    );
+    action.executing();
     // 记录在但端点已死→陈旧接管(注销旧记录后照常新启)。两个 CLI 进程同时竞启
     // 同一 profile 时,后到者的 Edge 会被先到者锁住退出→端口不出现→启动失败,如实报错。
     if let Mode::Persistent { name } = &mode
         && let Some(reused) = reuse_persistent_session(paths, name, timeout)?
     {
+        action.delivered();
         return Ok(reused);
     }
 
@@ -484,6 +542,7 @@ pub fn launch(paths: &Paths, spec: LaunchSpec) -> Result<Value, CtlError> {
     };
     session::save(paths, &record)?;
 
+    action.delivered();
     Ok(json!({
         "session_id": session_id,
         "target_id": target_id,
@@ -588,9 +647,11 @@ pub fn navigate(
     validate_url(url)?;
     let timeout = dur(timeout_ms, OP_DEFAULT_TIMEOUT_MS);
     let record = session::load(paths, session_id)?;
+    let mut action = declare_action("browser-navigate", &format!("cdp:{session_id}"));
     let conn = connect_browser(&record)?;
     let cdp_session = attach_target(&conn, &record.target_id, timeout)?;
     verify_target_alive(&conn, &record.target_id, timeout)?;
+    action.executing();
     conn.call("Page.enable", json!({}), Some(&cdp_session), timeout)
         .map_err(map_cdp)?;
     let nav = conn
@@ -657,6 +718,7 @@ pub fn navigate(
         .unwrap_or(url)
         .to_string();
     session::save(paths, &record)?;
+    action.delivered();
     Ok(json!({
         "session_id": session_id,
         "url": record.bound_url,
@@ -674,10 +736,13 @@ pub fn read(
     session_id: &str,
     kind: SelectorKind,
     value: &str,
+    property: Option<&str>,
     iframe: bool,
     timeout_ms: Option<u64>,
 ) -> Result<Value, CtlError> {
     validate_selector(kind, value)?;
+    let property = property.unwrap_or("text");
+    validate_property(property)?;
     let timeout = dur(timeout_ms, OP_DEFAULT_TIMEOUT_MS);
     let record = session::load(paths, session_id)?;
     let conn = connect_browser(&record)?;
@@ -691,12 +756,16 @@ pub fn read(
     let located = eval_json(
         &conn,
         &cdp_session,
-        &locate_script(kind, value),
+        &locate_script(kind, value, Some(property)),
         context_id,
         timeout,
     )?;
     require_unique_match(&located, kind, value)?;
     let mut payload = located_text_payload(&located);
+    if property != "text" {
+        payload["property"] = Value::String(property.to_string());
+        payload["value"] = located.get("property").cloned().unwrap_or(Value::Null);
+    }
     payload["session_id"] = Value::String(session_id.to_string());
     payload["frame"] = Value::String(if iframe { "iframe" } else { "main" }.to_string());
     Ok(payload)
@@ -731,11 +800,13 @@ pub fn click(
     } else {
         None
     };
+    let mut action = declare_action("browser-click", &format!("cdp:{session_id}"));
+    action.executing();
 
     let located = eval_json(
         &conn,
         &cdp_session,
-        &locate_script(kind, value),
+        &locate_script(kind, value, None),
         context_id,
         timeout,
     )?;
@@ -770,7 +841,7 @@ pub fn click(
     let after = eval_json(
         &conn,
         &cdp_session,
-        &locate_script(kind, value),
+        &locate_script(kind, value, None),
         context_id,
         timeout,
     )?;
@@ -806,6 +877,7 @@ pub fn click(
             }),
         ));
     }
+    action.delivered();
     Ok(json!({
         "session_id": session_id,
         "clicked": true,
@@ -820,9 +892,111 @@ pub fn click(
 // close
 // ---------------------------------------------------------------------------
 
+/// 守卫输入写:input/textarea 赋值(native setter + input/change 事件,React 受控组件
+/// 兼容),读回 value 必须与请求一致(不一致=ASSERTION_FAILED,受控组件改写了值)。
+/// 与 click 同纪律:停止核验→绑定重核→唯一匹配→派发→读回。
+pub fn type_text(
+    paths: &Paths,
+    session_id: &str,
+    kind: SelectorKind,
+    value: &str,
+    text: &str,
+    iframe: bool,
+    timeout_ms: Option<u64>,
+) -> Result<Value, CtlError> {
+    validate_selector(kind, value)?;
+    if text.is_empty() || text.len() > TEXT_LIMIT {
+        return Err(protocol("--text requires 1-65536 characters"));
+    }
+    actl_core::stop::check_current()?;
+    let timeout = dur(timeout_ms, OP_DEFAULT_TIMEOUT_MS);
+    let record = session::load(paths, session_id)?;
+    let conn = connect_browser(&record)?;
+    let cdp_session = attach_target(&conn, &record.target_id, timeout)?;
+    verify_target_alive(&conn, &record.target_id, timeout)?;
+    let context_id = if iframe {
+        Some(iframe_context(&conn, &cdp_session, timeout)?.1)
+    } else {
+        None
+    };
+    let mut action = declare_action("browser-type", &format!("cdp:{session_id}"));
+    action.executing();
+    let located = eval_json(
+        &conn,
+        &cdp_session,
+        &locate_script(kind, value, Some("value")),
+        context_id,
+        timeout,
+    )?;
+    require_unique_match(&located, kind, value)?;
+    if located
+        .get("tag")
+        .and_then(Value::as_str)
+        .is_none_or(|t| !matches!(t.to_ascii_uppercase().as_str(), "INPUT" | "TEXTAREA"))
+    {
+        return Err(CtlError::with_evidence(
+            ErrorCode::NotActionable,
+            "browser-type targets input/textarea elements only".to_string(),
+            json!({ "tag": located.get("tag") }),
+        ));
+    }
+
+    let embedded_sel = serde_json::to_string(value).unwrap_or_default();
+    let embedded_text = serde_json::to_string(text).unwrap_or_default();
+    let locate_expr = match kind {
+        SelectorKind::Css => format!("document.querySelectorAll({embedded_sel})[0]"),
+        SelectorKind::Xpath => format!(
+            "document.evaluate({embedded_sel},document,null,XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,null).snapshotItem(0)"
+        ),
+    };
+    let script = format!(
+        "(function(){{var e={locate_expr};\
+         if(!e)return JSON.stringify({{typed:false,reason:'gone'}});\
+         var tag=(e.tagName||'').toUpperCase();\
+         if(tag!=='INPUT'&&tag!=='TEXTAREA')return JSON.stringify({{typed:false,reason:'not_input'}});\
+         var proto=tag==='INPUT'?window.HTMLInputElement.prototype:window.HTMLTextAreaElement.prototype;\
+         var d=Object.getOwnPropertyDescriptor(proto,'value');\
+         if(d&&d.set){{d.set.call(e,{embedded_text});}}else{{e.value={embedded_text};}}\
+         e.dispatchEvent(new Event('input',{{bubbles:true}}));\
+         e.dispatchEvent(new Event('change',{{bubbles:true}}));\
+         return JSON.stringify({{typed:true,value:String(e.value)}});}})()"
+    );
+    let typed = eval_json(&conn, &cdp_session, &script, context_id, timeout)?;
+    if typed.get("typed").and_then(Value::as_bool) != Some(true) {
+        return Err(CtlError::with_evidence(
+            ErrorCode::NotActionable,
+            "element resolved but typing did not dispatch (DOM changed between locate and type)"
+                .to_string(),
+            json!({ "typed": typed }),
+        ));
+    }
+    let value_after = typed
+        .get("value")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    if value_after != text {
+        return Err(CtlError::with_evidence(
+            ErrorCode::AssertionFailed,
+            "post-type value differs from the requested text (controlled input rewrote it)"
+                .to_string(),
+            json!({ "requested_len": text.len(), "actual_len": value_after.len() }),
+        ));
+    }
+    action.delivered();
+    // 不回显输入内容(动作日志不含文本纪律);需要时调用方 browser-read --property value 自取
+    Ok(json!({
+        "session_id": session_id,
+        "typed": true,
+        "value_after_len": value_after.len(),
+        "frame": if iframe { "iframe" } else { "main" },
+    }))
+}
+
 pub fn close(paths: &Paths, session_id: &str, timeout_ms: Option<u64>) -> Result<Value, CtlError> {
     let timeout = dur(timeout_ms, OP_DEFAULT_TIMEOUT_MS);
     let record = session::load(paths, session_id)?;
+    let mut action = declare_action("browser-close", &format!("cdp:{session_id}"));
+    action.executing();
 
     let mut already_gone = false;
     match connect_browser(&record) {
@@ -861,6 +1035,7 @@ pub fn close(paths: &Paths, session_id: &str, timeout_ms: Option<u64>) -> Result
         }
     }
     .map(|mut value| {
+        action.delivered();
         if already_gone {
             value["already_unreachable"] = Value::Bool(true);
         }
@@ -961,7 +1136,7 @@ pub fn verify(paths: &Paths, mode: VerifyMode, timeout_ms: Option<u64>) -> Resul
             let located = eval_json(
                 &conn,
                 &cdp_session,
-                &locate_script(kind, &value),
+                &locate_script(kind, &value, None),
                 None,
                 timeout,
             )?;

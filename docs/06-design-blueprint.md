@@ -278,9 +278,16 @@ browser-navigate --session <id> --url U  # 重核绑定 target 存活→导航�
                                      # Page.frameNavigated(读线程事件,导航竞态判定地基);
                                      # 网络级加载失败(chrome-error)显式 INTERNAL+net_error
                                      # 证据,不静默当成功
-browser-read --session <id> (--css S | --xpath X) [--iframe]
+browser-read --session <id> (--css S | --xpath X) [--property P] [--iframe]
                                      # 唯一匹配读文本(0→NOT_FOUND,>1→AMBIGUOUS 带 matches 证据;
-                                     # --iframe 经子 frame 执行上下文,跨源同权);文本 64KiB 截断
+                                     # --iframe 经子 frame 执行上下文,跨源同权);文本 64KiB 截断;
+                                     # --property 白名单读属性:value/href/name/id/checked/tag
+                                     # (value 覆盖输入框——textContent 对 input 为空)
+browser-type --session <id> (--css S | --xpath X) --text T [--iframe]
+                                     # 守卫输入写:input/textarea 唯一匹配→native setter 赋值
+                                     # +input/change 事件(React 兼容)→读回 value 必须与请求一致
+                                     # (受控组件改写→ASSERTION_FAILED);输入内容不回显 envelope/
+                                     # evidence(长度核验),自证用 browser-read --property value
 browser-click --session <id> (--css S | --xpath X) [--iframe] [--expect-text substr]
                                      # 守卫写:停止代次核验→绑定重核→唯一匹配→派发→读回;
                                      # --expect-text 断言被点击元素自身文本(ASSERTION_FAILED);
@@ -295,6 +302,11 @@ browser-verify [--newest-alive | --none | --session <id> --alive|--gone | --sess
                                      # (+文本包含)——登录暂停点的 resume_check 判据;值级
                                      # 断言在写动词上(--expect-text)
 ```
+**显示层协同(P2,2026-10-02)**:browser 的写与生命周期命令(launch/navigate/click/
+type/close)在信号流声明动作卡(kind/effects/target)——**不经显示租约门**(CDP 写非桌面
+物理输入,展示是透明性而非权限门;急停仍经停止代次核验压过一切写);`InputEffects` 全空
+如实申报(无键鼠/焦点/剪贴板效应);target 只带 `cdp:<session>` 标记,不含选择器/URL/文本
+(动作日志内容省略纪律)。观察命令(read/list/verify)不声明动作,与 UIA 轨观察同规。
 **YAML 流程接入(2026-10-02 实测通过)**:browser 命令进 flow 的治理模型走三件套——
 ① `browser-launch` 是生命周期命令,不能带 outputs(outputs 只允许只读生产者);
 ② 会话句柄经 `browser-list` 以观察者身份产出(outputs.pointer=/sessions/0/session_id),

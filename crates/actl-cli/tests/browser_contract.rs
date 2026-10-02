@@ -270,3 +270,49 @@ fn flow_rejects_undeclared_persistent_profile() {
     assert_eq!(v["data"]["resources"]["browser_profiles"][0], "ok-profile");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn read_rejects_unknown_property_offline() {
+    let (code, stdout) = actl(&[
+        "browser-read",
+        "--session",
+        "nope123",
+        "--css",
+        "#x",
+        "--property",
+        "innerhtml",
+    ]);
+    assert_eq!(code, 2);
+    let v: Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(v["error"]["code"], "PROTOCOL");
+    assert!(v["error"]["message"].as_str().unwrap().contains("allowed"));
+}
+
+#[test]
+fn type_arg_surface_contract() {
+    // clap 层:--text 必填、选择器互斥
+    assert_eq!(
+        actl(&["browser-type", "--session", "x", "--css", "#i"]).0,
+        2
+    );
+    assert_eq!(
+        actl(&[
+            "browser-type",
+            "--session",
+            "x",
+            "--css",
+            "#i",
+            "--xpath",
+            "//i",
+            "--text",
+            "t"
+        ])
+        .0,
+        2
+    );
+    // handler 层:缺选择器 PROTOCOL envelope
+    let (code, stdout) = actl(&["browser-type", "--session", "nope123", "--text", "t"]);
+    assert_eq!(code, 2);
+    let v: Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(v["error"]["code"], "PROTOCOL");
+}
