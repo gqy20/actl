@@ -553,14 +553,14 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             url,
             profile,
             proxy,
-            visible,
+            headless,
             timeout,
         } => browser::launch_cmd(
             browser_executable,
             url.as_deref(),
             profile.as_deref(),
             proxy.as_deref(),
-            *visible,
+            *headless,
             *timeout,
         ),
         Command::BrowserNavigate {

@@ -28,7 +28,7 @@ pub(crate) fn launch_cmd(
     url: Option<&str>,
     profile: Option<&str>,
     proxy: Option<&str>,
-    visible: bool,
+    headless: bool,
     timeout: Option<u64>,
 ) -> Result<CommandOutput, CtlError> {
     ops::launch(
@@ -38,7 +38,7 @@ pub(crate) fn launch_cmd(
             url: url.map(str::to_string),
             profile: profile.map(str::to_string),
             proxy: proxy.map(str::to_string),
-            visible,
+            headless,
             timeout_ms: timeout,
         },
     )

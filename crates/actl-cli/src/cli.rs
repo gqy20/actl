@@ -685,9 +685,10 @@ pub(crate) enum Command {
         /// explicit local proxy; no scheme/prefix allowed (not an arbitrary-arg escape hatch)
         #[arg(long)]
         proxy: Option<String>,
-        /// Show the browser window (default: headless)
+        /// Run without a window (HeadlessChrome UA — many sites serve 403 to it and the
+        /// session is invisible to the user; default is a visible window)
         #[arg(long)]
-        visible: bool,
+        headless: bool,
         /// Startup timeout in milliseconds (default 15000)
         #[arg(long)]
         timeout: Option<u64>,
@@ -931,7 +932,7 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
 fn after_help_for(name: &str) -> Option<&'static str> {
     Some(match name {
         "browser-launch" => {
-            "Example:\n  actl browser-launch --browser-executable \"C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe\" --url about:blank --proxy 127.0.0.1:7890\nLaunches an OWNED isolated browser (never the user's default profile — Chrome/Edge 136+ disables the debug port there) and binds one tab as the session. --profile <name> keeps a persistent profile for one-time manual logins; default is a throwaway profile. --proxy HOST:PORT routes via an explicit local proxy (browser DoH can bypass system TUN fake-ip routing — the fix for silently unreachable sites). Headless unless --visible. Startup succeeds only when the devtools endpoint appears; otherwise the owned process is reclaimed.\nErrors: PROTOCOL bad executable/url/profile/proxy | INTERNAL endpoint never appeared (reclaimed)"
+            "Example:\n  actl browser-launch --browser-executable \"C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe\" --url about:blank --proxy 127.0.0.1:7890\nLaunches an OWNED isolated browser (never the user's default profile — Chrome/Edge 136+ disables the debug port there) and binds one tab as the session. Default is a VISIBLE window (normal UA, user-visible automation, manual-login ready); --headless opts into a hidden session for background tasks (HeadlessChrome UA — many sites serve 403 to it, and no UIA fallback surface exists). --profile <name> keeps a persistent profile for one-time manual logins; default is a throwaway profile. --proxy HOST:PORT routes via an explicit local proxy (browser DoH can bypass system TUN fake-ip routing — the fix for silently unreachable sites). Startup succeeds only when the devtools endpoint appears; otherwise the owned process is reclaimed.\nErrors: PROTOCOL bad executable/url/profile/proxy | INTERNAL endpoint never appeared (reclaimed)"
         }
         "browser-navigate" => {
             "Example:\n  actl browser-navigate --session s1a2b3 --url https://example.com\nConnects to the session's browser, re-verifies the bound tab still exists, navigates and waits for the main-frame Page.frameNavigated event. Reports url/title/frame_id. Network-level load failures (chrome-error pages) fail explicitly with the net error in evidence — never silently reported as success.\nErrors: PROTOCOL bad url | NOT_FOUND unknown session / endpoint unreachable / target lost | TIMEOUT navigation event missing | INTERNAL network-level load failure"

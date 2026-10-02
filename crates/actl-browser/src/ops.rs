@@ -26,7 +26,7 @@ pub struct LaunchSpec {
     pub profile: Option<String>,
     /// 出站代理(HOST:PORT,无 scheme);显式本地代理路径,非任意参数注入
     pub proxy: Option<String>,
-    pub visible: bool,
+    pub headless: bool,
     pub timeout_ms: Option<u64>,
 }
 
@@ -372,7 +372,7 @@ pub fn launch(paths: &Paths, spec: LaunchSpec) -> Result<Value, CtlError> {
         "--no-first-run".to_string(),
         "--no-default-browser-check".to_string(),
     ];
-    if !spec.visible {
+    if spec.headless {
         edge_args.insert(0, "--headless=new".to_string());
     }
     if let Some(proxy) = &spec.proxy {
@@ -454,7 +454,7 @@ pub fn launch(paths: &Paths, spec: LaunchSpec) -> Result<Value, CtlError> {
         browser_executable: spec.browser_executable.clone(),
         profile_dir: profile_dir.display().to_string(),
         mode: mode.clone(),
-        headless: !spec.visible,
+        headless: spec.headless,
         pid,
         devtools_port: devtools.0,
         browser_ws_path,
@@ -472,7 +472,7 @@ pub fn launch(paths: &Paths, spec: LaunchSpec) -> Result<Value, CtlError> {
         "browser_version": browser_version,
         "url": url,
         "mode": mode,
-        "headless": !spec.visible,
+        "headless": spec.headless,
         "profile_dir": profile_dir.display().to_string(),
     }))
 }

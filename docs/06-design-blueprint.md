@@ -255,15 +255,18 @@ list-notifications              # 系统通知读取
 
 #### 浏览器会话(browser,CDP 通道 v1,2026-10-02 spec)
 ```
-browser-launch --browser-executable <abs> [--url U] [--profile name] [--proxy host:port] [--visible] [--timeout ms]
+browser-launch --browser-executable <abs> [--url U] [--profile name] [--proxy host:port] [--headless] [--timeout ms]
                                      # 启动 actl 自有的隔离浏览器(系统 Edge/Chrome 二进制,
                                      # 专用 user-data-dir——默认 profile 被 Chrome/Edge 136+
                                      # 禁调试端口,永不附着用户会话)并绑定一个 tab 为会话;
-                                     # --profile 持久 profile(一次性人工登录复用),缺省一次性;
-                                     # --proxy 裸 HOST:PORT 显式代理(浏览器 DoH 会绕过系统
-                                     # TUN fake-ip 路由,是"站点不可达"的解药;2026-10-02
-                                     # x.com 场景实证);headless 除非 --visible(UA 壁垒站点
-                                     # 用 --visible,HeadlessChrome UA 会被部分站点拒服务);
+                                     # **默认有头**(可见窗口):常规 UA 过 UA 壁垒站点、用户
+                                     # 可全程旁观(非隐身执行立场)、持久 profile 人工登录就绪,
+                                     # 且浏览器 chrome 层的 UIA 兜底面在场;--headless 才是无
+                                     # 窗口后台形态(HeadlessChrome UA 会被部分站点拒服务,
+                                     # 无 UIA 面,代价自担);--profile 持久 profile(一次性
+                                     # 人工登录复用),缺省一次性;--proxy 裸 HOST:PORT 显式
+                                     # 代理(浏览器 DoH 会绕过系统 TUN fake-ip 路由,是
+                                     # "站点不可达"的解药;2026-10-02 x.com 场景实证);
                                      # DevToolsActivePort 出现=启动成功,否则 fail-fast 回收
                                      # 自启进程;stdio 继承守卫防管道挂死
 browser-navigate --session <id> --url U  # 重核绑定 target 存活→导航→等主 frame 的
