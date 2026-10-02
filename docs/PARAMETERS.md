@@ -132,7 +132,7 @@
 |---|---|---|---|
 | 主 UI tick | 100ms SetTimer | `shell.rs` | 交接 + 外壳 tick |
 | 状态读取线程 | 100ms 轮询 | `shell.rs` | calls/*.json → UI 缓存 |
-| 历史清理线程 | 1h sleep | `shell.rs` | 保留扫描循环 |
+| 历史清理线程 | 15 天 sleep | `shell.rs` / `history.rs::RETENTION_INTERVAL` | 保留扫描循环 |
 | 原始输入监视 | 100ms SetTimer / 健康 1000ms | `input_watch.rs` | 物理输入采样与监控存活判定 |
 | 控制面板刷新 | 500ms | `controls.rs` | 控件窗 |
 | 动作标记动画 | 20ms / 自动隐藏 400ms（preparing 600ms） | `overlay.rs` | 覆盖层 |
@@ -143,9 +143,9 @@
 | 参数 | 值 | 位置 | 控制什么 |
 |---|---|---|---|
 | 会话状态文件 TTL | 60,000 | `state.rs` | 每调用 calls/*.json 驱逐 |
-| 历史日志保留 | 30 天 / 32 MiB | `history.rs`（journal 清理） | 调用历史 |
-| 伴侣侧保留 | 7 天 / 64 MiB | `history.rs::maintain` | 后台清理 |
-| 保留扫描节流 | 1h（跨进程互斥 + 间隔标记） | `maintenance.rs` | 防重复扫描 |
+| 历史日志保留 | 7 天 / 3 GiB | `history.rs::maintain` | CLI 与伴侣共用，过期判定与容量预算 |
+| 任务报告保留 | 30 天 / 32 MiB | `history.rs::archive` | 任务报告 |
+| 保留扫描节流 | 15 天（跨进程互斥 + 间隔标记） | `maintenance.rs` / `history.rs::RETENTION_INTERVAL` | 防重复扫描；首次/失败/坏标记/时钟回退例外 |
 | journal 事件上限 | 1,048,576 | `history.rs` | 有界 journal |
 | 急停检查 | 无轮询间隔——每次守卫调用、每个等待循环每轮做文件存在性检查 | `stop.rs` | 停止的即时性 |
 

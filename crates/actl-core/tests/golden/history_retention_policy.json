@@ -1,0 +1,6 @@
+{
+  "age_ms": 604800000,
+  "budget_bytes": 3221225472,
+  "call_limit_bytes": 1048576,
+  "interval_ms": 1296000000
+}

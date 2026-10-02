@@ -7,7 +7,29 @@ use std::path::{Path, PathBuf};
 
 const DAY: u64 = 86_400_000;
 const CALL_LIMIT: u64 = 1024 * 1024;
-pub const RETENTION_INTERVAL: std::time::Duration = std::time::Duration::from_secs(60 * 60);
+const RETENTION_BUDGET: u64 = 3 * 1024 * 1024 * 1024;
+pub const RETENTION_INTERVAL: std::time::Duration =
+    std::time::Duration::from_secs(15 * 24 * 60 * 60);
+
+#[cfg(test)]
+mod retention_policy_tests {
+    use super::*;
+
+    #[test]
+    fn default_retention_policy_matches_contract() {
+        let actual = serde_json::json!({
+            "age_ms": 7 * DAY,
+            "budget_bytes": RETENTION_BUDGET,
+            "call_limit_bytes": CALL_LIMIT,
+            "interval_ms": RETENTION_INTERVAL.as_millis() as u64,
+        });
+        let expected: serde_json::Value = serde_json::from_str(include_str!(
+            "../tests/golden/history_retention_policy.json"
+        ))
+        .unwrap();
+        assert_eq!(actual, expected);
+    }
+}
 
 pub fn valid_id(id: &str) -> bool {
     !id.is_empty()
@@ -162,7 +184,7 @@ pub fn maintain(root: &Path) -> std::io::Result<()> {
     fs::create_dir_all(&dir)?;
     let _trace = crate::trace::scope("history.retention");
     crate::maintenance::periodic(&dir, crate::state::unix_ms(), || {
-        cleanup(&dir, 7 * DAY, 64 * 1024 * 1024)
+        cleanup(&dir, 7 * DAY, RETENTION_BUDGET)
     })
 }
 

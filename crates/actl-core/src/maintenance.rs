@@ -55,15 +55,27 @@ mod tests {
         let dir = std::env::temp_dir().join(crate::new_snapshot_id());
         std::fs::create_dir(&dir).unwrap();
         let calls = std::cell::Cell::new(0);
-        for now in [100_000, 100_001, 100_000 + 3_600_000 - 1] {
+        let interval = 15 * 86_400_000;
+        for now in [
+            100_000,
+            100_001,
+            100_000 + 3_600_000,
+            100_000 + interval - 1,
+        ] {
             periodic(&dir, now, || {
                 calls.set(calls.get() + 1);
                 Ok(())
             })
             .unwrap();
         }
-        std::fs::remove_dir_all(dir).unwrap();
         assert_eq!(calls.get(), 1);
+        periodic(&dir, 100_000 + interval, || {
+            calls.set(calls.get() + 1);
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(calls.get(), 2);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
@@ -72,7 +84,7 @@ mod tests {
         std::fs::create_dir(&dir).unwrap();
         assert!(periodic(&dir, 100_000, || Err(std::io::Error::other("failed"))).is_err());
         let calls = std::cell::Cell::new(0);
-        for now in [100_001, 99_000, 99_000 + 3_600_000] {
+        for now in [100_001, 99_000, 99_000 + 15 * 86_400_000] {
             periodic(&dir, now, || {
                 calls.set(calls.get() + 1);
                 Ok(())
