@@ -58,6 +58,13 @@ pub fn stage(stage: &str, started: Instant) {
     }
 }
 
+/// Content-minimal aggregate diagnostics; shares stderr/file routing with timings.
+pub(crate) fn detail(stage: &str, data: &serde_json::Value) {
+    if enabled() {
+        emit(&format!("[actl-trace] {stage} {data}"));
+    }
+}
+
 /// 区间计时 guard:`let _t = trace::scope("locate.dfs");` 离开作用域自动打点。
 /// 未启用时 Drop 内不输出(构造开销一次 Instant,纳秒级)。
 pub struct TraceScope {

@@ -190,63 +190,7 @@ pub fn maintain(root: &Path) -> std::io::Result<()> {
 
 /// Only this directory's regular files are eligible. Desktop recovery records are separate.
 /// Files touched in the last hour are protected against concurrent writers.
-pub fn cleanup(dir: &Path, age: u64, budget: u64) -> std::io::Result<()> {
-    let now = crate::state::unix_ms();
-    let mut files = Vec::new();
-    for entry in fs::read_dir(dir)? {
-        let entry = entry?;
-        if !entry.file_type()?.is_file() {
-            continue;
-        }
-        let path = entry.path();
-        if !matches!(
-            path.extension().and_then(|s| s.to_str()),
-            Some("json" | "jsonl")
-        ) {
-            continue;
-        }
-        let meta = entry.metadata()?;
-        let ts = meta
-            .modified()?
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
-        let active = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .and_then(|id| {
-                let state = dir.parent()?.join("calls").join(format!("{id}.json"));
-                serde_json::from_slice::<crate::state::SessionState>(&fs::read(state).ok()?).ok()
-            })
-            .is_some_and(|s| {
-                s.phase == crate::state::Phase::Running && now.saturating_sub(s.ts_ms) < 10_000
-            });
-        if now.saturating_sub(ts) > age && !active {
-            fs::remove_file(path)?;
-        } else {
-            files.push((ts, meta.len(), path, active));
-        }
-    }
-    files.sort_by_key(|f| f.0);
-    let mut total: u64 = files.iter().map(|f| f.1).sum();
-    for (ts, size, path, active) in files {
-        if total <= budget {
-            break;
-        }
-        if active || now.saturating_sub(ts) < 3_600_000 {
-            continue;
-        }
-        fs::remove_file(path)?;
-        total = total.saturating_sub(size);
-    }
-    if total > budget {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::StorageFull,
-            "history capacity reached; recent records protected",
-        ));
-    }
-    Ok(())
-}
+pub use crate::history_retention::cleanup;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
