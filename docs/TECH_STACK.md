@@ -191,6 +191,14 @@ COM 数组和元素按现有智能接口所有权释放，不传递裸指针、�
 缓存模式通过 ACTL_ROOT_PROBE_CACHE 显式选择 handle/metadata，无默认兜底；
 取根方式/缓存属性对照仅用于诊断，不切换生产客户端、授权或查询路线。
 
+逐节点桌面探针在同一 MTA 内直调 TreeWalker 的直接子节点/同级节点 BuildCache，
+逐项刷新证据，最多 256 项；成功的空 COM 指针表示遍历结束，失败 HRESULT 原样传播，
+非空返回接口由 windows 智能指针持有。DPI 对照仅临时切换测试线程 PMv2 并恢复。
+上述 unsafe 只在 actl-uia 测试中，不注入输入；TreeWalker 不替代生产批量查询。
+显示端修复探测使用 std 线程与有界 channel，单任务在途，消息线程只轮询结果；
+流程版本、停止代次及结果时效共同限制裁决复用。边缘窗口仅在屏幕几何变化时重建，
+色调更新重绘像素，隐藏使用 ShowWindow；窗口随显示进程退出释放。无新增依赖。
+
 
 桌面交接复用现有 std + serde_json + windows，无新增依赖。纯授权逻辑位于 actl-core/handoff。
 actl-uia/bin/signal/handoff 的 unsafe 用于原生非激活提示窗口和低级输入 hook：回调仅读取

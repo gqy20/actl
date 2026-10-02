@@ -13,6 +13,7 @@ pub fn read(paths: &SignalPaths, id: &str) -> Option<serde_json::Value> {
 }
 // Bind once when a window opens. Unrelated CLI calls must never retarget its buttons.
 pub fn discover(paths: &SignalPaths) -> Option<String> {
+    let _trace = actl_core::trace::scope("signal.flow_discovery");
     let states = paths.read_calls();
     if let Some(id) = states
         .iter()

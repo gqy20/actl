@@ -250,4 +250,12 @@ Computer Use 验证了控制窗口的 run_id、16 DIP 详情、继续中禁用�
 
 验收：原摘要重复的复现测试先失败，修正后通过。使用隔离临时状态导出真实隐藏原生控件的完成、暂停及双区展开预览，产物在 `target/panel-review`；该预览不注册快捷键、不注入输入、不授予权限，窗口均正常销毁。真实桌面点击与屏幕阅读器专项尚未验收。
 
+修复检测的目录扫描和只读 CLI 探测在单个后台 worker 中执行，五秒节流在扫描前生效；
+窗口消息线程只轮询结果，不等待子进程。周期性的流程回退发现也在状态读取线程完成，
+与调用列表共同发布快照。探测结果按停止代次、绑定状态、目标修订时间和时效核验；
+旧任务完成/停止/修订后丢弃旧裁决。回落检测其他暂停任务不借用当前绑定计划的
+自动恢复声明。边缘提示在切换色调、隐藏和重新显示时复用窗口，仅屏幕几何变化才重建。
+该调整减少显示端对 UIA 观察的干扰，不改变急停、暂停、授权或生产查询超时规则；
+现场证据、发布验证和剩余限制见 [65](65-observation-blocking-diagnosis.md)。
+
 显示端自动测试 63 项通过、5 项交互/预览用例默认忽略，另单独运行隐藏原生预览导出通过。完整 `cargo xtask gate` 通过（`target/ui-hierarchy-gate-ready.log`）；首轮旧文案断言失败及后续发布文件占用失败分别保留在 `ui-hierarchy-gate.log`、`ui-hierarchy-gate-final.log`。本机 Windows 10.0.26200.0，运行中的 `target/validation/release/actl-signal.exe` 已核对路径、PID、窗口及无运行调用后正常关闭，构建完成后经配套 `actl.exe display-start` 重启，`display-status` 为 ready。替换前后执行代次和预授权文件哈希一致，无任务续跑；二进制路径、SHA-256、状态和清理证据保存在 `target/ui-display-before.json`、`target/ui-display-after.json`，逐调用预览日志在 `target/ui-hierarchy-preview.log`。这些检查不代替真实桌面按钮点击验收。

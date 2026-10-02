@@ -158,6 +158,91 @@ fn native_context() -> Result<Value, actl_core::CtlError> {
 }
 
 #[test]
+#[ignore = "manual incremental root probe; set ACTL_ROOT_PROBE_OUTPUT/CACHE; no input"]
+fn root_walk() -> Result<(), Box<dyn std::error::Error>> {
+    use windows::Win32::UI::Accessibility::IUIAutomationElement;
+    use windows::core::Interface;
+    let mode = std::env::var("ACTL_ROOT_PROBE_CACHE")?;
+    if !["handle", "metadata"].contains(&mode.as_str()) {
+        return Err("ACTL_ROOT_PROBE_CACHE must be handle or metadata".into());
+    }
+    let mut r = Recorder(File::create_new(std::env::var("ACTL_ROOT_PROBE_OUTPUT")?)?);
+    r.note(
+        json!({"event":"context_before","cache_mode":mode,"native":native_context()?,
+        "binary":std::env::current_exe()?,"input_injected":false}),
+    )?;
+    let result = (|| -> Result<(), Box<dyn std::error::Error>> {
+        let auto = r.phase("initialize", UIAutomation::new)?;
+        let root = r.phase("get_root", || auto.get_root_element())?;
+        let root_id = r.phase("root.identity", || identity(&root))?;
+        r.note(json!({"event":"root_identity","identity":root_id}))?;
+        let walker = r.phase("walker", || auto.get_raw_view_walker())?;
+        let cache = r.phase("cache", || {
+            let cache = auto.create_cache_request()?;
+            cache.set_tree_scope(TreeScope::Element)?;
+            cache.add_property(UIProperty::NativeWindowHandle)?;
+            if mode == "metadata" {
+                for p in [
+                    UIProperty::ProcessId,
+                    UIProperty::ClassName,
+                    UIProperty::ControlType,
+                ] {
+                    cache.add_property(p)?;
+                }
+            }
+            Ok(cache)
+        })?;
+        let mut current = root;
+        for index in 0..256 {
+            let next = r.phase(&format!("walk.navigate.{index}"), || {
+                let mut raw = std::ptr::null_mut();
+                // SAFETY: owned interfaces on this MTA. Inspect the HRESULT and nullable
+                // out pointer separately: S_OK/null is end-of-list, not a provider error.
+                unsafe {
+                    let w = walker.as_ref();
+                    let method = if index == 0 {
+                        w.vtable().GetFirstChildElementBuildCache
+                    } else {
+                        w.vtable().GetNextSiblingElementBuildCache
+                    };
+                    method(
+                        w.as_raw(),
+                        current.as_ref().as_raw(),
+                        cache.as_ref().as_raw(),
+                        &mut raw,
+                    )
+                    .ok()?;
+                    Ok((!raw.is_null())
+                        .then(|| UIElement::from(IUIAutomationElement::from_raw(raw))))
+                }
+            })?;
+            let Some(next) = next else {
+                r.note(json!({"event":"walk_complete","count":index}))?;
+                return Ok(());
+            };
+            let value = r.phase(&format!("walk.identity.{index}"), || {
+                let hwnd: HWND = next.get_cached_native_window_handle()?.into();
+                let mut value = json!({"index":index,"hwnd":hwnd.0 as isize});
+                if mode == "metadata" {
+                    value["pid"] = json!(next.get_cached_process_id()?);
+                    value["class"] = json!(next.get_cached_classname()?);
+                    value["role"] = json!(format!("{:?}", next.get_cached_control_type()?));
+                }
+                Ok(value)
+            })?;
+            r.note(json!({"event":"walk_element","identity":value}))?;
+            current = next;
+        }
+        Err("root walk exceeded 256 elements; incomplete".into())
+    })();
+    r.note(json!({"event":"context_after","native":native_context()?,
+        "status":if result.is_ok(){"observed"}else{"failed"},
+        "error":result.as_ref().err().map(|e|e.to_string()),
+        "cleanup":"no_business_resources_created"}))?;
+    result
+}
+
+#[test]
 #[ignore = "manual root comparison; set ACTL_ROOT_PROBE_OUTPUT/CACHE; no input/activation"]
 fn root_sources() -> Result<(), Box<dyn std::error::Error>> {
     let mode = std::env::var("ACTL_ROOT_PROBE_CACHE")?;
@@ -198,4 +283,45 @@ fn root_sources() -> Result<(), Box<dyn std::error::Error>> {
         "error_code":result.as_ref().err().and_then(|e|e.downcast_ref::<CtlError>()).map(|e|e.code),
         "cleanup":"no_business_resources_created"}))?;
     result
+}
+
+#[test]
+#[ignore = "manual DPI context comparison; set ACTL_ROOT_PROBE_OUTPUT/CACHE"]
+fn root_sources_pmv2() -> Result<(), Box<dyn std::error::Error>> {
+    use windows::Win32::UI::HiDpi::{
+        DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetThreadDpiAwarenessContext,
+    };
+    // SAFETY: only this short-lived probe thread's coordinate virtualization changes.
+    let previous =
+        unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
+    if previous.is_invalid() {
+        return Err(windows::core::Error::from_thread().into());
+    }
+    let result = root_sources();
+    unsafe {
+        SetThreadDpiAwarenessContext(previous);
+    }
+    result
+}
+
+#[test]
+#[ignore = "manual production/root comparison; set ACTL_ROOT_PROBE_OUTPUT"]
+fn production_inventory() -> Result<(), Box<dyn std::error::Error>> {
+    let mut r = Recorder(File::create_new(std::env::var("ACTL_ROOT_PROBE_OUTPUT")?)?);
+    r.note(json!({"event":"context_before","native":native_context()?,"binary":std::env::current_exe()?}))?;
+    r.note(json!({"event":"started","phase":"production.inventory"}))?;
+    let start = Instant::now();
+    let result = actl_uia::list_windows();
+    r.note(json!({"event":"production_inventory","duration_ms":start.elapsed().as_millis(),
+        "count":result.as_ref().ok().map(Vec::len),
+        "windows":result.as_ref().ok().map(|v|v.iter().map(|w|json!({"hwnd":w.hwnd,"pid":w.pid,"class":w.class})).collect::<Vec<_>>()),
+        "error":result.as_ref().err().map(|e|json!({"code":e.code,"evidence":e.evidence}))}))?;
+    let auto = r.phase("initialize", UIAutomation::new)?;
+    let root = r.phase("get_root", || auto.get_root_element())?;
+    let id = r.phase("root.identity", || identity(&root))?;
+    r.note(json!({"event":"root_identity","identity":id}))?;
+    let raw = query(&auto, &root, "raw_after_production", "metadata", &mut r)?;
+    r.note(json!({"event":"query_result","result":raw,"native_after":native_context()?}))?;
+    result?;
+    Ok(())
 }

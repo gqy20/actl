@@ -137,11 +137,11 @@ pub(super) fn stop_timestamp(paths: &SignalPaths) -> Option<u64> {
 }
 
 // Filesystem snapshots arrive on a worker; the window thread only takes the latest value.
-fn call_snapshot() -> Vec<actl_core::state::SessionState> {
-    type States = Vec<actl_core::state::SessionState>;
-    static CACHE: std::sync::OnceLock<std::sync::Arc<Mutex<States>>> = std::sync::OnceLock::new();
+fn call_snapshot() -> (Vec<actl_core::state::SessionState>, Option<String>) {
+    type Snapshot = (Vec<actl_core::state::SessionState>, Option<String>);
+    static CACHE: std::sync::OnceLock<std::sync::Arc<Mutex<Snapshot>>> = std::sync::OnceLock::new();
     let cache = CACHE.get_or_init(|| {
-        let cache = std::sync::Arc::new(Mutex::new(vec![]));
+        let cache = std::sync::Arc::new(Mutex::new((vec![], None)));
         let output = cache.clone();
         if std::thread::Builder::new()
             .name("signal-history-retention".into())
@@ -164,8 +164,14 @@ fn call_snapshot() -> Vec<actl_core::state::SessionState> {
                     let paths = SignalPaths::default();
                     let mut states = paths.read_calls();
                     super::flow_display::retain(&paths, &mut states);
+                    let fallback = model::selected(&states, unix_ms())
+                        .and_then(|s| s.workflow.as_ref())
+                        .filter(|f| actl_core::history::valid_id(&f.run_id))
+                        .is_none()
+                        .then(|| super::flow_ui::discover(&paths))
+                        .flatten();
                     if let Ok(mut latest) = output.lock() {
-                        *latest = states;
+                        *latest = (states, fallback);
                     }
                     std::thread::sleep(std::time::Duration::from_millis(100));
                 }
@@ -182,6 +188,7 @@ fn call_snapshot() -> Vec<actl_core::state::SessionState> {
         .unwrap_or_default()
 }
 unsafe fn tick(hwnd: HWND) {
+    let _trace = actl_core::trace::scope("signal.tick");
     let slot = hover_slot(hwnd);
     let slot_entered = HOVER_SLOT.swap(slot, Ordering::Relaxed) != slot;
     if slot_entered {
@@ -193,7 +200,7 @@ unsafe fn tick(hwnd: HWND) {
     }
     let paths = SignalPaths::default();
     let now = unix_ms();
-    let states = call_snapshot();
+    let (states, fallback_flow) = call_snapshot();
     let stop = stop_timestamp(&paths);
     let mut v = model::view(&states, now, stop, actl_uia::display_support::input_busy());
     v.details.push_str(&paths.stop_details());
@@ -209,7 +216,7 @@ unsafe fn tick(hwnd: HWND) {
                 .map(|f| f.run_id.clone())
                 .filter(|id| actl_core::history::valid_id(id))
         })
-        .or_else(|| super::flow_ui::discover(&paths));
+        .or(fallback_flow);
     let bound_state = bound_flow
         .as_deref()
         .and_then(|id| super::flow_ui::read(&paths, id));
@@ -236,9 +243,10 @@ unsafe fn tick(hwnd: HWND) {
             .unwrap_or(0),
         plan.as_ref(),
     ) {
-        let declared = plan
-            .as_ref()
-            .is_some_and(|p| p["auto_resume"] == "action_failed");
+        let declared = bound_flow.as_deref() == Some(id.as_str())
+            && plan
+                .as_ref()
+                .is_some_and(|p| p["auto_resume"] == "action_failed");
         match verdict {
             super::probe::Verdict::Retriable => {
                 // 先核验派发前置(真实代次/无急停),再扣预算,最后派发——
@@ -410,11 +418,12 @@ unsafe fn tick(hwnd: HWND) {
             || preparing.is_some()
             || !FRAME_READY.load(Ordering::Relaxed))
     {
-        FRAME_READY.store(
-            paint::draw(hwnd, &v, slot, EXPANDED.load(Ordering::Relaxed))
-                && windows::Win32::Graphics::Dwm::DwmFlush().is_ok(),
-            Ordering::Relaxed,
-        );
+        let painted = paint::draw(hwnd, &v, slot, EXPANDED.load(Ordering::Relaxed));
+        let flushed = painted && {
+            let _trace = actl_core::trace::scope("signal.compositor");
+            windows::Win32::Graphics::Dwm::DwmFlush().is_ok()
+        };
+        FRAME_READY.store(flushed, Ordering::Relaxed);
     }
     // 悬浮卡:槽位 dwell ≥500ms 触发;换槽/离开即收;按下按钮或拖拽期间不出卡;
     // 其他弹窗(菜单/详情)占用时让位,且只有悬浮卡归属者能撤自己。

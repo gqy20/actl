@@ -48,6 +48,8 @@ mod perimeter;
 mod popup;
 #[path = "signal/probe.rs"]
 mod probe;
+#[path = "signal/probe_worker.rs"]
+mod probe_worker;
 #[path = "signal/shell.rs"]
 mod shell;
 #[path = "signal/task_notice.rs"]

@@ -292,3 +292,78 @@ lint-packs。构建前核对 PID 58516 的显示端路径与 HWND 后正常关�
 构建后恢复显示端 PID 3144、epoch `s18dac834bde581900`，ready/responsive=true；
 路径、哈希与状态见 cleanup-installed-binaries.json，旧 flow 内容和停止代次均未变化。
 本次未重跑交互探针，原 TIMEOUT 失败结论保留。
+
+## 2026-10-03：显示端消息线程与窗口生命周期对照
+
+证据目录 `target/uia-root-investigation/`。本轮只读查询现有桌面，未恢复旧 flow、
+授予输入权限或操作业务应用。显示端替换核对路径、租约 HWND/PID 后发送 WM_CLOSE，
+关闭记录单独保存；未强制结束 GUI。各捕获的 report.json 保存被测二进制、哈希和现场。
+以下样本来自同一轮桌面环境，但进程重启、缓存和后台活动不同，不作为稳定性能基准。
+
+### 官方资料与判别
+
+- [UIA threading](https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-threading)
+  要求查询使用无窗口的 MTA 线程；当前 CLI 已按此初始化。被查询窗口的消息线程仍须响应，
+  因而不能仅凭客户端使用 MTA 排除自家显示端阻塞。
+- [FindAllBuildCache](https://learn.microsoft.com/en-us/windows/win32/api/uiautomationclient/nf-uiautomationclient-iuiautomationelement-findallbuildcache)
+  的桌面查找应限定直接子节点；当前实现符合，没有用递归整个桌面的方式修补。
+- [TreeWalker](https://learn.microsoft.com/en-us/windows/win32/api/uiautomationclient/nn-uiautomationclient-iuiautomationtreewalker)
+  涉及跨进程调用，逐项诊断用于定位停顿，不因某次更快就替代生产批量查询。
+- [WM_GETOBJECT](https://learn.microsoft.com/en-us/windows/win32/winauto/handling-the-wm-getobject-message)
+  的默认处理承担可访问性服务；没有通过吞掉该消息隐藏自家窗口来规避查询。
+
+### 复现与修订
+
+1. `walk-metadata-01`、`walk-handle-01` 都在四个自家 perimeter 窗口和显示主窗口
+   连续长等待，每个约 1.5–2.9 秒。关闭显示端后的 `find-no-signal-01` 两种取根查询
+   分别 1329/720ms。排除“只因额外缓存属性”的单一解释。
+2. 同为带 trace 的 debug 显示端，`signal-before.trace` 中 100ms 定时消息内的修复
+   探测占约 94–153ms，整 tick 约 170–215ms；91 个历史流程的只读选目标扫描单次 93ms
+   （discovery-01.json）。原实现还在该线程同步等待探测 CLI，可能与查询自家窗口形成等待。
+   `find-debug-signal-before-01` 首条根查询 23596ms，第二条未完成即触发外部 30 秒截止；
+   这是外部捕获失败，不冒称收到原生 TIMEOUT HRESULT。
+3. 修复探测移到单个在途 std worker，UI 只轮询 channel；五秒节流在选目标之前执行。
+   结果须匹配停止代次、绑定状态、目标 updated_ms 和十秒有效期；完成、停止或修订后的
+   目标不能继承旧裁决。后台返回后再次核对暂停原因。回落到其他流程的提示不得使用原绑定
+   plan 的自动恢复声明。`signal-after.trace` 的探测轮询约 5–6ms，tick 约 63–70ms；
+   `find-debug-signal-after-01` 两次根查询 1858/1835ms，未触发截止。
+4. 仅上述修复仍有 `production-after-01` 的成功空清单：原生桌面有窗口，UIA 返回一个
+   匿名节点后被现有规则过滤。无显示端的生产 CLI、同进程清单、PMv2 对照均正常；
+   显示端存在但静默调用（silent-cli-signal-01）也返回 12 窗口。说明普通调用反馈是
+   重要区别，不能据原始探针成功宣称生产已修复。
+5. 边缘提示原先在颜色变化及隐藏时销毁 HWND；现改为复用窗口、重绘色调和隐藏，
+   屏幕几何变化才重建。`production-stable-01/02/03` 普通 CLI 均返回 12 窗口，
+   CLI 总耗时分别 6739/6426/4554ms；第二次 FindAllBuildCache 仍占 5457ms。
+   `walk-stable-01` 总捕获约 2.37 秒。窗口复用后空清单暂未重现，但有限样本不能证明
+   所有 provider 空清单和超时都消失，也不能把调试版数值当发布性能。
+6. 初轮门禁 gate.log 通过后，release 普通查询 production-release-01/02 分别
+   4195/3186ms、12 窗口；第三次仍有 19514ms（FindAllBuildCache 11594ms），
+   且随后的显示状态为 companion_unresponsive，原记录保留，不能据前两轮宣布稳定。
+   release trace 对照发现普通调用选中时仍走消息线程的 flow_discovery，单次约 62–76ms。
+   将此周期回退发现移入现有 signal-state-reader，和调用列表一起发布快照；按钮打开时的
+   显式发现及写入前校验保持原规则。合成器等待增加独立 trace，未通过移除 DwmFlush
+   放宽显示就绪判定。修改后的带 trace debug 两轮 production-discovery-worker-01/02
+   返回 12 窗口，分别 2707/2855ms，显示端检查 ready/responsive=true；这是有限现场
+   样本，不给出普遍加速比例。该轮显示单测 discovery-tests.log 再次通过 83 项。
+
+自动回归覆盖 worker 阻塞时 UI 仍可轮询、无并行叠加、任务变更/过期/断连不复用结果，
+以及色调变化保持 HWND、运行像素刷新、失效暂停状态拒绝裁决。显示端初轮 83 项通过、
+8 项默认忽略。新增诊断均默认忽略，不让普通门禁读真实桌面。
+
+当前边界：生产 UIA 仍无覆盖所有 provider 调用的进程级截止；后台只读探测子进程尚可被
+第三方 provider 长时间阻塞，但不再卡住显示消息线程，也不并行堆积探测。旧原生 TIMEOUT
+记录保留，不能将本轮已证实的自家显示端干扰等同于全部历史 TIMEOUT 的唯一根因。
+
+### 最终验证与现场恢复
+
+最终 `cargo xtask gate` 通过（final-gate.log：file-lines、pnpm 前端检查、fmt、clippy、
+workspace 测试、lint-packs 及 release 构建）。最终 release 三轮普通生产查询
+production-final-01/02/03 均成功返回 12 窗口，CLI 总耗时分别 1852/2865/1975ms；
+没有空清单或截止，不据这三个样本宣称所有应用/时段均稳定。捕获器还会读时间线，
+因此 harness 总时间不能当作 CLI 查询耗时。完整业务流程与人工按钮验收未运行。
+
+恢复后的显示端为 `target/validation/release/actl-signal.exe`，PID 48220，
+epoch `s18dacb19572598400`；display-final-status.json 核验 ready/responsive=true。
+两份发布二进制的路径与 SHA-256 见 final-binaries.json。旧任务仍为 paused/action_failed、
+updated_ms=1790952910101，停止代次仍为 `s18daa5225ceedbdc0`，分别保存于
+final-old-flow-state.json 与 final-stop-generation.txt；没有恢复任务、授予权限或关闭业务窗口。

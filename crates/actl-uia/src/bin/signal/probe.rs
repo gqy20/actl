@@ -3,7 +3,7 @@
 //! 双判据语义(防代做双重生效):before 过=障碍已清除,可重试;verify 过=结果
 //! 已存在(可能被手动完成),继续前需人工核对。auto_resume 仅在
 //! before 过且 verify 未过时触发,且仅当流程显式声明 auto_resume: action_failed,
-//! 预算 2 次/运行(显示端内存计,伴侣重启即重置——保守方向)。
+//! 预算 2 次/运行(从 probe.jsonl 的成功派发记录计数)。
 //! 红线:探测只跑只读命令;user_paused/checkpoint/needs_review 永不探测续跑;
 //! 急停/停止代次由 flow-resume 路径自身核验,探测不绕过任何护栏。
 use actl_core::state::{SignalPaths, unix_ms};
@@ -11,7 +11,7 @@ use actl_core::state::{SignalPaths, unix_ms};
 /// 探测节流与放弃边界。
 const PROBE_INTERVAL_MS: u64 = 5000;
 const PROBE_GIVE_UP_MS: u64 = 10 * 60 * 1000;
-/// auto_resume 预算(每流程,伴侣运行期内)。
+/// auto_resume 预算(每流程,按持久记录累计)。
 const AUTO_RESUME_BUDGET: u32 = 2;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -23,12 +23,6 @@ pub enum Verdict {
     /// 判据未满足/不可判定:无提示(不重复念叨"还没修好")。
     Pending,
 }
-
-struct ProbeState {
-    last_ms: u64,
-    verdict: Verdict,
-}
-static PROBE: std::sync::Mutex<Option<(String, ProbeState)>> = std::sync::Mutex::new(None);
 
 /// 纯决策(可测):双判据 → 裁决。
 pub fn verdict(before_ok: Option<bool>, verify_ok: Option<bool>) -> Verdict {
@@ -66,7 +60,7 @@ fn newest_probe_target(paths: &SignalPaths) -> Option<String> {
     best.map(|(_, id)| id)
 }
 
-/// paused_since_ms 用于放弃边界;无绑定/非 action_failed/无判据时清理并返回 None。
+/// paused_since_ms 用于绑定版本与放弃边界；后台选择并探测合格目标。
 pub fn tick(
     paths: &SignalPaths,
     bound: Option<&str>,
@@ -75,6 +69,93 @@ pub fn tick(
     paused_since_ms: u64,
     plan: Option<&serde_json::Value>,
 ) -> Option<(String, Verdict)> {
+    let _trace = actl_core::trace::scope("signal.repair_probe");
+    #[derive(Clone, PartialEq, Eq)]
+    struct Key {
+        root: std::path::PathBuf,
+        bound: Option<String>,
+        status: Option<String>,
+        reason: Option<String>,
+        updated: u64,
+        generation: String,
+    }
+    #[derive(Clone)]
+    struct Result {
+        id: String,
+        verdict: Verdict,
+        updated: u64,
+    }
+    thread_local! {
+        static WORKER: std::cell::RefCell<super::probe_worker::Worker<Key, Option<Result>>> = std::cell::RefCell::new(Default::default());
+    }
+    let generation = paths.execution_generation().ok()?;
+    if paths.stop_requested() {
+        return None;
+    }
+    let key = Key {
+        root: paths.dir.clone(),
+        bound: bound.map(str::to_string),
+        status: status.map(str::to_string),
+        reason: reason.map(str::to_string),
+        updated: paused_since_ms,
+        generation,
+    };
+    let input = key.clone();
+    let worker_paths = paths.clone();
+    let plan = plan.cloned();
+    let result = WORKER.with(|worker| {
+        worker.borrow_mut().poll(
+            key,
+            std::time::Duration::from_millis(PROBE_INTERVAL_MS),
+            move || {
+                let (id, verdict, updated) = evaluate(
+                    &worker_paths,
+                    input.bound.as_deref(),
+                    input.status.as_deref(),
+                    input.reason.as_deref(),
+                    input.updated,
+                    plan.as_ref(),
+                )?;
+                Some(Result {
+                    id,
+                    verdict,
+                    updated,
+                })
+            },
+        )
+    });
+    let result = match result {
+        Ok(result) => result??,
+        Err(error) => {
+            eprintln!("INTERNAL: repair probe unavailable: {error}");
+            return None;
+        }
+    };
+    // A completed/stopped/revised task must never inherit a delayed worker verdict.
+    let state = super::flow_ui::read(paths, &result.id)?;
+    if revision(&state) != Some(result.updated) {
+        return None;
+    }
+    Some((result.id, result.verdict))
+}
+
+fn revision(state: &serde_json::Value) -> Option<u64> {
+    if state["status"] != "paused" || state["reason"] != "action_failed" {
+        return None;
+    }
+    state["updated_ms"]
+        .as_u64()
+        .filter(|at| unix_ms().saturating_sub(*at) < PROBE_GIVE_UP_MS)
+}
+
+fn evaluate(
+    paths: &SignalPaths,
+    bound: Option<&str>,
+    status: Option<&str>,
+    reason: Option<&str>,
+    paused_since_ms: u64,
+    plan: Option<&serde_json::Value>,
+) -> Option<(String, Verdict, u64)> {
     let eligible = bound.is_some()
         && status == Some("paused")
         && reason == Some("action_failed")
@@ -82,42 +163,11 @@ pub fn tick(
             .map(|p| p["steps"].as_array().is_some_and(|s| !s.is_empty()))
             .unwrap_or(false)
         && unix_ms().saturating_sub(paused_since_ms) < PROBE_GIVE_UP_MS;
-    let Some(id) = bound
+    let id = bound
         .filter(|_| eligible)
         .map(str::to_string)
-        .or_else(|| newest_probe_target(paths))
-    else {
-        if let Ok(mut guard) = PROBE.lock() {
-            *guard = None;
-        }
-        return None;
-    };
+        .or_else(|| newest_probe_target(paths))?;
     let id = id.as_str();
-    let now = unix_ms();
-    let mut guard = PROBE.lock().ok()?;
-    let entry = guard.get_or_insert_with(|| {
-        (
-            id.to_string(),
-            ProbeState {
-                last_ms: 0,
-                verdict: Verdict::Pending,
-            },
-        )
-    });
-    if entry.0 != id {
-        *entry = (
-            id.to_string(),
-            ProbeState {
-                last_ms: 0,
-                verdict: Verdict::Pending,
-            },
-        );
-    }
-    let state = &mut entry.1;
-    if now.saturating_sub(state.last_ms) < PROBE_INTERVAL_MS {
-        return Some((id.to_string(), state.verdict));
-    }
-    state.last_ms = now;
     // 回落目标(非显示端绑定)时,plan 参数属于原绑定——按探测目标重读。
     let plan_value = match plan {
         Some(p) if bound == Some(id) => p.clone(),
@@ -125,6 +175,7 @@ pub fn tick(
     };
     // 阻塞步骤 = 首个未完成步骤(与引擎口径一致);取其 before/verify。
     let flow = super::flow_ui::read(paths, id)?;
+    let updated = revision(&flow)?;
     let steps = flow["steps"].as_array()?;
     let plan_steps = plan_value["steps"].as_array()?;
     let index = steps
@@ -141,7 +192,11 @@ pub fn tick(
     };
     let before_ok = run_probe(plan_steps.get(index).and_then(|s| s.get("before")));
     let verify_ok = run_probe(plan_steps.get(index).and_then(|s| s.get("verify")));
-    state.verdict = verdict(before_ok, verify_ok);
+    let current = super::flow_ui::read(paths, id)?;
+    if revision(&current) != Some(updated) {
+        return None;
+    }
+    let verdict = verdict(before_ok, verify_ok);
     record(
         paths,
         id,
@@ -150,10 +205,10 @@ pub fn tick(
             "step_index": index,
             "before_ok": before_ok,
             "verify_ok": verify_ok,
-            "verdict": format!("{:?}", state.verdict).to_lowercase(),
+            "verdict": format!("{verdict:?}").to_lowercase(),
         }),
     );
-    Some((id.to_string(), state.verdict))
+    Some((id.to_string(), verdict, updated))
 }
 
 /// 探测/自动续跑证据落盘:flows/<id>/probe.jsonl(伴侣进程无调用 journal,
@@ -211,6 +266,41 @@ fn run_actl(args: Vec<String>) -> Result<bool, ()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn only_current_action_failure_can_use_a_worker_result() {
+        let now = unix_ms();
+        let mut state =
+            serde_json::json!({"status":"paused","reason":"action_failed","updated_ms":now});
+        assert_eq!(revision(&state), Some(now));
+        for status in ["completed", "running", "stopped", "needs_review"] {
+            state["status"] = serde_json::json!(status);
+            assert_eq!(revision(&state), None);
+        }
+        state["status"] = serde_json::json!("paused");
+        state["reason"] = serde_json::json!("pause_requested");
+        assert_eq!(revision(&state), None);
+        state["reason"] = serde_json::json!("action_failed");
+        state["updated_ms"] = serde_json::json!(now - PROBE_GIVE_UP_MS);
+        assert_eq!(revision(&state), None);
+    }
+    #[test]
+    #[ignore = "read-only live discovery timing; set ACTL_PROBE_PROFILE_OUTPUT"]
+    fn profile_discovery() -> Result<(), Box<dyn std::error::Error>> {
+        let file = std::fs::File::create_new(std::env::var("ACTL_PROBE_PROFILE_OUTPUT")?)?;
+        let paths = SignalPaths::default();
+        let start = std::time::Instant::now();
+        let target = newest_probe_target(&paths);
+        serde_json::to_writer_pretty(
+            file,
+            &serde_json::json!({
+                "duration_ms":start.elapsed().as_millis(),"target":target,
+                "binary":std::env::current_exe()?,"ts_ms":unix_ms(),
+                "flow_count":std::fs::read_dir(paths.dir.join("flows"))?.count(),
+                "input_injected":false,"flow_execution":false
+            }),
+        )?;
+        Ok(())
+    }
     #[test]
     fn verdict_prioritizes_already_done_over_retriable() {
         // 双判据核心:verify 过(结果已存在)优先于 before 过——防代做双重生效。

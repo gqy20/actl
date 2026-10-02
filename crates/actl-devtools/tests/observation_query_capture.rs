@@ -7,6 +7,28 @@ use std::{collections::BTreeMap, path::PathBuf, time::Duration};
 #[test]
 #[ignore = "manual bounded root comparison; set ACTL_ROOT_PROBE_BINARY/CACHE and ACTL_ROOT_CAPTURE_OUTPUT"]
 fn desktop_root_capture() -> Result<(), Box<dyn std::error::Error>> {
+    capture_root("root_sources")
+}
+
+#[test]
+#[ignore = "manual bounded incremental root probe; set ACTL_ROOT_PROBE_BINARY/CACHE and ACTL_ROOT_CAPTURE_OUTPUT"]
+fn desktop_walk_capture() -> Result<(), Box<dyn std::error::Error>> {
+    capture_root("root_walk")
+}
+
+#[test]
+#[ignore = "manual bounded DPI comparison; set ACTL_ROOT_PROBE_BINARY/CACHE and ACTL_ROOT_CAPTURE_OUTPUT"]
+fn desktop_dpi_capture() -> Result<(), Box<dyn std::error::Error>> {
+    capture_root("root_sources_pmv2")
+}
+
+#[test]
+#[ignore = "manual bounded production comparison; set ACTL_ROOT_PROBE_BINARY/CACHE and ACTL_ROOT_CAPTURE_OUTPUT"]
+fn desktop_inventory_capture() -> Result<(), Box<dyn std::error::Error>> {
+    capture_root("production_inventory")
+}
+
+fn capture_root(test: &str) -> Result<(), Box<dyn std::error::Error>> {
     let binary = PathBuf::from(std::env::var("ACTL_ROOT_PROBE_BINARY")?).canonicalize()?;
     let name = binary
         .file_name()
@@ -29,7 +51,7 @@ fn desktop_root_capture() -> Result<(), Box<dyn std::error::Error>> {
         &[
             "--ignored".into(),
             "--exact".into(),
-            "root_sources".into(),
+            test.into(),
             "--nocapture".into(),
             "--test-threads=1".into(),
         ],

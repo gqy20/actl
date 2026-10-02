@@ -76,6 +76,9 @@ struct Strip {
     height: i32,
     pixels: Vec<u8>,
     phase: Vec<u8>,
+    screen_size: [i32; 2],
+    part: [i32; 4],
+    dpi: u32,
     wave_pixels: Vec<u8>,
 }
 struct Frame {
@@ -230,9 +233,34 @@ unsafe fn destroy(frame: Frame) {
     }
 }
 pub unsafe fn hide() {
-    if let Some(frame) = FRAME.lock().ok().and_then(|mut f| f.take()) {
-        destroy(frame);
+    if let Ok(mut current) = FRAME.lock()
+        && let Some(frame) = current.as_mut()
+    {
+        hide_frame(frame);
     }
+}
+unsafe fn hide_frame(frame: &mut Frame) {
+    for strip in &frame.strips {
+        let _ = ShowWindow(HWND(strip.hwnd as *mut _), SW_HIDE);
+    }
+    frame.alpha = 0;
+    frame.wave_frame = None;
+    frame.fading = None;
+}
+fn retint(frame: &mut Frame, tone: Tone) {
+    for strip in &mut frame.strips {
+        let [width, height] = strip.screen_size;
+        strip.pixels = raster(width, height, strip.part, strip.dpi, tone);
+        if tone == Tone::Running {
+            if strip.phase.is_empty() {
+                strip.phase = wave_phase(width, height, strip.part);
+            }
+            strip.wave_pixels.clone_from(&strip.pixels);
+        }
+    }
+    frame.tone = tone;
+    frame.alpha = 0;
+    frame.wave_frame = None;
 }
 unsafe fn create(screens: Vec<Screen>, tone: Tone) -> windows::core::Result<Frame> {
     let instance = GetModuleHandleW(None)?;
@@ -297,6 +325,9 @@ unsafe fn create(screens: Vec<Screen>, tone: Tone) -> windows::core::Result<Fram
                     pixels,
                     phase,
                     wave_pixels,
+                    screen_size: [width, height],
+                    part,
+                    dpi: screen.dpi,
                 });
             }
         }
@@ -353,6 +384,7 @@ fn opacity(tone: Tone, now: u64, fade: Option<(u64, u8)>, reduced: bool) -> u8 {
     }
 }
 pub unsafe fn update(owner: HWND, view: &View, states: &[SessionState], now: u64, visible: bool) {
+    let _trace = actl_core::trace::scope("signal.perimeter");
     if !visible {
         hide();
         return;
@@ -363,10 +395,7 @@ pub unsafe fn update(owner: HWND, view: &View, states: &[SessionState], now: u64
     };
     if let Some(tone) = desired {
         let monitors = screens(owner, states, now);
-        if current
-            .as_ref()
-            .is_none_or(|f| f.screens != monitors || f.tone != tone)
-        {
+        if current.as_ref().is_none_or(|f| f.screens != monitors) {
             if let Some(old) = current.take() {
                 destroy(old);
             }
@@ -376,6 +405,9 @@ pub unsafe fn update(owner: HWND, view: &View, states: &[SessionState], now: u64
             }
         }
         if let Some(f) = current.as_mut() {
+            if f.tone != tone {
+                retint(f, tone);
+            }
             f.fading = None;
         }
     }
@@ -390,19 +422,18 @@ pub unsafe fn update(owner: HWND, view: &View, states: &[SessionState], now: u64
         SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
     );
     if desired.is_none() {
+        if frame.alpha == 0 {
+            return;
+        }
         if !animation.as_bool() {
-            if let Some(old) = current.take() {
-                destroy(old);
-            }
+            hide_frame(frame);
             return;
         }
         frame.fading.get_or_insert((now, frame.alpha));
     }
     let alpha = opacity(frame.tone, now, frame.fading, !animation.as_bool());
     if alpha == 0 {
-        if let Some(old) = current.take() {
-            destroy(old);
-        }
+        hide_frame(frame);
         return;
     }
     let wave_frame = (frame.tone == Tone::Running && animation.as_bool()).then(|| {
@@ -437,6 +468,40 @@ pub unsafe fn update(owner: HWND, view: &View, states: &[SessionState], now: u64
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn tone_changes_keep_windows_and_refresh_running_pixels() {
+        let part = [0, 0, 320, 16];
+        let mut frame = Frame {
+            screens: vec![],
+            tone: Tone::Paused,
+            strips: vec![Strip {
+                hwnd: 123,
+                width: 320,
+                height: 16,
+                pixels: raster(320, 240, part, 96, Tone::Paused),
+                wave_pixels: vec![],
+                phase: vec![],
+                screen_size: [320, 240],
+                part,
+                dpi: 96,
+            }],
+            fading: None,
+            alpha: 255,
+            wave_frame: None,
+        };
+        let paused = frame.strips[0].pixels.clone();
+        for tone in [Tone::Running, Tone::Attention, Tone::Paused, Tone::Running] {
+            retint(&mut frame, tone);
+            assert_eq!(frame.strips[0].hwnd, 123);
+            assert_eq!(frame.alpha, 0, "next update must present the new tone");
+            assert_eq!(frame.tone, tone);
+            if tone == Tone::Running {
+                assert_ne!(frame.strips[0].pixels, paused);
+                assert_eq!(frame.strips[0].wave_pixels, frame.strips[0].pixels);
+                assert_eq!(frame.strips[0].phase.len(), 320 * 16);
+            }
+        }
+    }
     #[test]
     fn wave_moves_periodically_and_preserves_premultiplied_pixels() {
         let a = wave_table(0);

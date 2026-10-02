@@ -480,6 +480,7 @@ pub(super) unsafe fn present_alpha(
 }
 
 pub unsafe fn draw(hwnd: HWND, view: &View, hover: u8, expanded: bool) -> bool {
+    let _trace = actl_core::trace::scope("signal.paint");
     let mut ps = PAINTSTRUCT::default();
     let _ = BeginPaint(hwnd, &mut ps);
     let dpi = GetDpiForWindow(hwnd).max(96);
