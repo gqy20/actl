@@ -377,11 +377,16 @@ fn located_text_payload(located: &Value) -> Value {
 // ---------------------------------------------------------------------------
 
 pub fn launch(paths: &Paths, spec: LaunchSpec) -> Result<Value, CtlError> {
-    let exe = PathBuf::from(&spec.browser_executable);
+    // app-registry 别名解析:名字(如 edge)→ 绝对路径;非注册名原样传
+    let browser_executable = actl_uia::app_registry::resolve(&spec.browser_executable)
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| spec.browser_executable.clone());
+    let exe = PathBuf::from(&browser_executable);
     if !exe.is_absolute() {
         return Err(protocol(format!(
-            "browser executable path must be absolute: {}",
-            spec.browser_executable
+            "browser executable path must be absolute (or a registered alias): {}",
+            browser_executable
         )));
     }
     if !exe.is_file() {
