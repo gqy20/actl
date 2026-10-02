@@ -255,15 +255,21 @@ list-notifications              # 系统通知读取
 
 #### 浏览器会话(browser,CDP 通道 v1,2026-10-02 spec)
 ```
-browser-launch --browser-executable <abs> [--url U] [--profile name] [--visible] [--timeout ms]
+browser-launch --browser-executable <abs> [--url U] [--profile name] [--proxy host:port] [--visible] [--timeout ms]
                                      # 启动 actl 自有的隔离浏览器(系统 Edge/Chrome 二进制,
                                      # 专用 user-data-dir——默认 profile 被 Chrome/Edge 136+
                                      # 禁调试端口,永不附着用户会话)并绑定一个 tab 为会话;
                                      # --profile 持久 profile(一次性人工登录复用),缺省一次性;
-                                     # headless 除非 --visible;DevToolsActivePort 出现=启动成功,
-                                     # 否则 fail-fast 回收自启进程;stdio 继承守卫防管道挂死
+                                     # --proxy 裸 HOST:PORT 显式代理(浏览器 DoH 会绕过系统
+                                     # TUN fake-ip 路由,是"站点不可达"的解药;2026-10-02
+                                     # x.com 场景实证);headless 除非 --visible(UA 壁垒站点
+                                     # 用 --visible,HeadlessChrome UA 会被部分站点拒服务);
+                                     # DevToolsActivePort 出现=启动成功,否则 fail-fast 回收
+                                     # 自启进程;stdio 继承守卫防管道挂死
 browser-navigate --session <id> --url U  # 重核绑定 target 存活→导航→等主 frame 的
-                                     # Page.frameNavigated(读线程事件,导航竞态判定地基)
+                                     # Page.frameNavigated(读线程事件,导航竞态判定地基);
+                                     # 网络级加载失败(chrome-error)显式 INTERNAL+net_error
+                                     # 证据,不静默当成功
 browser-read --session <id> (--css S | --xpath X) [--iframe]
                                      # 唯一匹配读文本(0→NOT_FOUND,>1→AMBIGUOUS 带 matches 证据;
                                      # --iframe 经子 frame 执行上下文,跨源同权);文本 64KiB 截断

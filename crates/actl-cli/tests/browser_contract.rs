@@ -160,6 +160,28 @@ fn launch_rejects_bad_profile_name_and_url() {
 }
 
 #[test]
+fn launch_rejects_non_bare_proxy_values() {
+    let exe = "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
+    for bad in [
+        "http://127.0.0.1:7890",
+        "127.0.0.1",
+        "127.0.0.1:0",
+        "127.0.0.1:99999",
+    ] {
+        let (code, stdout) = actl(&[
+            "browser-launch",
+            "--browser-executable",
+            exe,
+            "--proxy",
+            bad,
+        ]);
+        assert_eq!(code, 2, "proxy {bad} must be rejected");
+        let v: Value = serde_json::from_str(&stdout).unwrap();
+        assert_eq!(v["error"]["code"], "PROTOCOL");
+    }
+}
+
+#[test]
 fn navigate_rejects_bad_url_before_touching_the_browser() {
     let (code, stdout) = actl(&[
         "browser-navigate",

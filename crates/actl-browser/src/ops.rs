@@ -24,6 +24,8 @@ pub struct LaunchSpec {
     pub browser_executable: String,
     pub url: Option<String>,
     pub profile: Option<String>,
+    /// 出站代理(HOST:PORT,无 scheme);显式本地代理路径,非任意参数注入
+    pub proxy: Option<String>,
     pub visible: bool,
     pub timeout_ms: Option<u64>,
 }
@@ -76,6 +78,29 @@ fn validate_selector(kind: SelectorKind, value: &str) -> Result<(), CtlError> {
             "{} selector requires 1-4096 characters",
             kind.as_str()
         )));
+    }
+    Ok(())
+}
+
+/// 代理仅接受裸 HOST:PORT(拒绝 scheme/凭据),防参数注入面
+fn validate_proxy(value: &str) -> Result<(), CtlError> {
+    let Some((host, port)) = value.rsplit_once(':') else {
+        return Err(protocol(format!(
+            "--proxy requires HOST:PORT, got: {value}"
+        )));
+    };
+    if host.is_empty()
+        || !host
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-' || b == b'[' || b == b']')
+    {
+        return Err(protocol(format!(
+            "--proxy host must be alphanumeric/dots/brackets: {value}"
+        )));
+    }
+    let valid_port = port.parse::<u16>().is_ok_and(|p| (1..=65535).contains(&p));
+    if !valid_port {
+        return Err(protocol(format!("--proxy port must be 1-65535: {value}")));
     }
     Ok(())
 }
@@ -322,6 +347,9 @@ pub fn launch(paths: &Paths, spec: LaunchSpec) -> Result<Value, CtlError> {
         }
         None => Mode::Ephemeral,
     };
+    if let Some(proxy) = &spec.proxy {
+        validate_proxy(proxy)?;
+    }
     let timeout = dur(spec.timeout_ms, LAUNCH_DEFAULT_TIMEOUT_MS);
 
     let session_id = actl_core::new_snapshot_id();
@@ -346,6 +374,9 @@ pub fn launch(paths: &Paths, spec: LaunchSpec) -> Result<Value, CtlError> {
     ];
     if !spec.visible {
         edge_args.insert(0, "--headless=new".to_string());
+    }
+    if let Some(proxy) = &spec.proxy {
+        edge_args.push(format!("--proxy-server={proxy}"));
     }
     edge_args.push("about:blank".to_string());
 
@@ -495,6 +526,17 @@ pub fn navigate(
             timeout,
         )
         .map_err(map_cdp)?;
+    // 网络级加载失败必须显式失败:chrome-error 错误页不是导航成功
+    // (2026-10-02 x.com 场景实证:DoH 绕过 TUN fake-ip 致连接重置曾表现为静默 ok)
+    if let Some(net_error) = nav.get("errorText").and_then(Value::as_str)
+        && !net_error.is_empty()
+    {
+        return Err(CtlError::with_evidence(
+            ErrorCode::Internal,
+            format!("page load failed at network level: {net_error}"),
+            json!({ "url": url, "net_error": net_error }),
+        ));
+    }
     let frame_id = nav
         .get("frameId")
         .and_then(Value::as_str)

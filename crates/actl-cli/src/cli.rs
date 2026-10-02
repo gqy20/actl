@@ -681,6 +681,10 @@ pub(crate) enum Command {
         /// Persistent profile name for login reuse (default: throwaway ephemeral profile)
         #[arg(long)]
         profile: Option<String>,
+        /// Outbound proxy as HOST:PORT (e.g. 127.0.0.1:7890) — routes the browser via an
+        /// explicit local proxy; no scheme/prefix allowed (not an arbitrary-arg escape hatch)
+        #[arg(long)]
+        proxy: Option<String>,
         /// Show the browser window (default: headless)
         #[arg(long)]
         visible: bool,
@@ -927,10 +931,10 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
 fn after_help_for(name: &str) -> Option<&'static str> {
     Some(match name {
         "browser-launch" => {
-            "Example:\n  actl browser-launch --browser-executable \"C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe\" --url about:blank\nLaunches an OWNED isolated browser (never the user's default profile — Chrome/Edge 136+ disables the debug port there) and binds one tab as the session. --profile <name> keeps a persistent profile for one-time manual logins; default is a throwaway profile. Headless unless --visible. Startup succeeds only when the devtools endpoint appears; otherwise the owned process is reclaimed.\nErrors: PROTOCOL bad executable/url/profile name | INTERNAL endpoint never appeared (reclaimed)"
+            "Example:\n  actl browser-launch --browser-executable \"C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe\" --url about:blank --proxy 127.0.0.1:7890\nLaunches an OWNED isolated browser (never the user's default profile — Chrome/Edge 136+ disables the debug port there) and binds one tab as the session. --profile <name> keeps a persistent profile for one-time manual logins; default is a throwaway profile. --proxy HOST:PORT routes via an explicit local proxy (browser DoH can bypass system TUN fake-ip routing — the fix for silently unreachable sites). Headless unless --visible. Startup succeeds only when the devtools endpoint appears; otherwise the owned process is reclaimed.\nErrors: PROTOCOL bad executable/url/profile/proxy | INTERNAL endpoint never appeared (reclaimed)"
         }
         "browser-navigate" => {
-            "Example:\n  actl browser-navigate --session s1a2b3 --url https://example.com\nConnects to the session's browser, re-verifies the bound tab still exists, navigates and waits for the main-frame Page.frameNavigated event. Reports url/title/frame_id.\nErrors: PROTOCOL bad url | NOT_FOUND unknown session / endpoint unreachable / target lost | TIMEOUT navigation event missing"
+            "Example:\n  actl browser-navigate --session s1a2b3 --url https://example.com\nConnects to the session's browser, re-verifies the bound tab still exists, navigates and waits for the main-frame Page.frameNavigated event. Reports url/title/frame_id. Network-level load failures (chrome-error pages) fail explicitly with the net error in evidence — never silently reported as success.\nErrors: PROTOCOL bad url | NOT_FOUND unknown session / endpoint unreachable / target lost | TIMEOUT navigation event missing | INTERNAL network-level load failure"
         }
         "browser-read" => {
             "Example:\n  actl browser-read --session s1a2b3 --css \"#result span\"\n  actl browser-read --session s1a2b3 --xpath \"//button[@id='go']\" --iframe\nReads the text of exactly one element (hard uniqueness). --iframe addresses the cross-origin child iframe via its execution context. Text is capped at 64 KiB with a truncated flag.\nErrors: PROTOCOL selector 1-4096 chars / neither --css nor --xpath | NOT_FOUND no match / no iframe | AMBIGUOUS multiple matches | INTERNAL CDP layer"

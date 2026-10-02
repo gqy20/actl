@@ -27,6 +27,7 @@ pub(crate) fn launch_cmd(
     browser_executable: &str,
     url: Option<&str>,
     profile: Option<&str>,
+    proxy: Option<&str>,
     visible: bool,
     timeout: Option<u64>,
 ) -> Result<CommandOutput, CtlError> {
@@ -36,6 +37,7 @@ pub(crate) fn launch_cmd(
             browser_executable: browser_executable.to_string(),
             url: url.map(str::to_string),
             profile: profile.map(str::to_string),
+            proxy: proxy.map(str::to_string),
             visible,
             timeout_ms: timeout,
         },
