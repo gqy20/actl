@@ -316,3 +316,14 @@ fn type_arg_surface_contract() {
     let v: Value = serde_json::from_str(&stdout).unwrap();
     assert_eq!(v["error"]["code"], "PROTOCOL");
 }
+
+#[test]
+fn snapshot_keywords_arg_contract() {
+    // clap 层:--keywords 与 --view 互斥
+    assert_eq!(
+        actl(&["snapshot", "--keywords", "save", "--view", "content"]).0,
+        2
+    );
+    // handler 层校验发生在窗口捕获前?——keywords 解析在 capture 之后、finish 之前,
+    // 但空/超限词表在校验首步,无桌面依赖路径不可离线断言;此处只锁互斥面
+}

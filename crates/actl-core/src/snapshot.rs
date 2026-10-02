@@ -76,8 +76,8 @@ pub fn new_snapshot_id() -> String {
     format!("s{nanos:x}{n:x}")
 }
 
-/// 快照投影模式(06 §3.2 L2 / §3.4)。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// 快照投影模式(06 §3.2 L2 / §3.4)。Keyword 携带词表,不再 Copy。
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Projection {
     /// 全量树。
     Full,
@@ -88,6 +88,13 @@ pub enum Projection {
     /// 折叠只作用于 Document 子树**内部**,chrome 交互元素不参与保留判定
     /// (浏览器形态 skeleton 仅削 ~36% 的根因修复)。
     Content { skeleton: bool },
+    /// 任务关键词投影(探索模式 S1,docs/42):可交互元素中 name/automation_id
+    /// 命中任一关键词(大小写不敏感)者为种子,保留种子+祖先链;`skeleton: true`
+    /// 时再叠加单链折叠。零命中时如实返回空投影(调用方决定是否放宽)。
+    Keyword {
+        keywords: Vec<String>,
+        skeleton: bool,
+    },
 }
 
 /// 快照构建器:吃 DFS 序节点流,产出带 ref 的输出。
@@ -140,6 +147,9 @@ impl SnapshotBuilder {
                     ));
                 }
                 self.content_keep_set(skeleton)
+            }
+            Projection::Keyword { keywords, skeleton } => {
+                self.keyword_keep_set(&keywords, skeleton)
             }
         };
         let mut next_ref = 0;
@@ -203,6 +213,42 @@ impl SnapshotBuilder {
     /// DFS 先序保证 parent 索引恒小于子,一遍即成。组合模式(skeleton=true)
     /// 交互种子只取 in_doc 节点——chrome 里的按钮/地址栏不再强制保留,
     /// 这是浏览器形态削减率的主增量。
+    /// keyword 保留集(探索模式 S1):可交互种子 = name/automation_id 子串命中
+    /// 任一关键词(大小写不敏感);保留种子+祖先链;skeleton 时叠单链折叠。
+    /// 与 skeleton/content 同构,但零命中是合法结果(空投影如实返回)。
+    fn keyword_keep_set(&self, keywords: &[String], skeleton: bool) -> Vec<bool> {
+        let hits = |n: &UiNode| -> bool {
+            if !is_interactive_role(&n.role) {
+                return false;
+            }
+            let needle = |hay: &Option<String>| -> bool {
+                hay.as_deref().is_some_and(|h| {
+                    let h = h.to_lowercase();
+                    keywords.iter().any(|k| h.contains(&k.to_lowercase()))
+                })
+            };
+            needle(&n.name) || needle(&n.automation_id)
+        };
+        let mut keep = vec![false; self.nodes.len()];
+        for (i, n) in self.nodes.iter().enumerate() {
+            if hits(n) {
+                keep[i] = true;
+                let mut p = n.parent;
+                while let Some(pi) = p {
+                    if keep[pi] {
+                        break;
+                    }
+                    keep[pi] = true;
+                    p = self.nodes[pi].parent;
+                }
+            }
+        }
+        if skeleton {
+            self.collapse_single_chains(&mut keep);
+        }
+        keep
+    }
+
     fn content_keep_set(&self, skeleton: bool) -> Vec<bool> {
         let mut in_doc = vec![false; self.nodes.len()];
         for (i, n) in self.nodes.iter().enumerate() {
@@ -434,5 +480,116 @@ mod tests {
         let json = serde_json::to_value(&out.elements[0]).unwrap();
         assert_eq!(json["name"], "确定");
         assert_eq!(json["ref"], "@e1");
+    }
+}
+
+#[cfg(test)]
+mod keyword_tests {
+    use super::*;
+
+    fn node(
+        depth: u32,
+        role: &str,
+        name: Option<&str>,
+        id: Option<&str>,
+        parent: Option<usize>,
+    ) -> UiNode {
+        UiNode {
+            depth,
+            role: role.to_string(),
+            name: name.map(str::to_string),
+            automation_id: id.map(str::to_string),
+            parent,
+        }
+    }
+
+    #[test]
+    fn keyword_projection_keeps_hits_and_ancestors_only() {
+        let mut b = SnapshotBuilder::new(100);
+        // 树:root(0) > pane(1) > [Button 保存(2), Button 取消(2), Text 无关(2)]
+        assert!(b.push(node(0, "Window", Some("App"), None, None)));
+        assert!(b.push(node(1, "Pane", Some("main"), None, Some(0))));
+        assert!(b.push(node(
+            2,
+            "Button",
+            Some("保存文件"),
+            Some("btnSave"),
+            Some(1)
+        )));
+        assert!(b.push(node(2, "Button", Some("取消"), None, Some(1))));
+        assert!(b.push(node(2, "Text", Some("版本信息"), None, Some(1))));
+        let out = b
+            .finish(Projection::Keyword {
+                keywords: vec!["保存".to_string()],
+                skeleton: false,
+            })
+            .unwrap();
+        // 保留:命中按钮 + 祖先链(Window/Pane);取消/版本信息被丢弃
+        let kept: Vec<&str> = out
+            .elements
+            .iter()
+            .map(|e| e.name.as_deref().unwrap_or(""))
+            .collect();
+        assert!(kept.contains(&"保存文件"));
+        assert!(kept.contains(&"App"));
+        assert!(kept.contains(&"main"));
+        assert!(!kept.contains(&"取消"));
+        assert!(!kept.contains(&"版本信息"));
+        // 命中元素必须带 ref
+        assert!(
+            out.elements
+                .iter()
+                .any(|e| e.name.as_deref() == Some("保存文件") && e.ref_id.is_some())
+        );
+    }
+
+    #[test]
+    fn keyword_projection_empty_hits_is_legal() {
+        let mut b = SnapshotBuilder::new(10);
+        assert!(b.push(node(0, "Window", Some("App"), None, None)));
+        assert!(b.push(node(1, "Button", Some("go"), None, Some(0))));
+        let out = b
+            .finish(Projection::Keyword {
+                keywords: vec!["不存在关键词".to_string()],
+                skeleton: false,
+            })
+            .unwrap();
+        assert!(
+            out.elements.is_empty(),
+            "zero hits = empty projection, no fallback"
+        );
+    }
+
+    #[test]
+    fn keyword_projection_automation_id_and_case_insensitive() {
+        let mut b = SnapshotBuilder::new(10);
+        assert!(b.push(node(0, "Window", Some("App"), None, None)));
+        assert!(b.push(node(
+            1,
+            "Button",
+            Some("irrelevant"),
+            Some("submitBtn"),
+            Some(0)
+        )));
+        assert!(b.push(node(1, "Edit", Some("SEARCH BOX"), None, Some(0))));
+        let out = b
+            .finish(Projection::Keyword {
+                keywords: vec!["submit".to_string(), "search".to_string()],
+                skeleton: false,
+            })
+            .unwrap();
+        let kept: Vec<&str> = out
+            .elements
+            .iter()
+            .map(|e| e.name.as_deref().unwrap_or(""))
+            .collect();
+        assert!(
+            kept.contains(&"irrelevant"),
+            "automation_id hit keeps the element"
+        );
+        assert!(
+            kept.contains(&"SEARCH BOX"),
+            "name match is case-insensitive"
+        );
     }
 }

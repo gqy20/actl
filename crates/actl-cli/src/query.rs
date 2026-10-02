@@ -49,15 +49,29 @@ pub(crate) fn status() -> Result<Value, CtlError> {
     }))
 }
 
-pub(crate) fn snapshot_cmd(
-    app: Option<&str>,
-    hwnd: Option<&str>,
-    skeleton: bool,
-    view: Option<crate::cli::ViewMode>,
-    within: Option<&str>,
-    depth: Option<u32>,
-    limit: Option<usize>,
-) -> Result<CommandOutput, CtlError> {
+/// snapshot 的 CLI 参数束(多参告警规避;main.rs 从 clap 变体直构)。
+pub(crate) struct SnapshotArgs<'a> {
+    pub app: Option<&'a str>,
+    pub hwnd: Option<&'a str>,
+    pub skeleton: bool,
+    pub view: Option<crate::cli::ViewMode>,
+    pub keywords: Option<&'a str>,
+    pub within: Option<&'a str>,
+    pub depth: Option<u32>,
+    pub limit: Option<usize>,
+}
+
+pub(crate) fn snapshot_cmd(args: SnapshotArgs<'_>) -> Result<CommandOutput, CtlError> {
+    let SnapshotArgs {
+        app,
+        hwnd,
+        skeleton,
+        view,
+        keywords,
+        within,
+        depth,
+        limit,
+    } = args;
     use actl_core::Projection;
     let (cap, scope) = if let Some(within) = within {
         let window = hwnd
@@ -93,11 +107,30 @@ pub(crate) fn snapshot_cmd(
         }
     }
     // 投影映射:--view content 与 --skeleton 正交组合(折叠仅作用于 Document
-    // 子树内部);content 模式下无 Document → NOT_FOUND(core 层裁定)
-    let projection = match view {
-        Some(crate::cli::ViewMode::Content) => Projection::Content { skeleton },
-        None if skeleton => Projection::Skeleton,
-        None => Projection::Full,
+    // 子树内部);content 模式下无 Document → NOT_FOUND(core 层裁定);
+    // --keywords 走任务关键词投影(与 --view 互斥,可与 --skeleton 组合)
+    let projection = if let Some(raw) = keywords {
+        let list: Vec<String> = raw
+            .split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .collect();
+        if list.is_empty() || list.len() > 16 || list.iter().any(|k| k.len() > 64) {
+            return Err(CtlError::protocol(
+                "--keywords requires 1-16 non-empty comma-separated keywords (each ≤64 chars)",
+            ));
+        }
+        Projection::Keyword {
+            keywords: list,
+            skeleton,
+        }
+    } else {
+        match view {
+            Some(crate::cli::ViewMode::Content) => Projection::Content { skeleton },
+            None if skeleton => Projection::Skeleton,
+            None => Projection::Full,
+        }
     };
     let out = builder.finish(projection)?;
     actl_uia::persist_snapshot_scoped(

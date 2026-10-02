@@ -627,3 +627,19 @@ fn pointer_commands_with_validated_args() {
     let (code, _) = actl(&["click", "name:x", "--app", "y", "--with", "ctrl"]);
     assert_eq!(code, 2);
 }
+
+#[test]
+fn snapshot_keywords_help_surface() {
+    let out = support::IsolatedCommand::new()
+        .command
+        .args(["snapshot", "--help"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.contains("--keywords"), "help must document --keywords");
+    assert!(
+        text.contains("EMPTY"),
+        "zero-hit semantics must be documented"
+    );
+}

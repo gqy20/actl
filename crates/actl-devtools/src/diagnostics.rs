@@ -400,74 +400,58 @@ pub fn run(kind: &str, args: &Args) -> Result<Value> {
     }
 }
 
-/// 快照差异对比(docs/31 组件选择判定树第 2 步):按 runtime_id(UIA 稳定身份)
-/// 对比两份历史快照,回答"组件去哪了"——消失/新增/同身份但语义元数据变化
-/// (如标签名"已修改"→"未修改")。文件来自此前 snapshot 调用落盘的
-/// `~/.actl/snapshots/<id>.json`;无 runtime_id 的元素按 role/name/automation_id
-/// 退化合并。列表截断 20 条防膨胀,计数保持完整。
+/// 快照差异对比(docs/31 组件选择判定树第 2 步;探索模式 S1 升级为 core 多级配对):
+/// automation_id+role 优先,动态 id 回退 name+role(大小写不敏感),余部为新增/消失。
+/// 文件来自此前 snapshot 调用落盘的 `~/.actl/snapshots/<id>.json`。
+/// 列表截断 20 条防膨胀,计数保持完整。
 fn snapshot_diff(from: &str, to: &str) -> Result<Value> {
     const CAP: usize = 20;
     let dir = actl_core::state::SignalPaths::default()
         .dir
         .join("snapshots");
-    let load = |id: &str| -> Result<BTreeMap<String, Value>> {
+    let load = |id: &str| -> Result<Vec<actl_core::snapshot::ElementOut>> {
         let raw = crate::capture::read_json(&dir.join(format!("{id}.json")))
             .map_err(|_| io("snapshot file unreadable (ids come from prior snapshot calls)"))?;
         let elements = raw["elements"]
             .as_array()
             .ok_or_else(|| io("snapshot file has no elements array"))?;
-        Ok(elements
-            .iter()
-            .map(|e| {
-                let key = if e["runtime_id"].is_array() {
-                    e["runtime_id"].to_string()
-                } else {
-                    format!("{}|{}|{}", e["role"], e["name"], e["automation_id"])
-                };
-                (key, e.clone())
-            })
-            .collect())
+        serde_json::from_value(serde_json::Value::Array(elements.clone()))
+            .map_err(|e| io(format!("snapshot elements do not parse: {e}")))
     };
-    let from_map = load(from)?;
-    let to_map = load(to)?;
-    let mut gone: Vec<Value> = vec![];
-    let mut identity_changed: Vec<Value> = vec![];
-    for (key, old) in &from_map {
-        match to_map.get(key) {
-            None => gone.push(old.clone()),
-            Some(new) => {
-                if old["name"] != new["name"]
-                    || old["role"] != new["role"]
-                    || old["automation_id"] != new["automation_id"]
-                {
-                    identity_changed.push(json!({
-                        "runtime_id": old["runtime_id"],
-                        "from": {"name": old["name"], "role": old["role"], "automation_id": old["automation_id"]},
-                        "to": {"name": new["name"], "role": new["role"], "automation_id": new["automation_id"]},
-                    }));
-                }
-            }
-        }
-    }
-    let added: Vec<Value> = to_map
-        .iter()
-        .filter(|(key, _)| !from_map.contains_key(*key))
-        .map(|(_, e)| e.clone())
-        .collect();
+    let from_el = load(from)?;
+    let to_el = load(to)?;
+    let d = actl_core::diff::diff(&from_el, &to_el);
+    let gone: Vec<Value> = serde_json::to_value(&d.removed)
+        .map_err(io)?
+        .as_array()
+        .map(|a| a.iter().take(CAP).cloned().collect())
+        .unwrap_or_default();
+    let added: Vec<Value> = serde_json::to_value(&d.added)
+        .map_err(io)?
+        .as_array()
+        .map(|a| a.iter().take(CAP).cloned().collect())
+        .unwrap_or_default();
+    let identity_changed: Vec<Value> = serde_json::to_value(&d.changed)
+        .map_err(io)?
+        .as_array()
+        .map(|a| a.iter().take(CAP).cloned().collect())
+        .unwrap_or_default();
     Ok(json!({
         "status": "diffed",
         "from": from,
         "to": to,
         "counts": {
-            "from": from_map.len(),
-            "to": to_map.len(),
-            "gone": gone.len(),
-            "added": added.len(),
-            "identity_changed": identity_changed.len(),
+            "from": from_el.len(),
+            "to": to_el.len(),
+            "gone": d.pairing.removed,
+            "added": d.pairing.added,
+            "identity_changed": d.pairing.changed,
+            "paired_by_automation_id_role": d.pairing.paired_by_automation_id_role,
+            "paired_by_name_role": d.pairing.paired_by_name_role,
         },
-        "gone": gone.into_iter().take(CAP).collect::<Vec<_>>(),
-        "added": added.into_iter().take(CAP).collect::<Vec<_>>(),
-        "identity_changed": identity_changed.into_iter().take(CAP).collect::<Vec<_>>(),
+        "gone": gone,
+        "added": added,
+        "identity_changed": identity_changed,
         "list_cap": CAP,
     }))
 }

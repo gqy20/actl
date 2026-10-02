@@ -186,6 +186,12 @@ pub(crate) enum Command {
         /// inside the document only) — the token saver for browsers/editors
         #[arg(long, value_enum)]
         view: Option<ViewMode>,
+        /// Task keyword projection (exploration S1): comma-separated keywords;
+        /// interactive elements whose name/automation_id contains any keyword
+        /// (case-insensitive) plus their ancestor chain; combines with --skeleton.
+        /// Zero hits return an EMPTY projection (no silent fallback)
+        #[arg(long, value_name = "K1,K2", conflicts_with = "view")]
+        keywords: Option<String>,
         /// Observe only this unique container (strict uia: selector; requires --app or --hwnd)
         #[arg(long)]
         within: Option<String>,
@@ -1106,7 +1112,7 @@ fn after_help_for(name: &str) -> Option<&'static str> {
         }
         "status" => "Example:\n  actl status\nOutput: version, protocol version, platform",
         "snapshot" => {
-            "Example:\n  actl snapshot --app Notepad --skeleton\n  actl snapshot --app Edge --view content --skeleton\n--skeleton keeps interactive elements + collapsed ancestors (token saver).\n--view content keeps only Document (web/document body) subtrees, drops app chrome;\ncombines with --skeleton (folding inside the document) — the browser/editor token saver.\nExample local scope:\n  actl snapshot --app MyApp --within 'uia:{\"match\":{\"id\":\"panel\"}}' --depth 3 --limit 100\n--within requires --app/--hwnd and one strict UIA container. Root depth is 0.\nLocal refs require the returned snapshot_id on replay; never mix with full-window refs.\nOutput: scope, ref_scope=container, observed_nodes; truncated + truncation_reasons report actual node/depth cuts.\nErrors: PROTOCOL invalid scope/budgets | AMBIGUOUS container | NOT_FOUND no window/Document | INTERNAL/PERM_DENIED/STALE_REF observation failed | NOT_ACTIONABLE incomplete content scope"
+            "Example:\n  actl snapshot --app Notepad --skeleton\n  actl snapshot --app Edge --view content --skeleton\n  actl snapshot --app MyApp --keywords 'save,导出' --skeleton\n--skeleton keeps interactive elements + collapsed ancestors (token saver).\n--view content keeps only Document (web/document body) subtrees, drops app chrome;\ncombines with --skeleton (folding inside the document) — the browser/editor token saver.\n--keywords K1,K2 keeps interactive elements whose name/automation_id contains any keyword (case-insensitive) plus ancestors; the task-projection primitive of exploration mode (docs/42). Zero hits return an EMPTY result (no silent fallback). 1-16 keywords, each ≤64 chars.\nExample local scope:\n  actl snapshot --app MyApp --within 'uia:{\"match\":{\"id\":\"panel\"}}' --depth 3 --limit 100\n--within requires --app/--hwnd and one strict UIA container. Root depth is 0.\nLocal refs require the returned snapshot_id on replay; never mix with full-window refs.\nOutput: scope, ref_scope=container, observed_nodes; truncated + truncation_reasons report actual node/depth cuts.\nErrors: PROTOCOL invalid scope/budgets/keywords | AMBIGUOUS container | NOT_FOUND no window/Document | INTERNAL/PERM_DENIED/STALE_REF observation failed | NOT_ACTIONABLE incomplete content scope"
         }
         "click" => {
             "Example:\n  actl click @e3 --app Notepad --snapshot s1a2b\n  actl click name:item --app Explorer --physical --with ctrl\n(multi-select)\n  actl click id:session_item_x --app 微信 --physical --no-activate\n  actl click id:session_item_x --app 微信 --expect element:id:chat_message_list\n--expect window:<substr> = a NEW window must appear; element:<target> = postcondition:\nthe element must resolve afterwards (implicit wait, default 2s) — the materialization\ncheck for apps whose UIA actions report success without effect.\n--no-activate (--physical only): the click lands but the window does not come to the\nforeground or steal focus (WS_EX_NOACTIVATE guard; cursor returned afterwards).\nErrors: NOT_FOUND no match | AMBIGUOUS multi-match (candidates returned) | STALE_REF stale @eN (re-snapshot) | NOT_ACTIONABLE no pattern, occluded, or xy: point outside window bounds | PERM_DENIED foreground guard (--physical) or no-activate style rejected (elevated window) | ASSERTION_FAILED --expect unmet | PROTOCOL xy: without --physical/--app, bad --expect, or --no-activate without --physical"
