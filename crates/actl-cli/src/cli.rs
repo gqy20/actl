@@ -174,28 +174,22 @@ pub(crate) enum Command {
         /// Target window by title substring or hwnd:<n> (@eN refs require it; otherwise focused window)
         #[arg(long, conflicts_with = "snap_hwnd")]
         app: Option<String>,
-        /// Target window by native handle (decimal or 0x-hex; untitled special windows
-        /// like the Win11 taskbar XAML island are only reachable this way)
+        /// Target window by native handle (decimal or 0x-hex)
         #[arg(long, id = "snap_hwnd", value_name = "HWND")]
         hwnd: Option<String>,
-        /// Keep only interactive elements and their ancestor chain (token saver)
+        /// Keep only interactive elements + ancestors (token saver)
         #[arg(long)]
         skeleton: bool,
-        /// Content-scoped view: keep only Document (web/document body) subtrees,
-        /// drop app chrome entirely; combines with --skeleton (folding applies
-        /// inside the document only) — the token saver for browsers/editors
+        /// Keep only Document (web body) subtrees, drop app chrome
         #[arg(long, value_enum)]
         view: Option<ViewMode>,
-        /// Task keyword projection (exploration S1): comma-separated keywords;
-        /// interactive elements whose name/automation_id contains any keyword
-        /// (case-insensitive) plus their ancestor chain; combines with --skeleton.
-        /// Zero hits return an EMPTY projection (no silent fallback)
+        /// Task keyword filter: keep hits + ancestors (zero hits = empty, no fallback)
         #[arg(long, value_name = "K1,K2", conflicts_with = "view")]
         keywords: Option<String>,
-        /// Observe only this unique container (strict uia: selector; requires --app or --hwnd)
+        /// Observe only this unique container (strict uia: selector)
         #[arg(long)]
         within: Option<String>,
-        /// Maximum depth relative to the container, 0..40 (root = 0)
+        /// Maximum depth from container, 0..40 (root = 0)
         #[arg(long)]
         depth: Option<u32>,
         /// Maximum observed nodes including the container, 1..5000
@@ -238,17 +232,14 @@ pub(crate) enum Command {
         /// Validate window and ref element identities against this snapshot id
         #[arg(long)]
         snapshot: Option<String>,
-        /// Physically move the mouse and click at the UIA clickable point
-        /// (uses the real pointer + input lock; UIA Invoke is the default)
+        /// Real mouse click (vs UIA Invoke default)
         #[arg(long)]
         physical: bool,
         /// Hold these modifier(s) atomically during a --physical click (ctrl = multi-select, shift = range)
         #[arg(long, requires = "physical", value_delimiter = ',')]
         with: Vec<String>,
         /// Suppress activation: temporarily set WS_EX_NOACTIVATE on the target
-        /// window root — the click lands by coordinates but does not bring the
-        /// window to the foreground or steal focus (pointer-only; keyboard
-        /// commands refuse it fail-closed); cursor is returned afterwards
+        /// Click without bringing the window to the foreground (cursor returned)
         #[arg(long, requires = "physical")]
         no_activate: bool,
         /// Post-condition: window:<substr> must NEWLY appear after the click
@@ -1144,7 +1135,7 @@ fn after_help_for(name: &str) -> Option<&'static str> {
             "Example:\n  actl snapshot --app Notepad --skeleton\n  actl snapshot --app Edge --view content --skeleton\n  actl snapshot --app MyApp --keywords 'save,导出' --skeleton\n--skeleton keeps interactive elements + collapsed ancestors (token saver).\n--view content keeps only Document (web/document body) subtrees, drops app chrome;\ncombines with --skeleton (folding inside the document) — the browser/editor token saver.\n--keywords K1,K2 keeps interactive elements whose name/automation_id contains any keyword (case-insensitive) plus ancestors; the task-projection primitive of exploration mode (docs/42). Zero hits return an EMPTY result (no silent fallback). 1-16 keywords, each ≤64 chars.\nExample local scope:\n  actl snapshot --app MyApp --within 'uia:{\"match\":{\"id\":\"panel\"}}' --depth 3 --limit 100\n--within requires --app/--hwnd and one strict UIA container. Root depth is 0.\nLocal refs require the returned snapshot_id on replay; never mix with full-window refs.\nOutput: scope, ref_scope=container, observed_nodes; truncated + truncation_reasons report actual node/depth cuts.\nErrors: PROTOCOL invalid scope/budgets/keywords | AMBIGUOUS container | NOT_FOUND no window/Document | INTERNAL/PERM_DENIED/STALE_REF observation failed | NOT_ACTIONABLE incomplete content scope"
         }
         "click" => {
-            "Example:\n  actl click @e3 --app Notepad --snapshot s1a2b\n  actl click name:item --app Explorer --physical --with ctrl\n(multi-select)\n  actl click id:session_item_x --app 微信 --physical --no-activate\n  actl click id:session_item_x --app 微信 --expect element:id:chat_message_list\n--expect window:<substr> = a NEW window must appear; element:<target> = postcondition:\nthe element must resolve afterwards (implicit wait, default 2s) — the materialization\ncheck for apps whose UIA actions report success without effect.\n--no-activate (--physical only): the click lands but the window does not come to the\nforeground or steal focus (WS_EX_NOACTIVATE guard; cursor returned afterwards).\nErrors: NOT_FOUND no match | AMBIGUOUS multi-match (candidates returned) | STALE_REF stale @eN (re-snapshot) | NOT_ACTIONABLE no pattern, occluded, or xy: point outside window bounds | PERM_DENIED foreground guard (--physical) or no-activate style rejected (elevated window) | ASSERTION_FAILED --expect unmet | PROTOCOL xy: without --physical/--app, bad --expect, or --no-activate without --physical"
+            "Example:\n  actl click @e3 --app Notepad --snapshot s1a2b\n  actl click name:item --app Explorer --physical --with ctrl\n(multi-select)\n  actl click id:session_item_x --app 微信 --physical --no-activate\n  actl click id:session_item_x --app 微信 --expect element:id:chat_message_list\n--expect window:<substr> = NEW window appears; element:<target> = postcondition resolves (implicit wait, 2s default).\nErrors: NOT_FOUND | AMBIGUOUS (candidates) | STALE_REF (re-snapshot) | NOT_ACTIONABLE occluded/xy: outside | PERM_DENIED guard | ASSERTION_FAILED --expect unmet | PROTOCOL bad args"
         }
         "execution-status" => {
             "Usage: actl execution-status\nArguments: none\nExample:\n  actl execution-status\nReports ready/stopped/repair_required; never grants permission.\nErrors: PROTOCOL invalid arguments"
@@ -1197,7 +1188,7 @@ Errors: PROTOCOL --app required | PERM_DENIED foreground guard | NOT_FOUND windo
             "Example:\n  actl toggle name:自动保存 --app 设置\nReturns the resulting state (On/Off). vs click: no click side effects.\nErrors: NOT_FOUND / AMBIGUOUS target | NOT_ACTIONABLE no Toggle pattern"
         }
         "right-click" => {
-            "Example:\n  actl right-click name:file.txt --app 项目\nPhysical action (naming = authorization): opens context menus.\n--no-activate: the click lands but the window does not come to the foreground\n(WS_EX_NOACTIVATE guard on the window root; cursor returned afterwards).\nErrors: NOT_FOUND / AMBIGUOUS | NOT_ACTIONABLE no clickable point or occluded | PERM_DENIED cannot set the no-activate style (elevated window)"
+            "Example:\n  actl right-click name:file.txt --app 项目\nPhysical action (naming = authorization): opens context menus.\n--no-activate: click without foregrounding the window.\nErrors: NOT_FOUND / AMBIGUOUS | NOT_ACTIONABLE no clickable point or occluded | PERM_DENIED elevated window"
         }
         "double-click" => {
             "Example:\n  actl double-click name:file.txt --app 项目\nErrors: NOT_FOUND / AMBIGUOUS | NOT_ACTIONABLE no clickable point or occluded"
@@ -1293,7 +1284,7 @@ pub(crate) fn build_cli() -> clap::Command {
                     | "verify"
                     | "wait"
             ) {
-                "\nStrict UIA target: uia:{\"match\":{\"role\":\"Button\",\"name\":\"OK\"},\"within\":{\"id\":\"panel\"},\"scope\":\"descendants\"}\nConditions: role (case-insensitive exact), id/name (exact), name_contains (case-sensitive substring).\nScope: children or descendants (default). Container must be unique. No fuzzy/ordinal/--near fallback.\nExample (PowerShell 7.3+): actl find --target 'uia:{\"match\":{\"role\":\"Button\",\"name\":\"OK\"}}' --app MyApp\nfind --target returns one persistent target, no snapshot ref; conflicts with --name/--role/--id/--limit.\nErrors: PROTOCOL invalid query | NOT_FOUND zero matches | AMBIGUOUS multiple matches | INTERNAL provider read failed | NOT_ACTIONABLE traversal budget exceeded."
+                "\nStrict UIA target syntax: see `actl find --help`"
             } else {
                 ""
             };
