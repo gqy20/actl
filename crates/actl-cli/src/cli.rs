@@ -687,7 +687,7 @@ pub(crate) enum Command {
     },
     /// Launch an isolated Chromium-family browser (Edge/Chrome) and bind one tab as an actl session (CDP channel, docs/72)
     BrowserLaunch {
-        /// Browser executable path (absolute), e.g. C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe
+        /// Executable path or app-registry alias (e.g. edge); see `actl app-list`
         #[arg(long)]
         browser_executable: String,
         /// Initial page URL (default about:blank)
@@ -807,7 +807,7 @@ pub(crate) enum Command {
         /// Absolute executable path, or a glob pattern with * for Store version directories
         /// (e.g. C:/Program Files/WindowsApps/Microsoft.Paint_*/PaintApp/mspaint.exe)
         path: String,
-        /// Treat the path as a glob pattern (Store apps; implies version-tolerant resolution)
+        /// Path is a glob pattern (Store apps; auto re-resolves on version change)
         #[arg(long)]
         pattern: bool,
     },
@@ -820,8 +820,7 @@ pub(crate) enum Command {
     },
     /// Read-only browser assertions for flow verify steps (exactly one mode)
     BrowserVerify {
-        /// Assert this session's bound target still responds (--alive), is deregistered (--gone),
-        /// or carries a logged-in state (--css/--xpath with optional --contains)
+        /// Session id for --alive/--gone/--css/--xpath assertions
         #[arg(long)]
         session: Option<String>,
         /// With --session: the bound tab target answers (implies browser + endpoint alive)

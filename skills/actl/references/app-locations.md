@@ -62,8 +62,18 @@ actl browser-launch --browser-executable edge --url about:blank
 #     default: edge
 ```
 
+## 移除注册
+
+```bash
+actl app-remove my-tool
+```
+
+只删注册记录，不动应用本体。未知别名返回 NOT_FOUND。
+Store 应用卸载后应清理对应的 pattern 注册。
+
 ## 纪律
 
 - **先查再写死**：任何脚本/流程中的 exe 路径，先 `app-list` 确认是否已注册
 - **发现新软件就注册**：找到路径后立即 `app-register`，下次不用再找
 - **Store 应用必须用 pattern**：写死版本号路径是定时炸弹
+- **注册写错或软件已卸载**：`app-remove <别名>` 清理，不手动编辑 apps.json

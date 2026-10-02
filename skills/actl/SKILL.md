@@ -85,9 +85,10 @@ actl verify --value <target> "<期望>" --app <app> # 确认:立即断言
 
 ## 命令速查
 
-感知:snapshot(--skeleton/--view content/--within uia:JSON --depth N --limit N) find(--name/--role/--id 或 --target uia:JSON) get list-windows status commands
+感知:snapshot(--skeleton/--view content/--keywords K1,K2/--within uia:JSON --depth N --limit N) find(--name/--role/--id 或 --target uia:JSON) get list-windows status commands
 
 已知容器时，使用 `snapshot --app <window> --within 'uia:{"match":{"id":"panel"}}' --depth 3 --limit 100` 减少无关输出。
+已知任务词汇时，用 `--keywords 'save,导出'` 只保留命中的交互元素+祖先链（零命中返回空，不静默回退全量——这是任务投影，探索模式的地基）。
 容器必须唯一，根节点深度为 0；检查 truncated/truncation_reasons，不把截断解释为不存在。
 局部 ref 从 @e1 重新编号，后续命令必须传同次返回的 `--snapshot <snapshot_id>`；不要混用全窗口或其他局部快照的编号。
 容器变化后重新观察；没有唯一容器时先 find/inspect，不用扩大输出代替定位。此功能不保证降低总扫描耗时。
@@ -95,12 +96,15 @@ actl verify --value <target> "<期望>" --app <app> # 确认:立即断言
 只在完整/局部观察均未截断、前后内容和身份稳定时比较；分别检查 elements 与完整 envelope 字节，
 不把字节等同 token。深树定位优先提供精确 id/name：由原生查询完整候选再核验唯一性。
 已知 role 可走原生候选查询；只有 name_contains 等宽泛查询仍有遍历预算；原生候选超限或 provider 失败须保留错误，不能按首个候选继续。
-执行:click(--physical/--expect/--near/--no-activate) right-click double-click hover drag scroll type(--paste)
-     press(--expect) key-down key-up set-value
-窗口:launch focus-window close-window resize-window wait(--element/--window/--gone/--stable/--idle) batch
+执行:click(--physical/--expect/--near/--no-activate) right-click double-click hover
+     drag(--to/--path X,Y 轨迹/xy: 框选两端守卫) scroll type(--paste)
+     press(--expect) key-down(--duration 长按自动释放) key-up set-value
+浏览器:browser-launch(--profile/--proxy/--headless/--browser-executable 接受别名) browser-navigate browser-read(--property/--iframe)
+     browser-click(--expect-text) browser-type browser-verify(--newest-alive/--none/--css) browser-close browser-list
+窗口:launch(接受 app-registry 别名) focus-window close-window resize-window wait(--element/--window/--gone/--stable/--idle) batch
 桌面:minimize-window restore-window desktop-prepare desktop-restore display-start display-status execution-status execution-recover
 验证:verify(--exists/--value/--contains/--checked) extract(--table)
-系统:get-clipboard set-clipboard
+系统:app-register(--pattern) app-list app-remove get-clipboard set-clipboard
 
 ## 外部 UIA 对照诊断
 
@@ -141,9 +145,11 @@ actl wait --element id:chat_message_list --app 微信 --timeout 4000
 
 目标语法:`@eN`(重放,须 --app)· `name:<子串>` · `id:<AutomationId>` · `role:<Type>` ·
 `role:<Type>#<序数>` · `id:<AutomationId>#<序数>`(多文档页同名 id) ·
-`xy:<x>,<y>`(坐标,须 --app + --physical,窗口边界守卫);窗口锚定 `--app` 可用
-`hwnd:<n>`(SPA 跳转改标题时);
+`xy:<x>,<y>`(坐标;click 须 --app + --physical;drag xy:→xy: 框选须 --app,两端窗口边界+遮挡守卫);
+窗口锚定 `--app` 可用 `hwnd:<n>`(SPA 跳转改标题时);
 多候选消歧:`--near <锚点>`。
+`drag --path X,Y`(可重复 ≤64 点,绝对物理像素)走 8px 插值轨迹(画布/签名);
+`key-down --duration <ms>`(50-60000)为长按:按下→持有→自动释放(急停即释放)。
 
 ## 弹窗处理协议
 
@@ -236,12 +242,15 @@ Canvas 类(mspaint)、自绘菜单(微信右键)、图片消息(微信气泡)、
 
 浏览器任务先路由,再动手:
 
-- **全新上下文的 web 任务**(抓取、批量表单、headless、测试):用 playwright/
-  browser-use 类工具——CDP 通道,DOM 级选择器,那是它们的主场。
-- **actl 的浏览器领地**:**用户真实登录态的会话**(企业 SSO 门户、已登录的
-  网页应用——Chrome 136 起默认 profile 禁 CDP,Playwright 接管不了,UIA 是唯一
-  非视觉通道)+ **浏览器内外联动**(下载→文件对话框→桌面应用、地址栏/标签/
-  扩展弹窗等 chrome 层操作)。
+- **全新上下文 + 无需桌面联动的 web 任务**:用 playwright/browser-use——它们
+  在无头/批量场景成熟。
+- **actl 自有浏览器会话(CDP 通道)**:`browser-launch` 启动隔离浏览器(默认有头、
+  常规 UA、可见窗口),守卫写(`browser-click --expect-text` / `browser-type` 读回核验),
+  会话生命周期经 `browser-list` / `browser-verify` 管理。持久 profile(`--profile`)
+  支持一次性人工登录复用。适用于需要登录态+守卫写的网页任务。
+- **用户真实登录态的桌面浏览器**(企业 SSO 门户、已登录的网页应用):UIA 驱动——
+  Chrome 136 起默认 profile 禁 CDP,Playwright 接管不了,UIA 是唯一非视觉通道。
+  树形观察用 `snapshot --view content --skeleton`;地址栏走 `press ctrl+l` → paste。
 
 浏览器内操作要点(详见 `apps/browser.yml`):树形观察用
 `snapshot --view content --skeleton`(chrome 整枝丢弃);读正文用
@@ -249,8 +258,8 @@ Canvas 类(mspaint)、自绘菜单(微信右键)、图片消息(微信气泡)、
 `wait --element role:Document --stable` 判定加载完成(不要 sleep);地址栏输入
 走 `press ctrl+l` → `set-clipboard` + `paste`。
 
-规则:**两工具可组合**——playwright 做研究/采集,actl 把结果"落地"到用户真实
-会话或桌面应用(与下方 collector 分工同构)。
+规则:**三通道可组合**——playwright 做研究/采集,actl CDP 做守卫写落地,
+actl UIA 操作用户真实会话或桌面应用。
 
 ## 工具分工:actl × wechat-ui-collector
 
@@ -268,6 +277,15 @@ collector 检索到结论 → actl 实时发消息回应。
 ## 更多
 
 错误码与恢复动作全表:[references/error-codes.md](references/error-codes.md)
+本地软件位置查找指南:[references/app-locations.md](references/app-locations.md)
+流程使用说明:[references/flows.md](references/flows.md)
+
+### 本地应用别名
+
+`launch <别名>` 和 `browser-launch --browser-executable <别名>` 支持经
+`app-register` 注册的本地别名(如 `edge`、`paint`),先 `app-list` 查已注册的别名,
+避免每次写完整路径。Store 应用用 `--pattern` 通配注册(路径带版本号,更新后自动重解析)。
+详见 [app-locations.md](references/app-locations.md)。
 
 
 ### 桌面交接（显示 v5）

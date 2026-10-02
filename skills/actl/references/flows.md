@@ -8,8 +8,26 @@ resources.directories 声明相对目录，resources.files 每项为 {path, text
 
 flow-validate 只读预检，返回使用 validation-preview 的资源清单，不创建文件；emit-plan 不证明资源已准备。flow-run 完整预检通过后准备资源，--paused 也会准备；flow-resume 不重置资源或重读模板。初始化失败保留现场，不自动清理或重试。当前输入覆盖不会改变资源声明，覆盖到外部路径时须自行准备并核对文件归属。
 
-适用于 actl 0.1.6，包含编写、执行和恢复所需说明。
+适用于 actl ≥0.1.9，包含编写、执行和恢复所需说明。
 现有业务流程见 [流程索引](../workflows/README.md)。
+
+## 浏览器命令在流程中的规则
+
+browser-* 命令可入 YAML 流程，但有专属治理规则：
+
+1. **`browser-launch` 不能带 `outputs`**（生命周期命令，不是只读生产者）——
+   会话句柄经 `browser-list` 以观察者身份产出（`pointer: /sessions/0/session_id`），
+   后续步骤 `bind` 注入 `--session` 值位。
+2. **有副作用的步骤必须带 `verify`**——`browser-verify` 断言族可用：
+   launch 后 `--newest-alive`、close 后 `--none`、写入后 `--session X --alive`。
+3. **登录暂停点**用 `pause_before: true` + `resume_check: browser-verify --css <登录标记>`
+   （用户在可见窗口完成登录后恢复；谓词不满足保持 paused）。
+4. **值级断言在写动词上**（`browser-click --expect-text` / `browser-type` 自动读回核验），
+   不用通用 `verify` 命令。
+5. **持久 profile 必须声明**：`browser-launch --profile <name>` 需在
+   `resources.browser_profiles` 声明该名字（未声明即 PROTOCOL 拒绝）。
+
+示例流程：`workflows/browser-login-session.yml`（登录暂停+复用全链）。
 
 ## 编写与预检
 
