@@ -4,6 +4,50 @@ body { margin: 0; font-size: 14px; line-height: 1.6; }
 [hidden] { display: none !important; }
 button, summary { -webkit-tap-highlight-color: transparent; }
 button { font: inherit; cursor: pointer; }
+
+/* ── 边缘脉冲条 ── */
+#edge-pulse {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 4px;
+  pointer-events: none;
+  z-index: 999;
+  opacity: 0;
+  border-radius: 0 0 2px 2px;
+}
+#edge-pulse[data-tone='working'] {
+  background: linear-gradient(90deg, transparent, #4a9eff 30%, #4a9eff 70%, transparent);
+  animation: edge-wave 400ms ease-out;
+}
+#edge-pulse[data-tone='waiting'] {
+  background: #ffb84a;
+  animation: edge-heartbeat 1s ease-in-out infinite;
+}
+#edge-pulse[data-tone='error'] {
+  background: #ff4a4a;
+  animation: edge-flash 300ms ease-out 2;
+}
+#edge-pulse[data-tone='done'] {
+  background: #4aff88;
+  animation: edge-fade 1s ease-out forwards;
+}
+@keyframes edge-wave {
+  0%   { transform: translateX(-100%) scaleX(0.3); opacity: 0; }
+  30%  { opacity: 0.8; }
+  100% { transform: translateX(100%) scaleX(1); opacity: 0; }
+}
+@keyframes edge-heartbeat {
+  0%, 100% { opacity: 0.06; }
+  50%      { opacity: 0.15; }
+}
+@keyframes edge-flash {
+  0%   { opacity: 0.6; }
+  100% { opacity: 0.12; }
+}
+@keyframes edge-fade {
+  0%   { opacity: 0.8; }
+  100% { opacity: 0; }
+}
 #content { padding: 8px 0 16px; }
 h1 { margin: 0 0 14px; font-size: 22px; font-weight: 600; line-height: 1.4; }
 h1[data-tone='working'] { color: #b4d0e2; }

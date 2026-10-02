@@ -14,6 +14,12 @@ const element = <T extends HTMLElement>(id: string): T => {
   return node as T;
 };
 const content = element('content');
+const edgePulse = document.getElementById('edge-pulse') ?? (() => {
+  const el = document.createElement('div');
+  el.id = 'edge-pulse';
+  document.body.prepend(el);
+  return el;
+})();
 let lastHeight = 0;
 function emitHeight(height: number): void {
   if (height !== lastHeight) {
@@ -37,6 +43,14 @@ function setText(id: string, text: string): void {
 function render(snapshot: Snapshot): void {
   setText('status', snapshot.status);
   element('status').dataset.tone = snapshot.tone;
+  // 边缘脉冲:tone 变化时重新触发动画
+  if (edgePulse.dataset.tone !== snapshot.tone) {
+    edgePulse.dataset.tone = snapshot.tone;
+    // 重置动画(移除再添加 data-tone 使 CSS 动画重播)
+    edgePulse.style.animation = 'none';
+    void edgePulse.offsetHeight; // 强制 reflow
+    edgePulse.style.animation = '';
+  }
   const summary = element('summary');
   if (summary.dataset.body !== snapshot.body) {
     const lines = summaryLines(snapshot.body);
