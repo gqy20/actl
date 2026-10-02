@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "actl-cli"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "actl-core",
  "actl-flow",
@@ -15,7 +15,7 @@ dependencies = [
 
 [[package]]
 name = "actl-core"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "serde",
  "serde_json",
@@ -24,7 +24,7 @@ dependencies = [
 
 [[package]]
 name = "actl-devtools"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "actl-core",
  "actl-flow",
@@ -35,7 +35,7 @@ dependencies = [
 
 [[package]]
 name = "actl-flow"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "actl-core",
  "serde",
@@ -45,11 +45,11 @@ dependencies = [
 
 [[package]]
 name = "actl-physical"
-version = "0.1.8"
+version = "0.1.9"
 
 [[package]]
 name = "actl-uia"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "actl-core",
  "serde_json",
@@ -847,13 +847,13 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "0.1.8"
+version = "0.1.9"
 
 [[package]]
 name = "zip"
-version = "8.2.0"
+version = "8.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b680f2a0cd479b4cff6e1233c483fdead418106eae419dc60200ae9850f6d004"
+checksum = "2d04a6b5381502aa6087c94c669499eb1602eb9c5e8198e534de571f7154809b"
 dependencies = [
  "crc32fast",
  "flate2",
