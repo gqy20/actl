@@ -1,5 +1,7 @@
 # Rust 构建产物
 /target
+# 浏览器 spike 独立工程构建产物(不并入根 workspace)
+/prototypes/browser-rs/target
 node_modules/
 /ui/signal/dist/
 
