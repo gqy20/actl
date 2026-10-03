@@ -6,6 +6,7 @@ pub mod engine;
 pub mod explore;
 pub mod freshness;
 pub mod inputs;
+pub mod record;
 pub mod recovery;
 pub mod resources;
 pub mod route;

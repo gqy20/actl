@@ -1,0 +1,12 @@
+{
+    "version":  "1",
+    "ok":  true,
+    "command":  "record-start",
+    "data":  {
+                 "dir":  "records/s1",
+                 "id":  "s1",
+                 "max_seconds":  60,
+                 "status":  "recording",
+                 "trace":  "records/s1/trace.jsonl"
+             }
+}

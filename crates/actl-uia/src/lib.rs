@@ -42,6 +42,8 @@ pub mod preview;
 #[allow(unsafe_op_in_unsafe_fn)] // Temporary no-activate preview windows and GDI resources.
 mod preview_window;
 mod read;
+/// GUI 操作录制会话捕获层(docs/06 R1;钩子+反查+trace)。
+pub mod record;
 pub use read::focus_report;
 /// 分离式子进程派生前的 stdio 继承守卫(浏览器通道等长命子进程;docs/72)。
 pub mod process_io;

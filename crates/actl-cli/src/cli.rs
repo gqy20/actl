@@ -176,6 +176,44 @@ pub(crate) enum FlowCommand {
 }
 
 #[derive(Subcommand)]
+pub(crate) enum RecordCommand {
+    /// Start a GUI recording session (spawns a detached bounded worker)
+    #[command(name = "record-start")]
+    Start {
+        /// Session id (default: rec-<unix ms>); fails if the id was already used
+        #[arg(long)]
+        id: Option<String>,
+        /// Hard duration cap in seconds; the worker finalizes honestly on cap
+        #[arg(long, default_value_t = 600)]
+        max_seconds: u64,
+    },
+    /// Internal recording session process (spawned by record-start; same semantics when run directly)
+    #[command(name = "record-worker")]
+    Worker {
+        /// Session id to capture
+        #[arg(long)]
+        id: String,
+        /// Hard duration cap in seconds
+        #[arg(long, default_value_t = 600)]
+        max_seconds: u64,
+    },
+    /// Stop the active recording session and return the compiled draft
+    #[command(name = "record-stop")]
+    Stop {
+        /// Session id (default: the single active session; ambiguous requires --id)
+        #[arg(long)]
+        id: Option<String>,
+    },
+    /// Report recording session state and trace statistics (read-only)
+    #[command(name = "record-status")]
+    Status {
+        /// Session id (omit to list active sessions)
+        #[arg(long)]
+        id: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
 pub(crate) enum Command {
     /// List every command with its argument schema (machine-readable self-description)
     Commands,
@@ -185,6 +223,8 @@ pub(crate) enum Command {
     Desktop(DesktopCommand),
     #[command(flatten)]
     Flow(FlowCommand),
+    #[command(flatten)]
+    Record(RecordCommand),
     /// Capture the interactive element tree of a window as refs (@e1..)
     Snapshot {
         /// Target window by title substring or hwnd:<n> (@eN refs require it; otherwise focused window)
@@ -983,6 +1023,10 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
         Command::Flow(FlowCommand::Resume { .. }) => "flow-resume",
         Command::Flow(FlowCommand::Clean { .. }) => "flow-clean",
         Command::Flow(FlowCommand::Writeback { .. }) => "explore-writeback",
+        Command::Record(RecordCommand::Start { .. }) => "record-start",
+        Command::Record(RecordCommand::Worker { .. }) => "record-worker",
+        Command::Record(RecordCommand::Stop { .. }) => "record-stop",
+        Command::Record(RecordCommand::Status { .. }) => "record-status",
         Command::Desktop(DesktopCommand::History { .. }) => "history",
         Command::Desktop(DesktopCommand::DisplayStart) => "display-start",
         Command::Desktop(DesktopCommand::MinimizeWindow { .. }) => "minimize-window",
@@ -1116,6 +1160,18 @@ fn after_help_for(name: &str) -> Option<&'static str> {
         }
         "explore-writeback" => {
             "Example:\n  actl explore-writeback --id explore-s1-calc-auto\n  actl explore-writeback --id explore-s2-calc-tie --out route-fragment.yml\nRead-only evidence collection (docs/42 S3): extracts a pack-format route fragment (status ALWAYS unverified — verification migration is human review, PACKS.md discipline) from a completed exploration run (goal_met=true). Steps are the acted click sequence plus the goal assertion, with the app anchor emitted as {window}; dead/no-effect selectors become quirk candidates and suggested_priors (dead=-4, no_effect=-2) for the next run's explore.priors. The yaml fragment (envelope data or --out file) is pasted into apps/<slug>.yml by the caller; actl never writes pack files. Runs without goal_met or with a capped action log are rejected — incomplete routes are never exported.\nErrors: PROTOCOL not an exploration run / goal not met / truncated action log | INTERNAL storage or fragment write"
+        }
+        "record-start" => {
+            "Example:\n  actl record-start\n  actl record-start --id demo-save --max-seconds 300\nGUI recording session (docs/06 R1 / docs/76 / docs/79): spawns a detached bounded worker that captures semantic events via low-level hooks + point-in-time UIA reverse lookup. Trace (records/<id>/trace.jsonl) is the evidence file; record-stop compiles the mechanical draft (records/<id>/draft.yml, flow-validate clean, TODO items as comments with trace line evidence). One active session at a time; password-field keys are never stored; injected events are traced but not compiled.\nErrors: PROTOCOL session already active / id already used | INTERNAL worker spawn or startup confirm"
+        }
+        "record-worker" => {
+            "Example:\n  actl record-worker --id rec-1760 --max-seconds 600\nInternal session process spawned by record-start (CREATE_NO_WINDOW, stdio null). Runs the capture loop until stop-requested or the duration cap, then compiles and writes the draft itself; envelope printed at exit (useful for direct invocation/testing). ACTL_RECORD_DISABLE_HOOKS=1 is the offline test seam.\nErrors: PROTOCOL id already used / invalid id | INTERNAL hook install / trace write"
+        }
+        "record-stop" => {
+            "Example:\n  actl record-stop\n  actl record-stop --id demo-save\nWrites the stop marker, waits for the worker to finalize (<=15s), and returns the terminal summary including the full draft yaml. A dead worker (abandoned session) gets data salvage: the existing trace is compiled, the process is never revived. Already-completed sessions return the summary idempotently.\nErrors: PROTOCOL unknown id / no active session / ambiguous active sessions | INTERNAL stop marker write / finalize timeout"
+        }
+        "record-status" => {
+            "Example:\n  actl record-status --id demo-save\n  actl record-status\nRead-only: with --id reports session state (recording/abandoned when the pid is dead/finalizing/completed/failed), draft/trace paths, and trace statistics (clicks/keys/masked/injected); without --id lists active sessions and the total count.\nErrors: PROTOCOL unknown id / invalid id"
         }
         "task-archive" => {
             "Example:\n  actl task-archive --file report.json\nImmutable caller report, retained 30 days; never implies verified task success.\nErrors: PROTOCOL invalid report | INTERNAL file/storage failure"

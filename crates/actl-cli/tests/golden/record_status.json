@@ -1,0 +1,26 @@
+{
+    "version":  "1",
+    "ok":  true,
+    "command":  "record-status",
+    "data":  {
+                 "dir":  "records/s1",
+                 "draft":  "records/s1/draft.yml",
+                 "error":  null,
+                 "events":  0,
+                 "id":  "s1",
+                 "skipped_own":  0,
+                 "status":  "recording",
+                 "steps":  0,
+                 "stop_reason":  null,
+                 "todos":  0,
+                 "trace":  "records/s1/trace.jsonl",
+                 "trace_stats":  {
+                                     "clicks":  0,
+                                     "injected":  0,
+                                     "keys":  0,
+                                     "lines":  1,
+                                     "masked":  0
+                                 },
+                 "yaml":  null
+             }
+}

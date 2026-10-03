@@ -181,7 +181,7 @@ fn goal_step(spec: &ExploreSpec) -> Vec<String> {
 }
 
 /// YAML 标量渲染:需要时双引号(冒号/引号/控制字符/首尾空白/空串/流标点)。
-fn yaml_scalar(text: &str) -> String {
+pub(crate) fn yaml_scalar(text: &str) -> String {
     let needs_quote = text.is_empty()
         || text.starts_with(' ')
         || text.ends_with(' ')

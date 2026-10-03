@@ -199,6 +199,10 @@ fn self_describing_commands_schema() {
         "select",
         "toggle",
         "focus-report",
+        "record-start",
+        "record-worker",
+        "record-stop",
+        "record-status",
     ] {
         assert!(names.contains(&must), "commands schema must list {must}");
     }

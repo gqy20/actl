@@ -1,0 +1,18 @@
+{
+    "version":  "1",
+    "ok":  true,
+    "command":  "record-stop",
+    "data":  {
+                 "dir":  "records/salv1",
+                 "draft":  "records/salv1/draft.yml",
+                 "events":  2,
+                 "id":  "salv1",
+                 "skipped_own":  0,
+                 "status":  "completed",
+                 "steps":  2,
+                 "stop_reason":  "abandoned",
+                 "todos":  0,
+                 "trace":  "records/salv1/trace.jsonl",
+                 "yaml":  "# actl recording draft (mechanical compile, UNVERIFIED) — docs/06 R1 / docs/79\n# session: salv1; events: 2; stop_reason: abandoned; trace: records/salv1/trace.jsonl\n# TODO items below are comments, not steps (file stays flow-validate clean);\n# rewrite guidance: docs/79 §6 (agent rewrite pass, replay comparison).\nversion: 1\nname: salv1\nsteps:\n  - id: s1\n    title: \"click id:btn in 记事本\"\n    run:\n      command: click\n      args: [\"id:btn\", --app, 记事本]\n    verify:\n      command: verify\n      args: [--exists, \"id:btn\", --app, 记事本]\n    retry: never\n    # evidence: trace:2\n  - id: s2\n    title: press ctrl+s in 记事本\n    run:\n      command: press\n      args: [ctrl+s, --app, 记事本]\n    verify:\n      command: verify\n      args: [--exists, \"id:edit\", --app, 记事本]\n    retry: never\n    # evidence: trace:3\n"
+             }
+}

@@ -12,6 +12,7 @@ mod file_check;
 mod flow;
 mod interact;
 mod query;
+mod record;
 mod selector_input;
 
 use std::time::Instant;
@@ -67,6 +68,9 @@ fn main() {
                 | crate::cli::FlowCommand::Writeback { .. }
         ) | Command::Preview { .. }
             | Command::Desktop(DesktopCommand::ExecutionStatus | DesktopCommand::ExecutionRecover)
+            | Command::Record(
+                crate::cli::RecordCommand::Status { .. } | crate::cli::RecordCommand::Stop { .. },
+            )
     ) {
         finish(
             command_name,
@@ -146,6 +150,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             actl_uia::preview::show(app, &target, message, *duration).map(Into::into)
         }
         Command::Flow(command) => flow::dispatch(command).map(Into::into),
+        Command::Record(command) => record::dispatch(command).map(Into::into),
         Command::VerifyWindow { app, state } => {
             actl_uia::window_check::verify_window(app, state).map(Into::into)
         }

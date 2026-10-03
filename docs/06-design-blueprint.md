@@ -1016,3 +1016,54 @@ goal 核验的查询类故障（INTERNAL——真机实证：菜单开启态下 
 ### ref 编号口径修正（2026-10-03，投影快照 ref 可回放性修复）
 
 **@eN 编号 = 全树 DFS 交互序数,与投影无关**:投影(skeleton/keyword/content)只过滤可见性、不改编号——投影输出中编号有洞(如 @e3、@e7),但同一窗口的任何投影与全量快照对同一元素使用**同一编号**;输出编号、持久化身份列表、`click @eN --snapshot` 的回放计数(find 同口径)三者对齐。修复前:投影快照按投影后顺序从 @e1 重编,与回放的全树计数错位——投影 ref 从未正确回放过(发现 #6 攻坚实证:keyword 快照的 @e1 回放解析到全树第 1 个交互元素,NOT_ACTIONABLE)。副作用为正:跨投影 ref 混用从隐患变为安全(同空间),与 find 输出的编号纪律一致。
+
+## GUI 操作录制 R1（2026-10-03，PRD §1.3 授权；设计 docs/76 + 调研 docs/79）
+
+录制 = "人演示 → YAML"入口，与探索模式（agent 自主 → YAML）在回写层汇合。R1 = 捕获 + trace 证据 + 机械编译初版 YAML（"录完即可跑"下限）；R2 编译增强（延迟分析/泛化）、R3 agent 改写轮（skill 层）、R4 显示端菜单（[79 §8](79-quicker-recording-research.md) 触发面）。会话有界：显式 start/stop + 时长上限，**非常驻**。
+
+### 命令族（4 个，stdout 一律 envelope）
+
+- `record-start [--id <id>] [--max-seconds <N>]`：spawn 分离的 `actl record-worker --id … --max-seconds …`（std Command + `CREATE_NO_WINDOW` + stdio 全 NUL——signal probe 同款；**spawn 前先 `process_io::clear_stdio_inheritance()`**：worker 继承调用方管道写端会让 `$()`/ReadToEnd/管道读阻塞到 worker 退出，R1 落地实测 + 浏览器通道同坑先例，"兜底一切分离式子进程派生"由此兑现）。默认 id = `rec-<unix ms>`（valid_id 规则）；默认时长上限 600s。启动后等 state.json 出现（≤3s）确认后返回：data `{id, status: "recording", pid, dir, trace, max_seconds}`（路径为相对 %LOCALAPPDATA%\actl\ 的 records/<id> 形态）。已存在活跃会话（state=recording 且 pid 存活）→ **PROTOCOL**；id 已被用过 → PROTOCOL。落盘：`%LOCALAPPDATA%\actl\records\<id>\{state.json, trace.jsonl, stop-requested, draft.yml}`。
+- `record-worker --id <id> [--max-seconds <N>]`（内部会话进程，由 record-start spawn；直接调用同语义，stdout envelope 便于测试与诊断）。捕获循环 → 终态时编译 draft.yml 并返回 `{id, status: "completed", stop_reason: "requested"|"duration_cap", events, steps, todos, yaml, trace, draft, dir}`。钩子安装失败 → status `failed` + 错误码如实。
+- `record-stop [--id <id>]`：写 stop-requested 标记 → 轮询 state.json 至终态（≤15s，超时 INTERNAL 如实）→ 返回终态摘要（与 worker 终态同形，含 yaml 全文）。无 --id 时按活跃会话发现（records/ 扫描 + pid 存活，**唯一才执行，歧义即 PROTOCOL 要求 --id**——与 flow_ui::discover 同纪律）；会话已 completed（时长上限先到）→ 幂等返回摘要不报错；**abandoned 会话（worker 已死）做数据收口**：编译既有 trace 产 draft（stop_reason=abandoned），不复活进程；未知 id → PROTOCOL。
+- `record-status [--id <id>]`（只读，进 main 的免信号名单）：有 id → 完整会话状态 + trace 统计（按 kind 计数 + masked/injected + 行数）；无 id → `{active: [ids], sessions: N}`。state=recording 而 pid 已死 → 派生态 `abandoned`（如实报告；收口走显式 record-stop，不自动恢复）。
+
+### 捕获语义（docs/79 §5 吸收点的落地）
+
+- **钩子回调极简**：WH_MOUSE_LL + WH_KEYBOARD_LL 挂在专属线程（消息泵），回调只做"时间戳+事件入队"（锁+队列+条件变量）；**一切 UIA/Win32 反查在工作线程**（钩子超时被 Windows 回收是 Quicker 实证；本仓 UIA 反查 P50 200ms+ 不可进回调）。
+- **只录语义事件**：鼠标按下（左键 kind=click；右/中键记 button 字段，编译为 TODO）；移动/滚轮不录（Quicker 数据洪水教训）。键盘只记 down（按键重复去重：按住期间同 VK 只记首个）。
+- **注入事件**（LLMHF_INJECTED）如实入 trace（`injected:true`）但**不参与编译**——录制的是人的演示，机器注入不是演示内容。
+- **actl 自家窗口过滤**：鼠标事件的 WindowFromPoint 命中窗 pid ∈ {worker 自身, actl-signal}（signal pid 经 `actl_signal_window` 类名窗口解析）→ 整事件跳过（计数入 state 的 skipped_own——"点录制 UI 自己"不进 trace）。
+- **点击瞬间反查**：工作线程对每个点击事件做 `element_from_point` + 根窗元数据（GetAncestor GA_ROOT → hwnd/标题/rect/DPI/pid/进程名）。反查失败如实记 `lookup:"failed:<code>"`，坐标与窗口元数据仍在（编译为 TODO，不猜测）。
+- **焦点身份与密码脱敏**：键事件经 GetGUIThreadInfo 取物理焦点 hwnd；hwnd 变化或 burst 首键时做一次 `get_focused_element`（identity: automation_id/name/control_type + `is_password`）。焦点元素是密码框期间的全部键事件 → trace 只记 `{kind:"key", masked:true}`（**VK 都不落盘**）；脱敏不可关闭。焦点元素身份同时服务 type 步骤的目标选择器。
+- **IME 标记**：VK_PROCESSKEY(0xE5) 出现 → 该键运行标记 `ime:true`（编译为 TODO：中文文本留待 R2/--paste 通道，键序列重放必错是 Quicker 实证）。
+- **trace = JSONL 逐事件追加**（崩溃安全）：首行会话头 `{kind:"session", id, started_ms, max_seconds, pid}`；事件行含 t/kind/坐标/窗口元数据/元素身份/标志（键事件另携带 mods 快照与 focus/focus_element）。trace 是 agent 改写轮的原料（本地文件，非 token 载荷；按行索引消费）。
+
+### 机械编译（R1 规则，编译器在 actl-flow，纯函数）
+
+trace 事件 → flow-v1 兼容 YAML。flow schema 要求写步骤必带 verify 且 retry ≠ read_only（默认）——**机械验证 + `retry: never` 恒配**，效果级验证留给 R2/agent 改写轮：
+
+| 事件形态 | 编译产物 | 机械 verify |
+|---|---|---|
+| click 且元素有 AutomationId/name | step `click 'id:<aid>' --app <根窗标题>` | `verify --exists <同 selector> --app <标题>`（目标仍在） |
+| click 无可用身份（反查失败/无名无 id/右中键） | **TODO 注释**（非步骤，文件保持可验证）——不猜测目标；注释含 trace 行号证据引用 | — |
+| 键事件 = ctrl/alt/win 修饰 + 单键 且焦点元素已知 | step `press '<mods>+<key>' --app <焦点窗标题>` | `verify --exists <焦点 selector>`（编辑框类快捷键通常成立） |
+| 快捷键无焦点身份 / 键名不可解析 | TODO 注释 | — |
+| 键运行 = 纯可打印 ASCII 且焦点元素已知 | step `type '<selector>' '<text>' --app <焦点窗标题>` | `verify --value <selector> <text> --property value`（读回核验——真后置条件） |
+| 终结键（Enter/Tab/Esc/F 键） | **TODO 注释**——终结键恰恰改变焦点/关窗，对旧焦点断言存在是系统性错误猜测（不猜测纪律）；笔记含完整表达式供人工/agent 补 verify | — |
+| 键运行含 IME 标记 | TODO 注释（中文文本，R2/--paste 通道） | — |
+| 键运行被脱敏 | TODO 注释（密码字段，内容永不落盘） | — |
+
+修饰键自身事件是噪音（组合语义由被修饰键的 mods 字段携带——捕获侧回调的 held 集快照，免 keyup 跟踪）。每步 `# evidence: trace:<行号>` 注释 = 指回 trace 的证据引用（agent 改写轮的锚点，docs/76 §11 "带 trace 证据引用" 的落地）。**编译器不提前丢信息**：未编译的事件全部保留在 trace。
+
+v1 边界（如实记录）：空事件会话的草稿 `steps: []` 会被 flow schema 拒绝（"expected 1-256 steps (empty only with explore)"）——空录制没有可运行内容，如实失败不是编译缺陷；不生成 wait 步骤（延迟分析 R2）、`{window}` 泛化 R2、`--paste` 通道 R2 前中文文本不入 step。
+
+### 测试缝与验收口径
+
+- 契约测试离线：`ACTL_RECORD_DISABLE_HOOKS=1` 跳过钩子线程（会话循环/终态/编译/文件协议全真），CI 无需交互桌面——与"uia 交互用例默认 ignore 不占门禁"同纪律；**测试缝不掩盖真机行为**，钩子真机验收另轮（docs/77 先例，R1 真机验收后记 CHANGELOG）。
+- 编译器单测（actl-flow）：事件流 → YAML → `serde_saphyr` 往返解析为 Plan（与 route.rs 渲染同验证口径）；覆盖上表全部形态 + 空事件 + 注入跳过 + 证据行号正确。
+- 契约 golden：record-start/status/stop/worker 的 envelope（duration_ms 剔除后全文比对）；错误侧断言 error.code 与退出码 2。
+
+### 错误码
+
+PROTOCOL：已存在活跃会话 / 未知 id / 活跃会话歧义（无 --id）/ 非 actl 会话目录形态。INTERNAL：spawn 失败、state.json 超时未现、stop 等待超时（15s）、trace/草稿写失败。worker 钩子失败 → 会话 status `failed` + 原错误码入 state（record-start 已返回的启动成功不回改——异步失败由 record-status 如实暴露）。
