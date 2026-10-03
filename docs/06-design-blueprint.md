@@ -1067,3 +1067,14 @@ v1 边界（如实记录）：空事件会话的草稿 `steps: []` 会被 flow s
 ### 错误码
 
 PROTOCOL：已存在活跃会话 / 未知 id / 活跃会话歧义（无 --id）/ 非 actl 会话目录形态。INTERNAL：spawn 失败、state.json 超时未现、stop 等待超时（15s）、trace/草稿写失败。worker 钩子失败 → 会话 status `failed` + 原错误码入 state（record-start 已返回的启动成功不回改——异步失败由 record-status 如实暴露）。
+
+### R2 增补：编译增强（2026-10-04）
+
+R1 三块机械能力的增强（编译器纯函数 + 捕获层一个新事件类型；协议面不变）：
+
+- **延迟分析 → wait 步骤**（docs/76 §4 规则的落地）：与上一用户动作间隔 ≥2s **且目标换窗** → 在点击前编译 `wait --window <新窗标题> --timeout <间隔+1000ms>`（"等应用加载"形态）；同窗长间隔是"人在犹豫"，不出步。wait 只读——无 verify、默认 retry 可重放。时间轴只记用户动作（点击/按键），值事件（机器读回）不入轴。
+- **值读回事件（kind=value）**：键入 burst 的三个终点——静默 ≥300ms / 下一个点击事件 / 会话终点——捕获层对当前焦点元素做 `get_focused_element` + ValuePattern 读值，事件 `{t, kind:"value", value, focus, element}` 先于点击事件入 trace。守卫：焦点根窗须与运行一致（不一致 = 焦点已换，读到的是别的元素）；**密码焦点不读**（脱敏不可关闭）；ValuePattern 缺失如实返回无事件。
+- **编译配对与 --paste**：值事件与 pending 键入运行配对（窗口一致 + 身份一致或单侧未知）→ `type '<selector>' '<提交文本>'`，**提交文本覆盖 VK 推导**（IME 候选/自动纠正的真值）；IME 键出现过或文本含非 ASCII → 加 `--paste`（剪贴板通道，中文 IME 下键盘通道不可靠——type 命令既有语义）。无值读回的 IME 运行维持 TODO。
+- **{window} 泛化**：步骤与 verify 里 `--app <记录时标题>` 的字面标题收编为 flow inputs——`window`/`window_2`/…（按首现顺序），默认值 = 记录时标题，args 替换为 `{input: windowN}`。重放前一处可调（多机/窗口改名场景），与 explore-writeback 的 `{window}` 同一泛化思想；TODO 注释里的标题保持字面（注释不执行）。文本字面值的参数化留给 agent 改写轮（数据 vs 常量是语义判断）。
+
+已知边界（如实）：值读回依赖事件到达时机（工作线程异步），焦点快速转移时可能错过（运行退回 VK 路径或 TODO，不虚记）；wait 只覆盖"换窗+间隔"形态，"UIA 树变化但同窗"的等待（如树内加载）待 agent 改写轮补。

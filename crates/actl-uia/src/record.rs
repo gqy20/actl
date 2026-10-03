@@ -16,7 +16,7 @@ use serde_json::{Value, json};
 use std::{
     cell::RefCell,
     collections::{HashSet, VecDeque},
-    fs::{self, OpenOptions},
+    fs::{self, File, OpenOptions},
     io::{BufWriter, Write as IoWrite},
     path::{Path, PathBuf},
     sync::{Arc, Condvar, Mutex, mpsc},
@@ -375,6 +375,51 @@ fn refresh_focus(auto: &UIAutomation) -> FocusCache {
     }
 }
 
+/// burst 末值读回(docs/06 R2):提交后的最终文本——IME 中文/自动纠正的真值来源。
+/// 守卫:焦点根窗须与运行一致(不一致 = 焦点已换,读到的会是别的元素);
+/// 密码焦点不读(脱敏不可关闭);ValuePattern 缺失/失败如实返回 None。
+fn capture_value(auto: &UIAutomation, expected_title: Option<&str>) -> Option<Value> {
+    let (hwnd, title) = crate::kbd::focused_root_window()?;
+    if let Some(expected) = expected_title
+        && expected != title
+    {
+        return None;
+    }
+    let element = auto.get_focused_element().ok()?;
+    let identity = element_identity(&element);
+    if identity["is_password"].as_bool() == Some(true) {
+        return None;
+    }
+    let value = element
+        .get_pattern::<uiautomation::patterns::UIValuePattern>()
+        .ok()?
+        .get_value()
+        .ok()?;
+    if value.is_empty() {
+        return None;
+    }
+    Some(json!({
+        "t": unix_ms(), "kind": "value", "value": value,
+        "focus": {"hwnd": hwnd, "title": title},
+        "element": identity,
+    }))
+}
+
+/// 追加事件行到 trace(JSONL)与事件集(编译输入)。
+fn append_event(
+    trace: &mut BufWriter<File>,
+    events: &mut Vec<Value>,
+    event: Value,
+) -> Result<(), CtlError> {
+    serde_json::to_writer(&mut *trace, &event)
+        .map_err(|e| internal(format!("trace write: {e}")))?;
+    trace
+        .write_all(b"\n")
+        .map_err(|e| internal(e.to_string()))?;
+    events.push(event);
+    Ok(())
+}
+
 fn write_state(dir: &Path, status: &str, extra: Value) {
     let mut state = json!({
         "id": dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
@@ -465,6 +510,9 @@ pub fn run_session(cfg: &SessionConfig) -> Result<SessionOutcome, CtlError> {
 
     let mut events: Vec<Value> = vec![header];
     let mut focus: Option<FocusCache> = None;
+    // 键入 burst 待收口状态:(焦点窗标题, 最后键事件 t)——值读回的触发时机 =
+    // 静默 300ms / 点击事件 / 会话终点。
+    let mut pending_keys: Option<(Option<String>, u64)> = None;
     let mut skipped_own: u64 = 0;
     let started = Instant::now();
     let mut last_state_ms = started_ms;
@@ -505,6 +553,13 @@ pub fn run_session(cfg: &SessionConfig) -> Result<SessionOutcome, CtlError> {
                     y,
                     injected,
                 } => {
+                    // 点击终结键入 burst:先补值读回(提交后最终文本,IME 中文的
+                    // 唯一可靠来源),值事件先于点击事件入 trace(docs/06 R2)。
+                    if let Some(expected) = pending_keys.take()
+                        && let Some(value) = capture_value(&auto, expected.0.as_deref())
+                    {
+                        append_event(&mut trace, &mut events, value)?;
+                    }
                     // 注入事件如实入 trace(injected:true)但不做反查——记录的是人的演示;
                     // 反查 actl 自己注入的点击会与其动作产生读竞争。
                     if injected {
@@ -541,6 +596,8 @@ pub fn run_session(cfg: &SessionConfig) -> Result<SessionOutcome, CtlError> {
                             focus = Some(refresh_focus(&auto));
                         }
                         let focus = focus.as_ref().unwrap();
+                        // 记录 burst 待收口状态(密码焦点不进——值读回会泄露)。
+                        pending_keys = Some((focus.title.clone(), raw.t_ms));
                         json!({
                             "t": raw.t_ms, "kind": "key", "vk": vk, "mods": mods,
                             "ime": vk == 0xE5,
@@ -556,6 +613,15 @@ pub fn run_session(cfg: &SessionConfig) -> Result<SessionOutcome, CtlError> {
                 .write_all(b"\n")
                 .map_err(|e| internal(e.to_string()))?;
             events.push(event);
+        }
+        // 键入静默 ≥300ms = burst 末:读回提交值(用户还没点下一个目标,
+        // 焦点最可能仍在输入控件上——值配对成功率最高的时机)。
+        if let Some((expected, last_t)) = pending_keys.clone()
+            && unix_ms().saturating_sub(last_t) >= 300
+            && let Some(value) = capture_value(&auto, expected.as_deref())
+        {
+            pending_keys = None;
+            append_event(&mut trace, &mut events, value)?;
         }
         trace.flush().map_err(|e| internal(e.to_string()))?;
 
@@ -581,6 +647,12 @@ pub fn run_session(cfg: &SessionConfig) -> Result<SessionOutcome, CtlError> {
             let _ = unsafe { PostThreadMessageW(thread_id, WM_QUIT, WPARAM(0), LPARAM(0)) };
         }
         let _ = handle.join();
+    }
+    // 会话终点补最后一次值读回(最后一段键入可能直到停止都没等到静默/点击)。
+    if let Some(expected) = pending_keys.take()
+        && let Some(value) = capture_value(&auto, expected.0.as_deref())
+    {
+        append_event(&mut trace, &mut events, value)?;
     }
     write_state(
         &cfg.dir,

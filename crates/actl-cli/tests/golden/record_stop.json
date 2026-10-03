@@ -14,6 +14,6 @@
                  "stop_reason":  "requested",
                  "todos":  0,
                  "trace":  "records/s1/trace.jsonl",
-                 "yaml":  "# actl recording draft (mechanical compile, UNVERIFIED) — docs/06 R1 / docs/79\n# session: s1; events: 0; stop_reason: requested; trace: records/s1/trace.jsonl\n# TODO items below are comments, not steps (file stays flow-validate clean);\n# rewrite guidance: docs/79 §6 (agent rewrite pass, replay comparison).\nversion: 1\nname: s1\nsteps: []\n"
+                 "yaml":  "# actl recording draft (mechanical compile, UNVERIFIED) — docs/06 R1/R2 / docs/79\n# session: s1; events: 0; stop_reason: requested; trace: records/s1/trace.jsonl\n# TODO items below are comments, not steps (file stays flow-validate clean);\n# rewrite guidance: skills/actl/references/record-rewrite.md (agent pass, replay comparison).\nversion: 1\nname: s1\nsteps: []\n"
              }
 }
