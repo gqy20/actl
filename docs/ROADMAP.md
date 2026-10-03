@@ -14,7 +14,7 @@
 
 ### 高优先（用户标记）
 
-- [ ] **GUI 操作录制 → YAML**（用户标记高价值；用户用鼠标键盘手动操作一遍应用，系统自动转成可复用流程文件——像 RPA recorder；与探索模式互补——录制是"人演示→YAML"，探索是"agent 自主→YAML"，两者在回写层汇合。Quicker 调研已完成并修正体系（[79](79-quicker-recording-research.md)、[76 §11](76-gui-recording.md)）：录制双产物（初版 YAML + trace 证据文件）、agent 改写轮放 skill 层（重放对比验收）、文本录最终值不录按键序列、钩子回调极简+工作线程反查、坐标兜底用窗口相对坐标；中文文本前置依赖 `--paste` 通道（与探索待办 ③ 合并裁定）；切片重排 R1-R4，spec 决策点清单见 [79 §8](79-quicker-recording-research.md)）
+- [ ] **GUI 操作录制 → YAML**（用户标记高价值，2026-10-03 立项 R1 起步；用户用鼠标键盘手动操作一遍应用，系统自动转成可复用流程文件——与探索模式互补：录制是"人演示→YAML"，探索是"agent 自主→YAML"，两者在回写层汇合。体系定稿见 [79](79-quicker-recording-research.md)、[76 §11](76-gui-recording.md)：录制双产物（初版 YAML + trace 证据文件）、agent 改写轮放 skill 层（重放对比验收）、文本录最终值不录按键序列、钩子回调极简+工作线程反查、坐标兜底用窗口相对坐标、触发面 = CLI 正典 + 显示端右键动态项；中文文本前置依赖 `--paste` 通道（与探索待办 ③ 合并裁定）；切片重排 R1-R4，spec 决策点清单见 [79 §9](79-quicker-recording-research.md)）
 - [ ] **探索模式（用户标记关键）**：S1 已落地（0.2.0）；S2 已实现并真机验收通过（[77](77-exploration-s2-acceptance.md)）；S3 已实现并真机闭环验收通过（[77 S3 增补](77-exploration-s2-acceptance.md)）；**L2 原语已实现（2026-10-03，spec 提交：`explore.texts` 输入原语 + 跨窗 goal 探测，见 [docs/06 L2 增补](06-design-blueprint.md)）——texts 真机通过（[77 L2 增补](77-exploration-s2-acceptance.md)）**——待办：①~~观察有界重试~~（已落地 2026-10-03，发现 #3 收口）；②观察锚点随弹窗转移（对话框内继续动作）与 RuntimeBroker 跨进程选择器的 pid 过滤放宽——**含动作改经快照 ref 身份绑定（`click @eN --snapshot`，docs/31 身份纪律，消除选择器重定位与快照两通道的分叉，发现 #6 的结构性收口）**；③type 的 `--paste` 通道选项（中文 IME）；④路线积累（§7 目标 5 条已 2 条）；⑤L0 命中重放 skill 层流程化、UCB 统计剪枝
 - [ ] release-review-draft 写段联测（待用户授权，[43](43-release-review-draft.md)）
 

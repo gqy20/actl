@@ -129,6 +129,7 @@ actl record stop --out my-flow.yml
 - **坐标兜底存窗口相对坐标**并随步记录窗口矩形/DPI/标题/进程元数据（Quicker DPI 四因素困境的显式绕法）；
 - **agent 改写轮入 R3**（skill 层，LLM 不进 CLI）：读 trace 做选择器稳健化/参数化/等待验证注入/噪音清除/TODO 修复，**验收判据 = 改写后重放通过率 ≥ 机械编译版**；
 - **§7 切片重排**：R1 = 钩子+trace+机械编译；R2 = 编译增强且**输出对齐 explore-writeback 片段格式**（录制与探索在回写层汇合，`{window}` 泛化/证据头/unverified→人工复核迁移全套复用）；R3 = agent 改写轮；R4 = 录制 UI；
+- **触发面**（[79 §8](79-quicker-recording-research.md)）：CLI `record-start/stop/pause` 为正典入口；显示端右键菜单加动态项（"开始/停止录制"，套 flow 暂停/继续的动态项+请求模式先例）为人类便利入口；信号条带"录制中"提示满足 §9 反后台录制要求；会话状态文件落盘（菜单发现依赖）；录制进程独立于显示端存活；trace 过滤 actl 自家进程的事件；
 - 新增 spec 决策点：trace 隐私脱敏（密码框文本不入 trace）、trace 消费方式（摘要+定点读取）、YAML 步骤证据字段（schema 变更，硬规则 8）。
 
 两点边界再确认（与 §9 一致）：改写智能在 skill 层不进 CLI，是"agent 替代编排层"定位的自然延伸而非例外；语义选择器是录制 YAML 可复用、可分发的前提——Quicker 官方劝用户"不要分发含坐标重放的动作"正是同一判断的反面表述。

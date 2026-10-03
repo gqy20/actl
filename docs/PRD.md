@@ -50,6 +50,12 @@
 运行为有界可暂停的流程任务，不是常驻 agent。当前仅设计未实现，实施前须完成 PRD
 非目标核对与决策卡协议 spec 评审，见 [42](42-exploration-mode.md)。
 
+2026-10-03 用户授权 GUI 操作录制立项（R1 起步）：低级键鼠钩子捕获 + 点击瞬间 UIA
+反查 + 录制 trace 证据文件 + 机械编译初版 YAML；agent 改写轮在 skill 层（LLM 不进
+CLI）；录制会话有界（显式 start/stop，非常驻），触发面 = CLI 正典 + 显示端右键菜单
+动态项；文本录提交后最终值不录按键序列，密码框文本脱敏；设计提案与 Quicker 调研
+见 [76](76-gui-recording.md)、[79](79-quicker-recording-research.md)。
+
 ---
 
 ## 2. 用户与场景
