@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=../../schemas/flow-v1.schema.json
+# S3 验收:效果风险先验飞轮。先验取自 S3/S3b 失败运行的 tried 映射
+# (flow-status 可读:ClearMemoryButton probe 判死;NormalAlwaysOnTopButton
+# 点击触发窗口重构使 CalculatorResults 消失→goal_check_failed;backSpace
+# 清空显示)——docs/77 发现 1/2 的知识回灌。预期:回退队列避开危险候选,
+# 终态为 budget_exhausted:actions 而非 goal_check_failed。
+# 前置:测试计算器显示为 0(先跑 calculator-reset.yml)。
+version: 1
+name: explore-s3d-calc-priors
+explore:
+  task: 让计算器显示一个验收专用的不可达字符串
+  app: 计算器
+  keywords: [七, Button]
+  goal: {command: verify, args: [--value, 'id:CalculatorResults', 'actl-s3-验收不可达', --property, name, --app, 计算器]}
+  priors: {'id:NormalAlwaysOnTopButton': -4, 'id:TogglePaneButton': -4, 'id:ClearMemoryButton': -4, 'id:backSpaceButton': -2}
+  budgets: {actions: 4, decisions: 1}

@@ -134,3 +134,65 @@ agent 约 4-8 倍;pack 命中后趋近零(飞轮:首次探索贵,回写后同类
 - token 收益数字全部为推算，S2 报告以实测替换（§7 已要求）；
 - 虚拟化/动态 id 的身份配对是 S1 验收焦点（零误报/漏报硬指标）；
 - 冷启动高决策密度为已知成本形态，不作为缺陷修复目标。
+
+## 10. S2 实施记录（2026-10-03）
+
+S2 落地范围：`actl-core/decision.rs`（决策协议）+ `actl-flow/explore.rs`（探索引擎）+ CLI 接线（flow-run/flow-resume/flow-status）。§9.2 五条 delta 全部兑现；与 §5 草案的偏差与补充裁定如下。
+
+### 10.1 落地形态与偏差
+
+1. **探索 spec 是 Plan 的一段，不是独立命令/文件格式**：`Plan.explore`（task/app/keywords/goal/budgets），`steps` 必须为空（可省略键）。`flow-run` 直接执行探索计划，`flow-validate` 校验后报告 explore 概览——零新命令，协议面最小。
+2. **决策卡协议按 §9.2.2 兑现**：4 KiB/卡、Top-K≤8 由构建器硬保证（压缩阶梯：丢样本名→截名字→Top-4→Top-2，仍超即 PROTOCOL）；卡经 flow-status `data.decision_card` 暴露，`data.explore` 携带计数与 token 审计。压缩、评分、排序全部确定性（整数分、同分按 selector 字典序）。
+3. **应答协议按 §9.2.3 兑现为单选**，排序回退（§3 token 优化的"一次往返摊平多次尝试"）落在**引擎侧**：应答后队列 = 首选 + 卡内其余非危险候选按序，首选无效果自动推进不产生新卡。危险候选永不自动回退；应答者显式选择危险候选即授权执行。
+4. **动作原语 v1 只有点击**：候选选择器为 `id:`/`name:`（语义选择器，跨进程可恢复，不做坐标兜底）；输入类动作（type/press）留给后续——词表投影的前沿里 Edit 零先验分，不误导。
+5. **效果归因限于同窗差分**：点击后按关键词投影帧差分归因 reveals/no_effect；跨窗效果（点击开新对话框）v1 不检测，属已知限制（见 §10.3）。
+6. **状态指纹刻画身份形状**：可识别元素（automation_id 优先、name 回退）+ 角色多重集的 FNV-1a，排序后哈希——虚拟化重排不敏感；同 id 仅标签变化指纹不变（标签变化由差分层上报）。
+7. **终态语义**：预算耗尽/无候选/观察失败均为 needs_review（原因串区分），goal 满足 completed；错误码如实传播不吞。探索运行在显示端 needs_review 显示 resume（静态流程 recheck 不变）。
+
+### 10.2 token 优化设计的兑现对照
+
+| §3 设计 | 落地点 |
+|---|---|
+| 本地化循环（LLM 不逐步参与） | 引擎闭环；外抛只在平局/全危险/悬挂卡 |
+| 任务投影+差分 | `--keywords --skeleton` 观察 + S1 差分；零命中放宽一次记 widened |
+| 决策卡硬上限 | 4 KiB/Top-K≤8 构建器保证，golden 断言 |
+| 上下文不复读 | 卡静态头一句话级；全量证据留 explore.json，卡只带判别字段 |
+| 选择题应答 | `--decision cN` 单 id；--confidence 仅入报告 |
+| 排序回退 | 引擎侧队列（§10.1.3） |
+| probe-before-act | find 只读探测；死候选不消耗动作预算 |
+| 本地谓词核验 | goal 断言在引擎内闭合 |
+| token 审计 | explore.json/flow-status 携带 observation_bytes/card_bytes/计数 |
+
+§7 要求的"token 数字以实测替换"：真机验收已补录（[77](77-exploration-s2-acceptance.md)：关键词帧 301–1700B/次，决策往返 0–1 次/任务，对比全量快照循环 5–17× 缩减；对照朴素截图循环 agent 的完整对照轮仍为可选后续）。
+
+### 10.3 已知限制（S3/后续）
+
+- 效果归因不做跨窗检测；点击打开新窗口时同窗差分为空可能误标 no_effect（预算与 tried 集仍保证有界与不循环；真机实证 S2/S3c）。
+- 探索动作只有 click；无滚动/键盘动作，长列表场景靠词表命中与 skeleton 放宽兜底。
+- goal 断言的目标元素在窗口形态变化后可能不可解析（真机实证 2026-10-03：计算器置顶/导航形态下 `CalculatorResults` 消失）→ `goal_check_failed` 失败闭合是规格行为，有界重试/形态感知是 S3 候选（[77](77-exploration-s2-acceptance.md) 发现 1）。
+- 卡候选排序无效果风险先验：含窗口重构类候选（置顶/导航/退格）的队列可能先触 `goal_check_failed` 而非预算终态（两者都诚实；先验排序属 S3 quirks 剪枝范畴）。
+- pack 回写（L0 命中重放、quirks 统计剪枝）属 S3。
+
+### 10.4 验收状态
+
+- 单测：actl-core 决策协议 9 项；actl-flow 引擎 MockHost 全链路 13 项（自动门完成/平局外抛+应答回退/危险闸双向/预算耗尽/急停暂停/死候选剪枝/观察失败诚实/无候选/应答协议错误/持久化往返）。
+- 契约：explore_contract 6 项离线（spec 校验 golden、混用/预算/bind 拒绝、静态流程 --decision 拒绝、悬挂卡三面协议、commands 面）。
+- **真机验收通过（2026-10-03，[77](77-exploration-s2-acceptance.md)）**：计算器/记事本 4 场景全过——熵门自动路径零外抛、平局卡+单选应答+排序回退一次往返完成两次尝试、`budget_exhausted:actions` 与 `goal_check_failed` 两类诚实终态实证、卡 556–1508B 远低于 4 KiB 硬上限；token 审计数字见 §10.2 注。
+
+## 11. S3 实施记录（2026-10-03）
+
+S3 落地范围：路线回写（`actl-flow/route.rs`）+ `explore.priors` 效果风险先验 + goal 断言有界重试。与 §6 估算的偏差与裁定：
+
+### 11.1 形态与裁定
+
+1. **回写是"片段生成"，不是"pack 写入"**：`explore-writeback --id <run> [--out <file>]` 从 goal_met 的完成运行抽取 pack 格式路线片段（envelope data + 可选落盘），由调用方合并进 `apps/<slug>.yml`。依据分层铁律（PACKS.md：核心 CLI 永不读 pack）——actl 不感知 pack 文件的存在，知识流经 agent 手。
+2. **verified 迁移不是命令**：片段 status 恒 `unverified`；迁移 = pack 文件编辑 + git PR（review 即人工复核,PACKS 红线生效）。自动化只做证据收集（AGENTS「修正与验收分开」）。重放由 agent 执行片段步骤（batch/flow）并留 envelope 证据随 PR 提交。
+3. **L0 命中重放留在 skill 层**：与 PACKS「当前引擎不自动展开 pack 路线」一致。飞轮闭环 = 探索 → writeback 片段 → agent 合并 pack → 人工复核转 verified → 下次任务 agent 读 pack 路线直接执行（零探索）。
+4. **quirks 与 priors 是数据不是行为**：writeback 输出死候选 quirk 片段与 suggested_priors（dead=-4/no_effect=-2）；`explore.priors` 由调用方注入,引擎评分时叠加（下限 0）。§4.5 统计剪枝的 v1 = 这条显式数据链,UCB/Thompson 等自动统计留待 pack quirks 积累出样本量后评估。
+5. **goal 有界重试**：瞬态 NOT_FOUND/TIMEOUT 重试 2 次（300ms 沉降,goal_retries 如实入状态,重试不计 errors）;耗尽或非瞬态维持失败闭合。docs/77 发现 1 的机制化收口。
+6. **不完整路线不导出**：action_log 达上限（可能截断）即 PROTOCOL 拒绝;goal 未达成即 PROTOCOL 拒绝（失败现场保留在 run 目录,quirk 提取走人工读 explore.json）。
+
+### 11.2 验收状态
+
+- 单测：actl-core 先验降权 2 项;actl-flow route 抽取/渲染（saphyr 往返保真）5 项、goal 重试双路径与先验改道 3 项;契约：回写 golden（片段+YAML 全量比对）、未完成拒绝、priors 越界拒绝、commands 面（含 writeback）。
+- 真机验收：见 [77](77-exploration-s2-acceptance.md) S3 增补（回写 S1/S2 运行 → 合并 calculator.yml → batch 重放 → 人工复核迁移 verified → priors 飞轮实证）。

@@ -127,6 +127,29 @@ pub trait Host {
     fn execute_output(&mut self, call: &Invocation) -> Result<serde_json::Value, CtlError> {
         self.execute(call).map(|()| serde_json::Value::Null)
     }
+    /// 批量只读探测通道(docs/42 §4.1 的卡面收口):引擎用于卡候选与应答
+    /// 回退队列的存活性预检。默认串行逐个执行;实现方可对独立只读调用
+    /// 并行化(结果与输入同序,单个失败不影响其他调用)。调用方保证只传
+    /// 只读探测命令;本层不解释结果语义。
+    fn execute_probes(&mut self, calls: &[Invocation]) -> Vec<Result<(), CtlError>> {
+        calls.iter().map(|call| self.execute(call)).collect()
+    }
+    /// 快照执行通道(发现 #6 的结构性收口):返回 (snapshot_id, data)。
+    /// snapshot_id 是帧内 ref(@eN)的身份锚点——引擎的 ref 绑定动作
+    /// (`click @eN --snapshot <id>`)依赖它走捕获身份解析。默认实现
+    /// 从 execute_output 推导,snapshot_id 未知(空串)→ 引擎回退选择器
+    /// 动作。实现方覆写以捕获 envelope 顶层的 snapshot_id。
+    fn execute_snapshot(
+        &mut self,
+        args: Vec<String>,
+    ) -> Result<(String, serde_json::Value), CtlError> {
+        let call = Invocation {
+            command: "snapshot".into(),
+            args,
+            bind: Default::default(),
+        };
+        self.execute_output(&call).map(|data| (String::new(), data))
+    }
     fn validate_step(&self, _step: &crate::Step) -> Result<(), CtlError> {
         Ok(())
     }

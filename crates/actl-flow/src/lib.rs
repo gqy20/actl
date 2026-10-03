@@ -3,10 +3,12 @@ pub mod bounded;
 pub mod branch;
 pub mod data;
 pub mod engine;
+pub mod explore;
 pub mod freshness;
 pub mod inputs;
 pub mod recovery;
 pub mod resources;
+pub mod route;
 mod schema;
 pub mod sequence;
 pub mod store;
@@ -25,7 +27,74 @@ pub struct Plan {
     /// 由显示端自动发起继续(预算 2 次/运行);默认关——授权通道与重试策略正交。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auto_resume: Option<AutoResume>,
+    /// 探索模式 spec(docs/42 S2):存在时 steps 必须为空,运行走 explore 引擎。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub explore: Option<ExploreSpec>,
+    #[serde(default)]
     pub steps: Vec<Step>,
+}
+
+/// 探索任务 spec(docs/42):自然语言任务一句话 + 应用锚 + 关键词词表 +
+/// 只读目标断言 + 有界预算。任务编译(自然语言→词表+谓词)由调用方完成;
+/// actl 只接收结构化产物,不做语义理解。
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ExploreSpec {
+    /// 任务一句话(≤160 UTF-8 字节),入决策卡静态头。
+    pub task: String,
+    /// 目标窗口锚(标题子串,≤80 字节)。
+    pub app: String,
+    /// 任务关键词词表(1..=16,每个 1..=64 字节):词表投影与候选评分共用。
+    #[serde(default)]
+    pub keywords: Vec<String>,
+    /// 只读目标断言(verify/wait 族):探索的本地后置条件谓词。
+    pub goal: Invocation,
+    /// 效果风险先验(docs/42 §4.5 v1):选择器 → 分数调整(-4..=4,≤32 项),
+    /// 由调用方从 pack quirks / 上轮 suggested_priors 注入——已知死/无效果/
+    /// 窗口重构类候选被压低,已知有效候选提升。引擎不读 pack,先验显式入参。
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub priors: std::collections::BTreeMap<String, i32>,
+    /// 输入原语(docs/42 L2):完整语义选择器(id:/name:) → 待输入文本。
+    /// 键的选择器值并入观察关键词(种子+评分激活 Edit),候选命中即执行
+    /// `type`(复用键盘护栏与 --app 绑定)。≤8 项,词表+texts 键 ≤16。
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub texts: std::collections::BTreeMap<String, String>,
+    #[serde(default)]
+    pub budgets: Budgets,
+}
+
+/// 探索预算(docs/42 §2 原则 3:有界运行)。到达任一上限即 needs_review,
+/// 不静默续跑。
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct Budgets {
+    /// 动作上限(默认 12)。
+    #[serde(default = "default_actions")]
+    pub actions: u32,
+    /// 决策外抛上限(默认 6)。
+    #[serde(default = "default_decisions")]
+    pub decisions: u32,
+    /// 运行时长上限毫秒(默认 600000)。
+    #[serde(default = "default_wall_ms")]
+    pub wall_ms: u64,
+}
+fn default_actions() -> u32 {
+    12
+}
+fn default_decisions() -> u32 {
+    6
+}
+fn default_wall_ms() -> u64 {
+    600_000
+}
+impl Default for Budgets {
+    fn default() -> Self {
+        Self {
+            actions: default_actions(),
+            decisions: default_decisions(),
+            wall_ms: default_wall_ms(),
+        }
+    }
 }
 /// 显式声明,唯一取值 action_failed(user_paused/checkpoint/needs_review 永不自动)。
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -273,13 +342,30 @@ pub fn parse(text: &str) -> Result<Plan, CtlError> {
         ),
         (
             "steps",
-            plan.steps.is_empty() || plan.steps.len() > 256,
-            "expected 1-256 steps",
+            plan.steps.len() > 256 || (plan.steps.is_empty() && plan.explore.is_none()),
+            "expected 1-256 steps (empty only with explore)",
         ),
     ] {
         if invalid {
             return Err(schema::error(field, None, message));
         }
+    }
+    if let Some(explore) = &plan.explore {
+        if !plan.steps.is_empty() {
+            return Err(schema::error(
+                "steps",
+                None,
+                "explore plans must not declare static steps",
+            ));
+        }
+        if plan.auto_resume.is_some() {
+            return Err(schema::error(
+                "auto_resume",
+                None,
+                "explore plans do not support auto_resume",
+            ));
+        }
+        validate_explore(explore)?;
     }
     let mut ids = std::collections::HashSet::new();
     if let Some(handoff) = &plan.handoff
@@ -367,6 +453,136 @@ pub fn parse(text: &str) -> Result<Plan, CtlError> {
     }
     data::validate(&plan)?;
     Ok(plan)
+}
+
+/// 探索 spec 校验(schema 层;CLI 层另做命令面校验)。
+fn validate_explore(explore: &ExploreSpec) -> Result<(), CtlError> {
+    for (field, invalid, message) in [
+        (
+            "explore.task",
+            explore.task.trim().is_empty() || explore.task.len() > 160,
+            "task requires 1-160 UTF-8 bytes",
+        ),
+        (
+            "explore.app",
+            explore.app.trim().is_empty() || explore.app.len() > 80,
+            "app requires 1-80 UTF-8 bytes",
+        ),
+        (
+            "explore.keywords",
+            explore.keywords.is_empty()
+                || explore.keywords.len() > 16
+                || explore
+                    .keywords
+                    .iter()
+                    .any(|k| k.trim().is_empty() || k.len() > 64),
+            "keywords requires 1-16 non-empty entries of at most 64 bytes each",
+        ),
+        (
+            "explore.goal.command",
+            explore.goal.command.is_empty() || explore.goal.command.len() > 64,
+            "goal command requires 1-64 bytes",
+        ),
+        (
+            "explore.goal.args",
+            explore.goal.args.len() > 128,
+            "goal allows at most 128 arguments",
+        ),
+        (
+            "explore.budgets.actions",
+            !(1..=512).contains(&explore.budgets.actions),
+            "actions budget must be 1..=512",
+        ),
+        (
+            "explore.budgets.decisions",
+            !(1..=64).contains(&explore.budgets.decisions),
+            "decisions budget must be 1..=64",
+        ),
+        (
+            "explore.budgets.wall_ms",
+            !(1_000..=3_600_000).contains(&explore.budgets.wall_ms),
+            "wall_ms budget must be 1000..=3600000",
+        ),
+    ] {
+        if invalid {
+            return Err(schema::error(field, None, message));
+        }
+    }
+    for (index, arg) in explore.goal.args.iter().enumerate() {
+        if arg.len() > 16_384 || arg.contains('\0') {
+            return Err(schema::error(
+                &format!("explore.goal.args[{index}]"),
+                None,
+                "argument exceeds 16 KiB or contains NUL",
+            ));
+        }
+    }
+    // 探索引擎不做输出绑定解析;goal 带 bind 是不可达路径,直接拒绝。
+    if !explore.goal.bind.is_empty() {
+        return Err(schema::error(
+            "explore.goal.bind",
+            None,
+            "explore goal cannot use output bindings",
+        ));
+    }
+    if explore.priors.len() > 32 {
+        return Err(schema::error(
+            "explore.priors",
+            None,
+            "at most 32 prior entries",
+        ));
+    }
+    for (selector, adjustment) in &explore.priors {
+        if selector.is_empty() || selector.len() > 96 {
+            return Err(schema::error(
+                "explore.priors",
+                None,
+                "prior selectors require 1-96 bytes",
+            ));
+        }
+        if !(-4..=4).contains(adjustment) {
+            return Err(schema::error(
+                "explore.priors",
+                None,
+                "prior adjustments must be -4..=4",
+            ));
+        }
+    }
+    if explore.texts.len() > 8 {
+        return Err(schema::error(
+            "explore.texts",
+            None,
+            "at most 8 text entries",
+        ));
+    }
+    for (selector, text) in &explore.texts {
+        let semantic = selector
+            .strip_prefix("id:")
+            .or_else(|| selector.strip_prefix("name:"))
+            .unwrap_or_default();
+        if selector.len() < 4 || selector.len() > 96 || semantic.is_empty() {
+            return Err(schema::error(
+                "explore.texts",
+                None,
+                "text keys require full semantic selectors (id:/name:, 3-92 byte value)",
+            ));
+        }
+        if text.is_empty() || text.len() > 4096 || text.contains('\0') {
+            return Err(schema::error(
+                "explore.texts",
+                None,
+                "text values require 1-4096 bytes without NUL",
+            ));
+        }
+    }
+    if explore.keywords.len() + explore.texts.len() > 16 {
+        return Err(schema::error(
+            "explore.keywords",
+            None,
+            "keywords plus text keys must stay within the 16-keyword budget",
+        ));
+    }
+    Ok(())
 }
 
 fn decode_yaml(text: &str) -> Result<serde_json::Value, CtlError> {

@@ -6,7 +6,7 @@ display: Windows 计算器
 launch: calc.exe
 window: 计算器
 app_version: "11.2607.0.0"
-verified_date: 2026-09-27
+verified_date: 2026-10-03
 verified_env: Windows 10.0.26200.0 zh-cn
 quirks:
   - id: current_execution_contract
@@ -49,3 +49,22 @@ routes:
     verify: Computer Use 点击 2 并截图确认后，Name 断言成功；显式 Value/Text 返回 actual=null。
     steps:
       - ["verify", "--value", "id:CalculatorResults", "显示为 {expected}", "--property", "name", "--app", "{window}"]
+  # ---- 探索回写(S3,2026-10-03) ----
+  # 2026-10-03 S3 真机验收:两条探索路线经人工复核迁移 verified(重放证据
+  # replay-s1-01/replay-s2-01 全步 verified,fixtures/flows/replay-explore-*.yml
+  # 可复现;docs/77 S3 增补)。
+  - id: explore_explore_s1_calc_auto
+    description: 让计算器显示包含数字七——探索回写(run explore-s1-calc-auto)
+    status: verified
+    verify: "目标断言:verify --value id:CalculatorResults 显示为 7 --property name --app {window};2026-10-03 重放 replay-s1-01 全步通过(人工复核)"
+    steps:
+      - ["click", "id:num7Button", "--app", "{window}"]
+      - ["verify", "--value", "id:CalculatorResults", "显示为 7", "--property", "name", "--app", "{window}"]
+  - id: explore_explore_s2_calc_tie
+    description: 让计算器显示包含数字七——探索回写(run explore-s2-calc-tie)
+    status: verified
+    verify: "目标断言:verify --value id:CalculatorResults 7 --property name --contains --app {window};2026-10-03 重放 replay-s2-01 全步通过(人工复核)"
+    steps:
+      - ["click", "id:num8Button", "--app", "{window}"]
+      - ["click", "id:num7Button", "--app", "{window}"]
+      - ["verify", "--value", "id:CalculatorResults", "7", "--property", "name", "--contains", "--app", "{window}"]

@@ -1,0 +1,35 @@
+# yaml-language-server: $schema=../../schemas/flow-v1.schema.json
+# S3 验收:pack 路线 explore_explore_s2_calc_tie(explore-writeback 回写,
+# run explore-s2-calc-tie)的 agent 侧重放——复位后按序点击八、七,
+# 末步断言 = 路线 goal(显示包含 7)。中间步骤附 agent 侧核对(显示 8)。
+# 前置:无用户计算数据的测试计算器。
+version: 1
+name: replay-explore-s2
+steps:
+  - id: reset
+    title: 复位计算器
+    run:
+      command: click
+      args: ['id:clearButton', --app, 计算器]
+    verify:
+      command: verify
+      args: [--value, 'id:CalculatorResults', '显示为 0', --property, name, --app, 计算器]
+    retry: never
+  - id: press_eight
+    title: 路线步骤:按下八
+    run:
+      command: click
+      args: ['id:num8Button', --app, 计算器]
+    verify:
+      command: verify
+      args: [--value, 'id:CalculatorResults', '显示为 8', --property, name, --app, 计算器]
+    retry: never
+  - id: press_seven
+    title: 路线步骤:按下七(goal 断言)
+    run:
+      command: click
+      args: ['id:num7Button', --app, 计算器]
+    verify:
+      command: verify
+      args: [--value, 'id:CalculatorResults', '7', --property, name, --contains, --app, 计算器]
+    retry: never

@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod activity;
 pub mod control_log;
+pub mod decision;
 pub mod diff;
 pub mod display;
 pub mod handoff;

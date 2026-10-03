@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=../../schemas/flow-v1.schema.json
+# 探索模式 S0 冒烟(零写入):目标谓词在观察后即刻满足——验证真实 UIA 词表投影
+# 观察、本地谓词核验、explore.json 持久化与诚实 completed(0 actions/0 decisions)。
+# 前置:已启动一个全新无标题记事本(标题「无标题 - Notepad」)。
+# 预期:status=completed,actions=0,decisions=0,goal_met=true,observations=1。
+version: 1
+name: explore-s0-notepad-smoke
+explore:
+  task: 确认记事本文本编辑区已就绪
+  app: 无标题 - Notepad
+  keywords: [文本]
+  goal: {command: verify, args: [--exists, 'name:文本编辑器', --app, '无标题 - Notepad']}

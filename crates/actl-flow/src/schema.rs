@@ -10,10 +10,15 @@ pub fn error(field: &str, id: Option<&str>, message: impl Into<String>) -> CtlEr
 }
 pub fn decode(raw: Value) -> Result<super::Plan, CtlError> {
     let mut value = raw.clone();
-    let steps = raw
-        .get("steps")
-        .and_then(Value::as_array)
-        .ok_or_else(|| error("steps", None, "steps must be an array"))?;
+    // 探索计划可省略 steps 键(等价空数组);静态计划必须显式给出。
+    let empty_steps: Vec<Value> = Vec::new();
+    let steps = match raw.get("steps").and_then(Value::as_array) {
+        Some(steps) => steps,
+        None if raw.get("explore").is_some() => &empty_steps,
+        None => {
+            return Err(error("steps", None, "steps must be an array"));
+        }
+    };
     for (i, step) in steps.iter().enumerate() {
         let base = format!("steps[{i}]");
         let id = step.get("id").and_then(Value::as_str);

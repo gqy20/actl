@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=../../schemas/flow-v1.schema.json
+# S3 验收:pack 路线 explore_explore_s1_calc_auto(explore-writeback 回写,
+# run explore-s1-calc-auto)的 agent 侧重放——先复位再走路线步骤,末步断言
+# 即路线 goal。重放通过 = 真机走通证据(用于人工复核迁移 verified)。
+# 前置:无用户计算数据的测试计算器。
+version: 1
+name: replay-explore-s1
+steps:
+  - id: reset
+    title: 复位计算器
+    run:
+      command: click
+      args: ['id:clearButton', --app, 计算器]
+    verify:
+      command: verify
+      args: [--value, 'id:CalculatorResults', '显示为 0', --property, name, --app, 计算器]
+    retry: never
+  - id: press_seven
+    title: 路线步骤:按下七
+    run:
+      command: click
+      args: ['id:num7Button', --app, 计算器]
+    verify:
+      command: verify
+      args: [--value, 'id:CalculatorResults', '显示为 7', --property, name, --app, 计算器]
+    retry: never

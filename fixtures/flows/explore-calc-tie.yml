@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=../../schemas/flow-v1.schema.json
+# 探索模式 S2 平局外抛 + 应答 + 排序回退:「七」「八」双关键词命中两个并列候选
+# (同分 6)→ 熵门判平局 → 决策卡外抛(decision_pending);应答 c2(id:num8Button)
+# 后引擎先点八(目标未达),自动回退到七 → 显示 87 包含 7 → goal 满足完成。
+# 一次往返完成两次尝试:验证卡协议、应答校验与引擎侧排序回退队列。
+# 前置:测试计算器显示为 0(先跑 calculator-reset.yml)。
+# 预期:status=completed,actions=2,decisions=1,answers=[c2]。
+version: 1
+name: explore-s2-calc-tie
+explore:
+  task: 让计算器显示包含数字七
+  app: 计算器
+  keywords: [七, 八]
+  goal: {command: verify, args: [--value, 'id:CalculatorResults', '7', --property, name, --contains, --app, 计算器]}
+  budgets: {actions: 4, decisions: 2}

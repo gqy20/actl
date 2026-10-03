@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=../../schemas/flow-v1.schema.json
+# 探索模式 S3 有界诚实失败:目标不可达(显示区 name 永不等于该串,元素存在故
+# 断言失败而非 NOT_FOUND——goal_check 走「未满足」路径)。「七」「Button」双
+# 关键词使 num7Button 首轮领先自动执行,其余候选同分平局外抛一张卡;应答后
+# 排序回退队列消耗动作预算,到 actions=4 如实终止。
+# 预期:status=needs_review,reason=budget_exhausted:actions,actions=4,
+# decisions=1,goal_met=false;tried 含 id:num7Button 与队列内候选。
+version: 1
+name: explore-s3-calc-budget
+explore:
+  task: 让计算器显示一个验收专用的不可达字符串
+  app: 计算器
+  keywords: [七, Button]
+  goal: {command: verify, args: [--value, 'id:CalculatorResults', 'actl-s2-验收不可达', --property, name, --app, 计算器]}
+  budgets: {actions: 4, decisions: 1}

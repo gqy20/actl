@@ -19,6 +19,8 @@ fn main() -> ExitCode {
     match std::env::args().nth(1).as_deref() {
         Some("setup") => setup(),
         Some("gate") => gate(),
+        Some("dev") => dev(),
+        Some("evidence") => evidence(),
         Some("fmt") => code(run(&["fmt", "--all"])),
         Some("regress") => regress(),
         Some("timing") => timing(),
@@ -29,6 +31,8 @@ fn main() -> ExitCode {
             eprintln!(
                 "tasks:\n  \
                  cargo xtask setup   install git hooks + activate pinned toolchain (run once after clone)\n  \
+                 cargo xtask dev     diagnosis loop: incremental DEBUG build of actl (seconds; never --release here)\n  \
+                 cargo xtask evidence  evidence round: RELEASE build + binary fingerprint logged to target/evidence/\n  \
                  cargo xtask gate    quality gate: file-lines + pnpm UI verify + fmt --check + clippy -D warnings + tests (= pre-push = CI)\n  \
                  cargo xtask fmt     format all code
                  cargo xtask fixture CASE | diagnose KIND | package [OPTIONS]
@@ -51,6 +55,118 @@ fn code(ok: bool) -> ExitCode {
     } else {
         ExitCode::FAILURE
     }
+}
+
+/// 诊断循环入口(AGENTS 验收纪律:双循环二进制纪律)。
+/// 增量 DEBUG 构建 actl(实测 ~4s vs release 全量 ~150s,40× 差距)——
+/// 诊断/试错一律用 `target/debug/actl.exe`;**禁止在诊断循环里 --release**:
+/// 证据二进制由 `cargo xtask evidence` 单独产出(显式声明证据轮)。
+fn dev() -> ExitCode {
+    let started = std::time::Instant::now();
+    let ok = run(&["build", "-p", "actl-cli"]);
+    eprintln!("· dev build took {}ms", started.elapsed().as_millis());
+    if ok {
+        eprintln!(
+            "✓ 诊断二进制: target\\debug\\actl.exe (诊断循环专用;最终验收/记录哈希走 `cargo xtask evidence`)"
+        );
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
+/// 证据轮入口:RELEASE 构建 + 二进制指纹(FNV-1a 双通道 128 位,与
+/// handoff::plan_fingerprint/flow 源模板指纹同算法族——仓库指纹惯例)追加
+/// 落盘 `target/evidence/binary-log.txt`(时间戳+指纹+大小),stdout 侧不打
+/// 噪音。每轮验收只调用一次;调用本身即"进入证据轮"的显式声明。
+fn evidence() -> ExitCode {
+    let started = std::time::Instant::now();
+    let ok = run(&["build", "--release", "-p", "actl-cli"]);
+    eprintln!("· release build took {}ms", started.elapsed().as_millis());
+    if !ok {
+        return ExitCode::FAILURE;
+    }
+    let binary = PathBuf::from("target").join("release").join("actl.exe");
+    let Some((fingerprint, size)) = binary_fingerprint(&binary) else {
+        eprintln!("✗ 证据二进制不可读: {}", binary.display());
+        return ExitCode::FAILURE;
+    };
+    let record = format!(
+        "{} fnv128={} size={}\n",
+        chrono_like_now(),
+        fingerprint,
+        size
+    );
+    let log = PathBuf::from("target")
+        .join("evidence")
+        .join("binary-log.txt");
+    if let Some(parent) = log.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    match std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log)
+        .and_then(|mut file| {
+            use std::io::Write;
+            file.write_all(record.as_bytes())
+        }) {
+        Ok(()) => {}
+        Err(error) => {
+            eprintln!("✗ 证据日志写入失败: {error}");
+            return ExitCode::FAILURE;
+        }
+    }
+    eprintln!(
+        "✓ 证据二进制: {} (fnv128={} size={} 已记录 {})",
+        binary.display(),
+        fingerprint,
+        size,
+        log.display()
+    );
+    ExitCode::SUCCESS
+}
+
+/// FNV-1a 双通道 128 位指纹 + 文件大小(与 flow.rs bytes_fingerprint 同族)。
+fn binary_fingerprint(path: &Path) -> Option<(String, u64)> {
+    let bytes = std::fs::read(path).ok()?;
+    let (mut h1, mut h2) = (0xcbf2_9ce4_8422_2325u64, 0x9e37_79b9_7f4a_7c15u64);
+    for &byte in &bytes {
+        h1 = (h1 ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3);
+        h2 = (h2 ^ u64::from(byte).rotate_left(7)).wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    Some((format!("{h1:016x}{h2:016x}"), bytes.len() as u64))
+}
+
+/// 本地时间戳(无外部依赖:从系统时间换算 UTC 即可——证据日志只需可排序)。
+fn chrono_like_now() -> String {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default();
+    let secs = now.as_secs();
+    // UTC 日期换算(civil-from-days 算法,无时区依赖;证据排序够用)
+    let days = secs / 86_400;
+    let (year, month, day) = civil_from_days(days as i64);
+    let rem = secs % 86_400;
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z",
+        rem / 3600,
+        (rem % 3600) / 60,
+        rem % 60
+    )
+}
+
+fn civil_from_days(z: i64) -> (i64, u32, u32) {
+    let z = z + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - 365 * yoe - yoe / 4 - yoe / 100;
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    (if m <= 2 { y + 1 } else { y }, m, d)
 }
 
 /// 一步配置:启用本仓库 git hooks + 触发 rustup 按 rust-toolchain.toml 安装工具链。

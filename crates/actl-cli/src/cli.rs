@@ -146,6 +146,12 @@ pub(crate) enum FlowCommand {
         /// Explicitly authorize repeating this uncertain step if verification fails
         #[arg(long)]
         retry_step: Option<String>,
+        /// Answer a pending exploration decision (choice id from the card, e.g. c2)
+        #[arg(long)]
+        decision: Option<String>,
+        /// Optional responder confidence note recorded with the answer (≤32 chars)
+        #[arg(long, requires = "decision")]
+        confidence: Option<String>,
     },
     /// Batch-archive historical non-completed flow states; preserves all evidence
     #[command(name = "flow-clean")]
@@ -156,6 +162,16 @@ pub(crate) enum FlowCommand {
         /// Archive without renaming (dry run: list what would move)
         #[arg(long)]
         dry_run: bool,
+    },
+    /// Extract a pack-format route fragment from a completed exploration run
+    #[command(name = "explore-writeback")]
+    Writeback {
+        /// Exploration run ID (must be completed with goal_met=true)
+        #[arg(long)]
+        id: String,
+        /// Write the YAML fragment to this file (default: envelope data only)
+        #[arg(long)]
+        out: Option<String>,
     },
 }
 
@@ -966,6 +982,7 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
         Command::Flow(FlowCommand::Pause { .. }) => "flow-pause",
         Command::Flow(FlowCommand::Resume { .. }) => "flow-resume",
         Command::Flow(FlowCommand::Clean { .. }) => "flow-clean",
+        Command::Flow(FlowCommand::Writeback { .. }) => "explore-writeback",
         Command::Desktop(DesktopCommand::History { .. }) => "history",
         Command::Desktop(DesktopCommand::DisplayStart) => "display-start",
         Command::Desktop(DesktopCommand::MinimizeWindow { .. }) => "minimize-window",
@@ -1083,19 +1100,22 @@ fn after_help_for(name: &str) -> Option<&'static str> {
             "Example:\n  actl verify-clipboard --expected 'Exact text' --normalize-lines\nRead-only exact text assertion. Optional normalization converts CRLF to LF and trims trailing LF.\nErrors: ASSERTION_FAILED text differs | NOT_ACTIONABLE unavailable clipboard | INTERNAL read failure"
         }
         "flow-run" => {
-            "Example:\n  actl flow-run --file skills/actl/workflows/vscode-edit.yml --id vscode-01\nOptional --inputs values.yml overrides declared defaults; --paused explicitly registers without executing steps. After full preflight, resources create isolated directories/text files or copy bundled assets once. Saves resolved immutable plan and durable state. Resume never rereads inputs or initializes resources. Physical actions retain explicit authorization.\nErrors: PROTOCOL invalid/reused ID/resource | NOT_ACTIONABLE executor busy | ABORTED stop | INTERNAL storage"
+            "Example:\n  actl flow-run --file skills/actl/workflows/vscode-edit.yml --id vscode-01\n  actl flow-run --file explore-task.yml --id explore-01\nOptional --inputs values.yml overrides declared defaults; --paused explicitly registers without executing steps. After full preflight, resources create isolated directories/text files or copy bundled assets once. Saves resolved immutable plan and durable state. Resume never rereads inputs or initializes resources. Physical actions retain explicit authorization. Exploration plans (explore: task/app/keywords/goal) run the bounded exploration engine instead of static steps: observe→diff→score→gate→probe→act with local goal assertion; semantic deadlocks surface as decision_pending cards answered via flow-resume --decision.\nErrors: PROTOCOL invalid/reused ID/resource | NOT_ACTIONABLE executor busy | ABORTED stop | INTERNAL storage"
         }
         "flow-status" => {
-            "Example:\n  actl flow-status --id report-01\nReports run state, declared saved outputs, pause request and runner_active. template carries the stale-plan hint: when the source template's byte fingerprint differs from the frozen record, changed=true warns that retries still run the old frozen plan (verify new fixes in a new task); null when the run predates source recording or the template is unreadable.\nErrors: PROTOCOL invalid ID/state | INTERNAL storage"
+            "Example:\n  actl flow-status --id report-01\n  actl flow-status --id explore-01\nReports run state, declared saved outputs, pause request and runner_active. template carries the stale-plan hint: when the source template's byte fingerprint differs from the frozen record, changed=true warns that retries still run the old frozen plan (verify new fixes in a new task); null when the run predates source recording or the template is unreadable. Exploration runs add an explore block (action/decision/observation counts, budgets, tried selectors, goal_met, token audit) and, when a run waits on a decision, the self-contained decision card (≤4 KiB, candidates c1..cK) to answer with flow-resume --decision.\nErrors: PROTOCOL invalid ID/state | INTERNAL storage"
         }
         "flow-pause" => {
             "Example:\n  actl flow-pause --id report-01\nRequests a boundary pause; workflow waits also check each poll. Only status=paused confirms it. In-flight COM calls and other CLI calls are not interrupted.\nErrors: PROTOCOL invalid ID/state | INTERNAL storage"
         }
         "flow-resume" => {
-            "Example:\n  actl flow-resume --id report-01\nUses the saved plan; never clears emergency stop. Optional resume_check verifies current context before uncertain-result checks. retry=stale_read retries only read-only STALE_REF, at most three calls. --retry-step requires an explicit failed assertion; observation errors never authorize write replay.\nErrors: PROTOCOL invalid state/step | NOT_ACTIONABLE executor busy | ABORTED stop | INTERNAL storage"
+            "Example:\n  actl flow-resume --id report-01\n  actl flow-resume --id explore-01 --decision c2 --confidence 0.8\nUses the saved plan; never clears emergency stop. Optional resume_check verifies current context before uncertain-result checks. retry=stale_read retries only read-only STALE_REF, at most three calls. --retry-step requires an explicit failed assertion; observation errors never authorize write replay. Exploration runs answer pending decision cards with --decision <choice_id> (must be a card candidate id); the engine then walks the chosen candidate first and falls back to the card's remaining non-dangerous candidates without a new card; --confidence is recorded in the report only.\nErrors: PROTOCOL invalid state/step/decision or decision on a static flow | NOT_ACTIONABLE executor busy | ABORTED stop | INTERNAL storage"
         }
         "flow-clean" => {
             "Example:\n  actl flow-clean --older-than-minutes 120\n  actl flow-clean --dry-run\nBatch-archives historical non-completed flow states (paused/needs_review/interrupted) whose last update is older than the threshold; default 60 minutes. Archives like task-archive: state moves to archive, all evidence preserved, nothing deleted. Completed flows are untouched; running flows are skipped (executor alive). --dry-run lists candidates without moving.\nErrors: PROTOCOL invalid arguments | INTERNAL storage"
+        }
+        "explore-writeback" => {
+            "Example:\n  actl explore-writeback --id explore-s1-calc-auto\n  actl explore-writeback --id explore-s2-calc-tie --out route-fragment.yml\nRead-only evidence collection (docs/42 S3): extracts a pack-format route fragment (status ALWAYS unverified — verification migration is human review, PACKS.md discipline) from a completed exploration run (goal_met=true). Steps are the acted click sequence plus the goal assertion, with the app anchor emitted as {window}; dead/no-effect selectors become quirk candidates and suggested_priors (dead=-4, no_effect=-2) for the next run's explore.priors. The yaml fragment (envelope data or --out file) is pasted into apps/<slug>.yml by the caller; actl never writes pack files. Runs without goal_met or with a capped action log are rejected — incomplete routes are never exported.\nErrors: PROTOCOL not an exploration run / goal not met / truncated action log | INTERNAL storage or fragment write"
         }
         "task-archive" => {
             "Example:\n  actl task-archive --file report.json\nImmutable caller report, retained 30 days; never implies verified task success.\nErrors: PROTOCOL invalid report | INTERNAL file/storage failure"

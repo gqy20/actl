@@ -958,3 +958,61 @@ click（Invoke/SelectionItem/Toggle/ExpandCollapse）、set-value、select、tog
 安全不变量：急停在任何模式下立即生效；动作预告照常上屏；授予动作只能来自显示端 UI 或用户点击（YAML 声明永远不自动生效）。协议版本 9→10，actl 与 actl-signal 需成对升级。按流程指纹（冻结计划哈希）持久信任的「始终信任此流程」为后续方向（ROADMAP）。
 
 **v11 增补（2026-10 批次 3）**：CHECK 响应新增 `YIELD_BUSY`（9）——Standing 授权仍在、仅输入活跃时返回，客户端有界等待安静（3 秒/150ms 轮询、急停即时、超时按让行失败并带 waited_ms 证据）；授权撤销/过期维持 YIELDED 立即失败。误触（鼠标一晃/键盘一碰）在预授权下不再打断任务。协议 10→11 成对升级。
+
+## 探索模式与决策卡（2026-10-03，docs/42 S2）
+
+Plan 新增可选 `explore` 段；存在时 `steps` 必须为空（可省略键），运行走探索引擎而非静态步骤引擎。spec 四要素：`task`（≤160B 一句话）、`app`（≤80B 窗口锚）、`keywords`（1..16 个、各 ≤64B——词表投影与候选评分共用）、`goal`（只读断言族调用，verify/wait/verify-file 等；禁 click 等写命令、禁 bind）。`budgets` 缺省 {actions:12, decisions:6, wall_ms:600000}；auto_resume 与 explore 互斥。
+
+探索循环：`snapshot --app <app> --keywords K1,K2 --skeleton`（零命中放宽一次全 skeleton，记 `widened`）→ 与上一帧差分（S1 配对）→ 前沿评分排序（词表命中 × 身份稳定 × 角色先验 × 新鲜加成，整数分稳定排序）→ 熵门：非危险候选头部领先次名 ≥2 分自动执行，否则外抛；词法闸（删除/发送/支付等中英模式，子串大小写不敏感）命中的候选永不自动执行——全部走决策卡。每个候选先过 `find` 只读探测（probe-before-act）：死候选记 `tried=dead`，不消耗动作预算；点击成功后按帧变化归因 `reveals`/`no_effect`。目标核验完全本地谓词（`goal` 断言），LLM 永远不被问「这步成功了吗」。
+
+决策外抛（docs/42 §9.2 delta）：run 置 `needs_review`、`reason="decision_pending"`（复用 NeedsReview，不加状态顶点）；决策卡自包含、序列化硬上限 **4 KiB**、候选 **Top-K≤8**、卡内只带判别性字段（id/selector/role/截断 name/效果标注/分数/危险位），差分只报计数 + ≤4 条样本名；压缩阶梯（丢样本名→截名字→Top-4→Top-2）保证上限，仍超即 PROTOCOL。卡经 `flow-status` 的 `data.decision_card` 暴露，`data.explore` 携带动作/决策/观察计数、tried 映射、goal_met 与 token 审计（observation_bytes/card_bytes）。全部状态持久化于 `flows/<id>/explore.json`（256 KiB 上限，原子写）。
+
+应答协议：`flow-resume --id <id> --decision <choice_id>`，choice 必须属于卡内候选 id 集，否则 PROTOCOL；`--confidence`（≤32 字符，requires --decision）仅入报告。应答后引擎按「首选 + 卡内其余非危险候选按序」组成排序回退队列——首选无效果时自动推进，不产生新卡（危险候选永不自动回退，显式选择即授权）。静态流程传 --decision 为 PROTOCOL；探索运行传 --retry-step 为 PROTOCOL；悬挂卡未带 --decision 续跑为 PROTOCOL。
+
+终态语义：goal 满足 → completed；预算耗尽 → needs_review（reason `budget_exhausted:actions|decisions|wall`）；无候选（放宽后仍空）→ needs_review `no_candidates`；观察失败 → needs_review `observation_failed` 且错误如实传播（错误码原样返回调用方）；目标断言本身报错 → needs_review `goal_check_failed`。急停/暂停在任何边界生效（先持久化后返回），与静态流程同语义。显示端 needs_review 动作对探索显示 resume（静态流程仍为 recheck）。
+
+### S3 增补:路线回写、先验与目标重试（2026-10-03，docs/42 S3）
+
+`explore.priors`（可选,YAML 映射）:选择器 → 分数调整(-4..=4,≤32 项),调用方从 pack quirks / 上轮回写的 suggested_priors 注入——已知死/无效果/窗口重构类候选被压低,已知有效候选提升;分数下限 0。引擎不读 pack,先验显式入参(分层约束:核心 CLI 永不读 pack)。
+
+`explore-writeback --id <run> [--out <file>]`(只读):从 goal_met=true 的完成运行抽取 pack 格式路线片段——status **恒 unverified**(verified 迁移必须人工复核,PACKS.md 修订纪律;自动化只做证据收集);步骤 = acted 点击序列 + 终态 goal 断言,`--app <锚点>` 精确值替换为 `{window}`;死候选生成 quirk 片段,tried 效果映射输出 suggested_priors(dead=-4,no_effect=-2)供下一轮 priors。证据头注释携带 run id/动作/决策/观察计数与 token 审计。action_log 达上限(可能截断)或 goal 未达成即拒绝——不完整路线不导出。片段由调用方合并进 `apps/<slug>.yml`(actl 不写 pack 文件),`cargo xtask lint-packs` 为最终校验;重放由 agent 执行步骤并留证据,PR review 即迁移复核。
+
+goal 断言瞬态错误(NOT_FOUND/TIMEOUT,如提供程序抖动/窗口短时未物化)有界重试 2 次(300ms 沉降,重试计入 goal_retries 不计 errors);耗尽或非瞬态错误维持失败闭合,错误码原样传播。flow-status 的 explore 块新增 goal_retries 与 priors。
+
+### P1 增补:goal 断言折叠进观察帧（2026-10-03）
+
+goal 折叠:goal 目标选择器的值(id 精确/name 子串,镜像 verify 定位语义)并进观察关键词,使 goal 元素始终入帧——存在型断言与 name 通道值断言(`--value ... --property name [--contains]`)在帧内本地判定,**逐轮消掉一次 verify 采集**。折叠仅覆盖可精确镜像的形态;目标缺席/id 歧义/其他通道(--property value、--normalize-lines、--url-query)回退权威 COM 调用,错误码语义不变。spec 词表达 16 上限时折叠词机会性放弃。goal 核验通道由 condition 改为 execute_output 直判,保留 ASSERTION_FAILED(未满足)/NOT_FOUND(目标缺席)两态:存在型缺席=未满足继续探索,值断言缺席=有界重试(docs/77 发现 1);wait 族超时=未满足。副作用:goal 元素入帧使同窗差分归因能看到 goal 通道的变化(计算器显示区),reveals/no_effect 标注更准。
+
+### L2 增补:输入原语与跨窗 goal 探测（2026-10-03，docs/42 L2）
+
+`explore.texts`(可选,YAML 映射):完整语义选择器(id:/name:)→ 待输入文本,≤8 项、值 1–4096B、词表+texts 键 ≤16。键的选择器值并入观察关键词(种子+评分激活 Edit——Edit 角色先验为零,靠 texts 键命中得分);候选命中即执行 `type <selector> <文本> --app <锚点>`(复用键盘护栏与 --app fail-closed),probe-before-act 与授权/急停/暂停护栏同 click。type 动作的文本记入 action_log(serde `text` 字段),writeback 导出为 `["type", selector, 文本, --app, "{window}"]` 步骤——重放可用。
+
+跨窗 goal 探测:goal 目标在锚窗 NOT_FOUND 时,先做同进程窗口探测——`list-windows` 枚举 pid 等于观察窗(快照 window.pid)的其他有标题窗口(排除当前窗与同题窗),把 goal 的 `--app` 逐个改写为候选窗标题重试(≤3 个/轮);命中即记录 `goal_window`(转移)并判定 goal 达成。探测预算:每运行 ≤2 轮(每轮一次枚举),无 --app 的 goal(如 verify-file)不探测;枚举失败不传播(探测是机会性增强,主错误语义留在 goal 调用)。观察窗与跨窗身份(window_pid/window_title/goal_window/anchor_transfers/probe_episodes)入 explore.json 与 flow-status 的 explore 块。v1 边界:转移只在 goal 命中时发生(观察锚点不随弹窗转移——在弹窗内继续点击属后续);goal_window 已转移而其窗后续缺席时回落锚窗重探。
+
+### P3 增补:批量并行探测（2026-10-03）
+
+Host 新增 `execute_probes` 批量只读通道(默认串行逐个执行,引擎与实现解耦):CLI 侧对 find-only 批量经 `std::thread::scope` 并行分发——UIAutomation 客户端按线程自初始化 MTA(uiautomation crate 语义),并行读是 UIA 合法客户端形态;线程 panic 折 INTERNAL 不外泄;非 find 形态回退默认串行。引擎两个接入点:①**卡构建预检**——外抛前对 Top-K 候选批量探测,确定性死亡的候选不进卡(应答者不看到死控件,卡体积与 token 双省),全前沿死亡回循环重算(有界,最终落 no_candidates);②**应答队列预检**——卡发出到应答之间世界可能已变,应答时批量探测把死项出队,每个死项省一整轮观察。死活分类规则:仅确定性错误(NOT_FOUND/AMBIGUOUS/NOT_ACTIONABLE/PERM_DENIED)标 dead 并计 errors;瞬态错误(TIMEOUT/INTERNAL/ABORTED)不标记——留待动作时单点 probe 权威复核(docs/77 发现 #3 经验:过渡期错误不代表控件不存在)。并行收益:K≤8 个候选的探测从串行 ~800ms 降到 ~200ms 量级(受提供程序并发度影响,最坏退化为串行且无害)。P2(观察∥goal)按分析不做:goal 折叠已消掉大半核验采集,残余并发读与发现 #3 的抖动窗口重叠,风险大于收益;P4/P5 保留至对应场景立项。
+
+### 观察有界重试增补（2026-10-03，docs/77 发现 #3 收口）
+
+观察的瞬态错误(INTERNAL/TIMEOUT——菜单开合/窗口重构过渡期提供程序短暂锁住,紧随动作的观察失败形态,真机已证 ~1s 后恢复)有界重试 2 次、500ms 沉降,重试计入 `observation_retries` 不计 errors;耗尽后维持原语义(协议错误 → Failed spec_rejected,其余 → needs_review observation_failed 且错误码原样传播)。窗口缺失(NOT_FOUND,结构性)不重试。与 goal 有界重试同构:瞬态先给恢复机会,终态保持诚实闭合。
+
+### P3 修正:并行读被证据否决,批量通道保持串行（2026-10-03）
+
+P3 落地时的并行分发(同进程多线程 UIA find)经真机复现证伪:两个并行 find 中必有一个返回 `E_FAIL(0x80004005) 未指定的错误`(顺序不定)——同进程内对桌面根/UIA 提供程序的并发读存在上限,并发即抖动;叠加此前的计时实证(UWP 计算器上并行无净收益),**并行 UIA 读在本栈上既有害又无益,CLI 侧回退串行**。保留的形态:`Host::execute_probes` 批量通道与引擎侧接入点(卡构建预检/应答队列预检)不变——死候选排除与队列预滤是提供程序无关的正确性收益;通道为将来真正可并行的读(浏览器轨 CDP 读天然可并行)预留,语义契约(同序结果、单失败不影响其他)已经 MockHost 全链路钉住。
+
+### goal 查询故障语义增补（2026-10-03，docs/77 发现 #5）
+
+goal 核验的查询类故障（INTERNAL——真机实证：菜单开启态下 item-container 定位对不存在元素持续抛 RPC 服务器异常，非瞬态）**不判死运行**：计 errors 如实记录、按未满足继续探索。理由：goal 核验先于动作，持续故障会饿死本该执行的探索动作（如点开菜单项后下一步才能达成 goal）；预算有界兜底，永久故障最终以 budget_exhausted 终止且 errors 计数反映每轮故障。INTERNAL 与 NotFound 一样先经同 pid 跨窗探测（机会性）；NotFound 的存在性/有界重试/失败闭合语义不变，PermDenied/PROTOCOL 等非查询类致命错误维持立即 goal_check_failed。
+
+### 帧背书增补（2026-10-03，docs/77 发现 #6）
+
+**帧背书原则**:本轮刚观察的帧是引擎对候选存活性的权威视图——find/click 的 item-container 定位对 flyout 项**间歇性失明**(同现场 0 结果与命中交替,快照树稳定可见,两通道可靠性倒挂)。规则:选择器能在当前帧内解析(id 精确/name 子串,镜像选择器语义)即帧内候选——①**跳过动作前 COM 探测**(帧即新鲜度证据,省一次易抖动的定位往返);②**动作失败不判死**(计一次动作预算,有界重试,下轮前沿重导;真死候选在预算内自然耗尽,终态诚实)。非帧内候选(应答回退队列等陈旧上下文)保持 probe-before-act 原语义(COM 定位判死)。由此**卡构建不再批量预检**——卡与观察同轮,帧即新鲜度,COM 定位的间歇失明会错杀卡面;死候选的过滤收敛到两处权威:应答时的队列预检(跨轮,陈旧帧需真探测)与动作时点击自身的目标解析。结构性改进方向(登记 ROADMAP):动作经由快照 ref 身份绑定(`click @eN --snapshot`)而非选择器重定位——与 docs/31 的身份纪律一致,消除两条通道的语义分叉。
+
+### ref 绑定动作增补（2026-10-03，发现 #6 的结构性收口）
+
+**动作经快照 ref 身份绑定**：引擎的动作用帧内 ref 走捕获身份解析,不再经选择器重定位——`click/type @eN --snapshot <snapshot_id> --app <锚点>`(docs/31 身份纪律:跨调用使用 ref 必须绑定 snapshot_id)。机制:①Host 新增 `execute_snapshot` 快照通道(返回 snapshot_id + data;默认实现从 execute_output 推导,snapshot_id 未知时空串→回退选择器路径;CLI Adapter 覆写捕获 envelope 顶层 snapshot_id);②引擎观察时把快照 id 与帧同轮记录(explore.json 的 `snapshot_id`,flow-status 可见);③act() 对帧内元素(选择器在当前帧解析成功且元素携带 ref)构造 ref 绑定动作——身份来自**看见它的那条通道**(快照捕获身份+RuntimeId 核对+窗口新鲜度检查),绕开间歇失明的 item-container 定位通道。无 ref/无快照 id(历史语义)回退选择器路径;应答回退队列中的陈旧 ref 自然失效(STALE_REF),按帧内候选的有界重试语义下轮重新观察取新 ref。STALE_REF(元素重建)不计死亡、计一次动作预算——与"控件重建后重新观察"纪律同构。副作用:动作语义与 docs/31 的身份纪律完全对齐,选择器路径仅服务陈旧上下文(队列)。
+
+### ref 编号口径修正（2026-10-03，投影快照 ref 可回放性修复）
+
+**@eN 编号 = 全树 DFS 交互序数,与投影无关**:投影(skeleton/keyword/content)只过滤可见性、不改编号——投影输出中编号有洞(如 @e3、@e7),但同一窗口的任何投影与全量快照对同一元素使用**同一编号**;输出编号、持久化身份列表、`click @eN --snapshot` 的回放计数(find 同口径)三者对齐。修复前:投影快照按投影后顺序从 @e1 重编,与回放的全树计数错位——投影 ref 从未正确回放过(发现 #6 攻坚实证:keyword 快照的 @e1 回放解析到全树第 1 个交互元素,NOT_ACTIONABLE)。副作用为正:跨投影 ref 混用从隐患变为安全(同空间),与 find 输出的编号纪律一致。

@@ -5,6 +5,37 @@
 0.x 期间破坏性变更在条目中以 **[BC]** 标注。条目只记"变了什么与为什么"；
 过程细节与归因在 git 提交信息与 docs/ 里，不在此重复。
 
+## [Unreleased]
+
+### Added
+
+- **双循环二进制纪律工具化（[docs/70 §8](docs/70-debug-playbook.md)，AGENTS 验收纪律操作化）**：`cargo xtask dev`（诊断循环入口——增量 DEBUG 构建,实测无改动 0.8s/小改动 ~4s,40× 快于 release;计时打 stderr）与 `cargo xtask evidence`（证据轮入口——RELEASE 构建+FNV-1a 双通道 128 位二进制指纹追加落 `target/evidence/binary-log.txt`,调用即进入证据轮的显式声明）。诊断与证据二进制结构性分离;AGENTS 验收纪律同步升级（双循环命令对、一轮多假设、事件等待替代固定 sleep）。Makefile 精简为高频别名（dev/gate/evidence/setup,按频率排序;fmt/regress 低频不再设别名）;agent 直达 `cargo xtask`,make 仅为人类别名层（AGENTS 环境节明确）。
+- **探索引擎 L2 原语（spec，[docs/06 L2 增补](docs/06-design-blueprint.md)）**：① 输入原语 `explore.texts`——选择器→文本映射（≤8 项，键值并入关键词激活 Edit 评分），候选命中执行 `type`（键盘护栏/--app fail-closed/probe/授权全复用），action_log 记录文本、writeback 导出 type 步骤，解锁文件名/搜索框/表单类任务；② 跨窗 goal 探测——goal 目标锚窗缺席时枚举同 pid 窗口（快照 window.pid），goal 的 --app 改写为候选窗标题重试（≤3/轮、≤2 轮/运行），命中即转移 goal_window 并完成，"点击→对话框→对话框内断言"链打通（v1 转移仅 goal 侧，观察锚点不随弹窗移动）。测试：type 全链路、跨窗命中/预算封顶、texts schema 校验契约（flow 34 + 契约 9 全绿）。
+
+### Fixed
+
+- **投影快照 ref 编号口径（docs/06 增补，投影 ref 可回放性修复）**：@eN 编号改为**全树 DFS 交互序数**（投影只过滤可见性不改编号，投影后编号有洞）——修复前投影快照按投影后顺序从 @e1 重编，与 `click @eN --snapshot` 回放的全树计数错位，skeleton/keyword/content 投影的 ref **从未正确回放过**（发现 #6 攻坚中实证：keyword 快照的 @e1 回放解析到全树第 1 个交互元素）。修复后输出编号=持久化身份=回放计数三口径对齐，同一窗口跨投影编号稳定（与 find 输出同纪律），投影 ref 混用从隐患变为安全。全量快照编号不变。
+- **并行探测回退串行（P3 修正，docs/06 P3 修正节）**：真机复现证伪同进程并行 UIA 读——两个并行 find 必有一个返回 `E_FAIL(0x80004005)`（顺序不定，桌面根/提供程序并发上限）；与此前"并行无净计时收益"互相印证。CLI 侧移除并行分发，`Host::execute_probes` 批量通道保持默认串行；引擎侧卡/队列预检语义不变（提供程序无关的正确性收益），通道为将来可并行的读（浏览器 CDP）预留。契约测试的队列断言同步新语义（ghost 窗口下候选确定性死亡→队列清空）。
+
+### Changed
+
+- **探索引擎 ref 绑定动作（docs/06 增补，发现 #6 的结构性收口）**：动作经快照 ref 身份解析——`click/type @eN --snapshot <id> --app`（捕获身份 + RuntimeId 核对 + 窗口新鲜度检查，docs/31 身份纪律），绕开间歇失明的 item-container 定位通道。Host 新增 `execute_snapshot` 快照通道（返回 snapshot_id + data；默认实现回退选择器路径，CLI Adapter 覆写捕获 envelope 顶层 id）；快照 id 与帧同轮持久化（flow-status 可见）；帧内元素携带 ref 即走绑定路径，无 ref/陈旧上下文回退选择器；STALE_REF（元素重建）不判死、计动作预算有界重试（下轮重新观察取新 ref）。测试：ref 路径全链路（raw action 断言 @eN+--snapshot）、STALE 重试恢复、无 ref 回退（44 项引擎单测）。
+- **探索引擎帧背书原则（docs/06 增补，docs/77 发现 #6 收口）**：本轮刚观察的帧是候选存活性的权威视图——find/click 的 item-container 定位对 flyout 项间歇性失明（同现场 0 结果与命中交替，快照稳定可见）。帧内候选：跳过动作前 COM 探测（帧即新鲜度证据）、动作失败不判死（计动作预算有界重试）；非帧内候选（应答队列）保持探测判死原语义。卡构建的批量预检移除（卡与观察同轮，定位失明会错杀卡面）——死候选过滤收敛到应答时队列预检与动作时点击权威。P3 的卡面接入点由此修正，队列预检保留。结构性方向（ROADMAP）：动作改经快照 ref 身份绑定（`click @eN --snapshot`，docs/31 身份纪律），消除选择器重定位的通道分叉。
+- **探索引擎观察有界重试 + goal 查询故障语义（docs/06 增补，docs/77 发现 #3/#5 收口）**：① 观察的瞬态错误（INTERNAL/TIMEOUT——菜单开合/窗口重构过渡期提供程序短暂锁住，真机实证 ~1s 后恢复）有界重试 2 次、500ms 沉降（observation_retries 入状态、重试不计 errors）；耗尽维持诚实闭合。② goal 核验的查询类故障（INTERNAL——真机实证：菜单开启态下 item-container 定位持续抛 RPC 服务器异常）不判死运行：计 errors 如实记录、按未满足继续探索（核验先于动作，持续故障会饿死本该执行的菜单项点击），预算有界兜底；INTERNAL 与 NotFound 同样先经同 pid 跨窗探测。两者共同直接针对 L2 验收中阻断跨窗链路的观察/核验瞬态。
+- **探索引擎 P3 批量并行探测（docs/06 P3 增补）**：Host 新增 `execute_probes` 批量只读通道（默认串行；CLI 侧对 find 批量经 std::thread::scope 并行——UIA 客户端每线程自初始化 MTA，并行读合法）。引擎两个接入点：卡构建前对 Top-K 候选预检（死候选不进卡——真机验收里 ClearMemoryButton 死候选进过卡的问题就此收口，应答者不再看到死控件）与应答时队列预检（卡到应答间死亡的候选出队，每个死项省一整轮观察）。死活分类只认确定性错误（NOT_FOUND/AMBIGUOUS/NOT_ACTIONABLE/PERM_DENIED）；瞬态错误不标记（docs/77 发现 #3 的经验规则——过渡期抖动不等于控件死亡），动作时单点 probe 权威复核不变。P2（观察∥goal）按分析不实施：goal 折叠已消掉大部分核验采集、残余并发读与提供程序抖动窗口重叠。
+- **探索引擎 goal 断言折叠(P1,docs/06 探索节增补)**：goal 目标选择器的值并入观察关键词(goal 元素始终入帧),存在型断言与 name 通道值断言帧内本地判定——逐轮消掉一次 verify 采集(真机实测观察 ~450ms/次,这是无线程的采集并行化);goal 核验改走 execute_output 直判,保留"未满足/目标缺席"两态语义(存在型缺席=继续探索,值断言缺席=有界重试,wait 超时=未满足)。折叠不可镜像的形态回退权威 COM 调用。副产品:goal 通道变化进入同窗差分,reveals/no_effect 效果标注更准(此前显示区不在关键词帧)。
+
+### Documentation and validation
+
+- **探索引擎 L2 真机验收（[77 L2 增补](docs/77-exploration-s2-acceptance.md)）**：P1 goal 折叠随全程生效（观察即核验）；`texts` 输入原语真机通过——texts 键激活 Document 评分后与菜单栏「编辑」形成真实三方平局卡（应答裁决后 type 单步执行、ValuePattern 读回核验通过）；发现菜单 flyout 在锚窗快照内（探索可观察菜单项）。跨窗链路被真机发现 #3 阻断（菜单开合过渡期 UIA 观察瞬态→失败闭合），机制有 MockHost 全链路单测、收口方向为观察有界重试（受阻如实记录，ROADMAP）。附带实证：find 歧义死候选剪枝与队列回退、窗口标题变化下稳定锚设计、中文 IME 键盘通道限制确认（ASCII 验收,--paste 选项留 spec 决策）。
+- **探索模式 S3 真机闭环验收通过（[77 S3 增补](docs/77-exploration-s2-acceptance.md)）**：回写（S1/S2 完成运行→pack 片段，失败运行如实拒绝）→ agent 侧重放（replay-explore-*.yml 全步 verified）→ **用户人工复核**迁移 2 条 unverified→verified（pack 更新+lint-packs 通过）→ **先验飞轮实证**：失败运行的 tried 数据导出 explore.priors 后，同一不可达 goal 从 S3/S3b 的 `goal_check_failed`（窗口重构陷阱）变为 S3d 的 `budget_exhausted:actions`（actions=4/errors=0）——docs/77 发现 1/2 机制化收口。诚实记账：§7 的 5 条 verified 目标本轮 2 条（现有完成运行全部），余 3 条待路线积累。
+- **探索模式 S2 真机验收通过（[77](docs/77-exploration-s2-acceptance.md)）**：计算器/记事本 4 场景全过——熵门自动路径（0 决策外抛）、平局决策卡+`--decision` 单选应答+排序回退（一次往返完成两次尝试）、`budget_exhausted:actions` 与 `goal_check_failed` 两类诚实终态实证。token 审计实测：关键词帧 301–1700B/次（与 docs/42 §3 推算量级吻合）、决策往返 0–1 次/任务、对比同窗全量快照循环 5–17× 体积缩减。真机发现两条入 docs/42 §10.3（窗口形态变化使显示元素不可解析→失败闭合；候选排序缺效果风险先验）。验收 spec 沉淀为 fixtures/flows/explore-*.yml（含 calculator-reset 辅助）。
+
+### Added
+
+- **探索模式 S3（spec）：路线回写 + 效果风险先验 + goal 有界重试（[42 §11](docs/42-exploration-mode.md)，协议见 [06](docs/06-design-blueprint.md) S3 增补）**。`explore-writeback --id <run> [--out <file>]`（只读）从 goal_met 的完成运行抽取 pack 格式路线片段——status **恒 unverified**（verified 迁移必须人工复核，走 pack 编辑+git review，自动化只做证据收集；actl 不写 pack 文件，分层铁律：核心 CLI 永不读 pack）；步骤 = acted 点击序列 + 终态 goal 断言，`--app` 精确值替换为 `{window}`；死候选生成 quirk 片段、tried 效果输出 suggested_priors（dead=-4/no_effect=-2）。action_log 截断或 goal 未达成即拒绝——不完整路线不导出。`explore.priors`（-4..=4,≤32 项）由调用方从 pack quirks/上轮 suggested_priors 注入，评分叠加、下限 0——docs/77 发现的「候选排序缺效果风险先验」由此闭环。goal 断言瞬态错误（NOT_FOUND/TIMEOUT）有界重试 2 次（goal_retries 入状态、重试不计 errors），耗尽维持失败闭合、错误码原样传播——docs/77 发现 1 的机制化收口。测试：core 先验 2 + flow route 抽取/渲染（saphyr 往返）5 + goal 重试/先验改道 3 + 契约 golden 等 3 项。
+- **探索模式 S2（spec）：有界探索引擎 + 决策卡协议（[42](docs/42-exploration-mode.md) §9.2 delta 全兑现，协议见 [06](docs/06-design-blueprint.md) 探索节）**。Plan 新增可选 `explore` 段（task/app/keywords/goal/budgets，steps 必须为空），`flow-run` 直接执行探索计划，零新命令。引擎循环：关键词投影观察（零命中放宽一次记 widened）→ S1 差分 → 前沿评分（词表命中×身份稳定×角色先验×新鲜加成，整数分稳定排序）→ 熵门（头部领先 ≥2 自动执行，平局外抛）→ probe-before-act（`find` 只读探测，死候选记 tried=dead 不消耗预算）→ 点击 → 帧差分归因 reveals/no_effect → 本地谓词核验 goal（LLM 永不被问"这步成功了吗"）。词法闸（删除/发送/支付等中英模式）命中的候选永不自动执行。决策外抛：run 置 needs_review/decision_pending（复用状态机不加顶点），决策卡自包含、4 KiB/Top-K≤8 构建器硬保证（压缩阶梯，仍超即 PROTOCOL），经 `flow-status` 的 data.decision_card 暴露。应答 `flow-resume --decision <choice_id>`（未知候选 PROTOCOL，--confidence 仅入报告）；应答后引擎侧排序回退（首选 + 卡内非危险候选按序），一次往返摊平淡区间。终态语义：goal 满足 completed；预算耗尽/无候选/观察失败 needs_review 按原因串区分，错误码如实传播。全部状态持久化 `flows/<id>/explore.json`（256 KiB 原子写），token 审计（observation_bytes/card_bytes/计数）入 flow-status，为 42 §9.4"推算以实测替换"提供数据。测试：core 9 项 + 引擎 MockHost 全链路 13 项 + 契约 6 项离线；真机验收列入 ROADMAP（未做不记通过）。
+
 ## [0.2.0] - 2026-10-03
 
 本版是浏览器 CDP 通道 + 指针扩展 + 探索模式地基的版本：从零到一建成了 actl 自有浏览器自动化通道（9 个 spec 提交），三项指针扩展全部真机通过，探索模式 S1 落地；同时补齐本地应用注册表、帮助精简、AGENTS 工程纪律、显示端动画与 UIA 诊断增强。

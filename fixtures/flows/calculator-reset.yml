@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=../../schemas/flow-v1.schema.json
+# 探索模式验收辅助:把测试计算器复位到显示 0(供 explore 系列场景间隔离状态)。
+# 只应作用于无用户数据的测试计算器;不要对含用户计算过程的计算器执行。
+version: 1
+name: 复位计算器
+steps:
+  - id: clear
+    title: 清空测试计算器
+    run:
+      command: click
+      args: ['id:clearButton', --app, 计算器]
+    verify:
+      command: verify
+      args: [--value, 'id:CalculatorResults', '显示为 0', --property, name, --app, 计算器]
+    retry: never

@@ -1,0 +1,23 @@
+{
+  "version": "1",
+  "ok": true,
+  "command": "flow-validate",
+  "data": {
+    "valid": true,
+    "version": 1,
+    "name": "explore-contract",
+    "steps": 0,
+    "explore": {
+      "app": "actl-explore-contract-ghost-window",
+      "keywords": [
+        "保存",
+        "save"
+      ],
+      "budgets": {
+        "actions": 12,
+        "decisions": 6,
+        "wall_ms": 600000
+      }
+    }
+  }
+}

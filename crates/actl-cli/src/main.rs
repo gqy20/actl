@@ -24,9 +24,11 @@ use crate::cli::{Cli, Command, DesktopCommand, app_of, command_name};
 use crate::{interact::*, query::*};
 
 /// 命令执行产物:data 进 envelope,`snapshot_id` 存在时附加到顶层(06 §4)。
+/// 字段 crate 可见:flow Adapter 的快照通道需要捕获 snapshot_id
+/// (探索引擎 ref 绑定动作,docs/06 帧背书/ref 绑定增补)。
 pub(crate) struct CommandOutput {
-    data: Value,
-    snapshot_id: Option<String>,
+    pub(crate) data: Value,
+    pub(crate) snapshot_id: Option<String>,
 }
 
 impl From<Value> for CommandOutput {
@@ -62,6 +64,7 @@ fn main() {
             crate::cli::FlowCommand::Validate { .. }
                 | crate::cli::FlowCommand::Status { .. }
                 | crate::cli::FlowCommand::Pause { .. }
+                | crate::cli::FlowCommand::Writeback { .. }
         ) | Command::Preview { .. }
             | Command::Desktop(DesktopCommand::ExecutionStatus | DesktopCommand::ExecutionRecover)
     ) {

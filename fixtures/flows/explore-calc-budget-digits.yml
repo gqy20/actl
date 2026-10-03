@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=../../schemas/flow-v1.schema.json
+# 探索模式 S3c 有界诚实失败(纯数字前沿版):九个数字键关键词(零一二三四五六八九,
+# 缺七留观察差)全部同分平局 → 立即外抛卡;应答 c1 后排序回退队列逐个键入数字,
+# 显示区始终存在(断言失败而非 NOT_FOUND),到 actions 预算如实终止。
+# 与 explore-calc-budget 的区别:卡内不含 置顶/导航/退格 等窗口重构或显示清除
+# 类候选——预算耗尽路径不被 goal_check_failed 抢先终止。
+# 前置:测试计算器显示为 0(先跑 calculator-reset.yml)。
+# 预期:status=needs_review,reason=budget_exhausted:actions,actions=4,
+# decisions=1,goal_met=false,errors=0。
+version: 1
+name: explore-s3c-calc-budget-digits
+explore:
+  task: 让计算器显示一个验收专用的不可达字符串
+  app: 计算器
+  keywords: [零, 一, 二, 三, 四, 五, 六, 八, 九]
+  goal: {command: verify, args: [--value, 'id:CalculatorResults', 'actl-s2-验收不可达', --property, name, --app, 计算器]}
+  budgets: {actions: 4, decisions: 1}

@@ -152,7 +152,22 @@ impl SnapshotBuilder {
                 self.keyword_keep_set(&keywords, skeleton)
             }
         };
-        let mut next_ref = 0;
+        // ref 编号 = 全树 DFS 交互序数,与投影无关(投影只过滤可见性):
+        // 投影后编号有洞,但 @eN 与 find 输出/replay 的全树计数口径一致,
+        // 跨投影稳定且可回放——此前投影快照按投影后顺序从 @e1 重编,与
+        // replay 的全树计数错位,投影 ref 从未正确回放过(发现 #6 攻坚中
+        // 实证:keyword 快照的 @e1 回放解析到全树第 1 个交互元素)。
+        let mut counter = 0usize;
+        let interactive_no: Vec<usize> = self
+            .nodes
+            .iter()
+            .map(|n| {
+                if is_interactive_role(&n.role) {
+                    counter += 1;
+                }
+                counter
+            })
+            .collect();
         let elements = self
             .nodes
             .iter()
@@ -160,12 +175,10 @@ impl SnapshotBuilder {
             .filter(|(i, _)| keep[*i])
             .map(|(i, n)| {
                 let ref_id = if is_interactive_role(&n.role) {
-                    next_ref += 1;
-                    Some(format!("@e{next_ref}"))
+                    Some(format!("@e{}", interactive_no[i]))
                 } else {
                     None
                 };
-                let _ = i;
                 ElementOut {
                     ref_id,
                     role: n.role.clone(),
@@ -387,13 +400,14 @@ mod tests {
                 "Hyperlink"
             ]
         );
-        // ref 只落在 Document 子树内
+        // ref 只落在 Document 子树内;编号=全树交互序数(投影后有洞,
+        // 跨投影与 replay 口径一致——chrome 按钮 ToolBar@e1 Button 占 1、2)
         let refs: Vec<&str> = out
             .elements
             .iter()
             .filter_map(|e| e.ref_id.as_deref())
             .collect();
-        assert_eq!(refs, vec!["@e1", "@e2", "@e3"]);
+        assert_eq!(refs, vec!["@e3", "@e4", "@e5"]);
     }
 
     /// 组合模式:chrome 交互元素不参与保留判定(纯 skeleton 削不动的根因),

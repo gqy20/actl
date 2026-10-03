@@ -1,0 +1,39 @@
+{
+  "version": "1",
+  "ok": true,
+  "command": "explore-writeback",
+  "data": {
+    "route": {
+      "route_id": "explore_wb_ok",
+      "description": "在计算器中按下数字七——探索回写(run wb-ok)",
+      "status": "unverified",
+      "verify": "目标断言:verify --value id:CalculatorResults 显示为 7 --property name --app {window};人工复核后按 PACKS 纪律迁移 verified,证据见 run wb-ok",
+      "steps": [
+        ["click", "id:num8Button", "--app", "{window}"],
+        ["click", "id:num7Button", "--app", "{window}"],
+        ["verify", "--value", "id:CalculatorResults", "显示为 7", "--property", "name", "--app", "{window}"]
+      ],
+      "quirks": [
+        {
+          "id": "explore_clearmemorybutton_dead",
+          "note": "探索 run wb-ok 真机:selector id:ClearMemoryButton probe 判死(虚拟化或瞬态);重新观察后可恢复,勿据单次 NOT_FOUND 判定控件不存在"
+        }
+      ],
+      "suggested_priors": {
+        "id:ClearMemoryButton": -4,
+        "id:num8Button": -2
+      },
+      "evidence": {
+        "run_id": "wb-ok",
+        "actions": 2,
+        "decisions": 1,
+        "observations": 4,
+        "errors": 0,
+        "observation_bytes": 2060,
+        "card_bytes": 556,
+        "goal_retries": 1
+      }
+    },
+    "yaml": "# 探索回写(explore-writeback):自动化只收集证据,status 恒 unverified;\n# verified 迁移须人工复核(PACKS.md 修订纪律),replay 证据随 PR 提交。\n# 证据:run wb-ok · actions 2 · decisions 1 · observations 4 · errors 0 · goal_retries 1 · observation_bytes 2060 · card_bytes 556\nroutes:\n  - id: explore_wb_ok\n    description: 在计算器中按下数字七——探索回写(run wb-ok)\n    status: unverified\n    verify: \"目标断言:verify --value id:CalculatorResults 显示为 7 --property name --app {window};人工复核后按 PACKS 纪律迁移 verified,证据见 run wb-ok\"\n    steps:\n      - [click, \"id:num8Button\", --app, \"{window}\"]\n      - [click, \"id:num7Button\", --app, \"{window}\"]\n      - [verify, --value, \"id:CalculatorResults\", 显示为 7, --property, name, --app, \"{window}\"]\nquirks:\n  - id: explore_clearmemorybutton_dead\n    note: \"探索 run wb-ok 真机:selector id:ClearMemoryButton probe 判死(虚拟化或瞬态);重新观察后可恢复,勿据单次 NOT_FOUND 判定控件不存在\"\n# suggested_priors(下一轮 explore.priors 数据源):dead=-4, no_effect=-2\n#   \"id:ClearMemoryButton\": -4\n#   \"id:num8Button\": -2\n"
+  }
+}

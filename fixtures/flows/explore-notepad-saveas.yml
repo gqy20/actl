@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=../../schemas/flow-v1.schema.json
+# 探索模式 L2 验收:跨窗 goal 探测(best-effort)。链路:点击「文件」菜单 →
+# 菜单出现「另存为」→ 点击 → 「另存为」对话框(同进程新窗口)→ goal 的
+# 保存按钮在锚窗缺席 → 同 pid 窗口探测改写 --app 重试 → 命中即转移完成。
+# 前置:已输入未保存文本的记事本(app 锚 Notepad)。
+# 风险记录:菜单 flyout 若不在主窗快照内(独立 XAML 弹层),链路断在观察侧
+# ——v1 边界(观察锚点不随弹窗转移),如实记录为受阻。
+version: 1
+name: explore-l2-notepad-saveas
+explore:
+  task: 在记事本打开另存为对话框
+  app: Notepad
+  keywords: [文件, 另存]
+  goal: {command: verify, args: [--exists, 'name:保存', --app, Notepad]}
+  budgets: {actions: 4, decisions: 2}

@@ -160,6 +160,44 @@ fn validate_assertion(command: &Command) -> Result<(), CtlError> {
     Ok(())
 }
 pub fn validate(plan: &Plan) -> Result<(), CtlError> {
+    // 探索计划(docs/42 S2):无静态步骤;校验目标是只读断言族命令。
+    if let Some(explore) = &plan.explore {
+        let command = parse(&explore.goal).map_err(|e| {
+            CtlError::with_evidence(
+                e.code,
+                format!("explore.goal: {}", e.message),
+                json!({"field": "explore.goal"}),
+            )
+        })?;
+        if !read_only(&command) {
+            return Err(CtlError::with_evidence(
+                ErrorCode::Protocol,
+                "explore goal must be a read-only assertion (verify family)",
+                json!({"field": "explore.goal"}),
+            ));
+        }
+        if !matches!(
+            command,
+            Command::Verify { .. }
+                | Command::Wait { .. }
+                | Command::VerifyFile { .. }
+                | Command::VerifyRows { .. }
+                | Command::VerifyOwner { .. }
+                | Command::VerifyClosed { .. }
+                | Command::VerifyWindow { .. }
+                | Command::VerifyClipboard { .. }
+                | Command::BrowserVerify { .. }
+        ) {
+            return Err(CtlError::with_evidence(
+                ErrorCode::Protocol,
+                "explore goal must be an assertion command (verify/wait family)",
+                json!({"field": "explore.goal"}),
+            ));
+        }
+        crate::selector_input::validate(&command)?;
+        validate_assertion(&command)?;
+        return Ok(());
+    }
     for (index, step) in plan.steps.iter().enumerate() {
         actl_flow::branch::validate(step)?;
         if let Some(otherwise) = &step.otherwise {
@@ -171,6 +209,7 @@ pub fn validate(plan: &Plan) -> Result<(), CtlError> {
                 name: plan.name.clone(),
                 handoff: plan.handoff,
                 auto_resume: None,
+                explore: None,
                 steps: vec![child],
             })?;
         }
@@ -189,6 +228,7 @@ pub fn validate(plan: &Plan) -> Result<(), CtlError> {
                     name: plan.name.clone(),
                     handoff: plan.handoff,
                     auto_resume: None,
+                    explore: None,
                     steps: vec![child],
                 })?;
             }
@@ -436,11 +476,27 @@ impl Host for Adapter<'_> {
     fn execute(&mut self, call: &Invocation) -> Result<(), CtlError> {
         self.execute_output(call).map(|_| ())
     }
+    /// 快照通道:捕获 envelope 顶层的 snapshot_id(帧内 ref 的身份锚点,
+    /// 探索引擎 ref 绑定动作用)。快照为只读,跳过 handoff 配置;保留
+    /// 暂停观察 scope 与既有 parse/护栏路径。
+    fn execute_snapshot(&mut self, args: Vec<String>) -> Result<(String, Value), CtlError> {
+        let call = Invocation {
+            command: "snapshot".into(),
+            args,
+            bind: Default::default(),
+        };
+        let command = parse(&call)?;
+        let _scope = actl_core::wait_control::Scope::enter(self.store.dir.join("pause-requested"));
+        let output = crate::dispatch(&command)?;
+        let snapshot_id = output.snapshot_id.clone().unwrap_or_default();
+        Ok((snapshot_id, output.data))
+    }
     fn validate_step(&self, step: &actl_flow::Step) -> Result<(), CtlError> {
         validate(&Plan {
             version: 1,
             handoff: self.plan.handoff,
             auto_resume: None,
+            explore: None,
             name: self.plan.name.clone(),
             steps: vec![step.clone()],
         })
@@ -505,11 +561,32 @@ impl Host for Adapter<'_> {
         actl_core::stop::check_current().is_err()
     }
     fn publish(&mut self, run: &Run) {
-        let current = run
-            .steps
-            .iter()
-            .position(|s| s.status != engine::StepStatus::Completed)
-            .unwrap_or(run.steps.len().saturating_sub(1));
+        // 探索运行 steps 恒空:发布任务一句话与探索状态,不做步骤索引。
+        let (title, step_id, command, error_code) = match self.plan.steps.split_first() {
+            Some(_) => {
+                let current = run
+                    .steps
+                    .iter()
+                    .position(|s| s.status != engine::StepStatus::Completed)
+                    .unwrap_or(run.steps.len().saturating_sub(1));
+                (
+                    self.plan.steps[current].title.clone(),
+                    Some(run.steps[current].id.clone()),
+                    self.plan.steps[current].run.command.clone(),
+                    run.steps[current].error_code,
+                )
+            }
+            None => (
+                self.plan
+                    .explore
+                    .as_ref()
+                    .map(|e| e.task.clone())
+                    .unwrap_or_else(|| self.plan.name.clone()),
+                None,
+                "explore".to_owned(),
+                None,
+            ),
+        };
         let status = match run.status {
             Status::Ready => "ready",
             Status::Running => "running",
@@ -522,24 +599,27 @@ impl Host for Adapter<'_> {
         let actions = match run.status {
             Status::Running => vec!["pause", "stop"],
             Status::Paused | Status::Ready | Status::Failed => vec!["resume"],
+            // 静态流程 needs_review 沿用 recheck;探索的决策应答走
+            // flow-resume --decision(agents/脚本),显示端入口是 resume。
+            Status::NeedsReview if self.plan.steps.is_empty() => vec!["resume"],
             Status::NeedsReview => vec!["recheck"],
             Status::Stopped => vec!["allow_then_resume"],
             Status::Completed => vec![],
         };
         actl_core::signal_session::workflow(actl_core::state::WorkflowProgress {
             run_id: run.id.clone(),
-            title: self.plan.steps[current].title.clone(),
+            title,
             status: status.into(),
             reason: run.reason.clone(),
-            step_id: Some(run.steps[current].id.clone()),
-            error_code: run.steps[current].error_code,
+            step_id,
+            error_code,
             actions: actions.into_iter().map(str::to_owned).collect(),
         });
         actl_core::signal_session::step(
-            &self.plan.steps[current].run.command,
+            &command,
             None,
-            current + 1,
-            run.steps.len(),
+            run.steps.len().min(1),
+            run.steps.len().max(1),
         );
     }
 }
@@ -598,12 +678,52 @@ fn template_hint(store: &Store) -> Value {
     }
 }
 fn state(store: &Store) -> Result<Value, CtlError> {
-    let (_, run) = store.load()?;
+    let (plan, run) = store.load()?;
     let active = store.active()?;
     let interrupted = run.status == Status::Running && !active;
-    Ok(
-        json!({"run":run,"runner_active":active,"interrupted":interrupted,"pause_requested":store.pause_requested(),"template":template_hint(store)}),
-    )
+    let mut value = json!({"run":run,"runner_active":active,"interrupted":interrupted,"pause_requested":store.pause_requested(),"template":template_hint(store)});
+    // 探索运行:附探索状态(动作/决策计数、token 审计)与悬挂决策卡。
+    // 卡即应答入口(flow-resume --decision <id>);其余证据按省略纪律不进协议面。
+    if plan.explore.is_some()
+        && let Some(state) = actl_flow::explore::load(store)?
+    {
+        value["explore"] = json!({
+            "task": state.spec.task,
+            "app": state.spec.app,
+            "actions": state.actions,
+            "decisions": state.decisions,
+            "observations": state.observations,
+            "errors": state.errors,
+            "budgets": {
+                "actions": state.spec.budgets.actions,
+                "decisions": state.spec.budgets.decisions,
+                "wall_ms": state.spec.budgets.wall_ms,
+            },
+            "widened": state.widened,
+            "frames_truncated": state.frames_truncated,
+            "goal_retries": state.goal_retries,
+            "goal_window": state.goal_window,
+            "snapshot_id": state.snapshot_id,
+            "anchor_transfers": state.anchor_transfers,
+            "priors": state.spec.priors,
+            "texts": state.spec.texts,
+            "tried": state.tried,
+            "visited_states": state.visited.len(),
+            "goal_met": state.goal_met,
+            "audit": {
+                "observation_bytes": state.audit.observation_bytes,
+                "card_bytes": state.audit.card_bytes,
+            },
+        });
+        if let Some(pending) = &state.pending {
+            value["decision_card"] = serde_json::to_value(&pending.card)
+                .map_err(|e| CtlError::internal(e.to_string()))?;
+        }
+        if !state.queue.is_empty() {
+            value["explore"]["queue"] = json!(state.queue);
+        }
+    }
+    Ok(value)
 }
 fn load_plan(
     file: &str,
@@ -661,6 +781,26 @@ pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
         actl_core::stop::check_current()?;
     }
     let root = actl_core::state::SignalPaths::default().dir;
+    if let FlowCommand::Writeback { id, out } = command {
+        // 只读证据收集(docs/42 S3):片段 status 恒 unverified,verified 迁移
+        // 走人工复核(PACKS.md);actl 不写 pack 文件,--out 只落调用方给的片段文件。
+        let store = Store::at(&root, id)?;
+        let (plan, _) = store.load()?;
+        if plan.explore.is_none() {
+            return Err(CtlError::protocol("run is not an exploration run"));
+        }
+        let state = actl_flow::explore::load(&store)?
+            .ok_or_else(|| CtlError::protocol("exploration state missing"))?;
+        let fragment = actl_flow::route::extract(&state, id)?;
+        let yaml = actl_flow::route::render_yaml(&fragment);
+        if let Some(path) = out {
+            std::fs::write(path, yaml.as_bytes())
+                .map_err(|e| CtlError::internal(format!("fragment write: {e}")))?;
+        }
+        let fragment =
+            serde_json::to_value(&fragment).map_err(|e| CtlError::internal(e.to_string()))?;
+        return Ok(json!({"route": fragment, "yaml": yaml}));
+    }
     match command {
         FlowCommand::Validate {
             file,
@@ -671,6 +811,17 @@ pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
             validate(&plan)?;
             let mut result =
                 json!({"valid":true,"version":1,"name":plan.name,"steps":plan.steps.len()});
+            if let Some(explore) = &plan.explore {
+                result["explore"] = json!({
+                    "app": explore.app,
+                    "keywords": explore.keywords,
+                    "budgets": {
+                        "actions": explore.budgets.actions,
+                        "decisions": explore.budgets.decisions,
+                        "wall_ms": explore.budgets.wall_ms,
+                    },
+                });
+            }
             if resources.enabled() {
                 result["resources"] = resources.summary();
             }
@@ -736,17 +887,24 @@ pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
                 run.reason = Some("start_paused".into());
                 store.save(&run)?;
                 host.publish(&run);
+            } else if let Some(spec) = &plan.explore {
+                actl_flow::explore::execute(spec, &mut run, &store, &mut host, None, None)?;
             } else {
                 engine::execute(&plan, &mut run, &store, &mut host, None)?;
             }
             drop(active);
             outcome(&store, &run)
         }
-        FlowCommand::Resume { id, retry_step } => {
+        FlowCommand::Resume {
+            id,
+            retry_step,
+            decision,
+            confidence,
+        } => {
             let source = actl_core::control_log::source();
             actl_core::signal_session::flow_event(
                 "flow_resume_requested",
-                json!({"run_id":id,"request_id":actl_core::control_log::request_id(),"source":source,"source_verified":false,"retry_step":retry_step}),
+                json!({"run_id":id,"request_id":actl_core::control_log::request_id(),"source":source,"source_verified":false,"retry_step":retry_step,"decision":decision}),
             );
             let store = Store::at(&root, id)?;
             let _global = store.lock(true)?;
@@ -756,6 +914,34 @@ pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
                 &serde_json::to_string(&plan).map_err(|e| CtlError::internal(e.to_string()))?,
             )?;
             validate(&plan)?;
+            if let Some(spec) = &plan.explore {
+                if retry_step.is_some() {
+                    return Err(CtlError::protocol(
+                        "exploration runs do not support --retry-step",
+                    ));
+                }
+                let active = store.lock(false)?;
+                actl_core::stop::check_current()?;
+                store.clear_pause()?;
+                actl_flow::explore::execute(
+                    spec,
+                    &mut run,
+                    &store,
+                    &mut Adapter {
+                        plan: &plan,
+                        store: &store,
+                    },
+                    decision.as_deref(),
+                    confidence.as_deref(),
+                )?;
+                drop(active);
+                return outcome(&store, &run);
+            }
+            if decision.is_some() {
+                return Err(CtlError::protocol(
+                    "--decision answers an exploration run; this run is a static flow",
+                ));
+            }
             let active = store.lock(false)?;
             actl_core::stop::check_current()?;
             store.clear_pause()?;
@@ -771,6 +957,10 @@ pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
             )?;
             drop(active);
             outcome(&store, &run)
+        }
+        // 防御分支:writeback 在 match 前已提前返回;走到这里说明分发序被破坏。
+        FlowCommand::Writeback { .. } => {
+            Err(CtlError::internal("writeback dispatch ordering invariant"))
         }
         FlowCommand::Clean {
             older_than_minutes,

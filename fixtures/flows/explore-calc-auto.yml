@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=../../schemas/flow-v1.schema.json
+# 探索模式 S1 熵门自动路径:「七」单关键词命中 num7Button,分数领先次名 3 分
+# (≥2 裕度)→ 自动执行,零决策外抛;目标由本地谓词核验(显示区 name)。
+# 前置:测试计算器显示为 0(先跑 calculator-reset.yml)。
+# 预期:status=completed,actions=1,decisions=0;唯一点击 id:num7Button。
+version: 1
+name: explore-s1-calc-auto
+explore:
+  task: 在计算器中按下数字七
+  app: 计算器
+  keywords: [七]
+  goal: {command: verify, args: [--value, 'id:CalculatorResults', '显示为 7', --property, name, --app, 计算器]}
+  budgets: {actions: 4, decisions: 2}

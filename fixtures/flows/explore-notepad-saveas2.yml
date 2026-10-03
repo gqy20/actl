@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=../../schemas/flow-v1.schema.json
+# 探索模式 L2 验收:跨窗 goal 探测(goal 收紧版)。goal = 文件名编辑框——
+# 只存在于「另存为」对话框,锚窗(含菜单 flyout)永不含它:
+# 点击 文件 → 菜单另存为(领先自动执行)→ 对话框打开 → goal 锚窗 NOT_FOUND
+# → 同 pid 探测改写 --app 重试。Store 记事本的文件选择器若由 RuntimeBroker
+# 承载(跨进程),探测会如实错失——记录真实形态,不臆断。
+# 前置:记事本含未保存文本(app 锚 Notepad),菜单未开。
+version: 1
+name: explore-l2-notepad-saveas2
+explore:
+  task: 在记事本打开另存为对话框
+  app: Notepad
+  keywords: [文件, 另存]
+  goal: {command: verify, args: [--exists, 'name:文件名', --app, Notepad]}
+  budgets: {actions: 4, decisions: 2}
