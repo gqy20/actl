@@ -6,37 +6,32 @@
 
 ## 里程碑
 
-- M2 = v0.2.0（可靠性+验收）· M3 = v0.3.0（协议稳定+按需扩展）· 1.0 正式稳定版
+- ~~M2 = v0.2.0 已发布（2026-10-03）~~ · M3 = v0.3.0（协议稳定+按需扩展）· 1.0 正式稳定版
 
-## M2 v0.2.0 — 待收口
-
-出口标准已达标（金任务跨日双百 / NFR / 发布产物核对，见 CHANGELOG）。
-
-- [ ] **非开发机 US3 复现**（用户裁定 2026-10-02 搁置——发版时作为已知限制记录，机器到位后补验）
-- [ ] 综合任务编排：首条 release-review-draft 写段联测待用户授权（[43](43-release-review-draft.md)）
-- [ ] 浏览器 CDP 通道收尾：v1 命令族与真机验收已落地（[72](72-browser-cdp-integration.md)、CHANGELOG Unreleased）；余量=flow 通道声明、持久 profile 登录验收、pipe spike
-
-## M3 v0.3.0 — 候选方向
+## M3 v0.3.0 — 当前阶段
 
 按需推进，不承诺全部交付；实施前明确边界并核对 PRD 非目标。
 
+### 高优先（用户标记）
+
+- [ ] **GUI 操作录制 → YAML**（用户标记高价值；用户用鼠标键盘手动操作一遍应用，系统自动转成可复用流程文件——像 RPA recorder；需低级键鼠钩子捕获 + UIA ElementFromPoint 实时反查 + 语义动作提取 + YAML 生成；~800-1200 行，与探索模式 S3 互补——录制是"人演示→YAML"，探索是"agent 自主→YAML"；[76](76-gui-recording.md)）
+- [ ] **探索模式（用户标记关键）**：spec 评审已通过 [42 §9](42-exploration-mode.md)，S1 已落地（diff API + keyword projection + `snapshot --keywords`），**S2 探索 Host + 决策卡为下一步**（走 spec 提交），S3 pack 回写收尾
+- [ ] release-review-draft 写段联测（待用户授权，[43](43-release-review-draft.md)）
+
 ### 指针与输入扩展
 
-- [x] **三项全落地并真机通过（2026-10-02，[74](74-pointer-extensions.md)）**：框选（`drag xy:x1,y1 xy:x2,y2 --app` 坐标对直连，双端守卫）、长按（`key-down --duration`，急停即释放）、轨迹拖拽（`drag --path` 多路径点 8px 插值）；Paint 真机三项正路径全通 + 遮挡守卫负路径证据，验收材料见 docs/74
+- [x] 三项全落地并真机通过（0.2.0 已发）：框选/长按/轨迹拖拽，[74](74-pointer-extensions.md)
 - 触摸手势：PRD 非目标区，除非明确需求不做
-
-> 已有指针命令覆盖常见场景（单/右/双/三/中键、from→to 拖拽、悬停、滚动、坐标点击、修饰键组合）。以上为 M3 按需扩展，M2 不加——发版优先于功能扩张。
 
 ### 流程与集成
 
 - [ ] 流程扩展：循环、嵌套分支、计划修订迁移
+- [ ] 浏览器通道余量：flow 级 uncertain 持久化、pipe 传输 spike（`--remote-debugging-pipe`）、`--user-agent` 覆盖（headless UA 壁垒站点）、选择器索引消歧、batch 组合验收
 - [ ] WebView2 专项验收（键盘跨原生/网页、屏幕阅读器、多屏 DPI、缺失运行时回退）
-- [ ] 中央任务提示专项验收：真实失败/停止/接管暂停、显示端重启后旧流程恢复、跨屏 DPI 与减少动态设置（[75](75-action-start-notification.md)；已有只读 YAML 起止演示和自动测试）
+- [ ] 中央任务提示专项验收：真实失败/停止/接管暂停、显示端重启后旧流程恢复、跨屏 DPI 与减少动态设置（[75](75-action-start-notification.md)）
 - [ ] agent 自驱授权白名单通道（仅真实需求时立项，[32](32-desktop-handoff.md)）
-- [ ] **GUI 操作录制 → YAML**（用户标记高价值；用户用鼠标键盘手动操作一遍应用，系统自动转成可复用流程文件——像 RPA recorder；需低级键鼠钩子捕获 + UIA ElementFromPoint 实时反查 + 语义动作提取 + YAML 生成；~800-1200 行，与探索模式 S3 互补——录制是"人演示→YAML"，探索是"agent 自主→YAML"；0.2.0 后优先立项，[76](76-gui-recording.md)）
 - [ ] MCP 远程访问适配
 - [ ] 本地 serve 与增量观察
-- [ ] **探索模式（用户标记关键，优先启动；spec 评审已通过 [42 §9](42-exploration-mode.md)，S1 差分 API 可立即动工，S2 走 spec 提交）**
 - [ ] 游戏场景（Minecraft 命令通道）
 
 ### 应用深化
@@ -47,6 +42,10 @@
 - [ ] Zotero 导入导出
 - [ ] 腾讯会议 draft-date 键盘路线（ctrl+a+paste+tab，QDateEdit set-value 无效）
 - [ ] 应用 pack 长尾维护
+
+### 遗留验收
+
+- [ ] 非开发机 US3 复现（用户裁定 2026-10-02 搁置——作为已知限制已记录于 0.2.0 CHANGELOG；机器到位后补验）
 
 ## 长期观察项
 

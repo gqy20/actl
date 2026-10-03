@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "actl-browser"
-version = "0.1.9"
+version = "0.2.0"
 dependencies = [
  "actl-core",
  "actl-uia",
@@ -15,7 +15,7 @@ dependencies = [
 
 [[package]]
 name = "actl-cli"
-version = "0.1.9"
+version = "0.2.0"
 dependencies = [
  "actl-browser",
  "actl-core",
@@ -27,7 +27,7 @@ dependencies = [
 
 [[package]]
 name = "actl-core"
-version = "0.1.9"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -36,7 +36,7 @@ dependencies = [
 
 [[package]]
 name = "actl-devtools"
-version = "0.1.9"
+version = "0.2.0"
 dependencies = [
  "actl-core",
  "actl-flow",
@@ -47,7 +47,7 @@ dependencies = [
 
 [[package]]
 name = "actl-flow"
-version = "0.1.9"
+version = "0.2.0"
 dependencies = [
  "actl-core",
  "serde",
@@ -57,11 +57,11 @@ dependencies = [
 
 [[package]]
 name = "actl-physical"
-version = "0.1.9"
+version = "0.2.0"
 
 [[package]]
 name = "actl-uia"
-version = "0.1.9"
+version = "0.2.0"
 dependencies = [
  "actl-core",
  "serde",
@@ -1046,7 +1046,7 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
 name = "xtask"
-version = "0.1.9"
+version = "0.2.0"
 
 [[package]]
 name = "zerocopy"

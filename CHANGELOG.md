@@ -5,30 +5,41 @@
 0.x 期间破坏性变更在条目中以 **[BC]** 标注。条目只记"变了什么与为什么"；
 过程细节与归因在 git 提交信息与 docs/ 里，不在此重复。
 
-## [Unreleased]
+## [0.2.0] - 2026-10-03
+
+本版是浏览器 CDP 通道 + 指针扩展 + 探索模式地基的版本：从零到一建成了 actl 自有浏览器自动化通道（9 个 spec 提交），三项指针扩展全部真机通过，探索模式 S1 落地；同时补齐本地应用注册表、帮助精简、AGENTS 工程纪律、显示端动画与 UIA 诊断增强。
 
 ### Added
 
-- **浏览器 CDP 通道 v1（`browser-*` 命令族，spec）**：actl 自有浏览器会话的最小同步 CDP 客户端（新 crate `actl-browser`，tungstenite 为唯一新增直接依赖）+ 五命令：`browser-launch`（隔离 Edge/Chrome + 专用 profile；**默认有头**——可见窗口=非隐身执行、常规 UA、人工登录就绪、UIA 兜底面在场，`--headless` 为后台选项；`--proxy HOST:PORT` 显式代理；DevToolsActivePort 出现=启动成功，失败回收自启进程）、`browser-navigate`（绑定重核 + 主 frame 导航事件等待；网络级加载失败显式报 `net_error`，不静默当成功）、`browser-read`（CSS/XPath 唯一匹配读文本，`--iframe` 经子 frame 执行上下文跨源可达）、`browser-click`（守卫写：停止核验→绑定重核→唯一匹配→派发→读回，`--expect-text` 断言）、`browser-type`（守卫输入写：native setter + input/change 事件，读回值核验，内容不回显只报长度）、`browser-close`（CDP 优雅关闭 + 幂等注销）、`browser-list`（只读枚举活跃会话，新→旧）、`browser-verify`（只读断言族：`--newest-alive`/`--none`/`--session+--alive|--gone`，以及**登录态谓词** `--session+--css/--xpath [--contains]`——登录暂停点的 resume_check 判据）；`browser-read --property`（白名单属性读 value/href/name/id/checked/tag，闭合输入框值读取缺口）。**显示层协同**：browser 写与生命周期命令在信号流声明动作卡（无租约门——CDP 写非物理输入，展示即透明；InputEffects 全空如实申报；急停仍压过一切写）。**持久 profile 四件套**：①登录暂停点（`pause_before`+`resume_check` 选择器断言，未登录恢复被拒并保持 paused）；②`resources.browser_profiles` 流程资源（全局命名资产、创建幂等、永不删除；流程内 `--profile` 未声明即拒）；③同名持久 profile 再启=复用活跃会话（`reused:true`），陈旧记录自动接管，启动判定改为"端口文件出现且端点应答"（修复持久 profile 残留端口的假阳）；④扩展策略：ephemeral 恒禁用扩展，持久 profile 默认保留（合法自动化资产）可 `--disable-extensions`。**YAML 流程实测接入**：治理三件套就位（生命周期命令不带 outputs→`browser-list` 承载会话句柄产出→`bind` 注入；副作用步骤必带 verify→`browser-verify`），探针流程六步真机全通；登录示例流程 `skills/actl/workflows/browser-login-session.yml` 暂停/恢复/拒未登/复用全链实测。错误码复用现有全集，无新增。安全边界：客户端只实现 Target/Runtime/Page/Browser 白名单域——cookie 读取域构造性不可达，无 cookie 导出动词，永不附着用户默认 profile（136+ 禁端口）。设计文档 [72](docs/72-browser-cdp-integration.md)；x.com 真机场景八轮全链记录见 [73](docs/73-browser-twitter-scenario.md)（UA 壁垒/DoH 绕过 TUN/间歇页漂移三道真实壁垒及对策）。
-- **stdio 继承守卫（`actl-uia::process_io`）**：浏览器进程树会继承调用方管道写端致 `$()`/`ReadToEnd` 永不 EOF（原生管道实测复现；`Stdio::null()` 三件套对 Edge 多子进程树不够）——长命子进程派生前清自身 stdio 的 INHERIT 标志。此修复同时兜底未来一切分离式子进程派生。
-- **指针扩展（M3 P3，spec）**：①轨迹拖拽 `drag --path X,Y`（≤64 路径点，8px 线性插值成一批 MOVE，总事件 ≤32768；无 `--path` 的 drag 行为零变更）；②坐标框选 `drag xy:x1,y1 xy:x2,y2 --app`（marquee/画布直连，两端窗口边界+遮挡守卫，`--app` 必填）；③长按 `key-down --duration Ms`（50-60000，持有期 100ms 分片过停止核验，急停即释放并 ABORTED）。插值器纯函数单测 + 契约 5/5 + **Paint 真机三项正路径全通**（轨迹/坐标/长按；含遮挡守卫负路径证据与 DPI 坐标口径教训），见 [74](docs/74-pointer-extensions.md)。
-- **探索模式 spec 评审通过（[42 §9](docs/42-exploration-mode.md)）**：PRD 非目标逐条核对通过；协议 delta 定稿——等待裁决扩展 NeedsReview 语义不加状态顶点、决策卡硬上限 4KiB/Top-K≤8、`flow-resume --decision` 应答、浏览器轨只读观察直接入 L1；实施顺序裁定 S1（差分 snapshot API）先行。
+- **浏览器 CDP 通道 v1（`browser-*` 命令族，spec）**：actl 自有浏览器会话的最小同步 CDP 客户端（新 crate `actl-browser`，tungstenite 为唯一新增直接依赖）。**8 命令**：`browser-launch`（默认有头、`--headless` 后台选项、`--proxy` 显式代理、`--profile` 持久登录复用、`--browser-executable` 接受 app-registry 别名）、`browser-navigate`（网络级失败显式报错不静默）、`browser-read`（`--property` 白名单属性读 + `--iframe` 跨源子 frame）、`browser-type`（守卫输入写，native setter + 读回核验，内容不回显）、`browser-click`（守卫写 + `--expect-text` 断言）、`browser-close`（CDP 优雅关闭 + 幂等注销）、`browser-list`（只读枚举）、`browser-verify`（断言族 + 登录态谓词 `--css/--xpath [--contains]`）。**持久 profile 四件套**：登录暂停点（`pause_before`+`resume_check`）、`resources.browser_profiles` 声明治理（未声明即拒）、同名再启=复用+陈旧接管、扩展策略（ephemeral 恒禁/持久默认保留）。**YAML 流程接入**：治理三件套（outputs 只读生产者/副作用必带 verify/持久 profile 声明）全部就位，探针六步+登录暂停+复用真机全通。安全边界：Target/Runtime/Page/Browser 白名单域——cookie 构造性不可达，永不附着用户默认 profile。设计 [72](docs/72-browser-cdp-integration.md)；x.com 八轮真机 [73](docs/73-browser-twitter-scenario.md)。
+- **本地应用注册表（`app-register`/`app-list`/`app-remove`）**：`%LOCALAPPDATA%/actl/apps.json` 存储名字→路径映射，`launch <别名>` 和 `browser-launch --browser-executable <别名>` 走注册表解析；Store 应用支持 `--pattern` 通配（版本号变化自动重解析 glob）。skills 文档含查找指南 [app-locations.md](skills/actl/references/app-locations.md)。
+- **探索模式 S1（spec）**：`crates/actl-core/src/diff.rs` 多级身份配对差分 API（automation_id+role 优先、动态 id 回退 name+role、大小写不敏感、重复键容忍——虚拟化列表场景全覆盖，6 单测全绿）；`Projection::Keyword` 任务关键词投影（命中交互元素+祖先链，零命中=空不回退）；`snapshot --keywords K1,K2` CLI 面；devtools `snapshot-diff` 升级为 core 配对。
+- **指针扩展（M3 P3，spec）**：①轨迹拖拽 `drag --path X,Y`（≤64 路径点 8px 插值）；②坐标框选 `drag xy:x1,y1 xy:x2,y2 --app`（两端窗口边界+遮挡守卫）；③长按 `key-down --duration Ms`（急停即释放并 ABORTED）。Paint 真机三项全通，见 [74](docs/74-pointer-extensions.md)。
+- **动作开始中心闪现（`action_flash`）**：agent 动作启动物理/CDP 写时，屏幕居中偏上出现单行胶囊（`ACTL | 动作名`），从左滑入→停留 1.6s→向右滑出，穿透+置顶+不激活；与信号条同色系。
+- **中央任务起止提示**：只在任务开始、完成及异常/中断时提示，步骤过程沿用原状态条；B 开放光带样式，横向从工作区三分之一处进入、中央停留、向三分之二处退出。见 [75](docs/75-action-start-notification.md)。
+- **stdio 继承守卫（`actl-uia::process_io`）**：浏览器进程树会继承调用方管道写端致 `$()`/`ReadToEnd` 永不 EOF——长命子进程派生前清自身 stdio 的 INHERIT 标志。兜底一切分离式子进程派生。
+- **探索模式 spec 评审通过（[42 §9](docs/42-exploration-mode.md)）**：PRD 非目标逐条核对通过；协议 delta 定稿（NeedsReview 扩展、决策卡 4KiB/Top-K≤8、`flow-resume --decision`）；S1 先行。
+- **GUI 操作录制设计提案（[76](docs/76-gui-recording.md)）**：用户手动操作→自动生成 YAML（像 RPA recorder）；~800-1200 行，0.2.0 后优先立项。
 
 ### Changed
 
-- **显示端 UIA 响应**：修复检测的历史扫描和只读 CLI 探测移出窗口消息线程，后台单任务执行并按流程版本、停止代次和结果时效丢弃过期裁决；周期性的流程回退发现也移入状态读取线程，仅绑定流程可使用自身声明的自动恢复策略。屏幕边缘提示切换颜色和隐藏时复用 HWND，减少查询期间窗口重建。增加非阻塞、过期结果及色调切换回归，扩展只读桌面遍历、DPI 与生产清单对照探针。现场改善与剩余查询波动见 [65](docs/65-observation-blocking-diagnosis.md)，不将局部改善视为所有 UIA 超时已解决。
-- **历史清理扫描性能**：仅在文件过期或超预算待删除时读取调用状态，容量未超预算时跳过排序；删除候选核验最新活跃状态，近期文件及恢复目录保护保留。清理入口直接导出唯一实现；按需 trace 增加枚举、元数据、状态读取、排序、删除的耗时与数量汇总，默认跳过的只读目录对照不主动清理真实历史，日志预算保持不变。
-- **桌面根诊断**：增加默认跳过的有界 UIA 桌面根身份探针，保留逐阶段错误码与原生错误；缓存模式须显式指定为 handle 或 metadata，移除隐式默认兜底。取根对照不改变生产查询路线、超时或输入授权。
-- **历史日志保留策略（spec）**：正常全目录检查间隔由 1 小时改为 15 天，容量预算由 64 MiB 提高至 3 GiB；CLI 与显示端后台共用同一跨进程节流策略。检查时仍按 7 天判过期，保留近期/活跃文件保护；间隔内可继续增长，预算非实时硬上限。新增默认策略 golden 与 15 天边界回归，同步设计蓝图及参数文档。
-- **UIA 查询阶段诊断（spec）**：生产 children 查询细分原生 `FindAllBuildCache`、数组 Length 和元素转换，记录桌面/元素范围、已知总数、已取得数与失败索引；零结果与未知区分，负长度返回 INTERNAL，转换失败不返回部分树。同步 flow metadata 阶段白名单及契约 golden；新增默认跳过的只读有界捕获用例，不改变生产超时、授权或重试。字段见 [06](docs/06-design-blueprint.md)，诊断限制见 [41](docs/41-logging-metadata.md)。
+- **帮助输出精简**：18 个命令的 selector_help 重复块改为 `"see actl find --help"` 引用；`--no-activate` 从 ~200→~60 字符；`--physical` 从 ~130→~40 字符；snapshot 六选项单行化。总体削减 ~8000 字符。
+- **skills 文档全面更新**：SKILL.md 新增浏览器三通道路由（playwright/actl CDP/actl UIA）+ 命令速查新增浏览器/app-registry 分类；flows.md 新增浏览器流程规则五条（outputs 限制/verify 断言族/登录暂停/值断言/profile 声明）；版本号从 0.1.6→≥0.1.9。
+- **显示端 UIA 响应**：修复检测和只读探测移出窗口消息线程；屏幕边缘提示复用 HWND 减少重建。见 [65](docs/65-observation-blocking-diagnosis.md)。
+- **历史日志保留策略（spec）**：检查间隔 1h→15d，容量 64MiB→3GiB；跨进程节流。
+- **UIA 查询阶段诊断（spec）**：children 查询细分 FindAllBuildCache/Length/转换，零结果与未知区分。
+- **UIA 窗口观察优化**：单次观察内复用客户端和缓存请求，减少重复 COM 调用。
+- **任务时间线查询**：按有效首条筛选，有界任务头缓存跳过未变化 journal。
+- **UIA 观察诊断（spec）**：`UIA_E_TIMEOUT` 映射为 `TIMEOUT`；观察阶段首尾/耗时/错误码/前台变化/输入活动摘要入时间线。
+- **历史清理扫描性能**：仅在超预算时读取排序；按需 trace 增加耗时汇总。
+- **桌面根诊断**：有界 UIA 桌面根身份探针，缓存模式须显式指定。
 
-- **UIA 窗口观察优化与诊断**：窗口清单在单次观察内复用 UIA 客户端和缓存请求；句柄、控件类型从批量查询缓存读取，有标题的窗口将 HWND/Class/PID 合并刷新，保留空标题跳过、虚拟窗口、挂靠弹窗及失败传播。增加默认跳过的只读 COM 阶段对照和缓存一致性用例，核验进程实例与窗口身份，隐藏/最小化目标拒绝并留证。不改变完整清单语义、超时、重试或输入授权；减少重复读取不代表已修复提供程序超时。现场证据与限制见 [65](docs/65-observation-blocking-diagnosis.md)。
+### Known Limitations
 
-- **任务时间线查询**：按有效首条筛选任务，并以有界的任务头缓存跳过未变化的非目标 journal；缓存失效回查原日志，目标记录始终读取原事件。按任务查询的损坏计数限定目标调用和未知首条，全目录查询保留全量检查。
-
-- **UIA 观察诊断（spec）**：明确将 `UIA_E_TIMEOUT` 映射为 `TIMEOUT`；默认记录有界的观察阶段首尾、耗时、错误码、目标原生身份、前台变化及输入活动摘要，与原有暂停/继续请求共用任务时间线。监听缺失、样本过期、显示端重启与计数回退保留未知；不记录键值或坐标，不改变授权、急停和重试。协议与诊断限制见 [41](docs/41-logging-metadata.md)。
-
-- **中央任务起止提示**：只在任务开始、完成及异常/中断时提示，步骤过程沿用原状态条；按任务去重，历史状态不重播，暂停和待核对不当作完成。采用 B 开放光带，一行 `ACTL + 冻结计划任务名`，任务名 30 DIP 半粗、品牌 24 DIP；无环绕外框，炭灰承托层与淡蓝流光沿用整体配色。横向从工作区三分之一处进入、中央停留、向三分之二处退出，文字不缩放；异常后缀预留宽度，支持减少动态。设计和验证见 [75](docs/75-action-start-notification.md)。
+- 非开发机 US3 复现搁置（用户裁定 2026-10-02）；机器到位后补验。
+- Store 应用 app-registry pattern 受 WindowsApps 权限限制：glob 无法枚举该目录，需注册完整路径（更新后重新注册）。
+- 浏览器写入的 uncertain 状态不跨进程持久化（崩溃后由调用方 browser-read 裁决）；flow 级 uncertain 持久化归 M3。
+- 显示端常驻会话卡（区别于动作流的浏览器会话 UI）待后续。
 
 ## [0.1.9] - 2026-10-02
 

@@ -11,10 +11,10 @@ keywords = ["windows", "automation", "cli", "agent", "rpa"]
 categories = ["command-line-utilities"]
 
 [dependencies]
-actl-browser = { path = "../actl-browser", version = "0.1.8" }
-actl-core = { path = "../actl-core", version = "0.1.8" }
-actl-flow = { path = "../actl-flow", version = "0.1.8" }
-actl-uia = { path = "../actl-uia", version = "0.1.8" }
+actl-browser = { path = "../actl-browser", version = "0.2.0" }
+actl-core = { path = "../actl-core", version = "0.2.0" }
+actl-flow = { path = "../actl-flow", version = "0.2.0" }
+actl-uia = { path = "../actl-uia", version = "0.2.0" }
 clap = { version = "4.6.7", features = ["derive"] }
 serde_json.workspace = true
 
