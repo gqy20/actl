@@ -33,6 +33,7 @@
 - [ ] WebView2 专项验收（键盘跨原生/网页、屏幕阅读器、多屏 DPI、缺失运行时回退）
 - [ ] 中央任务提示专项验收：真实失败/停止/接管暂停、显示端重启后旧流程恢复、跨屏 DPI 与减少动态设置（[75](75-action-start-notification.md)；已有只读 YAML 起止演示和自动测试）
 - [ ] agent 自驱授权白名单通道（仅真实需求时立项，[32](32-desktop-handoff.md)）
+- [ ] **GUI 操作录制 → YAML**（用户标记高价值；用户用鼠标键盘手动操作一遍应用，系统自动转成可复用流程文件——像 RPA recorder；需低级键鼠钩子捕获 + UIA ElementFromPoint 实时反查 + 语义动作提取 + YAML 生成；~800-1200 行，与探索模式 S3 互补——录制是"人演示→YAML"，探索是"agent 自主→YAML"；0.2.0 后优先立项，[76](76-gui-recording.md)）
 - [ ] MCP 远程访问适配
 - [ ] 本地 serve 与增量观察
 - [ ] **探索模式（用户标记关键，优先启动；spec 评审已通过 [42 §9](42-exploration-mode.md)，S1 差分 API 可立即动工，S2 走 spec 提交）**
