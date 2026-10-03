@@ -75,6 +75,8 @@ jobs:
         run: cargo publish -p actl-core
       - name: Publish actl-uia
         run: cargo publish -p actl-uia
+      - name: Publish actl-browser
+        run: cargo publish -p actl-browser
       - name: Publish actl-flow
         run: cargo publish -p actl-flow
       - name: Publish actl-cli
