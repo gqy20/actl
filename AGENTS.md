@@ -27,8 +27,8 @@
 
 - 工具链锁死于 [rust-toolchain.toml](rust-toolchain.toml)(版本唯一来源,含 msvc target),不要绕过、不要在他处写版本号;
 - clone 后:`make setup`(惯例入口,等价 `cargo xtask setup`;一步装 hooks + 激活 pinned 工具链);提交前:`make gate`;
-- **Makefile 只是转发层**:全部目标转发到 `cargo xtask ...`,门禁的唯一实现单点在 `crates/xtask`;禁止在 Makefile 写实现逻辑;
-- 无 make 的环境(如纯净 Windows)直接用 `cargo xtask setup / gate / fmt`。
+- **Makefile 是人类的别名层,已精简为高频目标**(2026-10-03 按使用频率排序:`dev`/`gate`/`evidence`/`setup`;`fmt`/`regress` 等低频任务不设别名,直达 `cargo xtask fmt / regress`):全部目标仅转发到 `cargo xtask ...`,门禁的唯一实现单点在 `crates/xtask`;禁止在 Makefile 写实现逻辑;
+- **agent 一律直达 `cargo xtask …`**(与 make 完全等价,不经别名层——agent 会话里"见不到 make"是预期行为,不是遗漏);无 make 的环境(如纯净 Windows)同。常用:`cargo xtask dev`(诊断循环)/ `gate`(提交前)/ `evidence`(证据轮);完整任务清单:`cargo xtask`(无参)。
 
 ## 仓库地图(分层细节见 docs/TECH_STACK.md §2)
 
@@ -48,7 +48,7 @@
 - golden 变更只能随 `spec`/`test` 提交,禁止顺手改;
 - **GUI 应用禁 taskkill**(会话复活:记事本 TabState+云同步、计算器僵尸框架)——清理一律优雅关闭(close-window --pid/--hwnd),fixture 无论成败统一进入收尾判定并记录清理状态;仅在无停止/人工接管且资源归属已核实时关闭,否则保留现场并记录原因;
 - **资源归属**:使用隔离文件/profile/数据目录;关闭前核对 HWND、PID、进程实例和任务标记。新窗口差集、标题匹配或 UIA 消失不能单独证明归属或已关闭;多标签应用只清理本任务标签。详见 [窗口基建](docs/30-window-infrastructure.md)。
-- **验收证据**:代码完成、gate 通过、真机验收分别报告;受阻不记通过,原失败记录保留,后续局部确认不能改写整轮结果。记录被测二进制路径/哈希、环境、逐调用证据及清理状态,产物留本地 target。
+- **验收证据**:代码完成、gate 通过、真机验收分别报告;受阻不记通过,原失败记录保留,后续局部确认不能改写整轮结果。被测二进制经 `cargo xtask evidence` 产出并落指纹(`target/evidence/binary-log.txt`),环境、逐调用证据及清理状态随记录,产物留本地 target。
 - 真机回归:`cargo xtask regress`(需交互桌面;含键盘注入的 fixture 需桌面空闲)。
 - 目标预览真机回归:`cargo xtask preview-tests`(需交互桌面;串行跑 preview_window 交互用例,只操作自有预览窗口、不注入输入;活动急停时整轮让行报阻塞,锁屏/遮挡由用例护栏拒绝并如实失败;默认跳过需人工点击的 mouse_selection 用例)。
 
@@ -58,12 +58,14 @@
 - **桌面交接与代操作授权**:同一任务复用 ACTL_TASK_ID/flow ID。用户已授权 agent 在本仓库的既定测试与排障范围内仅在 computer use 以**真实输入驱动**时点击 actl 可见的“开始/继续”（2026-10-01 实证：CUA SendInput、PostMessage、PowerShell SendInput 与注入热键均无法驱动面板——合成授予被安全模型拒绝，机械不可达；不得把代点当作依赖，正式 agent 自驱验收须先设计白名单通道并走 spec）；先核对显示端身份、任务 ID、目标和待执行动作，再实际点击并检查恢复结果。不得写授权文件、伪造事件或绕过护栏。用户明确暂停、稍后、停止或接管时优先让行，不以代点击抵消用户意图；不确定写入先核验，不循环点击继续。详见 [桌面交接](docs/32-desktop-handoff.md)。
 - **诊断工具选择**:优先用 actl 的状态、局部快照、属性、模式和日志诊断；视觉核对优先用 actl 自带的整窗、元素或区域截图。需要看画面本身不是切换 computer use 的理由。仅在 actl 自身失效、证据矛盾需要独立工具对照，或执行上述交接代操作时使用 computer use，记录原因与结果；同一现场不默认重复观察。UIA 树与截图都不保证完整揭示界面，虚拟列表、隐藏状态、自绘内容和操作后的变化须围绕当前目标补充观察与结果核验，不能将截断或未暴露视为不存在。
 - **诊断与执行效率**:先在已有隔离窗口完成最小复现和组件路线验证，再跑整轮；优先限定目标容器，避免反复全窗口遍历。准备资源和静态预检不创建待恢复任务，不为普通诊断额外启动或暂停 flow。仅在流程计划必须变更或验收要求隔离时创建新任务，保留旧失败证据；暂停不是每步确认机制。门禁与真实桌面写入串行，避免输入锁竞争干扰诊断。
-- **验收脚本四纪律**(2026-10-02 实证沉淀;违反=迭代分钟级变秒级的差距):
+- **验收脚本纪律**(2026-10-02 实证沉淀,2026-10-03 操作化升级为工具入口;违反=迭代分钟级变秒级的差距):
   1. **YAML 流程优先于一次性脚本**:≥2 步的验收/测试/诊断场景,先写 YAML 流程文件放 `skills/actl/workflows/`(有 inputs/verify/可复用/有治理),不写一次性 bash/PowerShell 脚本——脚本不可复用、绕过 verify/pause/资源治理,是垃圾产物(用户 2026-10-02 明确指出);
   2. **batch 优先**:3 条以上顺序 actl 调用必须走 `batch`(单进程共享 snapshot/COM,消除 N-1 次 spawn+初始化);bash 逐条 spawn 是反模式;
-  3. **debug 快速迭代**:`cargo build`(debug)做代码验证,只在最终验收/gate 时切 `--release`;每轮省 30-60s;
+  3. **双循环二进制纪律**:诊断/试错循环一律 `cargo xtask dev`(增量 DEBUG 构建,实测 ~4s;产物 `target/debug/actl.exe`);**证据轮单独走 `cargo xtask evidence`**(RELEASE 构建+二进制指纹落 `target/evidence/binary-log.txt`,每轮验收一次)——诊断二进制与证据二进制分离,**禁止在诊断循环里 `--release`**(实测 40× 差距:debug 增量 4s vs release 全量 ~150s;2026-10-03 探索攻坚违反 8 次≈20 分钟纯编译的教训);
   4. **JSON 解析不用 bash grep**:验收脚本解析 actl 输出用 PowerShell `ConvertFrom-Json -Encoding UTF8` 或脚本内 JSON 库;bash grep 中文/嵌套 JSON 是编码双重污染的温床(已实证多次);
-  5. **先探测再写死**:脚本/流程中的窗口标题/app 锚/exe 路径,先跑一次 `list-windows`/`where.exe` 确认实际值,不猜——猜错=整轮重跑。
+  5. **先探测再写死**:脚本/流程中的窗口标题/app 锚/exe 路径,先跑一次 `list-windows`/`where.exe` 确认实际值,不猜——猜错=整轮重跑;
+  6. **一轮多假设**:重编译前先列全本轮待验假设,一轮埋多个探针(多处 eprintln/ACTL_TRACE=1)——"一假设一重编译"是慢循环的结构性根因(2026-10-03 实证:6 个真机发现理想 2-3 轮收齐,实跑 8+ 轮);
+  7. **事件等待替代固定 sleep**:等窗口用 `wait --window <标题>`,不用 `sleep N`(快机慢机都准);固定 sleep 是拍脑袋值,慢机不够快机浪费。
 - **暂停、停止与恢复**:人工让行和主动暂停不写急停。急停变更持久停止代次，旧调用不得因开始新任务或修复而复活；新任务可正常请求用户开始，纯观察不因历史急停拒绝。损坏或旧格式状态通过 execution-status 诊断，由明确的 execution-recover/修复运行状态操作归档并修复，不手动删标记、不自动恢复旧任务或授予权限。实现契约见 docs/47-execution-recovery.md。
 - **结果不确定先核验**:写入、点击、提交或启动报错不等于没有生效;检查送达信息与实际结果后决定下一步,禁止盲目重放。flow 的 uncertain 步骤先验证;单 CLI/普通脚本不宣称具备自动续跑能力。
 - **目标与焦点**:跨调用使用 ref 时,支持 `--snapshot` 的命令须绑定 snapshot_id;其他路径重新观察定位。控件重建或菜单变化后重新观察。面向输入框的键盘操作核验具体输入目标与焦点,不能只凭窗口相同放行;拒绝时诊断原因,不放宽护栏。详见 [身份与焦点](docs/31-element-identity-input-focus.md)。
@@ -71,7 +73,7 @@
 
 ## AI agent 附加要求
 
-- 交付前过 gate(唯一门禁,见工作流),如实报告结果(含失败);
+- 交付批次收口时过一次 gate(唯一门禁,见工作流),如实报告结果(含失败)——**gate 是边界检查,不是每提交仪式**:pre-push hook 已自动执行,纯 docs/markdown 改动直接提交不需要 gate(推流时 hook 兜底),pack 变更只跑 `cargo xtask lint-packs`(秒级),单 crate 代码走内环该 crate 测试;不为 docs-only 提交反复跑整套(2026-10-03 实证:一轮 10+ 次 gate 多数花在无法失败的变更上);
 - 命令/协议语义以 docs/06-design-blueprint.md 为准,不凭记忆发明;
 - 代码与文档同 PR;范围以 docs/PRD.md §1.3 非目标清单为铁律,拿不准就问,不静默扩大;
 - 安全:不做任何规避权限/隐身执行的功能;涉及 `--physical` 的改动必须显式提示;用户经显示端 UI 显式开启的预授权（显示协议 v10，docs/32）是合法授权通道——急停、动作预告与审计不变,但 agent 不得代开开关、不得绕过或伪造授予;

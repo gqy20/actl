@@ -15,7 +15,7 @@
 ### 高优先（用户标记）
 
 - [ ] **GUI 操作录制 → YAML**（用户标记高价值；用户用鼠标键盘手动操作一遍应用，系统自动转成可复用流程文件——像 RPA recorder；需低级键鼠钩子捕获 + UIA ElementFromPoint 实时反查 + 语义动作提取 + YAML 生成；~800-1200 行，与探索模式 S3 互补——录制是"人演示→YAML"，探索是"agent 自主→YAML"；[76](76-gui-recording.md)）
-- [ ] **探索模式（用户标记关键）**：spec 评审已通过 [42 §9](42-exploration-mode.md)，S1 已落地（diff API + keyword projection + `snapshot --keywords`），**S2 探索 Host + 决策卡为下一步**（走 spec 提交），S3 pack 回写收尾
+- [ ] **探索模式（用户标记关键）**：S1 已落地（0.2.0）；S2 已实现并真机验收通过（[77](77-exploration-s2-acceptance.md)）；S3 已实现并真机闭环验收通过（[77 S3 增补](77-exploration-s2-acceptance.md)）；**L2 原语已实现（2026-10-03，spec 提交：`explore.texts` 输入原语 + 跨窗 goal 探测，见 [docs/06 L2 增补](06-design-blueprint.md)）——texts 真机通过（[77 L2 增补](77-exploration-s2-acceptance.md)）**——待办：①~~观察有界重试~~（已落地 2026-10-03，发现 #3 收口）；②观察锚点随弹窗转移（对话框内继续动作）与 RuntimeBroker 跨进程选择器的 pid 过滤放宽——**含动作改经快照 ref 身份绑定（`click @eN --snapshot`，docs/31 身份纪律，消除选择器重定位与快照两通道的分叉，发现 #6 的结构性收口）**；③type 的 `--paste` 通道选项（中文 IME）；④路线积累（§7 目标 5 条已 2 条）；⑤L0 命中重放 skill 层流程化、UCB 统计剪枝
 - [ ] release-review-draft 写段联测（待用户授权，[43](43-release-review-draft.md)）
 
 ### 指针与输入扩展
@@ -56,7 +56,7 @@
 ## 维护
 
 - [ ] 显示端按钮触发的暂停/继续 request_id 核对
-- [ ] 构建指纹与非 UIA 观察阶段的耗时诊断表达
+- [ ] 非 UIA 观察阶段的耗时诊断表达（~~构建指纹~~已落地 2026-10-03：`cargo xtask evidence` 产 FNV-128 二进制指纹并落 `target/evidence/binary-log.txt`）
 - [ ] 存储目录不可写/磁盘耗尽/进程中断验收
 
 ---

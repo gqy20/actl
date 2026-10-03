@@ -6,8 +6,6 @@
 [![crates.io](https://img.shields.io/crates/v/actl-cli.svg)](https://crates.io/crates/actl-cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> 仓库私有期间 Actions 徽章仅登录可见;crates.io/License 徽章为公开数据。
-
 > 让 AI 像人一样操作 Windows 软件——但更快、更准、每一步可验证。
 
 ## 为什么是 actl
@@ -35,21 +33,7 @@
 scoop install https://raw.githubusercontent.com/gqy20/actl/main/scoop/actl.json
 ```
 
-<details>
-<summary><b>直接下载</b>(免包管理器)</summary>
-
-从 [Releases](https://github.com/gqy20/actl/releases/latest) 下载完整 ZIP，将
-`actl.exe` 和同版本 `actl-signal.exe` 保存在同一目录，并把该目录加入 PATH。
-只读观察可独立使用主程序；桌面写操作需要配套显示端就绪和人工交接。
-
-后续发布的完整 ZIP 还包含 `skills/actl/`、README 和 LICENSE。
-已发布的 0.1.6 ZIP 尚未包含 skills；使用该版本时，请从仓库的
-[v0.1.6 源码包](https://github.com/gqy20/actl/archive/refs/tags/v0.1.6.zip) 获取配套文件。
-
-</details>
-
-<details>
-<summary><b>cargo</b></summary>
+**cargo**:
 
 ```bash
 cargo install actl-cli
@@ -59,6 +43,14 @@ cargo install actl-uia --bin actl-signal
 crate 名 [actl-cli](https://crates.io/crates/actl-cli),二进制名 `actl`;workspace 另有
 [actl-core](https://crates.io/crates/actl-core)(协议层)与
 [actl-uia](https://crates.io/crates/actl-uia)(UIA 后端)两个可独立复用的 crate。
+
+<details>
+<summary><b>直接下载</b>(免包管理器)</summary>
+
+从 [Releases](https://github.com/gqy20/actl/releases/latest) 下载完整 ZIP，将
+`actl.exe` 和同版本 `actl-signal.exe` 保存在同一目录，并把该目录加入 PATH。
+只读观察可独立使用主程序；桌面写操作需要配套显示端就绪和人工交接。
+完整 ZIP 包含 `actl.exe`、`actl-signal.exe`、`skills/actl/`、README 和 LICENSE。
 
 </details>
 
@@ -72,86 +64,58 @@ crate 名 [actl-cli](https://crates.io/crates/actl-cli),二进制名 `actl`;work
 
 ## 快速上手
 
-需要先向用户展示目标时，可用独立预览（当前源码新增，旧版二进制需先更新）：
+两个真实办公场景,感受"agent 操作你的软件"是什么样子——**每个都以可核对的效果收尾**,不是"大概点了"。(命令取自真实验证过的路线,完整流程见 [Agent Skill](skills/actl)。)
 
-```powershell
-actl preview id:saveButton --app MyApp --message 'Save this draft here' --duration 5000
-```
-
-只显示边框和说明，不点击、不输入；点击预览窗口右上角关闭或等待自动结束。
-ref 目标必须同时传 `--snapshot`。预览不是授权或业务核验，执行前仍需重新核对目标。
-
-三条命令走一遍"感知 → 执行 → 断言":
+**场景一:让 agent 读取 Excel 表格里的数据**
 
 ```bash
-# 1. 感知:目标窗口有哪些可操作元素(拿到稳定引用 @eN)
-actl snapshot --app 记事本 --skeleton
-#    浏览器页面用内容域投影:工具栏整枝丢弃,token 削减 70-80%(实测)
-actl snapshot --app Edge --view content --skeleton
-
-# 2. 执行:点击(UIA Invoke,后台执行不抢鼠标)
-actl click id:clearButton --app 计算器
-
-# 3. 断言:组合键后新窗口必须出现,否则立即报 ASSERTION_FAILED,不静默假成功
-actl press ctrl+s --app 记事本 --expect window:另存为
+actl launch excel
+actl extract role:DataGrid --app Excel          # GridPattern 直读整个表格,拿到结构化数据
 ```
 
-中文输入法环境下,`actl type ... --paste` 走剪贴板通道输入文字,更稳。
+效果:agent 拿到的是**结构化的行列数据**,不是截图——可以直接回答"B 列合计是多少"、把数据搬进另一个表、或写进报告。表格位置变了重跑一条命令就行,不用重新教它。
 
-输出统一为 envelope JSON(`ok`/`command`/`data|error`/`duration_ms`),错误带机器可读
-错误码 + 恢复建议 + 结构化证据,agent 可自我恢复:
-
-```json
-{"version":"1","ok":false,"command":"click","error":{
-  "code":"AMBIGUOUS",
-  "message":"role:Button matches 34 elements in the window",
-  "hint":"tighten the selector or pick by index",
-  "evidence":{"candidates":[{"ref":"@e2","role":"Button","name":"最小化 计算器"}]}},
- "duration_ms":1563}
-```
-
-定位歧义时,错误里直接带结构化候选(含可重放 ref),不用重拍快照:
+**场景二:让 agent 在 Word 文档里写一段话,并自己核对写对了**
 
 ```bash
-actl click role:Button --app 计算器                          # → AMBIGUOUS + candidates[]
-actl click role:Button#3 --app 计算器                        # 序数直选
-actl click role:Button --near id:clearButton --app 计算器    # 锚点就近
+actl set-clipboard '本报告由 agent 自动生成'
+actl click role:Document --app Word                              # 定位正文焦点
+actl press ctrl+v --target role:Document --app Word              # 粘贴(--target 断言焦点真的在正文,不是搜索框)
+actl get role:Document --property text --app Word                # 读回全文
 ```
 
-每条命令 `actl <cmd> -h` 均有四要素 help(用途/参数/示例/错误码);完整命令语义与
-协议契约见[设计蓝图](https://github.com/gqy20/actl/blob/main/docs/06-design-blueprint.md)。
+效果:最后一条**读回全文**——agent 自己确认文字真的在文档里,不会在"可能没粘上"的情况下宣称完成;`--target` 保证输入落在正文而不是恰好在窗口里就算数。点错目标时错误自带候选列表和恢复建议,agent 自己消歧重试,不需要人工看日志。
+
+两条使用提示:
+
+- **桌面写操作(点击/输入)需要 `actl-signal` 显示端就绪,并在横条上人工放行**——agent 动你的桌面,你全程知情,Ctrl+Alt+F12 随时急停。这是产品性格,不是限制;读操作(场景一)可独立使用。
+- 中文输入法环境下粘贴通道(`set-clipboard` + `ctrl+v`)是可靠输入方式;每条命令 `actl <cmd> -h` 均有四要素 help(用途/参数/示例/错误码);完整命令语义与协议契约见[设计蓝图](https://github.com/gqy20/actl/blob/main/docs/06-design-blueprint.md)。
 
 ## 核心特性
 
-- **精准定位,不猜坐标**:直接读系统 UIA 无障碍树,支持 `@eN` 引用、`name:/id:/role:`
-  选择器、序数与锚点就近消歧;虚拟化大列表(资源管理器条目级)、老 Win32 报表
-  (msinfo32)、Chromium/Electron 系正文读取均实测通达。
-- **逐步可验证**:`verify`/`wait` 支持值断言与属性谓词等待(`--property value=OK`/
-  `name=子串`/`checked=on`);`batch` 步级可观测;每个错误都带错误码 + hint +
-  evidence,agent 拿到就能自我恢复。
-- **安全护栏,宁可拒绝不错发**:
-  - 键鼠注入前以物理前台窗口为唯一判据核对目标,不匹配即拒绝;长注入分批复核焦点,
-    被抢自动停在批边界并如实上报;
-  - `type`/`press` 必须显式 `--app`,指针物理动作必须显式 `--physical`——默认走 UIA
-    后台调用,不抢用户的鼠标键盘;
-  - 检测到用户按住 Ctrl/Shift 时拒绝注入(防语义劫持),绝不踩掉用户按键;多 actl
-    实例输入互斥。
-- **桌面信号条 `actl-signal`**(建议同装):自动化运行时的知情权与逃生口——右上角
-  常驻迷你状态条(不抢焦点、DPI 感知),绿=执行中 · 琥珀=正在注入键鼠 · 红=已停止 ·
-  灰=空闲 · 暗=失联;**Ctrl+Alt+F12** 全局紧急停止,在途注入在动作边界被拒
-  (`ABORTED`)。旧调用不会因恢复复活；新任务可正常发起并点击“开始”。
-  `actl execution-status` 查看运行状态；旧格式/损坏状态使用 `actl execution-recover` 归档修复，
-  修复不授予权限、不续跑任务。CLI 与显示端须成对更新至显示协议 v7。
+**它找得到,也点得准。** 直接读系统无障碍树(UIA),像 Playwright 读 DOM 一样精确定位控件——不截图、不猜坐标。虚拟化大列表、老 Win32 报表、Chromium/Electron 正文都实测通达。看截图的 agent 点错只能重来;actl 点错会告诉你点错了,以及有哪几个候选。
 
-### 命令一览(33 条,`actl commands` 自发现)
+**它做完一步,验证一步。** 每次操作后可以立即断言"屏幕上现在写着什么"——不是"应该写上了"。值比对、属性谓词、文件内容、窗口状态全套断言原语;失败的错误自带错误码、恢复建议和结构化证据,agent 拿到就能自己消歧重试,不用人工看日志猜哪里断了。
+
+**它动你电脑,你全程知情。** 屏幕右上角常驻一条迷你状态条(不抢焦点):绿=执行中、琥珀=正在注入键鼠、红=已停止。**Ctrl+Alt+F12** 随时全局急停,在途注入在动作边界被拒。桌面写操作默认要你在状态条上放行一次——agent 用你的键盘鼠标,先取得你的同意。
+
+**它不抢你的手。** 默认全部走 UIA 后台调用,不碰你的鼠标键盘;需要真实移动鼠标的动作(拖拽等)必须显式 `--physical` 声明。输入前核对物理前台窗口,你正在打字时它拒绝注入,绝不踩掉你的按键。
+
+**流程是文件,不是黑盒。** 多步任务写成 YAML 流程(带输入声明、验证步骤、暂停点),`flow-run` 一步执行、断点可恢复。跑完的流程沉淀成可复用模板——同一个任务第二次就是一条命令的事。
+
+### 命令一览(70 条,`actl commands` 自发现)
 
 | 类别 | 命令 |
 |---|---|
 | 感知 | `snapshot` `find` `get` `list-windows` `screenshot` `status` `commands` |
 | 执行 | `click` `right-click` `double-click` `middle-click` `triple-click` `hover` `drag` `scroll` `type` `paste` `press` `key-down` `key-up` `set-value` `select` `toggle` |
-| 窗口 | `launch` `focus-window` `close-window` `resize-window` `wait` `batch` |
-| 验证 | `verify` `extract` |
-| 系统 | `get-clipboard` `set-clipboard` |
+| 窗口 | `launch` `focus-window` `close-window` `resize-window` `minimize-window` `restore-window` `wait` `batch` |
+| 验证 | `verify` `extract` `verify-file` `verify-rows` `verify-owner` `verify-closed` `verify-window` `verify-clipboard` |
+| 剪贴板 | `get-clipboard` `set-clipboard` |
+| 流程 | `flow-validate` `flow-run` `flow-status` `flow-pause` `flow-resume` `flow-clean` `explore-writeback` |
+| 浏览器 | `browser-launch` `browser-navigate` `browser-read` `browser-type` `browser-click` `browser-close` `browser-list` `browser-verify` |
+| 应用注册 | `app-register` `app-list` `app-remove` |
+| 桌面与诊断 | `desktop-prepare` `desktop-restore` `display-start` `display-status` `execution-status` `execution-recover` `focus-report` `front-report` `history` `task-archive` `preview` |
 
 ## 文档
 
@@ -165,28 +129,23 @@ actl click role:Button --near id:clearButton --app 计算器    # 锚点就近
 
 ## 项目状态
 
-当前 v0.1.x(M2 阶段):33 条命令全链路可用;计算器与记事本保存的端到端任务、跨
-3 应用数据搬运均实测全绿;Office(Excel/Word)与微信核心通道已实测通达;浏览器
-内容通道(`--view content` 投影、`--stable` settle、坐标寻址 `xy:` 视觉兜底)经
-Edge/Chrome 双验证,xhs/bili/douyin 登录态深度闭环实测;场景结论持续沉淀进 docs
-与应用档案。阶段划分与版本口径见 [ROADMAP](https://github.com/gqy20/actl/blob/main/docs/ROADMAP.md)。
+当前 v0.2.0(M3 阶段):70 条命令全链路可用——计算器与记事本端到端任务、跨
+3 应用数据搬运、浏览器自有 CDP 通道(登录态会话/内容投影/坐标兜底)、框选/长按/
+轨迹拖拽指针扩展、探索模式(有界自主探索+决策卡外抛)均实测落地;应用知识以
+pack 形式沉淀,流程以 YAML 治理。场景结论持续沉淀进 docs 与应用档案。阶段划分
+与版本口径见 [ROADMAP](https://github.com/gqy20/actl/blob/main/docs/ROADMAP.md)。
 
 ## 参与开发
 
-无人值守时可运行 `cargo xtask regress --unattended`：仅执行明确登记的无输入用例，
-其余写入报告为 skipped；`complete` 只表示所选用例全部通过，退出成功不代表整套 Phase 2 验收通过。
-只读性能与观察采样使用 `cargo xtask diagnose phase2-readonly`；
-指定本次观察到的 HWND 可追加快照对照，不启动或关闭应用。人工验收及遗留见
-[Phase 2 验收记录](https://github.com/gqy20/actl/blob/main/docs/44-phase2-acceptance.md)。
+Rust workspace,trunk-based(`main` 始终绿),协作规范人与 AI 共用([AGENTS.md](AGENTS.md))。
 
-Rust workspace,trunk-based(`main` 始终绿)。克隆后 `make setup` 一步配好 git hooks
-与锁定工具链,提交前 `make gate` 过门禁;协作规范(Conventional Commits、测试纪律、
-门禁单点等)见 [AGENTS.md](AGENTS.md),人与 AI 共用。
+```bash
+make setup    # 克隆后一次:git hooks + 锁定工具链
+make dev      # 诊断循环:秒级增量 DEBUG 构建
+make gate     # 提交前门禁:fmt + clippy + test + packs
+```
 
-详情页使用 TypeScript/Vite，环境由 pnpm 管理。前端检查已纳入同一门禁，开发机另需
-Node 24 和 package.json 指定的 pnpm；预览与构建命令见 [详情前端](ui/signal/README.md)。
-发布 EXE 内嵌静态页面，不需要 Node/pnpm；详情按需使用机器已有 Evergreen WebView2，
-缺失或加载失败自动回退原生内容。
+开发机要求:Rust(锁定于 [rust-toolchain.toml](rust-toolchain.toml));详情页前端另需 Node 24 与 pnpm(仅开发与预览,发布 EXE 内嵌静态页面不需要)。真机回归与验收入口见 `cargo xtask`(无参列出全部任务)。
 
 ## License
 
