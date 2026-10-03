@@ -166,6 +166,9 @@
   前置：交互桌面 + 显示端就绪（写入动作经 display gate 预告）+ 无既有记事本窗口；
   产物落 `docs/timing-data/<kind>-<UTC 时间戳>.md` 与 `target/timing-*/report.json`，
   逐调用留痕在同级 `call-*.{capture.json,stdout.json,stderr.log}`。
+  **入库策略**（2026-10-03 起）：`docs/timing-data/` 下的机器产物默认被 .gitignore 忽略
+  （本地留存）；curated 结论写 `docs/timing-*.md` 或验收文档后引用数据文件——
+  需要入库的数据按需 `git add -f`，此前的历史数据文件不受影响。
 - **timing 纪律**：性能数字只在同环境头内比较，慢日绝对值不跨日（AGENTS）。
 - gate 各步耗时随 stderr 输出（`· <step> Nms`），慢环节头内比较。
 - 生态对照见 [13 §4.2](13-realtime-state-maintenance.md)：poll ~100ms、窗口/元素超时 3-5s、
