@@ -29,7 +29,9 @@ use windows::{
     Win32::System::Threading::{
         GetCurrentProcessId, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
     },
-    Win32::UI::HiDpi::GetDpiForWindow,
+    Win32::UI::HiDpi::{
+        DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, GetDpiForWindow, SetThreadDpiAwarenessContext,
+    },
     Win32::UI::WindowsAndMessaging::{
         self, CallNextHookEx, DispatchMessageW, FindWindowW, GA_ROOT, GetAncestor, GetMessageW,
         GetWindowRect, GetWindowTextW, GetWindowThreadProcessId, HHOOK, KBDLLHOOKSTRUCT,
@@ -182,7 +184,10 @@ impl HookShared {
     fn on_key(&self, wparam: WPARAM, lparam: LPARAM) {
         let info = unsafe { &*(lparam.0 as *const KBDLLHOOKSTRUCT) };
         let vk = info.vkCode;
-        let injected = (info.flags.0 & 0x1) != 0; // KLHF_INJECTED(0.62.2 未导出常量)
+        // 真机发现 #2:KBDLLHOOKSTRUCT 的 INJECTED 标志是 0x10(LLKHF_INJECTED;
+        // 0x1 是 EXTENDED 位——0.62.2 未导出键盘侧常量,鼠标侧 LLMHF_INJECTED=0x1
+        // 恰好同位,首版误用了 0x1 导致注入键全部漏标,实测 enter/VK_PACKET 均 false)。
+        let injected = (info.flags.0 & 0x10) != 0; // LLKHF_INJECTED
         let message = wparam.0 as u32;
         HELD.with(|held| {
             let mut held = held.borrow_mut();
@@ -377,7 +382,7 @@ fn refresh_focus(auto: &UIAutomation) -> FocusCache {
 
 /// burst 末值读回(docs/06 R2):提交后的最终文本——IME 中文/自动纠正的真值来源。
 /// 守卫:焦点根窗须与运行一致(不一致 = 焦点已换,读到的会是别的元素);
-/// 密码焦点不读(脱敏不可关闭);ValuePattern 缺失/失败如实返回 None。
+/// 密码焦点不读(脱敏不可关闭);ValuePattern 缺失如实返回无事件。
 fn capture_value(auto: &UIAutomation, expected_title: Option<&str>) -> Option<Value> {
     let (hwnd, title) = crate::kbd::focused_root_window()?;
     if let Some(expected) = expected_title
@@ -390,14 +395,21 @@ fn capture_value(auto: &UIAutomation, expected_title: Option<&str>) -> Option<Va
     if identity["is_password"].as_bool() == Some(true) {
         return None;
     }
-    let value = element
-        .get_pattern::<uiautomation::patterns::UIValuePattern>()
-        .ok()?
-        .get_value()
-        .ok()?;
-    if value.is_empty() {
-        return None;
-    }
+    // 真机发现 #3:Win11 记事本的 Document 不支持 ValuePattern(TextPattern 型
+    // 应用,实测值读回静默缺失)——Value → Text 文档区读回的回退链(与 verify
+    // 的 value/text 通道同族;读回是 burst 末一次,演示量级文档全文可承受)。
+    let value = if let Ok(pattern) = element.get_pattern::<uiautomation::patterns::UIValuePattern>()
+    {
+        pattern.get_value().ok()
+    } else if let Ok(pattern) = element.get_pattern::<uiautomation::patterns::UITextPattern>() {
+        pattern
+            .get_document_range()
+            .ok()
+            .and_then(|range| range.get_text(-1).ok())
+    } else {
+        None
+    };
+    let value = value.filter(|text| !text.is_empty())?;
     Some(json!({
         "t": unix_ms(), "kind": "value", "value": value,
         "focus": {"hwnd": hwnd, "title": title},
@@ -449,6 +461,12 @@ pub fn run_session(cfg: &SessionConfig) -> Result<SessionOutcome, CtlError> {
     );
 
     let auto = UIAutomation::new().map_err(internal)?;
+    // 真机发现 #1:钩子事件坐标是物理屏幕坐标,而 WindowFromPoint/ElementFromPoint
+    // 按调用线程的 DPI 感知解释坐标——多显示器混合 DPI 下错位(实测点击反查命中
+    // 隔壁屏元素、窗口元数据全空)。会话线程设 PER_MONITOR_AWARE_V2 对齐口径。
+    unsafe {
+        SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    }
     let own_pid = unsafe { GetCurrentProcessId() };
     let signal_pid = unsafe {
         FindWindowW(w!("actl_signal_window"), None)

@@ -1078,3 +1078,11 @@ R1 三块机械能力的增强（编译器纯函数 + 捕获层一个新事件�
 - **{window} 泛化**：步骤与 verify 里 `--app <记录时标题>` 的字面标题收编为 flow inputs——`window`/`window_2`/…（按首现顺序），默认值 = 记录时标题，args 替换为 `{input: windowN}`。重放前一处可调（多机/窗口改名场景），与 explore-writeback 的 `{window}` 同一泛化思想；TODO 注释里的标题保持字面（注释不执行）。文本字面值的参数化留给 agent 改写轮（数据 vs 常量是语义判断）。
 
 已知边界（如实）：值读回依赖事件到达时机（工作线程异步），焦点快速转移时可能错过（运行退回 VK 路径或 TODO，不虚记）；wait 只覆盖"换窗+间隔"形态，"UIA 树变化但同窗"的等待（如树内加载）待 agent 改写轮补。
+
+### R2 真机修正：DPI 口径 / 键盘注入位 / 值读回回退（2026-10-04，真机自驱验收发现）
+
+注入轨真机验收（actl CLI 驱动，docs/80）抓出三处捕获层缺陷，全部修复：
+
+1. **DPI 坐标口径**：钩子事件坐标是物理屏幕坐标，而 `WindowFromPoint`/`ElementFromPoint` 按调用线程的 DPI 感知解释——多显示器混合 DPI 下错位（实测点击反查命中隔壁屏元素、窗口元数据全空）。会话线程设 `SetThreadDpiAwarenessContext(PER_MONITOR_AWARE_V2)` 对齐。
+2. **键盘注入标志位**：`KBDLLHOOKSTRUCT` 的 INJECTED 是 **0x10（LLKHF_INJECTED）**——0x1 是 EXTENDED 位；鼠标侧 LLMHF_INJECTED=0x1 恰好同位，首版误用 0x1 导致注入键全部漏标（实测 enter 与 VK_PACKET 键均 false，机器输入伪装成人工输入进入编译路径）。修为 0x10 后注入键正确排除。
+3. **值读回回退链**：Win11 记事本的 Document 不支持 ValuePattern（TextPattern 型应用）——Value 读回失败后回退 Text 文档区全文读回（与 verify 的 value/text 通道同族；burst 末一次，演示量级文档全文可承受，超长文档的截断边界留给改写轮）。
