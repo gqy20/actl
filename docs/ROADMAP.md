@@ -14,7 +14,7 @@
 
 ### 高优先（用户标记）
 
-- [ ] **GUI 操作录制 → YAML**（用户标记高价值；用户用鼠标键盘手动操作一遍应用，系统自动转成可复用流程文件——与探索模式互补：录制是"人演示→YAML"，探索是"agent 自主→YAML"，两者在回写层汇合。体系见 [79](79-quicker-recording-research.md)、[76 §11](76-gui-recording.md)。**R1–R3 已实现（离线测试全绿，2026-10-04）：R1 捕获/trace/机械编译 → R2 编译增强（wait 步骤 / 值读回→IME `type --paste` / `{window}` inputs 泛化）→ R3 改写轮指引（[skills/actl references/record-rewrite](../skills/actl/references/record-rewrite.md)），见 CHANGELOG Unreleased。剩余：① 真机钩子验收轮（钩子/反查/值读回真实行为，需用户在场演示）；② R4 显示端右键菜单动态项（会话状态文件已就位，flow_ui 动态项模式可套）；③ 首次真实改写+重放对比（真机验收后）**）
+- [ ] **GUI 操作录制 → YAML**（用户标记高价值；用户用鼠标键盘手动操作一遍应用，系统自动转成可复用流程文件——与探索模式互补：录制是"人演示→YAML"，探索是"agent 自主→YAML"，两者在回写层汇合。体系见 [79](79-quicker-recording-research.md)、[76 §11](76-gui-recording.md)。**R1–R3 已实现（离线全绿）且注入轨真机验收通过（[80](80-record-acceptance.md)，2026-10-04：四真机发现——DPI 口径/LLKHF 位/Text 回退/读回竞态——全部修复，前三者真机复验通过）。剩余：① 人工演示轨真机验收（非注入编译路径/IME/真人键鼠质量，用户在场 2 分钟；顺带裁定"录制窗口内用户输入必被捕获"）；② 发现 #4 沉降修复的真机复验（第四轮被锁屏阻断）；③ R4 显示端右键菜单动态项（会话状态文件已就位）；④ 首次真实改写+重放对比；⑤ marker4 记事本遗留桌面待锁屏解除后 close-window 收口**）
 - [ ] **探索模式（用户标记关键）**：S1 已落地（0.2.0）；S2 已实现并真机验收通过（[77](77-exploration-s2-acceptance.md)）；S3 已实现并真机闭环验收通过（[77 S3 增补](77-exploration-s2-acceptance.md)）；**L2 原语已实现（2026-10-03，spec 提交：`explore.texts` 输入原语 + 跨窗 goal 探测，见 [docs/06 L2 增补](06-design-blueprint.md)）——texts 真机通过（[77 L2 增补](77-exploration-s2-acceptance.md)）**——待办：①~~观察有界重试~~（已落地 2026-10-03，发现 #3 收口）；②观察锚点随弹窗转移（对话框内继续动作）与 RuntimeBroker 跨进程选择器的 pid 过滤放宽——**含动作改经快照 ref 身份绑定（`click @eN --snapshot`，docs/31 身份纪律，消除选择器重定位与快照两通道的分叉，发现 #6 的结构性收口）**；③type 的 `--paste` 通道选项（中文 IME）；④路线积累（§7 目标 5 条已 2 条）；⑤L0 命中重放 skill 层流程化、UCB 统计剪枝
 - [ ] release-review-draft 写段联测（待用户授权，[43](43-release-review-draft.md)）
 
