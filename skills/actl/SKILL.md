@@ -26,6 +26,17 @@ actl 是统一技能入口。收到包含多步决策或跨应用操作的任务
 用法见 [流程使用说明](references/flows.md)；变量插值和子流程调用仍未实现。
 个人任务值和运行状态不回写技能文件，测试计划仍放 `fixtures/flows/`。
 
+## GUI 录制与草稿改写
+
+用户要求"演示一遍就自动化"或提供人工演示时：`actl record-start --id <id>` 开始录制
+（用户正常操作，会话有界，密码字段键不落盘），`actl record-status --id <id>` 查看，
+`actl record-stop` 停止并返回机械草稿 `records/<id>/draft.yml` + 证据文件 `trace.jsonl`。
+草稿可 flow-validate，但目标选择、等待与验证是保守机械形态，TODO 项以注释携带
+trace 行号证据。改写草稿（选择器稳健化、TODO 修复、参数化、噪音清除）与重放对比
+验收的完整程序见 [录制草稿改写说明](references/record-rewrite.md)；改写产物留在本地
+`records/<id>/rewritten.yml`。录制与探索模式互补：录制是"人演示→YAML"，
+探索是"agent 自主→YAML"。
+
 ## 任务启动与桌面整理
 
 开始桌面任务可先调用 `actl display-start`：启动同目录的 actl-signal 并等待可见画面。
@@ -105,6 +116,7 @@ actl verify --value <target> "<期望>" --app <app> # 确认:立即断言
 桌面:minimize-window restore-window desktop-prepare desktop-restore display-start display-status execution-status execution-recover
 验证:verify(--exists/--value/--contains/--checked) extract(--table)
 系统:app-register(--pattern) app-list app-remove get-clipboard set-clipboard
+录制:record-start(--id/--max-seconds) record-worker record-stop(--id) record-status(--id)——草稿改写见 references/record-rewrite.md
 
 ## 外部 UIA 对照诊断
 
@@ -279,6 +291,7 @@ collector 检索到结论 → actl 实时发消息回应。
 错误码与恢复动作全表:[references/error-codes.md](references/error-codes.md)
 本地软件位置查找指南:[references/app-locations.md](references/app-locations.md)
 流程使用说明:[references/flows.md](references/flows.md)
+录制草稿改写说明:[references/record-rewrite.md](references/record-rewrite.md)
 
 ### 本地应用别名
 
