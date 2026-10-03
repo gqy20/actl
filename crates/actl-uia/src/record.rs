@@ -381,9 +381,25 @@ fn refresh_focus(auto: &UIAutomation) -> FocusCache {
 }
 
 /// burst 末值读回(docs/06 R2):提交后的最终文本——IME 中文/自动纠正的真值来源。
-/// 守卫:焦点根窗须与运行一致(不一致 = 焦点已换,读到的会是别的元素);
-/// 密码焦点不读(脱敏不可关闭);ValuePattern 缺失如实返回无事件。
+/// 真机发现 #4:burst 末/停止瞬间的读回与应用的输入提交管线竞态(实测停止在
+/// 最后按键后 231ms,文档尚未提交→读到空,值事件缺失)——有界沉降重试:
+/// ≤3 次、150ms 间隔(ACTL_SETTLE_MS 同族思想),耗尽如实返回无事件。
 fn capture_value(auto: &UIAutomation, expected_title: Option<&str>) -> Option<Value> {
+    for attempt in 0..3 {
+        if let Some(event) = read_focus_value(auto, expected_title) {
+            return Some(event);
+        }
+        if attempt < 2 {
+            thread::sleep(Duration::from_millis(150));
+        }
+    }
+    None
+}
+
+/// 单次读回尝试。守卫:焦点根窗须与运行一致(不一致 = 焦点已换,读到的会是
+/// 别的元素);密码焦点不读(脱敏不可关闭)。Value → Text 文档区回退链(真机
+/// 发现 #3:TextPattern 型应用无 ValuePattern,与 verify 的 value/text 通道同族)。
+fn read_focus_value(auto: &UIAutomation, expected_title: Option<&str>) -> Option<Value> {
     let (hwnd, title) = crate::kbd::focused_root_window()?;
     if let Some(expected) = expected_title
         && expected != title
@@ -395,9 +411,6 @@ fn capture_value(auto: &UIAutomation, expected_title: Option<&str>) -> Option<Va
     if identity["is_password"].as_bool() == Some(true) {
         return None;
     }
-    // 真机发现 #3:Win11 记事本的 Document 不支持 ValuePattern(TextPattern 型
-    // 应用,实测值读回静默缺失)——Value → Text 文档区读回的回退链(与 verify
-    // 的 value/text 通道同族;读回是 burst 末一次,演示量级文档全文可承受)。
     let value = if let Ok(pattern) = element.get_pattern::<uiautomation::patterns::UIValuePattern>()
     {
         pattern.get_value().ok()
