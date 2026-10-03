@@ -560,34 +560,31 @@ pub fn run_session(cfg: &SessionConfig) -> Result<SessionOutcome, CtlError> {
                     {
                         append_event(&mut trace, &mut events, value)?;
                     }
-                    // 注入事件如实入 trace(injected:true)但不做反查——记录的是人的演示;
-                    // 反查 actl 自己注入的点击会与其动作产生读竞争。
-                    if injected {
-                        json!({"t": raw.t_ms, "kind": "click", "button": button, "x": x, "y": y, "injected": true})
-                    } else {
-                        // actl 自家窗口过滤(显示端/录制器自身)——"点录制 UI 自己"不进 trace。
-                        let hit = unsafe { WindowsAndMessaging::WindowFromPoint(POINT { x, y }) };
-                        let mut pid = 0;
-                        if !hit.0.is_null() {
-                            let _ = unsafe { GetWindowThreadProcessId(hit, Some(&mut pid)) };
-                        }
-                        if pid == own_pid || signal_pid == Some(pid) {
-                            skipped_own += 1;
-                            continue;
-                        }
-                        let window = window_json(hit);
-                        let (element, lookup) = click_element(&auto, x, y);
-                        json!({
-                            "t": raw.t_ms, "kind": "click", "button": button, "x": x, "y": y,
-                            "window": window, "element": element, "lookup": lookup,
-                        })
+                    // actl 自家窗口过滤(显示端/录制器自身)——"点录制 UI 自己"不进 trace。
+                    let hit = unsafe { WindowsAndMessaging::WindowFromPoint(POINT { x, y }) };
+                    let mut pid = 0;
+                    if !hit.0.is_null() {
+                        let _ = unsafe { GetWindowThreadProcessId(hit, Some(&mut pid)) };
                     }
+                    if pid == own_pid || signal_pid == Some(pid) {
+                        skipped_own += 1;
+                        continue;
+                    }
+                    // 注入事件同样全量捕获(反查+元数据):trace 是"发生过什么"的完整证据
+                    // (机器动作带目标身份,诊断价值更高;只读查询与注入方分属两进程,
+                    // 无发现 #4 的同进程并发问题)。编译侧继续排除注入(录的是人的演示)。
+                    let window = window_json(hit);
+                    let (element, lookup) = click_element(&auto, x, y);
+                    json!({
+                        "t": raw.t_ms, "kind": "click", "button": button, "x": x, "y": y,
+                        "injected": injected,
+                        "window": window, "element": element, "lookup": lookup,
+                    })
                 }
                 RawKind::Key { vk, mods, injected } => {
-                    if injected {
-                        json!({"t": raw.t_ms, "kind": "key", "vk": vk, "mods": mods, "injected": true})
-                    } else if focus.as_ref().is_some_and(|f| f.password) {
-                        // 密码脱敏:焦点在密码框期间,VK 一律不落盘(不可关闭,docs/06)。
+                    if focus.as_ref().is_some_and(|f| f.password) {
+                        // 密码脱敏:焦点在密码框期间,VK 一律不落盘(不可关闭,docs/06;
+                        // 对注入键同样生效——机器向密码框写入也不留键迹)。
                         json!({"t": raw.t_ms, "kind": "key", "masked": true})
                     } else {
                         // 焦点窗变化才刷新身份(一次 UIA 调用,物理判据先行)。
@@ -600,7 +597,7 @@ pub fn run_session(cfg: &SessionConfig) -> Result<SessionOutcome, CtlError> {
                         pending_keys = Some((focus.title.clone(), raw.t_ms));
                         json!({
                             "t": raw.t_ms, "kind": "key", "vk": vk, "mods": mods,
-                            "ime": vk == 0xE5,
+                            "ime": vk == 0xE5, "injected": injected,
                             "focus": {"hwnd": focus.hwnd, "title": focus.title},
                             "focus_element": focus.element.clone(),
                         })

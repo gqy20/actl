@@ -1032,7 +1032,7 @@ goal 核验的查询类故障（INTERNAL——真机实证：菜单开启态下 
 
 - **钩子回调极简**：WH_MOUSE_LL + WH_KEYBOARD_LL 挂在专属线程（消息泵），回调只做"时间戳+事件入队"（锁+队列+条件变量）；**一切 UIA/Win32 反查在工作线程**（钩子超时被 Windows 回收是 Quicker 实证；本仓 UIA 反查 P50 200ms+ 不可进回调）。
 - **只录语义事件**：鼠标按下（左键 kind=click；右/中键记 button 字段，编译为 TODO）；移动/滚轮不录（Quicker 数据洪水教训）。键盘只记 down（按键重复去重：按住期间同 VK 只记首个）。
-- **注入事件**（LLMHF_INJECTED）如实入 trace（`injected:true`）但**不参与编译**——录制的是人的演示，机器注入不是演示内容。
+- **注入事件**（LLMHF_INJECTED）**全量捕获但不参与编译**：与人工事件同路径反查/焦点身份/值读回（trace 是"发生过什么"的完整证据——actl 流程在录制期间的注入动作带目标身份入档，诊断价值更高；只读查询与注入方分属两进程，无发现 #4 的同进程并发问题），编译侧一律排除（`injected:true`）——录制的是人的演示，机器注入不是演示内容。密码脱敏对注入键同样生效。
 - **actl 自家窗口过滤**：鼠标事件的 WindowFromPoint 命中窗 pid ∈ {worker 自身, actl-signal}（signal pid 经 `actl_signal_window` 类名窗口解析）→ 整事件跳过（计数入 state 的 skipped_own——"点录制 UI 自己"不进 trace）。
 - **点击瞬间反查**：工作线程对每个点击事件做 `element_from_point` + 根窗元数据（GetAncestor GA_ROOT → hwnd/标题/rect/DPI/pid/进程名）。反查失败如实记 `lookup:"failed:<code>"`，坐标与窗口元数据仍在（编译为 TODO，不猜测）。
 - **焦点身份与密码脱敏**：键事件经 GetGUIThreadInfo 取物理焦点 hwnd；hwnd 变化或 burst 首键时做一次 `get_focused_element`（identity: automation_id/name/control_type + `is_password`）。焦点元素是密码框期间的全部键事件 → trace 只记 `{kind:"key", masked:true}`（**VK 都不落盘**）；脱敏不可关闭。焦点元素身份同时服务 type 步骤的目标选择器。

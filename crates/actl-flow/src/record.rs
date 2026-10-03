@@ -783,6 +783,23 @@ mod tests {
     }
 
     #[test]
+    fn injected_events_carry_full_capture_but_stay_uncompiled() {
+        // R2 后注入事件全量捕获(反查/焦点身份);值读回照发(机器动作的完整证据),
+        // 但不与任何运行配对(注入键不成运行)→ 孤儿值事件,不产步骤。
+        let mut injected_click = click(10, 1, 2, "id:edit", "编辑", "记事本");
+        injected_click["injected"] = json!(true);
+        let injected_key = json!({
+            "t": 11, "kind": "key", "vk": 0x48, "mods": [], "ime": false, "injected": true,
+            "focus": {"hwnd": 5, "title": "记事本"},
+            "focus_element": {"automation_id": "edit", "name": "编辑", "control_type": "Edit", "runtime_id": [2], "is_password": false},
+        });
+        let orphan_value = value_event(12, "记事本", "edit", "编辑", "hello actl");
+        let draft = compile(&[header(), injected_click, injected_key, orphan_value]);
+        assert!(draft.steps.is_empty());
+        assert!(draft.todos.is_empty());
+    }
+
+    #[test]
     fn hotkey_compiles_to_press_with_focus_verify() {
         let draft = compile(&[
             header(),
