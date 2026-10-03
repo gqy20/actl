@@ -85,6 +85,9 @@
 - [70 · 调试手册](70-debug-playbook.md)：调试阶梯、观察瞬态耐心对照、正斜杠原生表面、转义纪律与症状速查。
 - [71 · 详情 TypeScript 内容层](71-signal-webview-details.md)：pnpm 预览、按需 WebView2 宿主、原生操作边界、体积与验收证据。
 - [75 · 任务起止与异常提示](75-action-start-notification.md)：中央短时提示的触发范围、原生动效、去重边界与 YAML 演示证据。
+- [76 · GUI 操作录制设计提案](76-gui-recording.md)：用户演示→YAML；组件表、分阶段切片、验收草案与 Quicker 调研增补（§11）。
+- [77 · 探索模式 S2 真机验收](77-exploration-s2-acceptance.md)：S2/S3/L2/P3 验收、跨窗链攻坚三连修正与 ref 绑定链路收官。
+- [79 · Quicker 录制调研与 agent 在环体系](79-quicker-recording-research.md)：Quicker 一方录制形态与社区痛点；录制双产物、agent 改写层与回写汇合层设计。
 
 
 ## 发布包与技能说明

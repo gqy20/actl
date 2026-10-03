@@ -1,6 +1,6 @@
 # 76 · GUI 操作录制设计提案：用户手动操作 → 自动生成 YAML 流程
 
-日期：2026-10-03。状态：**设计提案，未实现**。M3 候选，0.2.0 后优先立项（用户标记高价值）。
+日期：2026-10-03。状态：**设计提案，未实现**。M3 候选，0.2.0 后优先立项（用户标记高价值）。2026-10-03 增补：Quicker 调研结论与 agent 在环体系修正（§11，调研见 [79](79-quicker-recording-research.md)）。
 关联：[ROADMAP](ROADMAP.md) · [YAML 流程协议](20-yaml-workflow-protocol.md) · [探索模式](42-exploration-mode.md) · [UIA 观察](37-uia-observation.md) · [输入后端调研](09-input-backends-review.md)
 
 ## 1. 动机与定位
@@ -118,3 +118,17 @@ actl record stop --out my-flow.yml
 | 信号条 + 动作卡 | 录制状态的实时显示 |
 | display_gate / stop 生命周期 | 录制暂停/停止的信号协议 |
 | 词法闸（单向门） | 敏感操作的识别与标记 |
+
+## 11. 增补：Quicker 调研结论与 agent 在环体系（2026-10-03）
+
+[79](79-quicker-recording-research.md) 完成外部调研（Quicker 一方录制形态、作者立场、社区痛点）后，本提案的核心决策——事件瞬间语义反查、输出可编辑 YAML、flow-validate 兼容——被 Quicker 的失败面反向验证（其 UIA 模块有现成的坐标反查原语却从未接入录制器；官方自己承认坐标重放"只适合特定环境，不要分发"）。体系按下述修正，论据与来源见 79：
+
+- **产物改为双件套**：初版 YAML（机械编译）+ **录制 trace**（一等的本地证据文件，agent 改写轮的原料）；编译器不提前丢信息，§5 原则 3 的"TODO 供人工补"升级为**带 trace 证据引用，供 agent 或人工补**；
+- **文本输入录提交后最终文本生成 `type`，仅组合键生成 `press`**——原始按键序列在中文 IME 下重放必错（Quicker 实证）；中文文本依赖 `--paste`/Value 通道（是否随 R1 同步做，spec 裁定）；
+- **钩子架构**：WH_*_LL 回调只入队（时间戳+事件），UIA 反查在工作线程立即执行（钩子超时被 Windows 回收是 Quicker 实证；本仓 UIA 反查 P50 200ms+ 不可进回调）；原始坐标留存作降级；钩子互斥与自动重挂进 spec；
+- **坐标兜底存窗口相对坐标**并随步记录窗口矩形/DPI/标题/进程元数据（Quicker DPI 四因素困境的显式绕法）；
+- **agent 改写轮入 R3**（skill 层，LLM 不进 CLI）：读 trace 做选择器稳健化/参数化/等待验证注入/噪音清除/TODO 修复，**验收判据 = 改写后重放通过率 ≥ 机械编译版**；
+- **§7 切片重排**：R1 = 钩子+trace+机械编译；R2 = 编译增强且**输出对齐 explore-writeback 片段格式**（录制与探索在回写层汇合，`{window}` 泛化/证据头/unverified→人工复核迁移全套复用）；R3 = agent 改写轮；R4 = 录制 UI；
+- 新增 spec 决策点：trace 隐私脱敏（密码框文本不入 trace）、trace 消费方式（摘要+定点读取）、YAML 步骤证据字段（schema 变更，硬规则 8）。
+
+两点边界再确认（与 §9 一致）：改写智能在 skill 层不进 CLI，是"agent 替代编排层"定位的自然延伸而非例外；语义选择器是录制 YAML 可复用、可分发的前提——Quicker 官方劝用户"不要分发含坐标重放的动作"正是同一判断的反面表述。
