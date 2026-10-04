@@ -65,6 +65,7 @@ fn surface(classification: &str, name: &str) -> Surface {
         // 默认带一个按钮 = 可交互面板(降噪规则只豁免无按钮壳;
         // 需要空壳形态的用例用 Surface 字面量自备)。
         buttons: vec!["确定".into()],
+        hwnd: None,
     }
 }
 
@@ -103,6 +104,7 @@ fn unknown_popup_blocks_write_step_as_popup_pending() {
                 name: "神秘弹窗".into(),
                 text: String::new(),
                 buttons: vec!["确定".into()],
+                hwnd: None,
             }],
         }]),
         popups: RefCell::new(Vec::new()),
@@ -307,12 +309,14 @@ fn buttonless_unknown_shell_is_noise_and_does_not_block() {
                     name: "弹出窗口".into(),
                     text: String::new(),
                     buttons: Vec::new(),
+                    hwnd: None,
                 },
                 Surface {
                     classification: "unknown".into(),
                     name: "空壳".into(),
                     text: String::new(),
                     buttons: Vec::new(),
+                    hwnd: None,
                 },
             ],
         }]),
@@ -340,6 +344,7 @@ fn unknown_surface_with_buttons_still_blocks() {
                 name: "神秘向导".into(),
                 text: String::new(),
                 buttons: vec!["同意".into(), "拒绝".into()],
+                hwnd: None,
             }],
         }]),
         popups: RefCell::new(Vec::new()),

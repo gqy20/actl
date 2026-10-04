@@ -98,6 +98,10 @@ fn persist_resume_and_do_not_replay_completed_write() {
     let mut actual = serde_json::to_value(&run).unwrap();
     actual["updated_ms"] = json!(0);
     actual["steps"][0]["outputs_captured_ms"] = json!(0);
+    for step in actual["steps"].as_array_mut().unwrap() {
+        step["started_ms"] = json!(0);
+        step["finished_ms"] = json!(0);
+    }
     let expected: Value =
         serde_json::from_str(include_str!("golden/data_completed_v1.json")).unwrap();
     assert_eq!(actual, expected);

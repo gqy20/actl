@@ -51,6 +51,8 @@ mod read_channel;
 mod scoped_locate;
 mod table;
 pub use table::{TableResult, extract_table};
+/// UIA 调用看门狗(有界 COM 调用;docs/81 §8 僵尸事故根治)。
+pub mod watchdog;
 mod window;
 pub use window::front_report;
 pub mod window_check;

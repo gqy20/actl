@@ -126,6 +126,8 @@ pub fn apply_to_run(
             branch: None,
             recovery: None,
             plan_version: None,
+            started_ms: None,
+            finished_ms: None,
         });
     }
     if !rerun_required.is_empty() {

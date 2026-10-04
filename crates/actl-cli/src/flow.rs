@@ -88,13 +88,37 @@ fn validate_assertion(command: &Command) -> Result<(), CtlError> {
         } => {
             crate::file_check::rows_expected(prefix, expected)?;
         }
-        Command::VerifyFile { expected, path, .. } => {
+        Command::VerifyFile {
+            expected,
+            expected_file,
+            path,
+            ..
+        } => {
             if !std::path::Path::new(path).is_absolute() {
                 return Err(CtlError::protocol(
                     "persisted file checks require an absolute path",
                 ));
             }
-            crate::file_check::expectation(expected)?;
+            let text = match (expected, expected_file) {
+                (Some(_), Some(_)) => {
+                    return Err(CtlError::protocol(
+                        "--expected and --expected-file are mutually exclusive",
+                    ));
+                }
+                (Some(text), None) => text.clone(),
+                (None, Some(file)) => std::fs::read_to_string(file)
+                    .map_err(|e| {
+                        CtlError::protocol(format!("cannot read --expected-file {file:?}: {e}"))
+                    })?
+                    .trim_end_matches(['\r', '\n'])
+                    .to_string(),
+                (None, None) => {
+                    return Err(CtlError::protocol(
+                        "verify-file requires --expected or --expected-file",
+                    ));
+                }
+            };
+            crate::file_check::expectation(&text)?;
         }
         Command::Wait {
             element,
@@ -513,6 +537,7 @@ impl Host for Adapter<'_> {
                             .collect()
                     })
                     .unwrap_or_default(),
+                hwnd: None,
             });
         }
         // owned 原生弹窗无文本可分类:一律 unknown,宁可上抛(门禁语义)。
@@ -522,6 +547,7 @@ impl Host for Adapter<'_> {
                 name: node["title"].as_str().unwrap_or_default().to_string(),
                 text: String::new(),
                 buttons: Vec::new(),
+                hwnd: node["hwnd"].as_i64().map(|h| h as isize),
             });
         }
         Ok(engine::FrontLayer {
@@ -1362,6 +1388,8 @@ mod failure_evidence_tests {
             branch: None,
             recovery: None,
             plan_version: None,
+            started_ms: None,
+            finished_ms: None,
         }
     }
 

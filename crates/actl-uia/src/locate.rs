@@ -125,6 +125,9 @@ fn locate_full(
     target: &Target,
     near: Option<&str>,
 ) -> Result<Located, CtlError> {
+    // 看门狗区段:定位链含全树 DFS(Word 级巨型树秒级)+ provider 直连,
+    // 是无界 COM 挂起的高发面(docs/81 §8)
+    let _watchdog = crate::watchdog::enter();
     if matches!(target, Target::Uia(_)) && near.is_some() {
         return Err(CtlError::protocol(
             "uia selectors do not support --near; use within and unique conditions",
@@ -693,11 +696,27 @@ fn poll(app: Option<&str>, target: &Target) -> Result<Option<Located>, CtlError>
 /// "立即断言"分工见 06 §3.6"耐心等待")。
 pub fn wait_element(app: Option<&str>, target: &Target, timeout_ms: u64) -> Result<(), CtlError> {
     let deadline = std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
+    // 观察瞬态有界重试(docs/81 §8):首次解析在弹窗收尾/窗口重构过渡期可
+    // 报 STALE_REF/INTERNAL(Word open 步每轮必现、稍后同命令即通)。等待是
+    // 耐心命令——瞬态观察错误按"尚未出现"继续轮询(wait --gone 同款语义),
+    // 超时仍如实失败;非瞬态错误立即上抛。
+    let mut last_transient: Option<CtlError> = None;
     loop {
-        if poll(app, target)?.is_some() {
-            return Ok(());
+        match poll(app, target) {
+            Ok(Some(_)) => return Ok(()),
+            Ok(None) => {}
+            Err(error)
+                if matches!(error.code, ErrorCode::StaleRef | ErrorCode::Internal)
+                    && std::time::Instant::now() < deadline =>
+            {
+                last_transient = Some(error);
+            }
+            Err(error) => return Err(error),
         }
         if std::time::Instant::now() >= deadline {
+            if let Some(transient) = last_transient {
+                return Err(transient);
+            }
             return Err(CtlError::new(
                 ErrorCode::Timeout,
                 format!(

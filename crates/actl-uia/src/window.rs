@@ -713,7 +713,25 @@ fn list_windows_inner() -> Result<Vec<WindowEntry>, CtlError> {
             )
         })
         .collect::<Result<Vec<_>, CtlError>>()
-        .map(|items| items.into_iter().flatten().collect())
+        .map(|items| {
+            let mut windows: Vec<WindowEntry> = items.into_iter().flatten().collect();
+            // 前台窗兜底(docs/81 §8 枚举盲区收口):UIA 桌面子树在 provider
+            // 楔死时会漏窗(保存确认框实证——枚举不到但正挡在前台)。前台窗是
+            // 弹层判读最关键的样本,缺失时用 Win32 直读回填——枚举永不静默
+            // 失明于"当前正挡着什么"。
+            unsafe {
+                let fg = GetForegroundWindow();
+                if !fg.0.is_null()
+                    && !windows.iter().any(|w| w.hwnd == Some(fg.0 as isize))
+                    && let Ok(Some(entry)) = crate::native_windows::read_window(fg, fg)
+                    && entry.visible
+                    && !crate::display_support::is_display_window(fg)
+                {
+                    windows.push(entry);
+                }
+            }
+            windows
+        })
 }
 
 /// close-window:优雅关闭标题匹配的唯一窗口(WM_CLOSE 异步投递;未保存内容
@@ -771,7 +789,54 @@ fn post_close(
                 "WM_CLOSE"
             }
         ))
-    })
+    })?;
+    // 存活复核(docs/81 §8 诚实性收口):消息投递成功 ≠ 窗口已关——模态
+    // 未清(保存确认框/隐藏错误框)时窗口在投递后继续存活,调用方却拿到
+    // ok。有界等待窗口销毁;仍存活时如实报错并附同 pid 归属弹窗清单,
+    // 让"挡路的是什么"在证据里直接可见。
+    let mut waited = 0u64;
+    loop {
+        if !unsafe { windows::Win32::UI::WindowsAndMessaging::IsWindow(Some(hwnd)) }.as_bool() {
+            return Ok(());
+        }
+        if waited >= 2000 {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        waited += 100;
+    }
+    let blockers: Vec<serde_json::Value> = crate::native_windows::native_windows()?
+        .into_iter()
+        .filter(|w| {
+            let Some(owned) = w.hwnd else { return false };
+            if owned == hwnd.0 as isize || !w.visible {
+                return false;
+            }
+            let owner_hwnd = unsafe {
+                windows::Win32::UI::WindowsAndMessaging::GetWindow(
+                    windows::Win32::Foundation::HWND(owned as *mut _),
+                    windows::Win32::UI::WindowsAndMessaging::GW_OWNER,
+                )
+            };
+            owner_hwnd.map(|h| h.0 == hwnd.0).unwrap_or(false)
+        })
+        .map(|w| {
+            serde_json::json!({
+                "title": w.title,
+                "class": w.class,
+                "hwnd": w.hwnd,
+            })
+        })
+        .collect();
+    Err(CtlError::with_evidence(
+        ErrorCode::NotActionable,
+        "close posted but the window still lives (a modal probably blocks it)",
+        serde_json::json!({
+            "title": title,
+            "hwnd": hwnd.0 as isize,
+            "owned_popups": blockers,
+        }),
+    ))
 }
 
 /// resize-window:标题唯一匹配窗口 → SetWindowPos(不动位置,只改尺寸)。

@@ -53,6 +53,12 @@ pub struct StepRecord {
     /// None = 修订机制引入前的 v1)。结果可归属到确切的步骤规格。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plan_version: Option<u32>,
+    /// 步骤最近一次尝试的起止 unix 毫秒(docs/81 §8:性能画像一等公民——
+    /// 逐步耗时不再靠 outputs_captured_ms 差值与外围计时拼凑)。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finished_ms: Option<u64>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -97,12 +103,27 @@ impl Run {
                     branch: None,
                     recovery: None,
                     plan_version: None,
+                    started_ms: None,
+                    finished_ms: None,
                 })
                 .collect(),
         }
     }
     pub(crate) fn save(&mut self, store: &Store, host: &mut impl Host) -> Result<(), CtlError> {
         self.updated_ms = actl_core::state::unix_ms();
+        // 终态步骤补 finished_ms(幂等):一切落盘路径共用,单点收口
+        for step in &mut self.steps {
+            if step.started_ms.is_some()
+                && step.finished_ms.is_none()
+                && matches!(
+                    step.status,
+                    StepStatus::Completed | StepStatus::Uncertain | StepStatus::Pending
+                )
+                && step.status != StepStatus::Pending
+            {
+                step.finished_ms = Some(self.updated_ms);
+            }
+        }
         store.save(self)?;
         host.publish(self);
         Ok(())
@@ -126,6 +147,10 @@ pub struct Surface {
     pub name: String,
     pub text: String,
     pub buttons: Vec<String>,
+    /// 面板归属的原生 HWND(十进制;无标题保存确认框/错误框实例,docs/81 §8
+    /// 枚举盲区)——处置通道用 hwnd 精确直达,不依赖步骤 --app 锚能否覆盖
+    /// 无标题弹窗宿主。None = 采集层未提供。
+    pub hwnd: Option<isize>,
 }
 /// 提取调用的 `--app` 锚(门禁定位用):顶层参数或 sequence 子调用内嵌。
 fn invocation_app(call: &Invocation) -> Option<String> {
@@ -181,7 +206,13 @@ fn popup_gate(
         };
         let action = Invocation {
             command: "click".into(),
-            args: vec![handler.click.clone(), "--app".into(), app.to_string()],
+            // 处置锚(docs/81 §8):面板携带原生 HWND 时用 hwnd 精确直达——
+            // 无标题保存确认框的宿主窗不在步骤 --app 锚的标题匹配范围内,
+            // 引擎自动处置曾因此够不到按钮(004 实证,只能人工拆弹)。
+            args: match surface.hwnd {
+                Some(h) => vec![handler.click.clone(), "--app".into(), format!("hwnd:{h}")],
+                None => vec![handler.click.clone(), "--app".into(), app.to_string()],
+            },
             bind: Default::default(),
         };
         host.popup_event(
@@ -625,6 +656,8 @@ pub fn execute(
             }
             run.steps[i].plan_version = Some(run.plan_version);
             run.steps[i].status = StepStatus::Running;
+            run.steps[i].started_ms = Some(actl_core::state::unix_ms());
+            run.steps[i].finished_ms = None;
             run.steps[i].attempts = run.steps[i]
                 .attempts
                 .checked_add(1)

@@ -189,8 +189,35 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             path,
             kind,
             expected,
+            expected_file,
             subset,
-        } => file_check::verify(path, kind, expected, *subset).map(Into::into),
+        } => {
+            // --expected-file:期望从 UTF-8 文件读——长/中文 JSON 经 shell 传参
+            // 的引号/编码坑类消灭(docs/81 §8);与 --expected 互斥。
+            let expectation = match (expected, expected_file) {
+                (Some(_), Some(_)) => {
+                    return Err(actl_core::CtlError::protocol(
+                        "--expected and --expected-file are mutually exclusive",
+                    ));
+                }
+                (Some(text), None) => text.clone(),
+                (None, Some(file)) => std::fs::read_to_string(file)
+                    .map_err(|e| {
+                        actl_core::CtlError::new(
+                            actl_core::ErrorCode::Protocol,
+                            format!("cannot read --expected-file {file:?}: {e}"),
+                        )
+                    })?
+                    .trim_end_matches(['\r', '\n'])
+                    .to_string(),
+                (None, None) => {
+                    return Err(actl_core::CtlError::protocol(
+                        "verify-file requires --expected or --expected-file",
+                    ));
+                }
+            };
+            file_check::verify(path, kind, &expectation, *subset).map(Into::into)
+        }
         Command::Commands => commands().map(Into::into),
         Command::Status => status().map(Into::into),
         Command::Desktop(DesktopCommand::ExecutionStatus) => {

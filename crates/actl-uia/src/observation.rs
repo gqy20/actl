@@ -90,6 +90,8 @@ pub(crate) fn tree_bounded(
     depth: u32,
     limit: usize,
 ) -> Result<Observed<UIElement>, CtlError> {
+    // 看门狗区段:树观察遍历 provider 全树,是 COM 挂起的高发面(docs/81 §8)
+    let _watchdog = crate::watchdog::enter();
     let auto = UIAutomation::new().map_err(crate::internal)?;
     let condition = auto.create_true_condition().map_err(crate::internal)?;
     let cache = auto.create_cache_request().map_err(crate::internal)?;

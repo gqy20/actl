@@ -114,7 +114,7 @@ fn pair_uwp_frame(candidates: Vec<WindowEntry>) -> Vec<WindowEntry> {
     }
 }
 
-fn read_window(hwnd: HWND, foreground: HWND) -> Result<Option<WindowEntry>, CtlError> {
+pub(crate) fn read_window(hwnd: HWND, foreground: HWND) -> Result<Option<WindowEntry>, CtlError> {
     let mut pid = 0;
     unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
     if pid == 0 {

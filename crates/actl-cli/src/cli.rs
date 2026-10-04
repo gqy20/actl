@@ -604,7 +604,11 @@ pub(crate) enum Command {
         kind: String,
         /// Expected JSON value; text files use a JSON string
         #[arg(long)]
-        expected: String,
+        expected: Option<String>,
+        /// Read the expectation from a UTF-8 file (mutually exclusive with --expected;
+        /// long/Chinese JSON via shells mangles quotes/encoding — docs/81 §8)
+        #[arg(long)]
+        expected_file: Option<String>,
         /// Compare only declared object keys (array lengths remain exact)
         #[arg(long)]
         subset: bool,
@@ -1155,7 +1159,7 @@ fn after_help_for(name: &str) -> Option<&'static str> {
             "Example:\n  actl flow-validate --file task.yml\nOptional --inputs values.yml resolves declared whole-argument inputs before validating every step. Resources are checked without creating files; data.resources uses the validation-preview context. --emit-plan includes the concrete preview plan and input values, not initialized resources. when/unless select run or otherwise using immediate assertions; unknown observations stop. Both routes are prevalidated. run/otherwise.sequence groups up to 16 calls with one result check. outputs select typed read-only data via JSON Pointer; bind replaces a whole args entry by index. Resolved CLI arguments are revalidated before execution.\nErrors: PROTOCOL invalid YAML/command/policy/resource | INTERNAL file error"
         }
         "verify-file" => {
-            "Example:\n  actl verify-file --path note.docx --kind meta --expected '{\"size_min\":11000}' --subset\nReads text/JSON or OOXML via a fixed read-only native inspector (zip + Windows.Data.Xml.Dom; process facts via Win32/WMI). Text normalizes CRLF to LF; docx returns text and bold; docx-styles returns per-paragraph {text,style,bold} where style is the OOXML styleId (empty = no explicit style); meta returns {size,mtime_unix_ms} (metadata reads survive Office exclusive locks) with optional relational keys size_min/mtime_min; xlsx returns cell values/formulas from sheet1. Maximum input/output 4 MiB. No user scripts, no shell-out, no Office automation. Known mismatches are re-read in a 5-second settle window; unknown read errors stop immediately.\nErrors: PROTOCOL invalid expectation | ASSERTION_FAILED content differs | NOT_ACTIONABLE unreadable/unsupported document | INTERNAL inspector failure"
+            "Example:\n  actl verify-file --path note.docx --kind meta --expected-file meta.json --subset\nReads text/JSON or OOXML via a fixed read-only native inspector (zip + Windows.Data.Xml.Dom; process facts via Win32/WMI). Text normalizes CRLF to LF; docx returns text and bold; docx-styles returns per-paragraph {text,style,bold} where style is the OOXML styleId (empty = no explicit style); meta returns {size,mtime_unix_ms} (metadata reads survive Office exclusive locks) with optional relational keys size_min/mtime_min; xlsx returns cell values/formulas from sheet1. --expected-file reads the expectation from a UTF-8 file (mutually exclusive with --expected; long/Chinese JSON via shells mangles quotes/encoding). Maximum input/output 4 MiB. No user scripts, no shell-out, no Office automation. Known mismatches are re-read in a 5-second settle window; unknown read errors stop immediately.\nErrors: PROTOCOL invalid expectation | ASSERTION_FAILED content differs | NOT_ACTIONABLE unreadable/unsupported document | INTERNAL inspector failure"
         }
         "verify-rows" => {
             "Example:\n  actl verify-rows --app Task --prefix item-row- --expected '[]'\nCompares sorted names of TreeItem rows with an automation-ID prefix; rejects truncated snapshots and a missing parent tree.\nErrors: PROTOCOL invalid expected string array or prefix | ASSERTION_FAILED rows differ | NOT_ACTIONABLE incomplete observation"

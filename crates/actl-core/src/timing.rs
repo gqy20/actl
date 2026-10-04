@@ -40,6 +40,10 @@ pub struct Timing {
     pub vis_probe_ms: u64,
     /// 桌面交接 pending 态轮询间隔
     pub handoff_poll_ms: u64,
+    /// UIA 调用区段看门狗上限(docs/81 §8):定位/树观察等区段超过此时长,
+    /// 守护线程带专用退出码自毙——无界 COM 挂起会变成不可杀僵尸(实证)。
+    /// 0 = 禁用。
+    pub uia_watchdog_ms: u64,
 }
 
 /// CLI 协议默认值(help 四要素承诺的值)。**刻意不接 env 覆盖**:
@@ -71,6 +75,7 @@ impl Default for Timing {
             ready_poll_ms: 50,
             vis_probe_ms: 1000,
             handoff_poll_ms: 100,
+            uia_watchdog_ms: 20_000,
         }
     }
 }
@@ -104,6 +109,7 @@ impl Timing {
                 ready_poll_ms: env_num("ACTL_READY_POLL_MS", d.ready_poll_ms),
                 vis_probe_ms: env_num("ACTL_VIS_PROBE_MS", d.vis_probe_ms),
                 handoff_poll_ms: env_num("ACTL_HANDOFF_POLL_MS", d.handoff_poll_ms),
+                uia_watchdog_ms: env_num("ACTL_UIA_WATCHDOG_MS", d.uia_watchdog_ms),
             }
         })
     }

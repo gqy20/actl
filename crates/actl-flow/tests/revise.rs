@@ -121,6 +121,8 @@ fn record(id: &str, status: StepStatus, verified: bool) -> StepRecord {
         branch: None,
         recovery: None,
         plan_version: Some(1),
+        started_ms: None,
+        finished_ms: None,
     }
 }
 

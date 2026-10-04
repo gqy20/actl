@@ -1,1 +1,1 @@
-{"verify-file":["path","kind","expected","subset"],"verify-rows":["app","prefix","expected"],"verify-owner":["app","program","token","instance","hwnd","pid"],"verify-closed":["hwnd","pid","instance"],"verify-clipboard":["expected","normalize_lines"]}
+{"verify-file":["path","kind","expected","expected_file","subset"],"verify-rows":["app","prefix","expected"],"verify-owner":["app","program","token","instance","hwnd","pid"],"verify-closed":["hwnd","pid","instance"],"verify-clipboard":["expected","normalize_lines"]}

@@ -1,1 +1,37 @@
-{"version":1,"id":"data","status":"completed","updated_ms":0,"steps":[{"id":"source","status":"completed","attempts":1,"checkpoint_passed":false,"verified":false,"error_code":null,"outputs_captured_ms":0,"plan_version":1,"outputs":{"text":"hello 中文","count":2}},{"id":"sink","status":"completed","attempts":1,"checkpoint_passed":true,"verified":true,"error_code":null,"plan_version":1}],"reason":null,"plan_version":1}
+{
+ "version": 1,
+ "id": "data",
+ "status": "completed",
+ "updated_ms": 0,
+ "steps": [
+  {
+   "id": "source",
+   "status": "completed",
+   "attempts": 1,
+   "checkpoint_passed": false,
+   "verified": false,
+   "error_code": null,
+   "outputs_captured_ms": 0,
+   "plan_version": 1,
+   "outputs": {
+    "text": "hello 中文",
+    "count": 2
+   },
+   "started_ms": 0,
+   "finished_ms": 0
+  },
+  {
+   "id": "sink",
+   "status": "completed",
+   "attempts": 1,
+   "checkpoint_passed": true,
+   "verified": true,
+   "error_code": null,
+   "plan_version": 1,
+   "started_ms": 0,
+   "finished_ms": 0
+  }
+ ],
+ "reason": null,
+ "plan_version": 1
+}

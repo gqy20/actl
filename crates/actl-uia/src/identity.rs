@@ -137,6 +137,8 @@ impl Drop for FocusGuard {
     }
 }
 fn check_focus(expected: &Value) -> Result<(), CtlError> {
+    // 看门狗区段:焦点元素查询直连 provider,挂起面之一(docs/81 §8)
+    let _watchdog = crate::watchdog::enter();
     let current = UIAutomation::new()
         .and_then(|a| a.get_focused_element())
         .map(|e| identity(&e))

@@ -253,6 +253,16 @@ close-window --hwnd w-4521 --system-close  # 投 WM_SYSCOMMAND/SC_CLOSE(=点标�
                                            # 对 WM_CLOSE 只收窗不退程的应用(实测 Excel 在
                                            # 后台正确关闭文档后,裸框架 WM_CLOSE 隐藏、
                                            # SC_CLOSE 才退出),作为进程收尾手段
+close-window 存活复核(2026-10-04):消息投递成功≠已关——模态未清时窗口存活,
+  投递后有界等待(2s)窗口销毁;仍存活返回 NOT_ACTIONABLE,evidence 携带同 pid
+  归属弹窗清单(title/class/hwnd),调用方直接看到挡路者(docs/81 §8)
+list-windows 前台兜底:UIA 桌面子树在 provider 楔死时漏窗(无标题保存框实证),
+  前台窗缺失时用 Win32 直读回填——枚举不失明于"当前正挡着什么"
+UIA 看门狗(引擎行为):定位/树观察/焦点查询区段超过 ACTL_UIA_WATCHDOG_MS
+  (默认 20000,0=禁用)时进程带退出码 125 自毙——无界 COM 挂起从"永久僵尸"
+  变"限内诚实失败"(docs/81 §8 僵尸事故根治)
+wait --element 瞬态重试:STALE_REF/INTERNAL 观察瞬态按"尚未出现"继续轮询
+  (wait --gone 同款语义),超时如实失败;非瞬态立即上抛
 ```
 
 #### 系统(system)
@@ -930,7 +940,7 @@ expected: 预期完整文本
 
 新增只读断言（可用于 before/verify/resume_check，以及只读 run）：
 
-- `verify-file --path <path> --kind text|json|docx|docx-styles|meta|xlsx --expected <JSON> [--subset]`：文本按 CRLF→LF 读取；JSON 按类型比较；docx 返回正文 text 与显式加粗 bold；docx-styles 返回逐段 `{"paragraphs":[{text,style,bold}]}`（style 为 w:pStyle 的 OOXML styleId，无显式样式为空串即 Normal；bold 为段内"有文本 run 且全部显式加粗"，与 docx 同款不推断样式继承）；**meta 返回 `{"size","mtime_unix_ms"}`（元数据读取不受 Office 排他锁影响，是文档打开期间"保存确实落盘"的唯一断言通道），expected 支持关系键 `size_min`/`mtime_min`（unix 毫秒，单调下界断言；关系键不参与通用比较，剔除后空对象+subset=纯关系形态）**；xlsx 返回 sheet1 单元格的 value/formula。subset 仅忽略未声明的对象键，数组长度及顺序仍须一致。流程中的路径必须为绝对路径。docx 的 bold 指每个含文本 run 均显式声明加粗，不推断样式继承。
+- `verify-file --path <path> --kind text|json|docx|docx-styles|meta|xlsx (--expected <JSON> | --expected-file <utf8文件>) [--subset]`：文本按 CRLF→LF 读取；JSON 按类型比较；docx 返回正文 text 与显式加粗 bold；docx-styles 返回逐段 `{"paragraphs":[{text,style,bold}]}`（style 为 w:pStyle 的 OOXML styleId，无显式样式为空串即 Normal；bold 为段内"有文本 run 且全部显式加粗"，与 docx 同款不推断样式继承）；**meta 返回 `{"size","mtime_unix_ms"}`（元数据读取不受 Office 排他锁影响，是文档打开期间"保存确实落盘"的唯一断言通道），expected 支持关系键 `size_min`/`mtime_min`（unix 毫秒，单调下界断言；关系键不参与通用比较，剔除后空对象+subset=纯关系形态）**；xlsx 返回 sheet1 单元格的 value/formula。**--expected-file 从 UTF-8 文件读期望（与 --expected 互斥，二选一必填）——长/中文 JSON 经 shell 传参的引号/编码坑类消灭（docs/81 §8）**。subset 仅忽略未声明的对象键，数组长度及顺序仍须一致。流程中的路径必须为绝对路径。docx 的 bold 指每个含文本 run 均显式声明加粗，不推断样式继承。
 - `verify-rows --app ... --prefix <parent-id>-row- --expected <JSON string array>`：完整快照中必须有唯一父树，比较 TreeItem 行名集合（排序后保留重复项），截断或父树缺失拒绝。
 - `verify-owner --app ... --program <absolute exe> --token <absolute task path> [--instance ... --hwnd ... --pid ...]`：核对唯一可见原生窗口、进程可执行路径、命令行中的完整任务路径参数，并返回 HWND、PID、进程创建时间。可选身份字段必须全部匹配；不把标题匹配单独当归属证据。
 - `verify-closed --hwnd ... --pid ... --instance ...`：观察原窗口和原进程实例；窗口消失但进程仍在不算通过，PID 复用也不对新进程执行操作，状态矛盾/查询失败保留未知。
