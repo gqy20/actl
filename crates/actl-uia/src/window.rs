@@ -43,6 +43,48 @@ impl CaptureResult {
 
 /// 捕获一个顶层窗口的 UIA 子树。
 /// `app`:窗口标题子串;None = 焦点元素所在顶层窗口(spike #2:焦点链可能落在后台 UI)。
+/// P1-4 观察降级回退(docs/81 §8):同 pid 兄弟窗逐个重试身份可观察性,
+/// 首个可用者成为观察根;原根可用则原样返回(零行为变化)。
+pub(crate) fn root_with_fallback(
+    auto: &UIAutomation,
+    root: UIElement,
+) -> Result<UIElement, CtlError> {
+    if root
+        .get_runtime_id()
+        .map(|id| !id.is_empty())
+        .unwrap_or(false)
+    {
+        return Ok(root);
+    }
+    let pid = root.get_process_id().map_err(internal)?;
+    let original = root.get_name().unwrap_or_default();
+    for entry in crate::native_windows::native_windows()? {
+        if entry.pid != pid || !entry.visible || entry.title.is_empty() {
+            continue;
+        }
+        let Some(handle) = entry.hwnd else {
+            continue;
+        };
+        let Ok(candidate) = auto.element_from_handle(uiautomation::types::Handle::from(
+            windows::Win32::Foundation::HWND(handle as *mut _),
+        )) else {
+            continue;
+        };
+        if candidate
+            .get_runtime_id()
+            .map(|id| !id.is_empty())
+            .unwrap_or(false)
+        {
+            eprintln!(
+                "[actl] observation fallback: window {original:?} tree unusable; observing same-pid window {:?} instead",
+                entry.title
+            );
+            return Ok(candidate);
+        }
+    }
+    Ok(root)
+}
+
 pub fn capture(app: Option<&str>) -> Result<CaptureResult, CtlError> {
     let auto = UIAutomation::new().map_err(internal)?;
     let walker = auto.create_tree_walker().map_err(internal)?;
@@ -54,6 +96,13 @@ pub fn capture(app: Option<&str>) -> Result<CaptureResult, CtlError> {
             None => top_level_of_focused(&auto, &walker)?,
         }
     };
+
+    // P1-4 观察降级回退(docs/81 §8):框架层窗口的 provider 树楔死时
+    // (元素缺可用 runtime identity,Word OpusApp 实证——快照/查找系统性
+    // INTERNAL 而同 pid 内层 _WwG 树干净可用),按同 pid 可见窗口逐个重试,
+    // 首个身份可观察的窗口成为观察根。refs 编号属于回退根的树;
+    // window.class/title 如实报告回退根,调用方据此判断锚空间。
+    let target = root_with_fallback(&auto, target)?;
 
     let window = WindowInfo {
         title: target
