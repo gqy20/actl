@@ -6,27 +6,26 @@ inputs:
   program: {}
   ready_target: {}
 steps:
+  # ensure: 幂等语义示范(运行时治理第二轮):check 通过 = 步骤已满足,
+  # run 不派发直接 completed——重跑/修订续跑的前缀自动短路。
   - id: ensure-window
-    recovery: {max_retries: 2, timeout_ms: 3000, interval_ms: 200}
     title: 已有窗口则复用，否则启动
-    when:
-      command: verify-window
-      args: [--app, {input: app}, --state, exists]
+    ensure:
+      check:
+        command: verify-window
+        args: [--app, {input: app}, --state, exists]
     run:
-      command: verify-window
-      args: [--app, {input: app}, --state, exists]
-    otherwise:
       command: launch
       args: [{input: program}]
     verify:
       command: wait
       args: [--window, {input: app}, --timeout, '10000']
   - id: ensure-foreground
-    title: 窗口未在前台时切换并核验
-    recovery: {max_retries: 2, timeout_ms: 3000, interval_ms: 200}
-    unless:
-      command: verify-window
-      args: [--app, {input: app}, --state, foreground]
+    title: 已在前台则复用，否则切换并核验
+    ensure:
+      check:
+        command: verify-window
+        args: [--app, {input: app}, --state, foreground]
     run:
       command: focus-window
       args: [{input: app}]

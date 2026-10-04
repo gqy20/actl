@@ -116,6 +116,7 @@ actl verify --value <target> "<期望>" --app <app> # 确认:立即断言
 桌面:minimize-window restore-window desktop-prepare desktop-restore display-start display-status execution-status execution-recover
 验证:verify(--exists/--value/--contains/--checked) extract(--table)
 系统:app-register(--pattern) app-list app-remove get-clipboard set-clipboard
+流程:flow-validate flow-run(--paused) flow-status flow-pause flow-resume(--retry-step/--decision) flow-revise(--accept-rerun/--resume,修订续跑) flow-evidence(--step,失败采集包) flow-clean
 录制:record-start(--id/--max-seconds) record-worker record-stop(--id) record-status(--id)——草稿改写见 references/record-rewrite.md
 
 ## 外部 UIA 对照诊断
@@ -196,7 +197,10 @@ batch 的 `windows_created` 是原生前后差集，不是任务归属证明。�
 通过 `flow-pause --id` 请求暂停，以 `flow-status` 的 paused 确认；在途调用可能仍未结束。
 `flow-resume --id` 先核对未确认步骤，needs_review 时先观察实际结果；只有明确需要重复时
 才使用 `--retry-step <step-id>`。运行/恢复自动以 run ID 关联历史。
-修改源 YAML 不改变已有运行；新计划用新 ID，人工评估已完成操作，避免重复执行。
+修改源 YAML 不改变已有运行；**步骤级修复走 `flow-revise --id <run> --file <修后.yml>`**
+（版本化修订原地续跑：完成步规格未变保留结果，写步变更需 `--accept-rerun` 点名，
+uncertain 步变更即重试授权，谱系经 flow-status 的 revisions 可见）；路线级重构或需要
+干净对照时才开新 ID。失败现场的采集包用 `flow-evidence --id` 读取，含失败瞬间弹层。
 
 - 用同一个 `ACTL_TASK_ID` 关联任务中的调用（1–80 位 ASCII 字母、数字、`-`、`_`）。
   在当前任务的进程环境中设置，避免修改用户全局环境或混用其他任务的 ID。

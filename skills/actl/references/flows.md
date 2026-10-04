@@ -65,7 +65,11 @@ actl flow-pause --id report-01
 
 先预检，再执行；预检不证明实际目标存在。run/resume 同步返回，暂停或需核对不是任务完成。
 运行状态保存在 `%LOCALAPPDATA%/actl/flows/<id>/`；修改源 YAML 不会改变已保存计划。
-新计划用新 ID，并先核对已完成操作，避免重复执行。
+步骤级修复用 `flow-revise --id <run> --file <修后.yml>` 版本化修订原地续跑（完成步规格
+未变保留结果；写步变更需 `--accept-rerun` 点名；uncertain 步变更即重试授权；旧计划
+字节归档、谱系在 flow-status 的 revisions 可见；`--resume` 链式续跑）。路线级重构或
+需要干净对照才开新 ID。失败采集包（截图/窗口清单/UIA/弹层）用 `flow-evidence
+--id <run> [--step <sid>]` 读取。
 
 ## 输出与绑定
 

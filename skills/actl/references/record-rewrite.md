@@ -55,6 +55,30 @@
    `pause_before: true`。
 10. **校验**：`actl flow-validate --file records/<id>/rewritten.yml`——不过不跑。
 
+## 迭代修订（修订优先）
+
+改写产物的调试循环里，**步骤级修复不要开新任务重放全程**——用修订续跑：
+
+```
+actl flow-revise --id <run> --file <修后.yml> --message <一句话理由>   # 默认只落修订
+actl flow-resume --id <run>                                            # 或 revise 时 --resume 链式
+```
+
+- 适用（步骤级）：换选择器/断言/输入通道、补 verify、收敛前置（改 `ensure:`）、
+  加 `popup_handlers`——完成步规格未变的保留结果（不重跑），uncertain 步规格已变的
+  重置 Pending（**修订本身即该步的重试授权**）；
+- 完成写步规格变更必须 `--accept-rerun <step>` 点名（副作用重放显式授权）；
+- 旧计划字节归档在 `revisions/vN.plan.json` 永不覆盖，谱系（版本/指纹/理由/diff）经
+  flow-status 的 revisions 可见——修订是显式审计事件，不是作弊路径；
+- **路线级重构**（步骤序列换血、任务语义变化）或需要干净对照时才开新 ID。
+  下方「重放对比验收」的基线/改写两轮必须各自新 ID——那是受控对照实验，公平性要求
+  独立运行，与迭代修订正交。
+
+反例标本（旧模式的实测成本，docs/80 改写重放轮）：v1→v7 六轮全部重开新 id 重放全程，
+记事本会话脏缓冲每轮复活叠加（「复活循环」），六轮才走完本可一轮修订走完的路线。
+失败瞬间的采集包（截图/窗口清单/UIA/弹层快照）用 `flow-evidence --id <run>` 读取，
+判读后再修订，不再盲跑诊断命令。
+
 ## 重放对比验收
 
 1. 准备与录制开始前等价的应用状态（pack 的 reset 路线或人工复位）。
