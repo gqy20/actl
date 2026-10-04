@@ -5,7 +5,7 @@
 pack_format: 1
 name: utools
 display: uTools 启动器
-launch: uTools           # 实测路径 %LOCALAPPDATA%\Programs\utools\uTools.exe;actl 无启动命令,唤起需流程外运行该 exe(启动原语为 ROADMAP 候选)
+launch: uTools           # 裸名不可解析(App Paths 无注册);用 actl launch --wait-window uTools <exe全路径> 唤起,实测 %LOCALAPPDATA%\Programs\utools\uTools.exe
 window: "uTools"
 app_version: "uTools 5.x(Electron)"
 verified_date: 2026-10-04
@@ -26,9 +26,15 @@ quirks:
   - id: autohide_on_focus_loss
     note: >-
       失焦即隐藏;隐藏后 press 守卫正确拒绝(ok:false 是护栏在工作,
-      不要放宽)。重新唤起 = 再次运行 uTools.exe(单实例,唤起即聚焦
-      搜索框);唤起动画期窗口高仅 ~116px,清空/输入等前先 wait --window
-      再留 ~1s 沉降。
+      不要放宽)。重新唤起 = actl launch --wait-window uTools <exe>
+      (单实例:匹配既有实例标题并前台核验,唤起即聚焦搜索框);唤起
+      动画期窗口高仅 ~116px,清空/输入等前先 wait --window 再留 ~1s 沉降。
+  - id: focused_typing_channel
+    note: >-
+      搜索框文本输入用 type focused: <词> --app uTools(焦点元素寻址,
+      docs/06;逐字键盘通道单次注入,5 字符实测 916ms,识图实证筛选被
+      驱动、记事本居首高亮)——比逐键 press 快约一个数量级;元素读取
+      用 get focused: --property name(焦点可达,树不可见)。
   - id: query_persistence
     note: >-
       查询内容跨隐藏/唤起持久——重放前必须清空(发现 #9:backspace
@@ -39,14 +45,15 @@ quirks:
     note: 键名是 esc 不是 escape(错误表达式直接 PROTOCOL 拒绝)。
 routes:
   - id: search_launch_app
-    description: 清空查询后逐键搜索并回车启动应用(粘贴死路,见 paste_does_not_filter)
+    description: 唤起清空后搜索并回车启动应用(focused 逐字通道;粘贴死路见 paste_does_not_filter)
     status: verified
     verify: 回车后 wait --window <目标应用窗口标题> 出现(端到端断言,元素级不可行)
     steps:
+      - ["launch", "--wait-window", "uTools", "--timeout", "8000", "<exe全路径>"]
       - ["press", "ctrl+a", "--app", "{window}"]
       - ["press", "delete", "--app", "{window}"]
       - ["press", "backspace", "--app", "{window}"]
       - ["press", "backspace", "--app", "{window}"]
-      - ["press", "<逐键字母 j/i/s/h/i>", "--app", "{window}"]
+      - ["type", "focused:", "<搜索词>", "--app", "{window}"]
       - ["press", "enter", "--app", "{window}"]
       - ["wait", "--window", "<目标应用窗口标题>", "--timeout", "15000"]
