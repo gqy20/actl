@@ -1,0 +1,32 @@
+[package]
+name = "actl-mcp"
+description = "actl MCP adapter: remote access service for the controlled Windows device (docs/82; async allowed in this crate only — ADR-001 amendment)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# 协议面归官方 SDK(docs/82 §3.2:协议层不手写):server+macros 为默认,
+# streamable-http-server 提供模式 A 的传输(Tower service,由本 crate 的
+# axum 壳承载并加 Bearer/Origin 中间件)。
+rmcp = { version = "3.5", features = ["transport-streamable-http-server"] }
+# tokio 为 rmcp 的既成运行时(传递依赖显式化:子进程派发/信号/多线程)。
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "process", "signal", "time"] }
+# HTTP 壳(承载 StreamableHttpService + Bearer/Origin 中间件),scope 仅本 crate。
+axum = "0.8"
+# 配对 token 的熵源(纯安全 API,无 unsafe;scope 仅本 crate)。
+getrandom = "0.4"
+clap = { version = "4.5", features = ["derive"] }
+serde.workspace = true
+serde_json.workspace = true
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "actl-mcp"
+path = "src/main.rs"
