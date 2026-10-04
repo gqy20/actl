@@ -53,7 +53,7 @@
 
 ## 长期观察项
 
-- [ ] UIA 观察长阻塞及提供程序超时定位（60s NOT_FOUND 仍待复现；2026-10-02 已捕获桌面 children 枚举 TIMEOUT，故障提供程序与修复仍待确认，见 [41](41-logging-metadata.md)、[65](65-observation-blocking-diagnosis.md)；**2026-10-04 晚又一实锤：companion 中途死亡后，14 个输入类命令（press/type/click/batch，单线程 UserRequest 等待）挂起 ~2h 直至强制终止——companion ack 路径已排除（DISPLAY_ACK_MS=3s 有界、alive() 全非阻塞），指向 UIA 跨进程调用阻塞在卡死目标上。结构性防护候选：执行器侧对子命令加 wall-clock 监督（Job+超时→终止→步骤如实 uncertain），优于逐调用点加超时**）
+- [ ] UIA 观察长阻塞及提供程序超时定位（60s NOT_FOUND 仍待复现；2026-10-02 已捕获桌面 children 枚举 TIMEOUT，故障提供程序与修复仍待确认，见 [41](41-logging-metadata.md)、[65](65-observation-blocking-diagnosis.md)；**2026-10-04 晚又一实锤：companion 中途死亡后，14 个输入类命令（press/type/click/batch，单线程 UserRequest 等待）挂起 ~2h 直至强制终止——companion ack 路径已排除（DISPLAY_ACK_MS=3s 有界、alive() 全非阻塞），指向 UIA 跨进程调用阻塞在卡死目标上。**结构性防护已落地（2026-10-04 运行时治理第三轮：进程级看门狗——「无进展」判定 + 进展点重置，docs/06 §7.7；取代 Job 方案：覆盖所有 spawn 拓扑（脚本/执行器/任何调用方），不只自家派生）**）
 - [ ] UWP 挂起恢复（类配对后疑似绕开，更长放置待证）
 - [ ] 前台交接 v9 人工接管/嵌套/多窗口真机矩阵（[62](62-foreground-handoff.md)）
 

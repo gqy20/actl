@@ -50,6 +50,18 @@ fn main() {
     };
     let command_name = command_name(&cli.command);
     let started = Instant::now();
+    // 进程看门狗(运行时治理第三轮,docs/06 §7.7):UIA 跨进程挂起族的
+    // 进程级防护——语义是"无进展"(引擎按步、等待按轮询、录制按事件重置),
+    // 不是总时长。ACTL_WATCHDOG_MS 可调,0=关。
+    actl_core::watchdog::arm(actl_core::watchdog::env_timeout_ms());
+    // 测试缝(同 ACTL_RECORD_DISABLE_HOOKS 先例):制造确定性的无进展挂起,
+    // 供看门狗触发的契约测试使用;非测试环境不设此变量。
+    if let Ok(hang_ms) = std::env::var("ACTL_TEST_HANG_MS")
+        && let Ok(hang_ms) = hang_ms.parse::<u64>()
+    {
+        std::thread::sleep(std::time::Duration::from_millis(hang_ms));
+        return;
+    }
     if let Err(error) = flow::configure_task() {
         finish(command_name, Err(error), 0);
         return;

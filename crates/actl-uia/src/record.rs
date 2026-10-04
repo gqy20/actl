@@ -554,6 +554,8 @@ pub fn run_session(cfg: &SessionConfig) -> Result<SessionOutcome, CtlError> {
     let stop_path = cfg.dir.join("stop-requested");
     let stop_reason;
 
+    // 看门狗心跳:事件处理 = 进展(长录制会话不误杀)。
+    actl_core::watchdog::reset();
     loop {
         if stop_path.exists() {
             stop_reason = "requested";

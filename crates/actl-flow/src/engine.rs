@@ -428,6 +428,9 @@ pub fn execute(
     run.reason = None;
     run.save(store, host)?;
     'steps: for (i, step) in plan.steps.iter().enumerate() {
+        // 看门狗心跳(运行时治理第三轮):步边界 = 进展。长流程不受总时长
+        // 限制,只有单步卡死超期限才会被进程级终止(interrupted 恢复语义接手)。
+        actl_core::watchdog::reset();
         if matches!(
             run.steps[i].status,
             StepStatus::Completed | StepStatus::Skipped

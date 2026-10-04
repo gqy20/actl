@@ -709,3 +709,28 @@ fn app_registry_validation_contract() {
         2
     );
 }
+
+#[test]
+fn watchdog_terminates_a_stuck_process_with_stderr_marker() {
+    // 运行时治理第三轮:UIA 挂起族的进程级防护——ACTL_TEST_HANG_MS 缝
+    // 制造确定性无进展,看门狗(800ms)必须在远早于挂起时长内自我终止,
+    // 退出码 1 + stderr 标记(stdout envelope 纪律:主线程已卡本无 envelope)。
+    let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_actl"));
+    command
+        .args(["status"])
+        .env("ACTL_WATCHDOG_MS", "800")
+        .env("ACTL_TEST_HANG_MS", "30000");
+    let start = std::time::Instant::now();
+    let out = command.output().unwrap();
+    let elapsed = start.elapsed();
+    assert_eq!(out.status.code(), Some(1), "watchdog exit must be 1");
+    assert!(
+        elapsed.as_secs() < 10,
+        "watchdog must fire well before the 30s hang"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("[watchdog]"),
+        "stderr marker missing: {stderr}"
+    );
+}

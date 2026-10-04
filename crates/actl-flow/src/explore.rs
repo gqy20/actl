@@ -801,6 +801,8 @@ pub fn execute(
     run.reason = None;
     state.persist_now(store)?;
     run.save(store, host)?;
+    // 看门狗心跳:观察/动作轮次 = 进展(探索长任务不误杀)。
+    actl_core::watchdog::reset();
     loop {
         // 边界:急停/暂停(与 engine::boundary 同语义,状态先持久化再返回)。
         if host.stopped() {

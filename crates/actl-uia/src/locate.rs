@@ -701,6 +701,8 @@ pub fn wait_element(app: Option<&str>, target: &Target, timeout_ms: u64) -> Resu
     // 耐心命令——瞬态观察错误按"尚未出现"继续轮询(wait --gone 同款语义),
     // 超时仍如实失败;非瞬态错误立即上抛。
     let mut last_transient: Option<CtlError> = None;
+    // 看门狗心跳:等待轮询 = 进展(长 --timeout 不误杀)。
+    actl_core::watchdog::reset();
     loop {
         match poll(app, target) {
             Ok(Some(_)) => return Ok(()),
@@ -734,6 +736,8 @@ pub fn wait_element(app: Option<&str>, target: &Target, timeout_ms: u64) -> Resu
 /// 不被瞬态观察错误打断,超时仍如实失败。
 pub fn wait_gone(app: Option<&str>, target: &Target, timeout_ms: u64) -> Result<(), CtlError> {
     let deadline = std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
+    // 看门狗心跳:等待轮询 = 进展(长 --timeout 不误杀)。
+    actl_core::watchdog::reset();
     loop {
         match poll(app, target) {
             Ok(None) => return Ok(()),
@@ -791,6 +795,8 @@ pub fn wait_property(
 ) -> Result<String, CtlError> {
     let deadline = std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
     let mut last: Option<String> = None;
+    // 看门狗心跳:等待轮询 = 进展(长 --timeout 不误杀)。
+    actl_core::watchdog::reset();
     loop {
         if let Some(loc) = poll(app, target)? {
             let actual = predicate.read(&loc.element)?;
@@ -837,6 +843,8 @@ pub fn wait_stable(
     let mut stable = 0usize;
     let mut samples = 0usize;
     let mut changes = 0usize;
+    // 看门狗心跳:等待轮询 = 进展(长 --timeout 不误杀)。
+    actl_core::watchdog::reset();
     loop {
         if let Some(loc) = poll(app, target)? {
             let sample = stability_sample(&loc.element)?;
