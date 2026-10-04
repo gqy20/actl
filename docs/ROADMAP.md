@@ -34,7 +34,7 @@
 - [ ] WebView2 专项验收（键盘跨原生/网页、屏幕阅读器、多屏 DPI、缺失运行时回退）
 - [ ] 中央任务提示专项验收：真实失败/停止/接管暂停、显示端重启后旧流程恢复、跨屏 DPI 与减少动态设置（[75](75-action-start-notification.md)）
 - [ ] agent 自驱授权白名单通道（仅真实需求时立项，[32](32-desktop-handoff.md)）
-- [ ] MCP 远程访问适配
+- [ ] MCP 远程访问适配（**设计定稿 2026-10-05，[82 调研与设计](82-mcp-adapter-research.md)**：独立 crate `actl-mcp`——async 仅限该 crate（ADR-001 定界修订：桌面命令路径保持同步，crate 边界编译器强制）+ 官方 rmcp SDK（协议层不手写，用户裁定依赖数量不构成手写理由）+ v1 传输模式 A（LAN 直连 `--listen/--token`，token 屏幕打印=配对仪式，明文 HTTP 仅限可信局域网，跨公网不支持；SSH/stdio 为后续可选）；能力面 = 通用 `actl` 工具 + `actl://commands` 资源自发现（76 命令不做工具镜像永不漂移）；安全红线 = 子进程派发模型（每次调用 spawn 真实 actl CLI，信号条/预告/急停/看门狗全部本地权威不可绕过）+ 危险动词排除表 + ACTL_TASK_ID 审计。实施三轮切分见 82 §7）
 - [ ] 本地 serve 与增量观察
 - [ ] 游戏场景（Minecraft 命令通道）
 

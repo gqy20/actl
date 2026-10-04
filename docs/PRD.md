@@ -66,8 +66,17 @@ fail-closed NOT_FOUND；与 type 组合为单次注入的逐字通道（burst �
 第一轮 = failure_bundle 失败采集包（`flow-evidence` 只读索引）+ 写步步前弹层门禁
 （unknown 弹窗 popup_pending 上抛，步不执行）+ popup_handlers 声明（AGENTS 人肉
 弹层白名单机制化，仅 error/save/confirm/update，unknown 永远上抛，处置走既有
-click 全护栏）；第二轮 = `flow-revise` 计划版本化修订续跑 + `ensure:` 幂等步骤
+click 全护栏）；第二轮 = `flow-revise` 版本化修订续跑 + `ensure:` 幂等步骤
 （另轮实施）。协议见 [06 §7.7 增补](06-design-blueprint.md)。
+
+2026-10-05 用户授权 MCP 适配服务立项（[82 调研与设计](82-mcp-adapter-research.md)，
+三轮对话定向）：独立 crate `actl-mcp`（**async/tokio 仅限该 crate**——ADR-001 定界
+修订：桌面命令路径保持同步，crate 边界由编译器强制）；协议实现用官方 rmcp SDK
+（不手写协议层——用户裁定依赖预算不构成手写理由）；v1 传输只做模式 A（LAN 直连
+`--listen/--token`，token 屏幕打印=配对仪式，明文 HTTP 仅限可信局域网，跨公网不
+支持）；SSH/stdio 与 tasks 扩展为后续可选。能力面：通用 `actl` 工具 +
+`actl://commands` 资源自发现；安全红线：子进程派发模型（本地信号条/急停权威
+不可绕过）+ 危险动词排除表 + `ACTL_TASK_ID` 审计。
 
 ---
 
