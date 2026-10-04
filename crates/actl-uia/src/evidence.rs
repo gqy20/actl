@@ -295,6 +295,38 @@ pub fn office(path: &str, kind: &str) -> Result<Value, CtlError> {
             }
             json!({"text":paragraphs.join("\n"),"bold":bold})
         }
+        // 逐段视图(2026-10-04 样式流程):style = w:pStyle 的 OOXML styleId
+        // (无显式样式时空串,即 Normal);bold 沿用 docx 的"有 run 且全部加粗"段内语义。
+        "docx-styles" => {
+            let doc = xml(&mut zip, "word/document.xml")?;
+            let paragraphs = nodes(&doc, "//*[local-name()='body']//*[local-name()='p']")?;
+            let mut list = Vec::with_capacity(paragraphs.len());
+            for p in &paragraphs {
+                let styles = nodes(p, "./*[local-name()='pPr']/*[local-name()='pStyle']")?;
+                let style = if styles.is_empty() {
+                    String::new()
+                } else {
+                    text(&styles[0], "@*[local-name()='val']")?
+                };
+                let runs = nodes(p, ".//*[local-name()='r'][*[local-name()='t']]")?;
+                let mut bold = !runs.is_empty();
+                for run in &runs {
+                    let bs = nodes(run, "./*[local-name()='rPr']/*[local-name()='b']")?;
+                    if bs.is_empty() {
+                        bold = false;
+                    } else {
+                        let v = text(&bs[0], "@*[local-name()='val']")?;
+                        if ["0", "false", "off"].contains(&v.as_str()) {
+                            bold = false;
+                        }
+                    }
+                }
+                list.push(
+                    json!({"text":text(p, ".//*[local-name()='t']")?,"style":style,"bold":bold}),
+                );
+            }
+            json!({"paragraphs":list})
+        }
         "xlsx" => {
             let mut strings = vec![];
             if zip.file_names().any(|n| n == "xl/sharedStrings.xml") {
@@ -400,6 +432,24 @@ mod tests {
         assert_eq!(result["C1"]["value"], "inline");
         std::fs::remove_file(doc).unwrap();
         std::fs::remove_file(sheet).unwrap();
+    }
+    #[test]
+    fn office_docx_styles_per_paragraph() {
+        let doc = package(&[("word/document.xml",br#"<w:document xmlns:w="urn:test"><w:body><w:p><w:pPr><w:pStyle w:val="1"/></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t>head</w:t></w:r></w:p><w:p><w:pPr><w:pStyle w:val="a3"/></w:pPr><w:r><w:t>sub</w:t></w:r></w:p><w:p><w:r><w:t>body</w:t></w:r></w:p></w:body></w:document>"#)]);
+        assert_eq!(
+            office(doc.to_str().unwrap(), "docx-styles").unwrap(),
+            json!({"paragraphs":[
+                {"text":"head","style":"1","bold":true},
+                {"text":"sub","style":"a3","bold":false},
+                {"text":"body","style":"","bold":false}
+            ]})
+        );
+        // 旧 kind 不受新视图影响:聚合语义保持不变
+        assert_eq!(
+            office(doc.to_str().unwrap(), "docx").unwrap(),
+            json!({"text":"head\nsub\nbody","bold":false})
+        );
+        std::fs::remove_file(doc).unwrap();
     }
     #[test]
     fn office_rejects_dtd_duplicate_cells_invalid_indices_and_expansion() {

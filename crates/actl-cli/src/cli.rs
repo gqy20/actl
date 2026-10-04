@@ -582,7 +582,7 @@ pub(crate) enum Command {
     VerifyFile {
         #[arg(long)]
         path: String,
-        #[arg(long, value_parser = ["text", "json", "docx", "xlsx"])]
+        #[arg(long, value_parser = ["text", "json", "docx", "docx-styles", "xlsx"])]
         kind: String,
         /// Expected JSON value; text files use a JSON string
         #[arg(long)]
@@ -1136,7 +1136,7 @@ fn after_help_for(name: &str) -> Option<&'static str> {
             "Example:\n  actl flow-validate --file task.yml\nOptional --inputs values.yml resolves declared whole-argument inputs before validating every step. Resources are checked without creating files; data.resources uses the validation-preview context. --emit-plan includes the concrete preview plan and input values, not initialized resources. when/unless select run or otherwise using immediate assertions; unknown observations stop. Both routes are prevalidated. run/otherwise.sequence groups up to 16 calls with one result check. outputs select typed read-only data via JSON Pointer; bind replaces a whole args entry by index. Resolved CLI arguments are revalidated before execution.\nErrors: PROTOCOL invalid YAML/command/policy/resource | INTERNAL file error"
         }
         "verify-file" => {
-            "Example:\n  actl verify-file --path report.json --kind json --expected '{}'\nReads text/JSON or OOXML via a fixed read-only native inspector (zip + Windows.Data.Xml.Dom; process facts via Win32/WMI). Text normalizes CRLF to LF; docx returns text and bold; xlsx returns cell values/formulas from sheet1. Maximum input/output 4 MiB. No user scripts, no shell-out, no Office automation. Known mismatches are re-read in a 5-second settle window; unknown read errors stop immediately.\nErrors: PROTOCOL invalid expectation | ASSERTION_FAILED content differs | NOT_ACTIONABLE unreadable/unsupported document | INTERNAL inspector failure"
+            "Example:\n  actl verify-file --path note.docx --kind docx-styles --expected '{\"paragraphs\":[{\"text\":\"标题\",\"style\":\"1\"}]}' --subset\nReads text/JSON or OOXML via a fixed read-only native inspector (zip + Windows.Data.Xml.Dom; process facts via Win32/WMI). Text normalizes CRLF to LF; docx returns text and bold; docx-styles returns per-paragraph {text,style,bold} where style is the OOXML styleId (empty = no explicit style); xlsx returns cell values/formulas from sheet1. Maximum input/output 4 MiB. No user scripts, no shell-out, no Office automation. Known mismatches are re-read in a 5-second settle window; unknown read errors stop immediately.\nErrors: PROTOCOL invalid expectation | ASSERTION_FAILED content differs | NOT_ACTIONABLE unreadable/unsupported document | INTERNAL inspector failure"
         }
         "verify-rows" => {
             "Example:\n  actl verify-rows --app Task --prefix item-row- --expected '[]'\nCompares sorted names of TreeItem rows with an automation-ID prefix; rejects truncated snapshots and a missing parent tree.\nErrors: PROTOCOL invalid expected string array or prefix | ASSERTION_FAILED rows differ | NOT_ACTIONABLE incomplete observation"
