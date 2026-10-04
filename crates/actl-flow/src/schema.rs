@@ -36,6 +36,7 @@ pub fn decode(raw: Value) -> Result<super::Plan, CtlError> {
                 "before",
                 "verify",
                 "resume_check",
+                "ensure",
                 "section",
                 "pause_before",
                 "retry",

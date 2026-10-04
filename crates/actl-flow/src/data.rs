@@ -63,6 +63,13 @@ pub fn validate(plan: &Plan) -> Result<(), CtlError> {
     for (i, step) in plan.steps.iter().enumerate() {
         crate::branch::validate(step)?;
         crate::bounded::validate(step)?;
+        if step.ensure.is_some() && !step.outputs.is_empty() {
+            return Err(error(
+                &step.id,
+                &format!("steps[{i}].ensure"),
+                "ensure steps cannot declare outputs (the satisfied path produces none)",
+            ));
+        }
         for (phase, call) in [
             ("run", Some(&step.run)),
             ("when", step.when.as_ref()),

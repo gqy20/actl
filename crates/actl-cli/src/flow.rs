@@ -787,6 +787,14 @@ fn state(store: &Store) -> Result<Value, CtlError> {
             "resume": format!("actl flow-resume --id {}", run.id),
         });
     }
+    // 版本谱系(flow-revise,运行时治理第二轮):有修订史的 run 展示
+    // 只追加的版本事件链(版本/指纹/理由/diff)——修订是显式操作,不是
+    // "模板漂移告警"要防的作弊路径。
+    let lineage = actl_flow::revise::lineage(&store.dir);
+    if !lineage.is_empty() {
+        value["revisions"] =
+            serde_json::to_value(&lineage).map_err(|e| CtlError::internal(e.to_string()))?;
+    }
     // 探索运行:附探索状态(动作/决策计数、token 审计)与悬挂决策卡。
     // 卡即应答入口(flow-resume --decision <id>);其余证据按省略纪律不进协议面。
     if plan.explore.is_some()
@@ -1114,6 +1122,99 @@ pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
             drop(active);
             outcome(&store, &run)
         }
+        // flow-revise(运行时治理第二轮):版本化修订——旧计划字节归档、
+        // 版本谱系只追加、完成写步规格变更需显式 --accept-rerun、修订后
+        // 默认不自动续跑(--resume 才链式恢复,与显式恢复纪律一致)。
+        FlowCommand::Revise {
+            id,
+            file,
+            message,
+            accept_rerun,
+            resume,
+        } => {
+            let text = std::fs::read_to_string(file.as_str())
+                .map_err(|e| CtlError::internal(format!("revision file unreadable: {e}")))?;
+            let new_plan = actl_flow::parse(&text)?;
+            if new_plan.explore.is_some() {
+                return Err(CtlError::protocol(
+                    "revision file declares an exploration plan; flow-revise is static-flow only",
+                ));
+            }
+            let store = Store::at(&root, id)?;
+            if !store.dir.join("plan.json").exists() {
+                return Err(CtlError::protocol(format!("unknown id {id}")));
+            }
+            {
+                let _global = store.lock(true)?;
+                let (old_plan, mut run) = store.load()?;
+                if old_plan.explore.is_some() {
+                    return Err(CtlError::protocol(
+                        "exploration runs do not support flow-revise",
+                    ));
+                }
+                if store.active()? {
+                    return Err(CtlError::new(
+                        actl_core::ErrorCode::NotActionable,
+                        "executor busy; revise after the run pauses or completes",
+                    ));
+                }
+                if message.chars().count() > 200 {
+                    return Err(CtlError::protocol(
+                        "revision message exceeds 200 characters",
+                    ));
+                }
+                let adapter = Adapter {
+                    plan: &new_plan,
+                    store: &store,
+                };
+                let plan_bytes =
+                    serde_json::to_vec(&new_plan).map_err(|e| CtlError::internal(e.to_string()))?;
+                let fingerprint = actl_flow::revise::plan_fingerprint(&plan_bytes);
+                let outcome = actl_flow::revise::apply_to_run(
+                    &old_plan,
+                    &new_plan,
+                    &mut run,
+                    |step| !adapter.read_only(&step.run),
+                    accept_rerun,
+                    message,
+                    &fingerprint,
+                )?;
+                let old_bytes = std::fs::read(store.dir.join("plan.json"))
+                    .map_err(|e| CtlError::internal(format!("plan archive read: {e}")))?;
+                run.status = Status::Paused;
+                run.reason = None;
+                actl_flow::revise::persist(
+                    &store.dir,
+                    &old_bytes,
+                    &new_plan,
+                    &run,
+                    &outcome.revision,
+                )?;
+            }
+            if *resume {
+                let (plan, mut run) = store.load()?;
+                let active = store.lock(false)?;
+                actl_core::stop::check_current()?;
+                store.clear_pause()?;
+                engine::execute(
+                    &plan,
+                    &mut run,
+                    &store,
+                    &mut Adapter {
+                        plan: &plan,
+                        store: &store,
+                    },
+                    None,
+                )?;
+                drop(active);
+            }
+            let mut value = state(&store)?;
+            value["next"] = json!(format!(
+                "actl flow-resume --id {id}{}",
+                if *resume { " (already resumed)" } else { "" }
+            ));
+            Ok(value)
+        }
         // 防御分支:writeback 在 match 前已提前返回;走到这里说明分发序被破坏。
         FlowCommand::Writeback { .. } => {
             Err(CtlError::internal("writeback dispatch ordering invariant"))
@@ -1260,6 +1361,7 @@ mod failure_evidence_tests {
             observation_retries: vec![],
             branch: None,
             recovery: None,
+            plan_version: None,
         }
     }
 
@@ -1271,6 +1373,7 @@ mod failure_evidence_tests {
             status: Status::NeedsReview,
             updated_ms: 0,
             reason: Some("result_unconfirmed".into()),
+            plan_version: 1,
             steps: vec![
                 record("s1", engine::StepStatus::Completed),
                 record("s6", engine::StepStatus::Uncertain),
@@ -1293,7 +1396,7 @@ mod failure_evidence_tests {
             status: Status::NeedsReview,
             updated_ms: 0,
             reason: None,
-
+            plan_version: 1,
             steps: vec![record("s1", engine::StepStatus::Completed)],
         };
         assert!(retry_hint(&run).is_none());

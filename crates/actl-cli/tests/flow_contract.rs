@@ -854,3 +854,86 @@ fn flow_evidence_indexes_failure_bundles_with_step_filter() {
     let help = String::from_utf8_lossy(&out.stdout);
     assert!(help.contains("Example") && help.contains("--step") && help.contains("Errors"));
 }
+
+#[test]
+fn flow_revise_versions_plans_and_continues_in_place() {
+    // 运行时治理第二轮离线 E2E:失败(type 打不存在窗口,定位阶段 NOT_FOUND,
+    // 零注入)→ 修订(版本谱系+旧计划归档)→ 续跑原地完成,不重开新任务。
+    let s = Sandbox::new();
+    let v1 = s.file(
+        "version: 1\nname: ReviseE2E\nsteps:\n  - id: s1\n    title: Read\n    run: {command: status}\n  - id: s2\n    title: Doomed write\n    run: {command: type, args: ['name:Nope', hi, --app, definitely-missing-window-xyz]}\n    verify: {command: verify-window, args: [--app, definitely-missing, --state, absent]}\n",
+    );
+    let (code, result) = s.invoke(&["flow-run", "--file", &v1, "--id", "rv1"]);
+    assert_eq!(code, 0, "{result}");
+    // 观察类失败的写步:paused 诚实停(不授权重放),步 uncertain
+    assert_eq!(result["data"]["run"]["status"], "paused");
+    assert_eq!(result["data"]["run"]["steps"][1]["status"], "uncertain");
+    // s1 已完成——修订不得重置未变步骤
+    assert_eq!(result["data"]["run"]["steps"][0]["status"], "completed");
+
+    let v2 = s.file(
+        "version: 1\nname: ReviseE2E\nsteps:\n  - id: s1\n    title: Read\n    run: {command: status}\n  - id: s2\n    title: Fixed read\n    run: {command: status}\n",
+    );
+    let (code, result) = s.invoke(&[
+        "flow-revise",
+        "--id",
+        "rv1",
+        "--file",
+        &v2,
+        "--message",
+        "s2 target never exists; downgrade to read",
+    ]);
+    assert_eq!(code, 0, "{result}");
+    assert_eq!(result["data"]["run"]["plan_version"], 2);
+    assert_eq!(result["data"]["run"]["steps"][0]["status"], "completed");
+    assert_eq!(result["data"]["run"]["steps"][1]["status"], "pending");
+    let revisions = result["data"]["revisions"].as_array().unwrap();
+    assert_eq!(revisions.len(), 1);
+    assert_eq!(revisions[0]["version"], 2);
+    assert_eq!(
+        revisions[0]["diff"]["modified"].as_array().unwrap().len(),
+        1
+    );
+
+    // 原地续跑:同一 id 完成,版本谱系保留
+    let (code, result) = s.invoke(&["flow-resume", "--id", "rv1"]);
+    assert_eq!(code, 0, "{result}");
+    assert_eq!(result["data"]["run"]["status"], "completed");
+    assert_eq!(result["data"]["run"]["plan_version"], 2);
+    assert_eq!(result["data"]["revisions"].as_array().unwrap().len(), 1);
+    // 旧版本字节归档未覆盖
+    let archived = s
+        .root
+        .join("actl")
+        .join("flows")
+        .join("rv1")
+        .join("revisions")
+        .join("v1.plan.json");
+    assert!(archived.exists());
+
+    // 探索计划拒绝修订;帮助四要素可发现
+    let (code, result) = s.invoke(&["flow-revise", "--id", "nope", "--file", &v2]);
+    assert_eq!(code, 2);
+    assert_eq!(result["error"]["code"], "PROTOCOL");
+    let out = s
+        .command()
+        .args(["flow-revise", "--help"])
+        .output()
+        .unwrap();
+    let help = String::from_utf8_lossy(&out.stdout);
+    assert!(help.contains("--accept-rerun") && help.contains("Errors") && help.contains("Example"));
+}
+
+#[test]
+fn ensure_steps_short_circuit_when_satisfied() {
+    // ensure: 幂等语义离线验证——check 通过的写步不派发(无注入)。
+    let s = Sandbox::new();
+    let file = s.file(
+        "version: 1\nname: EnsureE2E\nsteps:\n  - id: e1\n    title: Env\n    ensure: {check: {command: verify-window, args: [--app, definitely-missing, --state, absent]}}\n    run: {command: type, args: ['name:Nope', hi, --app, definitely-missing]}\n    verify: {command: verify-window, args: [--app, definitely-missing, --state, absent]}\n",
+    );
+    let (code, result) = s.invoke(&["flow-run", "--file", &file, "--id", "ens1"]);
+    assert_eq!(code, 0, "{result}");
+    assert_eq!(result["data"]["run"]["status"], "completed");
+    assert_eq!(result["data"]["run"]["steps"][0]["status"], "completed");
+    assert_eq!(result["data"]["run"]["steps"][0]["verified"], true);
+}

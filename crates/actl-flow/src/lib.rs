@@ -9,6 +9,7 @@ pub mod inputs;
 pub mod record;
 pub mod recovery;
 pub mod resources;
+pub mod revise;
 pub mod route;
 mod schema;
 pub mod sequence;
@@ -142,6 +143,12 @@ pub struct Step {
     pub verify: Option<Invocation>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resume_check: Option<Invocation>,
+    /// ensure: 幂等语义(运行时治理第二轮,docs/06):check(只读)通过 = 步骤
+    /// 已满足,直接 Completed+verified,run 不派发——环境准备类步骤的
+    /// "先验证后执行"一等形态,重跑/修订续跑的前缀成本趋零。
+    /// 与 outputs 互斥(满足路径不产出绑定值)。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ensure: Option<EnsureSpec>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub section: Option<String>,
     #[serde(default)]
@@ -163,6 +170,14 @@ pub enum EvidencePolicy {
     #[default]
     Metadata,
     Full,
+}
+
+/// ensure: 的满足性检查(只读调用):通过即短路。观察错误如实传播
+/// (不能判定满足就不派发写步——与 when/unless 的错误语义同族)。
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct EnsureSpec {
+    pub check: Invocation,
 }
 
 pub fn failure_evidence(policy: EvidencePolicy, error: &CtlError) -> Option<serde_json::Value> {

@@ -49,6 +49,10 @@ pub struct StepRecord {
     pub branch: Option<crate::branch::Branch>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub recovery: Option<crate::bounded::Progress>,
+    /// 本记录派发时的计划版本(flow-revise 版本谱系的溯源标记;
+    /// None = 修订机制引入前的 v1)。结果可归属到确切的步骤规格。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan_version: Option<u32>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -59,6 +63,12 @@ pub struct Run {
     pub updated_ms: u64,
     pub steps: Vec<StepRecord>,
     pub reason: Option<String>,
+    /// 当前计划版本(1 起;flow-revise 每次修订 +1)。旧状态文件缺省 = 1。
+    #[serde(default = "default_plan_version")]
+    pub plan_version: u32,
+}
+fn default_plan_version() -> u32 {
+    1
 }
 impl Run {
     pub fn new(id: &str, plan: &Plan) -> Self {
@@ -68,6 +78,7 @@ impl Run {
             status: Status::Ready,
             updated_ms: actl_core::state::unix_ms(),
             reason: None,
+            plan_version: 1,
             steps: plan
                 .steps
                 .iter()
@@ -85,6 +96,7 @@ impl Run {
                     observation_retries: vec![],
                     branch: None,
                     recovery: None,
+                    plan_version: None,
                 })
                 .collect(),
         }
@@ -332,6 +344,7 @@ pub fn execute(
             .chain(s.resume_check.iter())
             .chain(s.when.iter())
             .chain(s.unless.iter())
+            .chain(s.ensure.iter().map(|ensure| &ensure.check))
             .any(|c| !host.read_only(c))
     }) {
         return Err(CtlError::protocol("flow checks must be read-only"));
@@ -570,6 +583,22 @@ pub fn execute(
             if !crate::freshness::guard(plan, &plan.steps[i], run, store, host)? {
                 return Ok(());
             }
+            // ensure: 幂等语义(运行时治理第二轮,docs/06):只读 check 通过 =
+            // 步骤已满足,直接 Completed+verified,run 不派发——重跑/修订
+            // 续跑的环境准备前缀自动短路。观察错误如实传播(与 when/unless
+            // 的错误语义同族:不能判定满足就不动写步)。
+            if let Some(ensure) = &step.ensure
+                && matches!(run.steps[i].status, StepStatus::Pending)
+                && host.condition(&ensure.check)?
+            {
+                run.steps[i].status = StepStatus::Completed;
+                run.steps[i].verified = true;
+                run.steps[i].plan_version = Some(run.plan_version);
+                run.status = Status::Running;
+                run.reason = None;
+                run.save(store, host)?;
+                continue;
+            }
             // 步前弹层门禁(运行时治理第一轮,docs/06):写步动手前先听前台
             // 引导层——unknown 面板 = popup_pending,步不执行(保持 Pending,
             // 无副作用不需 uncertain);声明过的面板自动处置留痕后复查放行。
@@ -586,6 +615,7 @@ pub fn execute(
                 host.publish(run);
                 return Ok(());
             }
+            run.steps[i].plan_version = Some(run.plan_version);
             run.steps[i].status = StepStatus::Running;
             run.steps[i].attempts = run.steps[i]
                 .attempts

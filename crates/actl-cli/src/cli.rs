@@ -162,6 +162,24 @@ pub(crate) enum FlowCommand {
         #[arg(long, requires = "decision")]
         confidence: Option<String>,
     },
+    /// Revise the frozen plan of a paused/needs-review run; old versions archived
+    #[command(name = "flow-revise")]
+    Revise {
+        #[arg(long)]
+        id: String,
+        /// New plan YAML (validated like flow-run before anything is written)
+        #[arg(long)]
+        file: String,
+        /// Why this revision (recorded in the version lineage, ≤200 chars)
+        #[arg(long, default_value = "")]
+        message: String,
+        /// Authorize re-running this completed write step whose spec changed (repeatable)
+        #[arg(long = "accept-rerun")]
+        accept_rerun: Vec<String>,
+        /// Continue execution immediately after the revision lands
+        #[arg(long)]
+        resume: bool,
+    },
     /// Batch-archive historical non-completed flow states; preserves all evidence
     #[command(name = "flow-clean")]
     Clean {
@@ -1031,6 +1049,7 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
         Command::Flow(FlowCommand::Evidence { .. }) => "flow-evidence",
         Command::Flow(FlowCommand::Pause { .. }) => "flow-pause",
         Command::Flow(FlowCommand::Resume { .. }) => "flow-resume",
+        Command::Flow(FlowCommand::Revise { .. }) => "flow-revise",
         Command::Flow(FlowCommand::Clean { .. }) => "flow-clean",
         Command::Flow(FlowCommand::Writeback { .. }) => "explore-writeback",
         Command::Record(RecordCommand::Start { .. }) => "record-start",
@@ -1167,6 +1186,9 @@ fn after_help_for(name: &str) -> Option<&'static str> {
         }
         "flow-resume" => {
             "Example:\n  actl flow-resume --id report-01\n  actl flow-resume --id explore-01 --decision c2 --confidence 0.8\nUses the saved plan; never clears emergency stop. Optional resume_check verifies current context before uncertain-result checks. retry=stale_read retries only read-only STALE_REF, at most three calls. --retry-step requires an explicit failed assertion; observation errors never authorize write replay. Exploration runs answer pending decision cards with --decision <choice_id> (must be a card candidate id); the engine then walks the chosen candidate first and falls back to the card's remaining non-dangerous candidates without a new card; --confidence is recorded in the report only.\nErrors: PROTOCOL invalid state/step/decision or decision on a static flow | NOT_ACTIONABLE executor busy | ABORTED stop | INTERNAL storage"
+        }
+        "flow-revise" => {
+            "Example:\n  actl flow-revise --id report-01 --file fixed.yml --message \"s6: assert Notepad window class instead of session-dependent title\"\n  actl flow-revise --id report-01 --file fixed.yml --accept-rerun s7 --resume\nVersioned plan revision (runtime governance round 2): the new YAML is validated like flow-run, diffed against the frozen plan step-by-step (by position+id: unchanged/modified/added/removed). Completed steps with unchanged specs keep their results (each record carries the plan_version it ran under); modified completed READ steps reset to pending, modified completed WRITE steps require --accept-rerun naming them; an uncertain step whose spec changed resets to pending — the revision itself is its retry authorization. Old plan bytes are archived to revisions/vN.plan.json (never overwritten) and revisions/index.json appends the lineage event (version, fingerprint, message, diff); flow-status shows the lineage. Nothing auto-resumes: pass --resume to continue immediately (same checks as flow-resume), or run flow-resume later. Revising resets the reason; freshness/resume_check re-establish preconditions on continue.\nErrors: PROTOCOL unknown id / explore run / write step needs accept-rerun / invalid new plan | NOT_ACTIONABLE executor busy | INTERNAL storage"
         }
         "flow-clean" => {
             "Example:\n  actl flow-clean --older-than-minutes 120\n  actl flow-clean --dry-run\nBatch-archives historical non-completed flow states (paused/needs_review/interrupted) whose last update is older than the threshold; default 60 minutes. Archives like task-archive: state moves to archive, all evidence preserved, nothing deleted. Completed flows are untouched; running flows are skipped (executor alive). --dry-run lists candidates without moving.\nErrors: PROTOCOL invalid arguments | INTERNAL storage"
