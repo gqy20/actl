@@ -31,3 +31,5 @@ Thumbs.db
 
 # 机器生成的时序画像/扫描报告(cargo xtask timing-profile/sweep 落盘;curated 结论进 docs/timing-*.md 与验收文档,原始数据默认留本地,需入库时 git add -f;历史已提交数据不受影响——策略见 docs/PARAMETERS.md §7)
 /docs/timing-data/
+/target2/
+/target3/
