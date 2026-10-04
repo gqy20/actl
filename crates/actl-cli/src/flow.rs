@@ -682,6 +682,12 @@ fn state(store: &Store) -> Result<Value, CtlError> {
     let active = store.active()?;
     let interrupted = run.status == Status::Running && !active;
     let mut value = json!({"run":run,"runner_active":active,"interrupted":interrupted,"pause_requested":store.pause_requested(),"template":template_hint(store)});
+    // 静态 needs_review:uncertain 写步在裸 resume 下不会重跑(引擎只允许
+    // --retry-step 显式授权)——裸 resume 两度被误读成"执行了没生效"
+    // (docs/80 改写重放轮 007),按 DX 结构化为可复制的重试命令。
+    if let Some(hint) = retry_hint(&run) {
+        value["retry_hint"] = hint;
+    }
     // 探索运行:附探索状态(动作/决策计数、token 审计)与悬挂决策卡。
     // 卡即应答入口(flow-resume --decision <id>);其余证据按省略纪律不进协议面。
     if plan.explore.is_some()
@@ -1046,6 +1052,23 @@ fn outcome(store: &Store, run: &Run) -> Result<Value, CtlError> {
     }
 }
 
+/// needs_review 运行的 uncertain 步重试提示:裸 resume 不重跑写步,
+/// 命令必须显式给到(误诊教训见 docs/80 改写重放轮 007)。
+fn retry_hint(run: &Run) -> Option<Value> {
+    if run.status != Status::NeedsReview {
+        return None;
+    }
+    let step = run
+        .steps
+        .iter()
+        .find(|s| s.status == engine::StepStatus::Uncertain)?;
+    Some(json!({
+        "step": step.id,
+        "command": format!("actl flow-resume --id {} --retry-step {}", run.id, step.id),
+        "note": "plain resume does not re-execute the uncertain write step",
+    }))
+}
+
 /// 从失败调用里提取 --app 窗口上下文,供失败瞬间的定向 UIA 快照。
 /// 覆盖两种形态:顶层参数("--app", 值)与序列 JSON 内嵌("\"--app\",\"值\"")。
 fn app_context(call: &Invocation) -> Option<String> {
@@ -1071,6 +1094,62 @@ fn app_context(call: &Invocation) -> Option<String> {
 #[cfg(test)]
 mod failure_evidence_tests {
     use super::*;
+
+    fn record(id: &str, status: engine::StepStatus) -> engine::StepRecord {
+        engine::StepRecord {
+            id: id.into(),
+            status,
+            attempts: 1,
+            checkpoint_passed: false,
+            verified: false,
+            error_code: None,
+            error_evidence: None,
+            attempt_errors: vec![],
+            outputs: Default::default(),
+            outputs_captured_ms: None,
+            observation_retries: vec![],
+            branch: None,
+            recovery: None,
+        }
+    }
+
+    #[test]
+    fn retry_hint_names_uncertain_step_and_command() {
+        let run = Run {
+            version: 1,
+            id: "demo-rewrite-007".into(),
+            status: Status::NeedsReview,
+            updated_ms: 0,
+            reason: Some("result_unconfirmed".into()),
+            steps: vec![
+                record("s1", engine::StepStatus::Completed),
+                record("s6", engine::StepStatus::Uncertain),
+                record("s7", engine::StepStatus::Pending),
+            ],
+        };
+        let hint = retry_hint(&run).expect("hint");
+        assert_eq!(hint["step"], "s6");
+        assert_eq!(
+            hint["command"],
+            "actl flow-resume --id demo-rewrite-007 --retry-step s6"
+        );
+    }
+
+    #[test]
+    fn retry_hint_absent_without_uncertain_step_or_other_status() {
+        let mut run = Run {
+            version: 1,
+            id: "r".into(),
+            status: Status::NeedsReview,
+            updated_ms: 0,
+            reason: None,
+            steps: vec![record("s1", engine::StepStatus::Completed)],
+        };
+        assert!(retry_hint(&run).is_none());
+        run.status = Status::Paused;
+        run.steps.push(record("s2", engine::StepStatus::Uncertain));
+        assert!(retry_hint(&run).is_none());
+    }
 
     fn call(args: &[&str]) -> Invocation {
         Invocation {
