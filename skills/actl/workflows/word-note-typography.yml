@@ -528,6 +528,24 @@
                   {
                       "run":  {
                                   "args":  [
+                                               "--path",
+                                               {
+                                                   "input":  "file"
+                                               },
+                                               "--kind",
+                                               "meta",
+                                               "--expected",
+                                               "{\"size_min\":11000}",
+                                               "--subset"
+                                           ],
+                                  "command":  "verify-file"
+                              },
+                      "title":  "保存落盘元数据断言",
+                      "id":  "save-disk"
+                  },
+                  {
+                      "run":  {
+                                  "args":  [
                                                "--hwnd",
                                                "1"
                                            ],
@@ -536,7 +554,7 @@
                                            },
                                   "command":  "close-window"
                               },
-                      "title":  "核对原进程实例后关闭",
+                      "title":  "关闭任务文档",
                       "before":  {
                                      "args":  [
                                                   "--app",
@@ -565,7 +583,7 @@
                                               },
                                      "command":  "verify-owner"
                                  },
-                      "id":  "close-before-reopen",
+                      "id":  "close",
                       "verify":  {
                                      "args":  [
                                                   "--hwnd",
@@ -586,70 +604,6 @@
                   {
                       "run":  {
                                   "args":  [
-                                               {
-                                                   "input":  "program"
-                                               },
-                                               "/n",
-                                               {
-                                                   "input":  "file"
-                                               }
-                                           ],
-                                  "command":  "launch"
-                              },
-                      "title":  "重开已保存的文档",
-                      "id":  "reopen",
-                      "verify":  {
-                                     "args":  [
-                                                  "--element",
-                                                  "role:Document",
-                                                  "--app",
-                                                  {
-                                                      "input":  "app"
-                                                  },
-                                                  "--timeout",
-                                                  "30000"
-                                              ],
-                                     "command":  "wait"
-                                 }
-                  },
-                  {
-                      "run":  {
-                                  "args":  [
-                                               "--app",
-                                               {
-                                                   "input":  "app"
-                                               },
-                                               "--program",
-                                               {
-                                                   "input":  "program"
-                                               },
-                                               "--token",
-                                               {
-                                                   "input":  "file"
-                                               }
-                                           ],
-                                  "command":  "verify-owner"
-                              },
-                      "title":  "核对重开文档的进程身份",
-                      "outputs":  {
-                                      "hwnd":  {
-                                                   "pointer":  "/hwnd",
-                                                   "type":  "number"
-                                               },
-                                      "pid":  {
-                                                  "pointer":  "/pid",
-                                                  "type":  "number"
-                                              },
-                                      "start":  {
-                                                    "pointer":  "/process_start",
-                                                    "type":  "string"
-                                                }
-                                  },
-                      "id":  "reopened-owner"
-                  },
-                  {
-                      "run":  {
-                                  "args":  [
                                                "--path",
                                                {
                                                    "input":  "file"
@@ -664,64 +618,6 @@
                               },
                       "title":  "逐段样式断言(docx-styles)",
                       "id":  "verify-styles"
-                  },
-                  {
-                      "run":  {
-                                  "args":  [
-                                               "--hwnd",
-                                               "1"
-                                           ],
-                                  "bind":  {
-                                               "1":  "reopened-owner.hwnd"
-                                           },
-                                  "command":  "close-window"
-                              },
-                      "title":  "关闭本任务文档并核对进程退出",
-                      "before":  {
-                                     "args":  [
-                                                  "--app",
-                                                  {
-                                                      "input":  "app"
-                                                  },
-                                                  "--program",
-                                                  {
-                                                      "input":  "program"
-                                                  },
-                                                  "--token",
-                                                  {
-                                                      "input":  "file"
-                                                  },
-                                                  "--instance",
-                                                  "pending",
-                                                  "--hwnd",
-                                                  "1",
-                                                  "--pid",
-                                                  "1"
-                                              ],
-                                     "bind":  {
-                                                  "9":  "reopened-owner.hwnd",
-                                                  "11":  "reopened-owner.pid",
-                                                  "7":  "reopened-owner.start"
-                                              },
-                                     "command":  "verify-owner"
-                                 },
-                      "id":  "close",
-                      "verify":  {
-                                     "args":  [
-                                                  "--hwnd",
-                                                  "1",
-                                                  "--pid",
-                                                  "1",
-                                                  "--instance",
-                                                  "pending"
-                                              ],
-                                     "bind":  {
-                                                  "5":  "reopened-owner.start",
-                                                  "1":  "reopened-owner.hwnd",
-                                                  "3":  "reopened-owner.pid"
-                                              },
-                                     "command":  "verify-closed"
-                                 }
                   }
               ],
     "resources":  {

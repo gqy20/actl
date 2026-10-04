@@ -63,7 +63,15 @@
 - 纯 `down` 计数在已填充文档中**漂移**（probe11：P4/P7 误中样式、P8 漏）——不做运行时定位地基；填充式设计天然 fail-safe：错位=文本错段=组级断言立即拦截，无静默样式污染。
 
 **新发现（待立项）**：
-1. **save 步验证缺口**：verify 只读活文档全文，ctrl+s 未实际落盘也"验证通过"（004 实证：文件保持模板原样 10407B），随后关闭被保存确认框卡住。修复方向：save 后断言文件 mtime/size 变化（元数据读取不受 Word 排他锁影响）——可作 verify-file 新 kind 或引擎写步内建。
+1. **save 步验证缺口**：verify 只读活文档全文，ctrl+s 未实际落盘也"验证通过"（004 实证：文件保持模板原样 10407B），随后关闭被保存确认框卡住。修复方向：save 后断言文件 mtime/size 变化（元数据读取不受 Word 排他锁影响）——可作 verify-file 新 kind 或引擎写步内建。**✅ 已落地（同日提速轮）：`verify-file --kind meta`（size/mtime + size_min/mtime_min 关系断言），流程 save-disk 步接入。**
 2. **保存确认框零坐标处置**：`click name:保存` AMBIGUOUS 时其证据携带候选 ref，按 `click @e5`（Button）直达——比截图判读坐标更快且无 DPI/阴影换算。
 3. PS 5.1 引号缺陷第三次实证：`uia:{...}` 选择器经 PS 传参必坏（内层双引号被吃）；bash 单引号安全——uia 严格选择器只在 bash 通道使用。
 4. 显示端第二次瞬态无响应（引擎 companion_unresponsive 自动暂停、自愈后 plain resume 续跑成功——治理机制按设计工作）。
+
+## 8. 三层提速落地（同日晚，②③① 一次交付）
+
+- **② locate 进程内元素缓存**：trace 实测定位热点 = `locate.dfs` 2.2-3.1s/次（每键 4.4s 的大头，Word 巨型树全树扫描）；缓存同 (app,target) 最近解析，命中以 **RuntimeId + 归属根窗口双复核**替代 DFS，失配回落原链路（fail-closed 不变），`resolved_by:"cache"` 如实标注；仅 name/id/role 静态选择器可缓存（@eN/uia:/focused:/--near 原链路）。
+- **③ `verify-file --kind meta`**：`{size,mtime_unix_ms}` + 关系键 `size_min`/`mtime_min`（专用单调断言，剔除后空对象+subset=纯关系形态）；元数据读取不受 Office 排他锁影响——save 落盘断言的唯一打开期通道。单测覆盖。
+- **① 流程砍重开循环**：save→save-disk(meta)→单次 close→离线 verify-styles 终态，10 步（原 12 步含两次冷启动+三次关闭周期）。
+- **环境事故与教训**：诊断期对挂起命令的 TaskStop 在 UIA RPC 中途杀进程，留下 8 个不可杀的 actl.exe 僵尸（内核态卡死、锁死主构建产物，被迫启用 target2 备用构建目录）+ Word 反复楔死——端到端验收（note-typo-005）三次尝试均在 open 步受阻**挂起待环境恢复**（僵尸自行退出或重启后用 `target2/debug/actl.exe flow-run --file skills/actl/workflows/word-note-typography.yml --id note-typo-006` 补测）。**新纪律：actl 命令挂起时优先等其自身超时（一切等待均有界），不做 TaskStop 中途击杀。**
+- 质量门禁：workspace 全测 0 失败 + fmt/clippy 干净（经 target2；正式 gate 待主产物解锁后补跑）。

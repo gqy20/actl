@@ -16,15 +16,115 @@ pub struct Located {
     pub name: Option<String>,
     pub automation_id: Option<String>,
     /// 定位链实际命中级别:"primary" | "fuzzy-name" | "role-ordinal" |
-    /// "anchor" | "ref-replay" | "item-container" | "focused"——agent 据此判断
-    /// 置信度并决定是否加验证
+    /// "anchor" | "ref-replay" | "item-container" | "focused" | "cache"——
+    /// agent 据此判断置信度并决定是否加验证;"cache" = 进程内定位缓存命中
+    /// (RuntimeId + 归属窗口复核通过,等价于 primary 语义)
     pub resolved_by: &'static str,
     pub(crate) element: UIElement,
+}
+
+/// 进程内定位缓存(docs/81 提速轮):同 (app,target) 的连续解析在键入序列中
+/// 每次都重扫目标窗全树(Word 级巨型树实测 DFS 2-3s/次,是每键 4.4s 的大头)。
+/// 缓存最近一次成功解析的元素;命中时以 RuntimeId + 归属根窗口双复核替代
+/// 全树 DFS,失配/失效即回落原链路(fail-closed 语义不变)。
+struct CachedResolve {
+    key: String,
+    element: UIElement,
+    runtime_id: serde_json::Value,
+}
+// UIElement 持 COM 指针(!Send):CLI/batch/flow 的命令派发同线程,thread_local 即可
+thread_local! {
+    static RESOLVE_CACHE: std::cell::RefCell<Option<CachedResolve>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+fn cache_key(app: Option<&str>, target: &Target) -> String {
+    format!("{}\u{1f}{}", app.unwrap_or(""), target.describe())
+}
+
+/// 元素沿 ControlView 向上走到根(有界 32 层,防御环/深树)。
+fn root_element(walker: &UITreeWalker, element: &UIElement) -> UIElement {
+    let mut current = element.clone();
+    for _ in 0..32 {
+        match walker.get_parent(&current) {
+            Ok(parent) => current = parent,
+            _ => break,
+        }
+    }
+    current
+}
+
+fn cache_lookup(app: Option<&str>, key: &str) -> Option<Located> {
+    let app = app?;
+    let (element, cached_rid) = RESOLVE_CACHE.with(|cache| {
+        let guard = cache.borrow();
+        let cached = guard.as_ref()?;
+        if cached.key != key {
+            return None;
+        }
+        Some((cached.element.clone(), cached.runtime_id.clone()))
+    })?;
+    // 复核 1:元素仍活着且 RuntimeId 未变(元素重建 = 失效,回落全链路)
+    let rid = element.get_runtime_id().ok()?;
+    if rid.is_empty() || serde_json::json!(rid) != cached_rid {
+        return None;
+    }
+    // 复核 2:app 锚解析到的当前窗口仍是该元素的归属根(窗口重建/换锚 = 失效)
+    let auto = UIAutomation::new().ok()?;
+    let walker = auto.create_tree_walker().ok()?;
+    let window = find_window(&auto, &walker, app).ok()?;
+    let root = root_element(&walker, &element);
+    let window_rid = window.get_runtime_id().ok()?;
+    let root_rid = root.get_runtime_id().ok()?;
+    if window_rid.is_empty()
+        || root_rid.is_empty()
+        || serde_json::json!(window_rid) != serde_json::json!(root_rid)
+    {
+        return None;
+    }
+    let title = window.get_name().ok()?;
+    located_from(element, title, "cache").ok()
+}
+
+fn cache_store(key: &str, located: &Located) {
+    let rid = match located.element.get_runtime_id() {
+        Ok(rid) if !rid.is_empty() => serde_json::json!(rid),
+        _ => return,
+    };
+    RESOLVE_CACHE.with(|cache| {
+        *cache.borrow_mut() = Some(CachedResolve {
+            key: key.to_string(),
+            element: located.element.clone(),
+            runtime_id: rid,
+        });
+    });
 }
 
 /// 在目标窗口内按 Target 定位元素；遍历须完整，不能用截断结果证明唯一性。
 /// `Ref(n)` 数不到 = 树已变化 → STALE_REF;语义选择器无命中 → NOT_FOUND(06 §4)。
 pub fn locate(app: Option<&str>, target: &Target, near: Option<&str>) -> Result<Located, CtlError> {
+    // 缓存仅覆盖静态语义选择器(name:/id:/role: 序数形态):@eN 编号、uia: 严格
+    // 选择器、focused:(随焦点漂移)、--near 锚语义都走原链路
+    let cacheable = near.is_none()
+        && app.is_some()
+        && matches!(target, Target::Name(_) | Target::Id(_) | Target::Role(..));
+    if !cacheable {
+        return locate_full(app, target, near);
+    }
+    let key = cache_key(app, target);
+    if let Some(hit) = cache_lookup(app, &key) {
+        return Ok(hit);
+    }
+    let located = locate_full(app, target, near)?;
+    cache_store(&key, &located);
+    Ok(located)
+}
+
+fn locate_full(
+    app: Option<&str>,
+    target: &Target,
+    near: Option<&str>,
+) -> Result<Located, CtlError> {
     if matches!(target, Target::Uia(_)) && near.is_some() {
         return Err(CtlError::protocol(
             "uia selectors do not support --near; use within and unique conditions",

@@ -500,10 +500,67 @@ fn verify_once(path: &str, kind: &str, expected: &str, subset: bool) -> Result<V
                 CtlError::new(ErrorCode::NotActionable, "invalid JSON evidence file")
             })?
         }
+    } else if kind == "meta" {
+        // 文件元数据断言(docs/81 提速轮):size/mtime 读取不受 Office 排他锁影响,
+        // 是"保存确实落盘"的唯一打开期断言通道。可选关系键 size_min/mtime_min
+        // (unix 毫秒)供单调性断言;其余键走通用子集/全等比较。
+        let meta = std::fs::metadata(path).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                CtlError::with_evidence(
+                    ErrorCode::AssertionFailed,
+                    "cannot read evidence file",
+                    json!({"io_kind": "not_found", "os_code": error.raw_os_error()}),
+                )
+            } else {
+                io_failure(&error)
+            }
+        })?;
+        let mtime_unix_ms = meta
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_millis() as u64);
+        json!({"size": meta.len(), "mtime_unix_ms": mtime_unix_ms})
     } else {
         inspect_office(path, kind)?
     };
-    if !matches(&actual, &expected, subset) {
+    if kind == "meta" {
+        if let Some(min) = expected.get("size_min").and_then(Value::as_u64) {
+            let size = actual.get("size").and_then(Value::as_u64).unwrap_or(0);
+            if size < min {
+                return Err(CtlError::with_evidence(
+                    ErrorCode::AssertionFailed,
+                    "file size below minimum",
+                    json!({"size": size, "size_min": min, "path": path}),
+                ));
+            }
+        }
+        if let Some(min) = expected.get("mtime_min").and_then(Value::as_u64) {
+            match actual.get("mtime_unix_ms").and_then(Value::as_u64) {
+                Some(mtime) if mtime >= min => {}
+                other => {
+                    return Err(CtlError::with_evidence(
+                        ErrorCode::AssertionFailed,
+                        "file mtime below minimum",
+                        json!({"mtime_unix_ms": other, "mtime_min": min, "path": path}),
+                    ));
+                }
+            }
+        }
+    }
+    // 关系键(size_min/mtime_min)只走上面的专用断言,不参与通用比较;
+    // 剔除后空对象 + subset = 纯关系断言形态。
+    let generic_expected = if kind == "meta" {
+        let mut filtered = expected.clone();
+        if let Some(object) = filtered.as_object_mut() {
+            object.remove("size_min");
+            object.remove("mtime_min");
+        }
+        filtered
+    } else {
+        expected.clone()
+    };
+    if !matches(&actual, &generic_expected, subset) {
         return Err(CtlError::with_evidence(
             ErrorCode::AssertionFailed,
             "file content differs",
@@ -526,6 +583,41 @@ fn inspect_office(path: &str, kind: &str) -> Result<Value, CtlError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn meta_kind_asserts_size_and_mtime_with_relational_keys() {
+        // 元数据断言:关系键专用通道 + 通用比较剔除关系键(空对象+subset=纯关系形态)
+        let dir = std::env::temp_dir().join(format!("meta-check-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("evidence.bin");
+        std::fs::write(&file, vec![0u8; 120]).unwrap();
+        let path = file.to_str().unwrap();
+        let before = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
+        // 纯关系断言:只给 size_min
+        assert!(verify_once(path, "meta", r#"{"size_min":100}"#, true).is_ok());
+        assert!(verify_once(path, "meta", r#"{"size_min":121}"#, true).is_err());
+        // 关系 + 精确键混合:size 走通用比较,mtime_min 走关系
+        assert!(verify_once(path, "meta", r#"{"size":120,"mtime_min":1}"#, true).is_ok());
+        assert!(verify_once(path, "meta", r#"{"size":119,"mtime_min":1}"#, true).is_err());
+        // mtime_min 用"未来的时间"必然失败(时钟单调)
+        assert!(
+            verify_once(
+                path,
+                "meta",
+                &format!(r#"{{"mtime_min":{}}}"#, before + 600_000),
+                true
+            )
+            .is_err()
+        );
+        // 不存在:ASSERTION_FAILED(settle 可重试语义),与 text/json 一致
+        let missing = dir.join("missing.bin");
+        let err =
+            verify_once(missing.to_str().unwrap(), "meta", r#"{"size_min":1}"#, true).unwrap_err();
+        assert_eq!(err.code, ErrorCode::AssertionFailed);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
     #[test]
     fn io_failure_classifies_sharing_violation_permission_and_other() {
         // 共享冲突(os 32,Excel/Word 持句柄)、权限拒绝、其他——分类入 evidence
