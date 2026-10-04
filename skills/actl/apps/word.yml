@@ -26,12 +26,35 @@ quirks:
     note: TextPattern 用 CR 分段，DOCX 用 w:p；核验时统一换行，不能将段落拆分或丢失误认为无关空白
   - id: selection_focus
     note: Ctrl+A 依赖正文焦点；先 type role:Document 获取正文焦点并读回，不能在搜索框或功能区焦点下直接全选粘贴
+  - id: dual_window_layers
+    note: 2026-10-04 实证：Word 为双层窗口——外层 OpusApp 框架 + 内层 _WwG 文档宿主（标题飘忽，常见"Microsoft Word 文档"）。内层可持前台致 type 前台守卫拒（evidence.actual="Microsoft Word 文档"），框架层被模态禁用时 focus-window 报 window not ready；_WwG 的 UIA 树干净（Document→页面→Body Edit, id:Body 可寻址）而 OpusApp 层快照/查找系统性 INTERNAL("no usable runtime identity")。保存确认/错误框可能不出现在 list-windows 枚举（弹层判读失明，只能截图判读兜底）；close-window 的 WM_CLOSE 返回 ok 但模态未清时窗口不关。见 docs/81。
+  - id: keyboard_line_selection_unreliable
+    note: 2026-10-04 实证（docs/81）：ctrl+home+shift+end 等键盘行选区在本机 Word 从未真正建立——按键全 ok、焦点三视图干净，但 ctrl+c 后剪贴板为空（对照：ctrl+a 全选+复制成功）。行级选择改用鼠标行首左侧选定区物理点击（click xy --physical，坐标由截图+视觉判读提取）；或样式路线的光标式应用（见 style_choreography 路线）根本不需要选区。
+  - id: autoformat_numbered_paste
+    note: 2026-10-04 实证：粘贴"N. 文本"到上一编号条目后的新段会触发 Word 自动编号列表——显示成"N. N. 文本"（自动编号+粘贴文本自带编号叠加）；流程文本改用 ①②③④/• 等非 ASCII 数字编号规避。
+  - id: n_drive_startup_dialog
+    note: 2026-10-04 起本机 Word 每次开文档弹「目录名无效。(N:\)」错误框（某项配置指向未连接的 N: 盘）；错误框 OK 按钮 automation_id=2，popup_handlers 声明(app 锚为步骤 --app 子串/classification error/name_contains 目录名无效/click id:2)可由引擎弹层治理处置（word-note-typography 流程真机通过）。
 routes:
   - id: body_read
     description: 正文读取(TextPattern 文档通道;中英文皆逐字)
     status: verified
     steps:
       - ["get", "role:Document", "--app", "{window}", "--property", "text"]
+  - id: style_choreography
+    description: 样式排版流程(模板预置样式+光标式 Ctrl+Alt+N;无选区、无对话框)
+    status: verified
+    steps:
+      - ["launch", "{program}", "/n", "{file}"]
+      - ["wait", "--element", "role:Document", "--app", "{window}", "--timeout", "30000"]
+      - ["type", "role:Document", " ", "--paste", "--app", "{window}"]
+      - ["press", "ctrl+a", "--target", "role:Document", "--app", "{window}"]
+      - ["press", "backspace", "--target", "role:Document", "--app", "{window}"]
+      - ["set-clipboard", "{段落文本}"]
+      - ["press", "ctrl+v", "--target", "role:Document", "--app", "{window}"]
+      - ["press", "ctrl+alt+1|ctrl+alt+2", "--target", "role:Document", "--app", "{window}"]
+      - ["press", "enter", "--target", "role:Document", "--app", "{window}"]
+      - ["press", "ctrl+s", "--target", "role:Document", "--app", "{window}"]
+    verify: Ctrl+Alt+N 以光标所在段落应用样式(无选区)；编排为逐段 回车→粘贴→按样式键,首段免回车;样式定义预置在 assets/note-template.docx(标题1=黑体20/标题2=微软雅黑14/正文=宋体12,1.5倍行距),运行时只应用不修改;关闭重开后 verify-file --kind docx-styles 逐段断言 styleId(workflows/word-note-typography.yml 全流程 2026-10-04 真机通过,docs/81)
   - id: body_append
     description: 正文写入(paste 通道;追加落在焦点处,先 click 定位插入点)
     # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
