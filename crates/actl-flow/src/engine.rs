@@ -151,6 +151,13 @@ fn invocation_app(call: &Invocation) -> Option<String> {
 /// 调用方置 NeedsReview 并保留 Pending——步未执行,无副作用需 uncertain 化)。
 /// 匹配 handler 的面板经既有 click 通道处置并留痕(popup_event);处置后
 /// 复查一次,清空才放行。观察失败在调用方已放行,不会进入本函数。
+/// 可交互面板判定:unknown 且无按钮 = 对话框宿主壳/纯瞬态(无文本可判、
+/// 无按钮可点)——门禁降噪跳过,不阻断(2026-10-04 门禁真机 E2E 发现:
+/// Win11 内容对话框自带「弹出窗口」空壳,真按钮在分类面板上)。
+fn actionable(surface: &Surface) -> bool {
+    surface.classification != "unknown" || !surface.buttons.is_empty()
+}
+
 fn popup_gate(
     plan: &Plan,
     step: &crate::Step,
@@ -158,8 +165,9 @@ fn popup_gate(
     app: &str,
     layer: &FrontLayer,
 ) -> Result<bool, CtlError> {
+    let pending: Vec<&Surface> = layer.surfaces.iter().filter(|s| actionable(s)).collect();
     let mut handled = Vec::new();
-    for surface in &layer.surfaces {
+    for surface in pending {
         let matched = plan.popup_handlers.iter().find(|handler| {
             app.contains(&handler.app)
                 && handler.classification == surface.classification
@@ -191,7 +199,7 @@ fn popup_gate(
     }
     if !handled.is_empty() {
         let recheck = host.front_layer(app)?;
-        if !recheck.clear {
+        if recheck.surfaces.iter().any(actionable) {
             host.capture_failure(step.id.as_str(), "popup_pending", Some(&step.run));
             return Ok(false);
         }
@@ -606,7 +614,7 @@ pub fn execute(
             if !host.read_only(&step.run)
                 && let Some(app) = invocation_app(&step.run)
                 && let Ok(layer) = host.front_layer(&app)
-                && !layer.clear
+                && layer.surfaces.iter().any(actionable)
                 && !popup_gate(plan, &step, host, &app, &layer)?
             {
                 run.status = Status::NeedsReview;

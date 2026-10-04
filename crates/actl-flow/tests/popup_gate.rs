@@ -62,7 +62,9 @@ fn surface(classification: &str, name: &str) -> Surface {
         classification: classification.into(),
         name: name.into(),
         text: String::new(),
-        buttons: Vec::new(),
+        // 默认带一个按钮 = 可交互面板(降噪规则只豁免无按钮壳;
+        // 需要空壳形态的用例用 Surface 字面量自备)。
+        buttons: vec!["确定".into()],
     }
 }
 
@@ -96,7 +98,12 @@ fn unknown_popup_blocks_write_step_as_popup_pending() {
         read_only: |c| c.command != "write",
         layers: RefCell::new(vec![FrontLayer {
             clear: false,
-            surfaces: vec![surface("unknown", "神秘弹窗")],
+            surfaces: vec![Surface {
+                classification: "unknown".into(),
+                name: "神秘弹窗".into(),
+                text: String::new(),
+                buttons: vec!["确定".into()],
+            }],
         }]),
         popups: RefCell::new(Vec::new()),
         captures: RefCell::new(Vec::new()),
@@ -273,6 +280,67 @@ fn sequence_run_app_anchor_is_extracted_for_gating() {
         layers: RefCell::new(vec![FrontLayer {
             clear: false,
             surfaces: vec![surface("unknown", "神秘弹窗")],
+        }]),
+        popups: RefCell::new(Vec::new()),
+        captures: RefCell::new(Vec::new()),
+    };
+    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    assert_eq!(run.status, Status::NeedsReview);
+    assert_eq!(run.reason.as_deref(), Some("popup_pending:w1"));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn buttonless_unknown_shell_is_noise_and_does_not_block() {
+    // 门禁降噪(真机 E2E 发现):Win11 内容对话框自带「弹出窗口」宿主壳
+    // (unknown 且无按钮)——不可交互即非引导层,不阻断写步。
+    let p = plan_with_handlers("", &write_call());
+    let (root, store, mut run) = setup(&p);
+    let mut host = PopupHost {
+        calls: Vec::new(),
+        read_only: |c| c.command != "write",
+        layers: RefCell::new(vec![FrontLayer {
+            clear: false,
+            surfaces: vec![
+                Surface {
+                    classification: "unknown".into(),
+                    name: "弹出窗口".into(),
+                    text: String::new(),
+                    buttons: Vec::new(),
+                },
+                Surface {
+                    classification: "unknown".into(),
+                    name: "空壳".into(),
+                    text: String::new(),
+                    buttons: Vec::new(),
+                },
+            ],
+        }]),
+        popups: RefCell::new(Vec::new()),
+        captures: RefCell::new(Vec::new()),
+    };
+    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    assert_eq!(run.status, Status::Completed);
+    assert_eq!(host.calls, vec!["write:--app".to_string()]);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn unknown_surface_with_buttons_still_blocks() {
+    // 降噪只豁免"无按钮"壳:有按钮的 unknown 面板仍须上抛判读。
+    let p = plan_with_handlers("", &write_call());
+    let (root, store, mut run) = setup(&p);
+    let mut host = PopupHost {
+        calls: Vec::new(),
+        read_only: |c| c.command != "write",
+        layers: RefCell::new(vec![FrontLayer {
+            clear: false,
+            surfaces: vec![Surface {
+                classification: "unknown".into(),
+                name: "神秘向导".into(),
+                text: String::new(),
+                buttons: vec!["同意".into(), "拒绝".into()],
+            }],
         }]),
         popups: RefCell::new(Vec::new()),
         captures: RefCell::new(Vec::new()),
