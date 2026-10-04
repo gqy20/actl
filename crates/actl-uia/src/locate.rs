@@ -16,7 +16,8 @@ pub struct Located {
     pub name: Option<String>,
     pub automation_id: Option<String>,
     /// 定位链实际命中级别:"primary" | "fuzzy-name" | "role-ordinal" |
-    /// "anchor" | "ref-replay" | "item-container"——agent 据此判断置信度并决定是否加验证
+    /// "anchor" | "ref-replay" | "item-container" | "focused"——agent 据此判断
+    /// 置信度并决定是否加验证
     pub resolved_by: &'static str,
     pub(crate) element: UIElement,
 }
@@ -98,6 +99,51 @@ pub fn locate(app: Option<&str>, target: &Target, near: Option<&str>) -> Result<
                 ),
             )),
         };
+    }
+
+    // focused:OS 键盘焦点元素——树对语义选择器不可见但焦点可达的应用
+    // (Electron 懒树,uTools 实证)的唯一寻址通道。属主判据用物理焦点根
+    // (GUITHREADINFO):UIA focused 视图在 WinUI 实测会谎报(kbd 文档);
+    // 属主(给了 --app 时焦点根 HWND 必须即 app 窗)与角色校验 fail-closed。
+    if let Target::Focused(role) = target {
+        let _t = actl_core::trace::scope("locate.focused");
+        let (focused_hwnd, focused_title) = crate::kbd::focused_root_window().ok_or_else(|| {
+            CtlError::new(
+                ErrorCode::NotFound,
+                "focused: no keyboard focus or focus root resolvable",
+            )
+        })?;
+        if app.is_some() {
+            let root_hwnd = crate::window::native_hwnd(&root)
+                .ok_or_else(|| internal("app window has no native hwnd"))?;
+            if root_hwnd.0 as isize != focused_hwnd {
+                return Err(CtlError::with_evidence(
+                    ErrorCode::NotFound,
+                    "focused: keyboard focus belongs to another window",
+                    serde_json::json!({
+                        "focused_window": focused_title,
+                        "app_window": window_title,
+                    }),
+                ));
+            }
+        }
+        let focused = auto
+            .get_focused_element()
+            .map_err(|e| crate::read_channel::failure("focused_element", e))?;
+        if let Some(expected) = role {
+            let actual = strict_role(&focused)?;
+            if !actual.eq_ignore_ascii_case(expected) {
+                return Err(CtlError::with_evidence(
+                    ErrorCode::NotFound,
+                    "focused: focused element role does not match",
+                    serde_json::json!({
+                        "expected": expected,
+                        "actual": actual,
+                    }),
+                ));
+            }
+        }
+        return located_from(focused, focused_title, "focused");
     }
 
     // L1 精确:全量收集(ref 编号与 snapshot 同源,候选可直接重放)

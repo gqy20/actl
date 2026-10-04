@@ -26,6 +26,11 @@ pub enum Target {
     /// 页的确定性寻址(iframe/扩展弹层会让同一 AutomationId 出现多次;
     /// 2026-09-27 三连踩后补,与 RoleAt 同机制)
     IdAt(String, u32),
+    /// OS 键盘焦点元素(`focused:` 裸 / `focused:Edit` 角色校验)。
+    /// 树对 name:/id:/role: 不可见但焦点可达的应用(Electron 懒树,
+    /// 如 uTools)的唯一元素寻址通道;焦点唯一,无序数形式。
+    /// 属主与角色校验 fail-closed(焦点不在 --app 窗口/角色不符 → NOT_FOUND)。
+    Focused(Option<String>),
     /// 屏幕物理坐标(`xy:1420,856`;负值合法——多显示器左侧屏)。
     /// 视觉兜底的"手":坐标来自调用方(screenshot+VLM/人),不经元素定位;
     /// 强制 --app + --physical(窗口边界守卫,06 §7)
@@ -43,6 +48,8 @@ impl Target {
             Target::Role(s) => format!("role:{s}"),
             Target::RoleAt(s, n) => format!("role:{s}#{n}"),
             Target::IdAt(s, n) => format!("id:{s}#{n}"),
+            Target::Focused(None) => "focused:".into(),
+            Target::Focused(Some(role)) => format!("focused:{role}"),
             Target::Coord(x, y) => format!("xy:{x},{y}"),
         }
     }
@@ -68,6 +75,15 @@ pub fn parse_target(raw: &str) -> Result<Target, CtlError> {
             return Ok(Target::Coord(x, y));
         }
         return Err(bad(raw));
+    }
+    // focused:/focused:<Role>:OS 键盘焦点元素;焦点唯一,序数/空白非法
+    if let Some(rest) = raw.strip_prefix("focused:") {
+        if rest.contains('#') || rest.contains(char::is_whitespace) {
+            return Err(bad(raw));
+        }
+        return Ok(Target::Focused(
+            (!rest.is_empty()).then(|| rest.to_string()),
+        ));
     }
     for (prefix, build) in [
         (
@@ -103,7 +119,7 @@ pub fn parse_target(raw: &str) -> Result<Target, CtlError> {
 
 fn bad(raw: &str) -> CtlError {
     CtlError::protocol(format!(
-        "invalid target {raw:?}: expected @eN, name:<substr>, id:<AutomationId>, role:<Type> or xy:<x>,<y>"
+        "invalid target {raw:?}: expected @eN, name:<substr>, id:<AutomationId>, role:<Type>, focused:[<Type>] or xy:<x>,<y>"
     ))
 }
 
@@ -159,6 +175,25 @@ mod tests {
             Target::Coord(-100, 200)
         );
         assert_eq!(parse_target("xy:0,0").unwrap(), Target::Coord(0, 0));
+        // focused:裸(不校验角色)与角色校验形态
+        assert_eq!(parse_target("focused:").unwrap(), Target::Focused(None));
+        assert_eq!(
+            parse_target("focused:Edit").unwrap(),
+            Target::Focused(Some("Edit".into()))
+        );
+    }
+
+    #[test]
+    fn focused_rejects_ordinals_and_whitespace() {
+        for bad in [
+            "focused:Edit#2",
+            "focused: Edit",
+            "focused:Edit ",
+            "focused:a b",
+        ] {
+            let err = parse_target(bad).unwrap_err();
+            assert_eq!(err.code, ErrorCode::Protocol, "{bad:?} should be rejected");
+        }
     }
 
     #[test]
