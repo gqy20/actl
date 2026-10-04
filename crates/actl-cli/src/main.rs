@@ -64,8 +64,9 @@ fn main() {
         Command::Flow(
             crate::cli::FlowCommand::Validate { .. }
                 | crate::cli::FlowCommand::Status { .. }
+                | crate::cli::FlowCommand::Evidence { .. }
                 | crate::cli::FlowCommand::Pause { .. }
-                | crate::cli::FlowCommand::Writeback { .. }
+                | crate::cli::FlowCommand::Writeback { .. },
         ) | Command::Preview { .. }
             | Command::Desktop(DesktopCommand::ExecutionStatus | DesktopCommand::ExecutionRecover)
             | Command::Record(

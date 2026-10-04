@@ -62,6 +62,13 @@ spec 落地）：解析到 OS 键盘焦点元素，服务树对语义选择器�
 fail-closed NOT_FOUND；与 type 组合为单次注入的逐字通道（burst 打字）。协议见
 [06 §3 命名规则](06-design-blueprint.md)，真机证据 docs/80。
 
+2026-10-04 用户授权运行时治理立项（对话讨论定向，ROADMAP「运行时治理」条目）：
+第一轮 = failure_bundle 失败采集包（`flow-evidence` 只读索引）+ 写步步前弹层门禁
+（unknown 弹窗 popup_pending 上抛，步不执行）+ popup_handlers 声明（AGENTS 人肉
+弹层白名单机制化，仅 error/save/confirm/update，unknown 永远上抛，处置走既有
+click 全护栏）；第二轮 = `flow-revise` 计划版本化修订续跑 + `ensure:` 幂等步骤
+（另轮实施）。协议见 [06 §7.7 增补](06-design-blueprint.md)。
+
 ---
 
 ## 2. 用户与场景

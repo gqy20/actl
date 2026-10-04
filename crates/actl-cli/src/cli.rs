@@ -132,6 +132,15 @@ pub(crate) enum FlowCommand {
         #[arg(long)]
         id: String,
     },
+    /// List captured failure bundles (screenshot/windows/UIA/front layer) of a run
+    #[command(name = "flow-evidence")]
+    Evidence {
+        #[arg(long)]
+        id: String,
+        /// Only bundles of this step id (e.g. s6); omit for all steps
+        #[arg(long)]
+        step: Option<String>,
+    },
     /// Request a pause at the next command boundary or workflow wait poll
     #[command(name = "flow-pause")]
     Pause {
@@ -1019,6 +1028,7 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
         Command::Flow(FlowCommand::Validate { .. }) => "flow-validate",
         Command::Flow(FlowCommand::Run { .. }) => "flow-run",
         Command::Flow(FlowCommand::Status { .. }) => "flow-status",
+        Command::Flow(FlowCommand::Evidence { .. }) => "flow-evidence",
         Command::Flow(FlowCommand::Pause { .. }) => "flow-pause",
         Command::Flow(FlowCommand::Resume { .. }) => "flow-resume",
         Command::Flow(FlowCommand::Clean { .. }) => "flow-clean",
@@ -1147,7 +1157,10 @@ fn after_help_for(name: &str) -> Option<&'static str> {
             "Example:\n  actl flow-run --file skills/actl/workflows/vscode-edit.yml --id vscode-01\n  actl flow-run --file explore-task.yml --id explore-01\nOptional --inputs values.yml overrides declared defaults; --paused explicitly registers without executing steps. After full preflight, resources create isolated directories/text files or copy bundled assets once. Saves resolved immutable plan and durable state. Resume never rereads inputs or initializes resources. Physical actions retain explicit authorization. Exploration plans (explore: task/app/keywords/goal) run the bounded exploration engine instead of static steps: observe→diff→score→gate→probe→act with local goal assertion; semantic deadlocks surface as decision_pending cards answered via flow-resume --decision.\nErrors: PROTOCOL invalid/reused ID/resource | NOT_ACTIONABLE executor busy | ABORTED stop | INTERNAL storage"
         }
         "flow-status" => {
-            "Example:\n  actl flow-status --id report-01\n  actl flow-status --id explore-01\nReports run state, declared saved outputs, pause request and runner_active. template carries the stale-plan hint: when the source template's byte fingerprint differs from the frozen record, changed=true warns that retries still run the old frozen plan (verify new fixes in a new task); null when the run predates source recording or the template is unreadable. Exploration runs add an explore block (action/decision/observation counts, budgets, tried selectors, goal_met, token audit) and, when a run waits on a decision, the self-contained decision card (≤4 KiB, candidates c1..cK) to answer with flow-resume --decision.\nErrors: PROTOCOL invalid ID/state | INTERNAL storage"
+            "Example:\n  actl flow-status --id report-01\n  actl flow-status --id explore-01\nReports run state, declared saved outputs, pause request and runner_active. template carries the stale-plan hint: when the source template's byte fingerprint differs from the frozen record, changed=true warns that retries still run the old frozen plan (verify new fixes in a new task); null when the run predates source recording or the template is unreadable. retry_hint names the uncertain write step with a copyable flow-resume --retry-step command (plain resume never replays it); popup_hint appears when the front-layer gate blocked a step (popup_pending). Exploration runs add an explore block (action/decision/observation counts, budgets, tried selectors, goal_met, token audit) and, when a run waits on a decision, the self-contained decision card (≤4 KiB, candidates c1..cK) to answer with flow-resume --decision.\nErrors: PROTOCOL invalid ID/state | INTERNAL storage"
+        }
+        "flow-evidence" => {
+            "Example:\n  actl flow-evidence --id report-01\n  actl flow-evidence --id report-01 --step s6\nRead-only index of a run's failure bundles (runtime governance round 1): each uncertain/blocked step-phase lists what was captured at the failure instant — full screenshot (what a human sees), native window inventory (what Windows sees), targeted UIA snapshot and the app's front guidance layer with classification (what automation sees; docs/68 attribution + popup incidents). Artifacts live under flow-resources/<id>/evidence/; a bundle only lists artifacts that actually exist, missing ones are never fabricated. Returns step, phase, capture time and artifact files with sizes; read a file directly for its content.\nErrors: PROTOCOL unknown id | INTERNAL storage read"
         }
         "flow-pause" => {
             "Example:\n  actl flow-pause --id report-01\nRequests a boundary pause; workflow waits also check each poll. Only status=paused confirms it. In-flight COM calls and other CLI calls are not interrupted.\nErrors: PROTOCOL invalid ID/state | INTERNAL storage"

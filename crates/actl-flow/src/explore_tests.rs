@@ -521,6 +521,7 @@ fn setup(spec: &ExploreSpec) -> (std::path::PathBuf, Store, Run) {
         handoff: None,
         auto_resume: None,
         explore: Some(spec.clone()),
+        popup_handlers: Vec::new(),
         steps: Vec::new(),
     };
     let store = Store::at(&root, "run1").expect("store");

@@ -796,3 +796,61 @@ fn pause_journal_does_not_overwrite_desktop_feedback() {
     assert_eq!(control["data"]["request_id"], request);
     assert_eq!(control["data"]["source"], "cli");
 }
+
+#[test]
+fn flow_evidence_indexes_failure_bundles_with_step_filter() {
+    // 运行时治理第一轮:失败采集包索引契约——清单来自 capture_failure 的
+    // bundle.json;--step 过滤;无包如实 PROTOCOL。
+    let s = Sandbox::new();
+    let file = s.file(SIMPLE);
+    let (code, _) = s.invoke(&["flow-run", "--file", &file, "--id", "ev1", "--paused"]);
+    assert_eq!(code, 0);
+    // 未知 id:store 不存在 → PROTOCOL
+    let (code, result) = s.invoke(&["flow-evidence", "--id", "nope"]);
+    assert_eq!(code, 2);
+    assert_eq!(result["error"]["code"], "PROTOCOL");
+    // 已注册但无采集:如实拒绝
+    let (code, result) = s.invoke(&["flow-evidence", "--id", "ev1"]);
+    assert_eq!(code, 2);
+    assert_eq!(result["error"]["code"], "PROTOCOL");
+    let dir = s
+        .root
+        .join("actl")
+        .join("flow-resources")
+        .join("ev1")
+        .join("evidence");
+    std::fs::create_dir_all(&dir).unwrap();
+    for (stem, step) in [
+        ("s6-verify", "s6"),
+        ("s6-popup_pending", "s6"),
+        ("s9-run", "s9"),
+    ] {
+        std::fs::write(
+            dir.join(format!("{stem}.bundle.json")),
+            json!({"step_id": step, "phase": stem.rsplit_once('-').unwrap().1,
+                   "captured_ms": 1791090000000u64 + stem.len() as u64,
+                   "artifacts": [{"kind": "screenshot", "file": format!("{stem}.png"), "bytes": 12}]}).to_string(),
+        )
+        .unwrap();
+    }
+    let (code, result) = s.invoke(&["flow-evidence", "--id", "ev1"]);
+    assert_eq!(code, 0);
+    assert_eq!(result["data"]["bundles"].as_array().unwrap().len(), 3);
+    let (code, result) = s.invoke(&["flow-evidence", "--id", "ev1", "--step", "s6"]);
+    assert_eq!(code, 0);
+    let bundles = result["data"]["bundles"].as_array().unwrap();
+    assert_eq!(bundles.len(), 2);
+    assert!(
+        bundles
+            .iter()
+            .all(|bundle| bundle["step_id"].as_str() == Some("s6"))
+    );
+    // 帮助四要素可发现
+    let out = s
+        .command()
+        .args(["flow-evidence", "--help"])
+        .output()
+        .unwrap();
+    let help = String::from_utf8_lossy(&out.stdout);
+    assert!(help.contains("Example") && help.contains("--step") && help.contains("Errors"));
+}

@@ -44,6 +44,22 @@ fn error(step: &str, field: &str, message: &str) -> CtlError {
 }
 pub fn validate(plan: &Plan) -> Result<(), CtlError> {
     let mut known = BTreeMap::new();
+    for (i, handler) in plan.popup_handlers.iter().enumerate() {
+        let field = format!("popup_handlers[{i}]");
+        if !matches!(
+            handler.classification.as_str(),
+            "error" | "save" | "confirm" | "update"
+        ) {
+            return Err(error(
+                "",
+                &field,
+                "classification must be error/save/confirm/update; unknown popups always escalate",
+            ));
+        }
+        if handler.app.is_empty() || handler.click.is_empty() {
+            return Err(error("", &field, "app and click must be non-empty"));
+        }
+    }
     for (i, step) in plan.steps.iter().enumerate() {
         crate::branch::validate(step)?;
         crate::bounded::validate(step)?;

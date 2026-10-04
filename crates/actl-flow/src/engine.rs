@@ -96,6 +96,97 @@ impl Run {
         Ok(())
     }
 }
+/// 步前弹层门禁的观察结果(运行时治理第一轮,docs/06):Host 从前台引导层
+/// 采集,引擎只做分类判定。观察失败由调用方决定放行——门禁是阳性检测,
+/// 观察不可用不伪造阻塞,写步自身守卫兜底。
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct FrontLayer {
+    pub clear: bool,
+    /// 未清空的前台面板:树内对话框(带分类)与 owned 原生弹窗(无文本
+    /// 可判,一律 unknown——宁可上抛)。
+    pub surfaces: Vec<Surface>,
+}
+/// 单个前台面板摘要。
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Surface {
+    /// error/save/confirm/update/unknown(朴素分类,判定权在上抛侧)。
+    pub classification: String,
+    pub name: String,
+    pub text: String,
+    pub buttons: Vec<String>,
+}
+/// 提取调用的 `--app` 锚(门禁定位用):顶层参数或 sequence 子调用内嵌。
+fn invocation_app(call: &Invocation) -> Option<String> {
+    for (index, arg) in call.args.iter().enumerate() {
+        if arg == "--app" {
+            return call
+                .args
+                .get(index + 1)
+                .cloned()
+                .filter(|value| !value.is_empty() && !value.starts_with('-'));
+        }
+        if arg.starts_with('{')
+            && let Ok(child) = serde_json::from_str::<Invocation>(arg)
+            && let Some(app) = invocation_app(&child)
+        {
+            return Some(app);
+        }
+    }
+    None
+}
+/// 步前弹层门禁(运行时治理第一轮,docs/06):写步动手前先听前台引导层。
+/// 返回 Ok(true)=放行,false=popup_pending(unknown 面板存在或处置未清层,
+/// 调用方置 NeedsReview 并保留 Pending——步未执行,无副作用需 uncertain 化)。
+/// 匹配 handler 的面板经既有 click 通道处置并留痕(popup_event);处置后
+/// 复查一次,清空才放行。观察失败在调用方已放行,不会进入本函数。
+fn popup_gate(
+    plan: &Plan,
+    step: &crate::Step,
+    host: &mut impl Host,
+    app: &str,
+    layer: &FrontLayer,
+) -> Result<bool, CtlError> {
+    let mut handled = Vec::new();
+    for surface in &layer.surfaces {
+        let matched = plan.popup_handlers.iter().find(|handler| {
+            app.contains(&handler.app)
+                && handler.classification == surface.classification
+                && handler.name_contains.as_deref().is_none_or(|needle| {
+                    surface.name.contains(needle) || surface.text.contains(needle)
+                })
+        });
+        let Some(handler) = matched else {
+            host.capture_failure(step.id.as_str(), "popup_pending", Some(&step.run));
+            return Ok(false);
+        };
+        let action = Invocation {
+            command: "click".into(),
+            args: vec![handler.click.clone(), "--app".into(), app.to_string()],
+            bind: Default::default(),
+        };
+        host.popup_event(
+            step.id.as_str(),
+            serde_json::json!({
+                "classification": surface.classification,
+                "surface": surface.name,
+                "click": handler.click,
+                "app": app,
+            }),
+        );
+        // 处置走既有 click 全护栏;失败视为未处置(fail-safe 上抛)。
+        host.execute(&action)?;
+        handled.push(surface.name.clone());
+    }
+    if !handled.is_empty() {
+        let recheck = host.front_layer(app)?;
+        if !recheck.clear {
+            host.capture_failure(step.id.as_str(), "popup_pending", Some(&step.run));
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
 pub trait Host {
     fn recovery_event(&mut self, _step_id: &str, _event: &crate::bounded::Event) {}
     /// 步骤失败留证钩子(默认无操作):实现方在失败瞬间截屏、记录窗口清单与
@@ -153,6 +244,16 @@ pub trait Host {
     fn validate_step(&self, _step: &crate::Step) -> Result<(), CtlError> {
         Ok(())
     }
+    /// 步前弹层观察(运行时治理第一轮):返回锚窗的前台引导层摘要。
+    /// 默认 clear——离线 Host/无显示环境不设防(门禁是阳性检测)。
+    fn front_layer(&mut self, _app: &str) -> Result<FrontLayer, CtlError> {
+        Ok(FrontLayer {
+            clear: true,
+            surfaces: Vec::new(),
+        })
+    }
+    /// 弹层处置留痕(实现方转发到审计通道):门禁按声明处置面板时逐次上报。
+    fn popup_event(&mut self, _step_id: &str, _event: serde_json::Value) {}
     fn read_only(&self, call: &Invocation) -> bool;
     fn stopped(&self) -> bool;
     fn publish(&mut self, run: &Run);
@@ -467,6 +568,22 @@ pub fn execute(
         for attempt in 0..attempts {
             // Preconditions and retries may take time; check again before dispatch.
             if !crate::freshness::guard(plan, &plan.steps[i], run, store, host)? {
+                return Ok(());
+            }
+            // 步前弹层门禁(运行时治理第一轮,docs/06):写步动手前先听前台
+            // 引导层——unknown 面板 = popup_pending,步不执行(保持 Pending,
+            // 无副作用不需 uncertain);声明过的面板自动处置留痕后复查放行。
+            // 只读步与无 --app 锚的步不设防;观察失败放行(写步守卫兜底)。
+            if !host.read_only(&step.run)
+                && let Some(app) = invocation_app(&step.run)
+                && let Ok(layer) = host.front_layer(&app)
+                && !layer.clear
+                && !popup_gate(plan, &step, host, &app, &layer)?
+            {
+                run.status = Status::NeedsReview;
+                run.reason = Some(format!("popup_pending:{}", step.id));
+                run.save(store, host)?;
+                host.publish(run);
                 return Ok(());
             }
             run.steps[i].status = StepStatus::Running;

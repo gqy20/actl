@@ -660,6 +660,9 @@ CLI 写入前与显示端后台共用 history 检查，任务报告仍在归档�
 
 新增 flow-validate/run/status/pause/resume，完整字段、状态与边界以
 [20](20-yaml-workflow-protocol.md) 为本节规范性扩展。
+
+**运行时治理第一轮（2026-10-04 spec，弹层/失败采集/步前门禁）**：① **failure_bundle 失败采集包**——uncertain/门禁阻断时 capture_failure 自动归集四工件：全屏截图、原生窗口清单、按 `--app` 定向的 UIA 快照、**失败瞬间前台弹层快照**（front-report 全文+分类，弹窗滞留事故的一手证据），外加 bundle.json 采集清单（只列实际存在的工件，不伪造）；`flow-evidence --id <id> [--step <sid>]`（新增只读命令）索引采集包。② **写步步前弹层门禁**——写步派发前经 `Host::front_layer` 观察其 `--app`（含 sequence 内嵌锚）的前台引导层：非 clear 且存在未声明处理的面板 → run 进 needs_review、reason=`popup_pending:<step>`、步保持 **Pending**（未执行无副作用，恢复走普通 flow-resume，门禁复查通过即续跑）；flow-status 附 popup_hint（判读入口+续跑命令）。读步与无 `--app` 步不设防；观察失败放行（门禁是阳性检测，写步自身 fail-closed 守卫兜底）。③ **popup_handlers 声明**（AGENTS 人肉弹层白名单的机制化）——flow 顶层声明 `popup_handlers: [{app, classification, name_contains?, click}]`：classification 仅允许 error/save/confirm/update（**unknown 永远上抛**，不可声明）；匹配面板经既有 click 全护栏（守卫/预告/审计）自动处置并逐次 popup_event 留痕，处置后复查清层才放行，未清或处置失败一律 popup_pending。每个 popup_pending 阻断同样落 failure_bundle。
+
 独立流程层复用原子命令，run/resume 按运行 ID 关联操作历史。
 写操作要求后置 verify，自动重试仅限只读；暂停在命令边界确认，紧急停止保持粘性。
 未确认动作恢复时先验证，不能直接重放；显式 --retry-step 才允许重复写入。

@@ -31,8 +31,31 @@ pub struct Plan {
     /// 探索模式 spec(docs/42 S2):存在时 steps 必须为空,运行走 explore 引擎。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub explore: Option<ExploreSpec>,
+    /// 弹层处理器声明(运行时治理第一轮,docs/06):写步步前门禁发现前台
+    /// 弹层时,匹配面板按声明点击处置(留痕);未匹配面板 → popup_pending
+    /// 上抛。AGENTS 人肉弹层白名单的机制化形态;unknown 分类不可声明。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub popup_handlers: Vec<PopupHandler>,
     #[serde(default)]
     pub steps: Vec<Step>,
+}
+
+/// 单条弹层处理器:classification 必须显式(error/save/confirm/update——
+/// unknown 永远上抛);click 是作用于该应用窗口的选择器(如
+/// `uia:{"match":{"role":"Button","name":"不保存"}}`),处置走既有 click
+/// 护栏(前台守卫/预告/审计不变)。
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct PopupHandler {
+    /// 目标应用锚(标题子串):仅当写步的 --app 包含此锚时生效。
+    pub app: String,
+    /// 面板分类(error/save/confirm/update)。
+    pub classification: String,
+    /// 可选的面板名/文本包含词,进一步收窄匹配。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name_contains: Option<String>,
+    /// 处置动作:click 选择器。
+    pub click: String,
 }
 
 /// 探索任务 spec(docs/42):自然语言任务一句话 + 应用锚 + 关键词词表 +

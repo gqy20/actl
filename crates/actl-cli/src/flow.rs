@@ -210,6 +210,7 @@ pub fn validate(plan: &Plan) -> Result<(), CtlError> {
                 handoff: plan.handoff,
                 auto_resume: None,
                 explore: None,
+                popup_handlers: Vec::new(),
                 steps: vec![child],
             })?;
         }
@@ -229,6 +230,7 @@ pub fn validate(plan: &Plan) -> Result<(), CtlError> {
                     handoff: plan.handoff,
                     auto_resume: None,
                     explore: None,
+                    popup_handlers: Vec::new(),
                     steps: vec![child],
                 })?;
             }
@@ -449,7 +451,89 @@ impl Host for Adapter<'_> {
                     eprintln!("INTERNAL: snapshot command build failed: {error}");
                 }
             }
+            // 弹层快照(运行时治理第一轮):失败瞬间该应用的前台引导层全文
+            // 与分类——弹窗滞留类事故的一手证据,front-report 只读不加锁。
+            if let Ok(front) = actl_uia::front_report(&app)
+                && let Err(error) = std::fs::write(
+                    dir.join(format!("{stem}.front.json")),
+                    serde_json::to_vec(&front).unwrap_or_default(),
+                )
+            {
+                eprintln!("INTERNAL: front layer write failed: {error}");
+            }
         }
+        // 采集清单(bundle manifest):本相位实际归集了哪些工件——flow-evidence
+        // 的索引依据;缺失工件如实不列,不伪造。
+        let mut artifacts = Vec::new();
+        for (kind, extension) in [
+            ("screenshot", "png"),
+            ("windows", "windows.json"),
+            ("uia", "uia.json"),
+            ("front", "front.json"),
+        ] {
+            let path = dir.join(format!("{stem}.{extension}"));
+            if let Ok(meta) = std::fs::metadata(&path) {
+                artifacts.push(json!({
+                    "kind": kind,
+                    "file": path.file_name().and_then(|n| n.to_str()),
+                    "bytes": meta.len(),
+                }));
+            }
+        }
+        let manifest = json!({
+            "step_id": step_id,
+            "phase": phase,
+            "captured_ms": actl_core::state::unix_ms(),
+            "artifacts": artifacts,
+        });
+        if let Err(error) = std::fs::write(
+            dir.join(format!("{stem}.bundle.json")),
+            serde_json::to_vec(&manifest).unwrap_or_default(),
+        ) {
+            eprintln!("INTERNAL: bundle manifest write failed: {error}");
+        }
+    }
+    fn front_layer(&mut self, app: &str) -> Result<engine::FrontLayer, CtlError> {
+        // 观察失败(窗口垂死/锁屏等)原样上抛——引擎按"阳性检测"放行。
+        let report = actl_uia::front_report(app)?;
+        let mut surfaces = Vec::new();
+        for node in report["in_tree"].as_array().unwrap_or(&Vec::new()) {
+            surfaces.push(engine::Surface {
+                classification: node["classification"]
+                    .as_str()
+                    .unwrap_or("unknown")
+                    .to_string(),
+                name: node["name"].as_str().unwrap_or_default().to_string(),
+                text: node["text"].as_str().unwrap_or_default().to_string(),
+                buttons: node["buttons"]
+                    .as_array()
+                    .map(|list| {
+                        list.iter()
+                            .filter_map(|b| b.as_str().map(str::to_string))
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+            });
+        }
+        // owned 原生弹窗无文本可分类:一律 unknown,宁可上抛(门禁语义)。
+        for node in report["owned"].as_array().unwrap_or(&Vec::new()) {
+            surfaces.push(engine::Surface {
+                classification: "unknown".into(),
+                name: node["title"].as_str().unwrap_or_default().to_string(),
+                text: String::new(),
+                buttons: Vec::new(),
+            });
+        }
+        Ok(engine::FrontLayer {
+            clear: report["front_clear"].as_bool().unwrap_or(true),
+            surfaces,
+        })
+    }
+    fn popup_event(&mut self, step_id: &str, event: Value) {
+        actl_core::signal_session::flow_event(
+            "workflow_popup",
+            json!({"step_id": step_id, "handled": event}),
+        );
     }
     fn condition(&mut self, call: &Invocation) -> Result<bool, CtlError> {
         let element_exists = matches!(
@@ -498,6 +582,7 @@ impl Host for Adapter<'_> {
             auto_resume: None,
             explore: None,
             name: self.plan.name.clone(),
+            popup_handlers: Vec::new(),
             steps: vec![step.clone()],
         })
     }
@@ -688,6 +773,20 @@ fn state(store: &Store) -> Result<Value, CtlError> {
     if let Some(hint) = retry_hint(&run) {
         value["retry_hint"] = hint;
     }
+    // 弹层门禁上抛(运行时治理第一轮):popup_pending 不是步骤失败,是
+    // "前台有未知弹窗,按纪律先判读"——给出判读入口与续跑命令。
+    if run
+        .reason
+        .as_deref()
+        .is_some_and(|reason| reason.starts_with("popup_pending:"))
+    {
+        value["popup_hint"] = json!({
+            "note": "unknown front-layer popup blocked the step; inspect before resuming",
+            "inspect": "actl front-report <step --app>",
+            "evidence": "actl flow-evidence --id <id>",
+            "resume": format!("actl flow-resume --id {}", run.id),
+        });
+    }
     // 探索运行:附探索状态(动作/决策计数、token 审计)与悬挂决策卡。
     // 卡即应答入口(flow-resume --decision <id>);其余证据按省略纪律不进协议面。
     if plan.explore.is_some()
@@ -838,6 +937,57 @@ pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
             Ok(result)
         }
         FlowCommand::Status { id } => state(&Store::at(&root, id)?),
+        // 失败采集包索引(运行时治理第一轮):只读扫描 flow-resources/<id>/
+        // evidence/ 的 *.bundle.json 清单;--step 过滤。工件缺失如实不列。
+        FlowCommand::Evidence { id, step } => {
+            let store = Store::at(&root, id)?;
+            let evidence_dir = store
+                .dir
+                .parent()
+                .and_then(|flows| flows.parent())
+                .map(|state| state.join("flow-resources").join(id).join("evidence"));
+            let Some(dir) = evidence_dir else {
+                return Err(CtlError::internal("evidence root unresolved"));
+            };
+            let mut bundles = Vec::new();
+            if let Ok(entries) = std::fs::read_dir(&dir) {
+                for entry in entries.flatten() {
+                    let name = entry.file_name();
+                    let Some(name) = name.to_str() else { continue };
+                    if !name.ends_with(".bundle.json") {
+                        continue;
+                    }
+                    let Ok(bytes) = std::fs::read(entry.path()) else {
+                        continue;
+                    };
+                    let Ok(mut manifest) = serde_json::from_slice::<Value>(&bytes) else {
+                        continue;
+                    };
+                    manifest["file"] = Value::String(name.to_string());
+                    if let Some(want) = &step
+                        && manifest["step_id"].as_str() != Some(want.as_str())
+                    {
+                        continue;
+                    }
+                    bundles.push(manifest);
+                }
+            }
+            bundles.sort_by_key(|bundle| {
+                (
+                    bundle["step_id"].as_str().unwrap_or_default().to_string(),
+                    bundle["captured_ms"].as_u64().unwrap_or_default(),
+                )
+            });
+            if bundles.is_empty() {
+                return Err(CtlError::protocol(format!(
+                    "no failure bundles for id {id}{} (clean run or pre-governance run)",
+                    step.as_deref()
+                        .map(|s| format!(" step {s}"))
+                        .unwrap_or_default()
+                )));
+            }
+            Ok(json!({"id": id, "evidence_dir": dir.to_string_lossy(), "bundles": bundles}))
+        }
         FlowCommand::Pause { id } => {
             let request = actl_core::control_log::Request::new(id, "pause");
             request.record("requested", None);
@@ -1143,6 +1293,7 @@ mod failure_evidence_tests {
             status: Status::NeedsReview,
             updated_ms: 0,
             reason: None,
+
             steps: vec![record("s1", engine::StepStatus::Completed)],
         };
         assert!(retry_hint(&run).is_none());
