@@ -20,6 +20,7 @@
 
 ### Fixed
 
+- **录制值读回护栏按 HWND 比对（[80 发现 #11](docs/80-record-acceptance.md)，#4 复验收口）**：值读回护栏曾按焦点窗**标题**精确比对——编辑行为会改标题（脏标记星号），burst 起点记的标题在读回时必然失配，6 次尝试全部被拒、值事件系统性缺失（演示轮偶然成功只因标题全程带星号）。修复：pending 状态与护栏改用**焦点根 HWND**（稳定身份），标题降为证据字段。真机复验：#4 原始形态（type 后即时 record-stop）三轮值事件全部出现（dev+探针定位；证据二进制正式轮因桌面被用户占用让行，挂起待空闲）。附带教训入档：close-window/文件变异后必 front-report（冲突框滞留事故）；歧义选择器先核对 resolved 再点（误点「保留更改」事故）。
 - **input 绑定渲染与残留守卫（[80 发现 #6/#6b](docs/80-record-acceptance.md)，actl-flow 渲染+引擎双层）**：`yaml_scalar` 会把 `{input: name}` 绑定加引号成普通字符串——inputs 解析只对流映射做替换，字符串原样透传；若 run 与 verify 拿同一字面量会**自洽假通过**（set-clipboard/verify-clipboard 对同一未替换字面量比较为真，用户目击实证）。修复双层：渲染层新增 `arg_scalar`（绑定原样发射，`yaml_scalar` 继续负责数字/布尔/null 引号——发现 #5）；引擎 `resolve` 后扫描残留绑定字符串并 PROTOCOL 拒绝（unresolved input binding）。单测两条（引号包裹拒绝/流映射默认值解析）+ golden 重生成。
 - **YAML 纯量数字/布尔/null 形态加引号（[80 演示轨发现 #5](docs/80-record-acceptance.md)，actl-flow 渲染层）**：`yaml_scalar`（route/record 渲染共用）此前不引数字/布尔/null 形态纯量——`--timeout 8022` 裸渲染被 YAML 解析为整数，flow schema 要求 args 全字符串 → 真人草稿 flow-validate 拒绝。修复：解析为 f64 或命中 bool/null 关键字的纯量强制加引号；既往 pack/route 数据无数字参数故未暴露。单测（数字/前导负号/科学计数/布尔/null 家族）+ roundtrip 断言（wait 超时参数必须字符串）钉住。
 - **投影快照 ref 编号口径（docs/06 增补，投影 ref 可回放性修复）**：@eN 编号改为**全树 DFS 交互序数**（投影只过滤可见性不改编号，投影后编号有洞）——修复前投影快照按投影后顺序从 @e1 重编，与 `click @eN --snapshot` 回放的全树计数错位，skeleton/keyword/content 投影的 ref **从未正确回放过**（发现 #6 攻坚中实证：keyword 快照的 @e1 回放解析到全树第 1 个交互元素）。修复后输出编号=持久化身份=回放计数三口径对齐，同一窗口跨投影编号稳定（与 find 输出同纪律），投影 ref 混用从隐患变为安全。全量快照编号不变。

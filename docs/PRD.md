@@ -56,6 +56,12 @@ CLI）；录制会话有界（显式 start/stop，非常驻），触发面 = CLI
 动态项；文本录提交后最终值不录按键序列，密码框文本脱敏；设计提案与 Quicker 调研
 见 [76](76-gui-recording.md)、[79](79-quicker-recording-research.md)。
 
+2026-10-04 用户授权焦点元素目标语法（`focused:` / `focused:<Type>`，对话批准后
+spec 落地）：解析到 OS 键盘焦点元素，服务树对语义选择器不可见但焦点可达的应用
+（Electron 懒树）；属主判据用物理焦点根（GUITHREADINFO），角色/属主不符
+fail-closed NOT_FOUND；与 type 组合为单次注入的逐字通道（burst 打字）。协议见
+[06 §3 命名规则](06-design-blueprint.md)，真机证据 docs/80。
+
 ---
 
 ## 2. 用户与场景
