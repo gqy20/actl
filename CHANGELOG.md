@@ -18,6 +18,7 @@
 
 ### Fixed
 
+- **YAML 纯量数字/布尔/null 形态加引号（[80 演示轨发现 #5](docs/80-record-acceptance.md)，actl-flow 渲染层）**：`yaml_scalar`（route/record 渲染共用）此前不引数字/布尔/null 形态纯量——`--timeout 8022` 裸渲染被 YAML 解析为整数，flow schema 要求 args 全字符串 → 真人草稿 flow-validate 拒绝。修复：解析为 f64 或命中 bool/null 关键字的纯量强制加引号；既往 pack/route 数据无数字参数故未暴露。单测（数字/前导负号/科学计数/布尔/null 家族）+ roundtrip 断言（wait 超时参数必须字符串）钉住。
 - **投影快照 ref 编号口径（docs/06 增补，投影 ref 可回放性修复）**：@eN 编号改为**全树 DFS 交互序数**（投影只过滤可见性不改编号，投影后编号有洞）——修复前投影快照按投影后顺序从 @e1 重编，与 `click @eN --snapshot` 回放的全树计数错位，skeleton/keyword/content 投影的 ref **从未正确回放过**（发现 #6 攻坚中实证：keyword 快照的 @e1 回放解析到全树第 1 个交互元素）。修复后输出编号=持久化身份=回放计数三口径对齐，同一窗口跨投影编号稳定（与 find 输出同纪律），投影 ref 混用从隐患变为安全。全量快照编号不变。
 - **并行探测回退串行（P3 修正，docs/06 P3 修正节）**：真机复现证伪同进程并行 UIA 读——两个并行 find 必有一个返回 `E_FAIL(0x80004005)`（顺序不定，桌面根/提供程序并发上限）；与此前"并行无净计时收益"互相印证。CLI 侧移除并行分发，`Host::execute_probes` 批量通道保持默认串行；引擎侧卡/队列预检语义不变（提供程序无关的正确性收益），通道为将来可并行的读（浏览器 CDP）预留。契约测试的队列断言同步新语义（ghost 窗口下候选确定性死亡→队列清空）。
 
@@ -31,6 +32,7 @@
 
 ### Documentation and validation
 
+- **GUI 录制人工演示轨真机验收通过（[80 演示轨增补](docs/80-record-acceptance.md)）**：用户右键菜单启动/停止（R4 链路随行验收——菜单点击被 pid 过滤排除，`skipped_own: 5`）→ uTools 唤起记事本 → 中英文输入 → ctrl+s → 关闭标签。**首份真人草稿：47 事件（43 真人输入）/10 步 + 6 TODO**——"录制窗口内用户输入必被捕获"裁定为肯定；**IME 旗舰断言**：输入法打出的「测试一下小过 」经 burst 末值读回编译为 `type --paste`（提交文本覆盖 VK 推导——真实 IME 不产生 VK_PROCESSKEY，信 VK 会编译出拼音乱码，提交值优先的设计恰成立）；wait 步骤（7 秒换窗间隔）、三窗口 `{window}` 泛化全过。**发现 #5**：`--timeout 8022` 裸数字被 YAML 解析为整数、flow schema 拒绝（yaml_scalar 不引数字/布尔/null 形态——离线测试的 wait 轮没断言该参数故全漏）；修复+单测+roundtrip 断言；R3 首次真实改写（最小机械修正→`rewritten.yml`→flow-validate 通过）。发现 #4 沉降路径本轮未被触发（复验仍挂）；重复 ctrl+s 等噪音如实记录（清除属改写轮）。
 - **GUI 录制注入轨真机验收通过（[80](docs/80-record-acceptance.md)）**：actl CLI 注入驱动的真机四轮——钩子真实安装/事件捕获/点击反查/焦点身份/值读回/注入标记与编译排除/会话协议全部在真实混合 DPI 双屏 + 并发用户环境验证。**四个真机发现全部修复**：①DPI 坐标口径（钩子物理坐标 vs 调用线程 DPI 感知，混合屏下反查命中隔壁屏元素——会话线程设 PER_MONITOR_AWARE_V2）；②LLKHF_INJECTED=0x10（首版误用 0x1=EXTENDED 位，注入键全部漏标）；③值读回 Value→Text 回退链（TextPattern 型应用无 ValuePattern）；④读回与输入提交竞态（停止距最后按键 231ms 读到空——有界沉降重试 ≤3×150ms；**其真机复验被第四轮锁屏阻断，挂起如实**）。文本保真度对照证实（注入 13 字符→verify 精确匹配）。人工演示轨（非注入编译路径/IME/真人键鼠质量）待用户在场；第二轮观察到录制窗口外的并发用户输入进入文档（trace 零非注入事件、逐事件对账，判定为窗口外输入——"窗口内用户输入必被捕获"留给演示轨裁定）。
 - **探索引擎 L2 真机验收（[77 L2 增补](docs/77-exploration-s2-acceptance.md)）**：P1 goal 折叠随全程生效（观察即核验）；`texts` 输入原语真机通过——texts 键激活 Document 评分后与菜单栏「编辑」形成真实三方平局卡（应答裁决后 type 单步执行、ValuePattern 读回核验通过）；发现菜单 flyout 在锚窗快照内（探索可观察菜单项）。跨窗链路被真机发现 #3 阻断（菜单开合过渡期 UIA 观察瞬态→失败闭合），机制有 MockHost 全链路单测、收口方向为观察有界重试（受阻如实记录，ROADMAP）。附带实证：find 歧义死候选剪枝与队列回退、窗口标题变化下稳定锚设计、中文 IME 键盘通道限制确认（ASCII 验收,--paste 选项留 spec 决策）。
 - **探索模式 S3 真机闭环验收通过（[77 S3 增补](docs/77-exploration-s2-acceptance.md)）**：回写（S1/S2 完成运行→pack 片段，失败运行如实拒绝）→ agent 侧重放（replay-explore-*.yml 全步 verified）→ **用户人工复核**迁移 2 条 unverified→verified（pack 更新+lint-packs 通过）→ **先验飞轮实证**：失败运行的 tried 数据导出 explore.priors 后，同一不可达 goal 从 S3/S3b 的 `goal_check_failed`（窗口重构陷阱）变为 S3d 的 `budget_exhausted:actions`（actions=4/errors=0）——docs/77 发现 1/2 机制化收口。诚实记账：§7 的 5 条 verified 目标本轮 2 条（现有完成运行全部），余 3 条待路线积累。

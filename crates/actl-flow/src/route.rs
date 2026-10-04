@@ -182,7 +182,33 @@ fn goal_step(spec: &ExploreSpec) -> Vec<String> {
 
 /// YAML 标量渲染:需要时双引号(冒号/引号/控制字符/首尾空白/空串/流标点)。
 pub(crate) fn yaml_scalar(text: &str) -> String {
+    // 数字/布尔/null 形态的纯量必须加引号:YAML 会把它们解析成非字符串,
+    // 而 flow schema 要求 args 全字符串(真机发现 #5:--timeout 8022 裸数字
+    // 被解析为整数,flow-validate 拒绝;离线测试的 wait 轮没断言该参数)。
+    let parses_non_string = text.parse::<f64>().is_ok()
+        || matches!(
+            text,
+            "true"
+                | "false"
+                | "null"
+                | "~"
+                | "True"
+                | "False"
+                | "Null"
+                | "TRUE"
+                | "FALSE"
+                | "NULL"
+                | "yes"
+                | "no"
+                | "on"
+                | "off"
+                | "Yes"
+                | "No"
+                | "On"
+                | "Off"
+        );
     let needs_quote = text.is_empty()
+        || parses_non_string
         || text.starts_with(' ')
         || text.ends_with(' ')
         || text.chars().any(|c| {
@@ -528,5 +554,20 @@ mod tests {
         assert_eq!(yaml_scalar("带\"引号\""), "\"带\\\"引号\\\"\"");
         assert_eq!(yaml_scalar("显示为 7"), "显示为 7");
         assert_eq!(yaml_scalar("{window}"), "\"{window}\"");
+    }
+
+    #[test]
+    fn yaml_scalar_quotes_number_like_and_bool_like_values() {
+        // 真机发现 #5:数字/布尔/null 形态裸渲染会被 YAML 解析为非字符串,
+        // flow schema 要求 args 全字符串。
+        assert_eq!(yaml_scalar("8022"), "\"8022\"");
+        assert_eq!(yaml_scalar("0"), "\"0\"");
+        assert_eq!(yaml_scalar("-1"), "\"-1\"");
+        assert_eq!(yaml_scalar("1e5"), "\"1e5\"");
+        assert_eq!(yaml_scalar("true"), "\"true\"");
+        assert_eq!(yaml_scalar("Null"), "\"Null\"");
+        // 中文与普通含空格文本不受影响。
+        // 中文不受影响;尾随空格本就触发引号(既有规则)。
+        assert_eq!(yaml_scalar("测试一下小过"), "测试一下小过");
     }
 }

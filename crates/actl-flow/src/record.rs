@@ -1047,6 +1047,8 @@ mod tests {
         // s4=press → s5=type。
         assert_eq!(steps[1]["run"]["command"], "wait");
         assert_eq!(steps[1]["run"]["args"][1], "另存为");
+        // 真机发现 #5:超时参数是数字形态,必须以字符串入 YAML(否则 flow schema 拒绝)。
+        assert_eq!(steps[1]["run"]["args"][3], "5990");
         assert!(steps[1].get("verify").is_none());
         assert!(steps[1].get("retry").is_none());
         assert_eq!(steps[0]["run"]["args"][2], "{input: window}");
