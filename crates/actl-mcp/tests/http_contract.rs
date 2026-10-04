@@ -25,7 +25,10 @@ impl Drop for Server {
 }
 
 fn start_server() -> Server {
-    let port = 17600 + (std::process::id() % 1000) as u16;
+    // 同一测试进程内多用例并行:端口按原子计数器分配(pid 派生会让全部
+    // 用例撞同一端口)。
+    static NEXT_PORT: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(17600);
+    let port = NEXT_PORT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     let child = Command::new(env!("CARGO_BIN_EXE_actl-mcp"))
         .args(["--listen", &format!("127.0.0.1:{port}"), "--token", TOKEN])
         .stdout(Stdio::null())
@@ -45,6 +48,8 @@ fn start_server() -> Server {
 }
 
 /// 手写一次 HTTP POST,返回 (状态码, 正文)。
+/// `mcp_name` 是 Mcp-Name 头的取值——规范要求与 body 的
+/// params.name(tools/call)或 params.uri(resources/read)一致,rmcp 强制。
 fn post(
     port: u16,
     path: &str,
@@ -52,6 +57,7 @@ fn post(
     origin: Option<&str>,
     body: &str,
     method_header: Option<&str>,
+    mcp_name: &str,
 ) -> (u16, String) {
     let mut stream = TcpStream::connect(("127.0.0.1", port)).expect("connect");
     stream
@@ -69,7 +75,7 @@ fn post(
     }
     if let Some(method) = method_header {
         request.push_str(&format!("Mcp-Method: {method}\r\n"));
-        request.push_str(&format!("Mcp-Name: actl\r\n"));
+        request.push_str(&format!("Mcp-Name: {mcp_name}\r\n"));
         request.push_str("MCP-Protocol-Version: 2026-07-28\r\n");
     }
     request.push_str(&format!("Content-Length: {}\r\n\r\n", body.len()));
@@ -150,7 +156,15 @@ fn tool_call_body(command: &str, args: &[&str]) -> String {
 fn bearer_gate_rejects_missing_and_wrong_tokens() {
     let server = start_server();
     let body = tool_call_body("status", &[]);
-    let (status, _) = post(server.port, "/mcp", None, None, &body, Some("tools/call"));
+    let (status, _) = post(
+        server.port,
+        "/mcp",
+        None,
+        None,
+        &body,
+        Some("tools/call"),
+        "actl",
+    );
     assert_eq!(status, 401, "missing token must be 401");
     let (status, _) = post(
         server.port,
@@ -159,6 +173,7 @@ fn bearer_gate_rejects_missing_and_wrong_tokens() {
         None,
         &body,
         Some("tools/call"),
+        "actl",
     );
     assert_eq!(status, 401, "wrong token must be 401");
 }
@@ -174,6 +189,7 @@ fn cross_origin_is_rejected_with_valid_token() {
         Some("http://evil.example"),
         &body,
         Some("tools/call"),
+        "actl",
     );
     assert_eq!(status, 403, "cross-origin must be 403");
 }
@@ -189,6 +205,7 @@ fn tool_call_dispatches_to_the_real_actl_binary() {
         None,
         &body,
         Some("tools/call"),
+        "actl",
     );
     assert_eq!(status, 200, "{response}");
     let json: serde_json::Value = serde_json::from_str(&response).expect("json-rpc response");
@@ -209,6 +226,7 @@ fn excluded_verb_returns_an_explicit_error_not_silence() {
         None,
         &body,
         Some("tools/call"),
+        "actl",
     );
     assert_eq!(status, 200, "{response}");
     let json: serde_json::Value = serde_json::from_str(&response).expect("json-rpc response");
@@ -235,6 +253,7 @@ fn unknown_method_is_jsonrpc_error_not_http_crash() {
         None,
         body,
         Some("no/such/method"),
+        "",
     );
     // 契约:结构化 JSON-RPC 错误体返回(校验序由 rmcp 定,400/-32602 合法),
     // 服务不崩;后续调用仍可用。
@@ -256,6 +275,65 @@ fn unknown_method_is_jsonrpc_error_not_http_crash() {
         None,
         &body,
         Some("tools/call"),
+        "actl",
     );
     assert_eq!(status, 200, "{response}");
+}
+
+#[test]
+fn help_resource_template_serves_real_command_help() {
+    let server = start_server();
+    let body = r#"{"jsonrpc":"2.0","id":3,"method":"resources/read","params":{"uri":"actl://help/verify-window","_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}"#;
+    let uri_like = "actl://help/verify-window";
+    let (status, response) = post(
+        server.port,
+        "/mcp",
+        Some(TOKEN),
+        None,
+        body,
+        Some("resources/read"),
+        &uri_like,
+    );
+    assert_eq!(status, 200, "{response}");
+    let json: serde_json::Value = serde_json::from_str(&response).expect("json-rpc");
+    let text = json["result"]["contents"][0]["text"]
+        .as_str()
+        .unwrap_or_default();
+    // 四要素纪律:真 --help 文本须含 Usage/Example/Errors 骨架。
+    assert!(text.contains("Usage"), "{text}");
+    assert!(text.contains("Example"), "{text}");
+}
+
+#[test]
+fn help_resource_is_absent_for_excluded_and_unknown_commands() {
+    let server = start_server();
+    for (uri, expect) in [
+        ("actl://help/execution-recover", "local-only"),
+        ("actl://help/not-a-command", "no help"),
+    ] {
+        let body = format!(
+            r#"{{"jsonrpc":"2.0","id":4,"method":"resources/read","params":{{"uri":"{uri}","_meta":{{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{{}}}}}}}}"#
+        );
+        let (status, response) = post(
+            server.port,
+            "/mcp",
+            Some(TOKEN),
+            None,
+            &body,
+            Some("resources/read"),
+            &uri,
+        );
+        assert!(status < 500, "{uri}: {status} {response}");
+        let json: serde_json::Value = serde_json::from_str(&response).ok().unwrap_or_default();
+        // 排除动词走 JSON-RPC 错误体;未知命令走资源文本如实回报——
+        // 两种形态都不得伪造帮助内容。
+        let error_text = json["error"]["message"].as_str().unwrap_or_default();
+        let contents_text = json["result"]["contents"][0]["text"]
+            .as_str()
+            .unwrap_or_default();
+        assert!(
+            error_text.contains(expect) || contents_text.contains(expect),
+            "{uri} should say '{expect}' — error: '{error_text}' contents: '{contents_text}'"
+        );
+    }
 }

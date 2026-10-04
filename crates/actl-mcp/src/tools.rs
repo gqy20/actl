@@ -85,6 +85,79 @@ impl ServerHandler for Adapter {
              local signal bar. Command families: {QUICKREF}"
         ))
     }
+
+    /// 资源面只有一个模板(docs/82 §5.2 三层懒加载第 2 层):单命令完整帮助
+    /// (CLI `-h` 四要素文本,docs/06 §3.5 既有纪律直接复用)——按需 ~300-500
+    /// tokens/次;排除动词的模板不存在(读不到即面外)。全量 commands schema
+    /// 不是资源(客户端自动读取会全员买单 15-25K tokens,2026-10-05 修订),
+    /// 需要时作为普通命令显式调用。
+    async fn list_resource_templates(
+        &self,
+        _request: Option<rmcp::model::PaginatedRequestParams>,
+        _ctx: RequestContext<RoleServer>,
+    ) -> Result<rmcp::model::ListResourceTemplatesResult, McpError> {
+        Ok(rmcp::model::ListResourceTemplatesResult {
+            resource_templates: vec![rmcp::model::ResourceTemplate::new(
+                "actl://help/{command}",
+                "Full help for one actl command (usage, arguments, example, errors)".to_string(),
+            )],
+            ..Default::default()
+        })
+    }
+
+    async fn read_resource(
+        &self,
+        request: rmcp::model::ReadResourceRequestParams,
+        _ctx: RequestContext<RoleServer>,
+    ) -> Result<rmcp::model::ReadResourceResponse, McpError> {
+        let command = request
+            .uri
+            .as_str()
+            .strip_prefix("actl://help/")
+            .map(str::to_string)
+            .ok_or_else(|| {
+                McpError::resource_not_found(
+                    "unsupported resource",
+                    Some(serde_json::json!({"uri": request.uri})),
+                )
+            })?;
+        if crate::is_excluded(&command) {
+            return Err(McpError::resource_not_found(
+                "local-only command: no remote help surface",
+                Some(serde_json::json!({"uri": request.uri})),
+            ));
+        }
+        // spawn `actl <cmd> --help`:stdout 是人类文本(--help 是 envelope
+        // 纪律的唯一例外,docs/06 §3.5)——原样作为文本资源返回。
+        let output = tokio::process::Command::new(&*self.exe)
+            .arg(&command)
+            .arg("--help")
+            .env("ACTL_TASK_ID", dispatch::new_task_id())
+            .kill_on_drop(true)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .output()
+            .await
+            .map_err(|e| McpError::internal_error(format!("help spawn failed: {e}"), None))?;
+        let text = if output.status.success() {
+            String::from_utf8_lossy(&output.stdout).into_owned()
+        } else {
+            // 未知命令:clap 的人类错误文本如实返回(资源面不伪造帮助)。
+            let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+            format!(
+                "actl reported no help (exit {}):\n{}",
+                output.status.code().unwrap_or(-1),
+                stderr.trim()
+            )
+        };
+        Ok(
+            rmcp::model::ReadResourceResult::new(vec![rmcp::model::ResourceContents::text(
+                text,
+                request.uri.clone(),
+            )])
+            .into(),
+        )
+    }
 }
 
 /// envelope → tool result 的唯一映射(单测钉住)。
