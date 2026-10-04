@@ -1,0 +1,52 @@
+# actl 应用档案 pack(pack_format: 1)—— uTools 启动器
+# 知识来源:docs/80-record-acceptance.md 改写重放轮(2026-10-04 真机六轮
+# 005-010,run demo-rewrite-010 全链 11 步 completed)+ 识图对比诊断
+# (uTools_paste/keystroke 效果对照)。Electron 应用,a11y 树对定位不可见。
+pack_format: 1
+name: utools
+display: uTools 启动器
+launch: uTools           # 实测路径 %LOCALAPPDATA%\Programs\utools\uTools.exe;actl 无启动命令,唤起需流程外运行该 exe(启动原语为 ROADMAP 候选)
+window: "uTools"
+app_version: "uTools 5.x(Electron)"
+verified_date: 2026-10-04
+verified_env: Win11 zh-cn(docs/80 改写重放轮,run demo-rewrite-010)
+quirks:
+  - id: paste_does_not_filter
+    note: >-
+      搜索框不吃粘贴(发现 #7,识图对比实证):ctrl+v 只生成关键词标签、
+      不驱动模糊筛选——结果列表保持默认全集,回车命中的是默认首项
+      「文件搜索」而非目标应用。文本输入必须逐键真实击键(press,与
+      手敲同通道);识图实证 jishi 逐键后记事本橙色高亮居首。
+  - id: a11y_tree_invisible
+    note: >-
+      snapshot/find 全不可见(树呈 6 个空 Pane);焦点可达——focus-report
+      的 uia_focused 能拿到搜索框 Edit(name=占位符文本)。automation_id
+      是会话级运行时 id(跨会话不可复用)。元素级断言做不了,效果证明
+      靠端到端后置条件(如 wait --window <目标应用>)。
+  - id: autohide_on_focus_loss
+    note: >-
+      失焦即隐藏;隐藏后 press 守卫正确拒绝(ok:false 是护栏在工作,
+      不要放宽)。重新唤起 = 再次运行 uTools.exe(单实例,唤起即聚焦
+      搜索框);唤起动画期窗口高仅 ~116px,清空/输入等前先 wait --window
+      再留 ~1s 沉降。
+  - id: query_persistence
+    note: >-
+      查询内容跨隐藏/唤起持久——重放前必须清空(发现 #9:backspace
+      按数清不净残留;全选删除幂等:press ctrl+a → press delete,空态
+      全部无副作用)。空查询时窗口收缩为 ~116px 高(仅搜索栏),窗口
+      高度可作空态探针。
+  - id: key_name_esc
+    note: 键名是 esc 不是 escape(错误表达式直接 PROTOCOL 拒绝)。
+routes:
+  - id: search_launch_app
+    description: 清空查询后逐键搜索并回车启动应用(粘贴死路,见 paste_does_not_filter)
+    status: verified
+    verify: 回车后 wait --window <目标应用窗口标题> 出现(端到端断言,元素级不可行)
+    steps:
+      - ["press", "ctrl+a", "--app", "{window}"]
+      - ["press", "delete", "--app", "{window}"]
+      - ["press", "backspace", "--app", "{window}"]
+      - ["press", "backspace", "--app", "{window}"]
+      - ["press", "<逐键字母 j/i/s/h/i>", "--app", "{window}"]
+      - ["press", "enter", "--app", "{window}"]
+      - ["wait", "--window", "<目标应用窗口标题>", "--timeout", "15000"]
