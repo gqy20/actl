@@ -41,20 +41,17 @@ routes:
     steps:
       - ["get", "role:Document", "--app", "{window}", "--property", "text"]
   - id: style_choreography
-    description: 样式排版流程(模板预置样式+光标式 Ctrl+Alt+N;无选区、无对话框)
+    description: 样式排版流程(模板 v2 预置样式空段+逐段填充;零运行时样式操作)
     status: verified
     steps:
       - ["launch", "{program}", "/n", "{file}"]
       - ["wait", "--element", "role:Document", "--app", "{window}", "--timeout", "30000"]
       - ["type", "role:Document", " ", "--paste", "--app", "{window}"]
-      - ["press", "ctrl+a", "--target", "role:Document", "--app", "{window}"]
-      - ["press", "backspace", "--target", "role:Document", "--app", "{window}"]
-      - ["set-clipboard", "{段落文本}"]
-      - ["press", "ctrl+v", "--target", "role:Document", "--app", "{window}"]
-      - ["press", "ctrl+alt+1|ctrl+alt+2", "--target", "role:Document", "--app", "{window}"]
-      - ["press", "enter", "--target", "role:Document", "--app", "{window}"]
+      - ["press", "ctrl+z", "--target", "role:Document", "--app", "{window}"]
+      - ["type", "role:Document", "{段落文本}", "--paste", "--app", "{window}"]
+      - ["press", "down", "--target", "role:Document", "--app", "{window}"]
       - ["press", "ctrl+s", "--target", "role:Document", "--app", "{window}"]
-    verify: Ctrl+Alt+N 以光标所在段落应用样式(无选区)；编排为逐段 回车→粘贴→按样式键,首段免回车;样式定义预置在 assets/note-template.docx(标题1=黑体20/标题2=微软雅黑14/正文=宋体12,1.5倍行距),运行时只应用不修改;关闭重开后 verify-file --kind docx-styles 逐段断言 styleId(workflows/word-note-typography.yml 全流程 2026-10-04 真机通过,docs/81)
+    verify: 模板 note-template.docx 预置 12 个带样式空段(P1=标题1/P3、P8=标题2,黑体20/雅黑14/宋体12+1.5倍行距);流程只填文本(type --paste 单调用内化剪贴板)不碰样式;尾部 \r 或 \r\n 粘贴不建段(只产生软换行),分隔符内嵌才建段;纯 down 计数在已填充文档会漂移,填充式靠组级全文断言 fail-safe;关闭重开后 verify-file --kind docx-styles 逐段断言(workflows/word-note-typography.yml 12 步 2026-10-04 两轮真机通过,note-typo-004;提速 ~30%,docs/81 §7)
   - id: body_append
     description: 正文写入(paste 通道;追加落在焦点处,先 click 定位插入点)
     # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
