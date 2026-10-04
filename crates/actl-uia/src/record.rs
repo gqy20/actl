@@ -384,9 +384,12 @@ fn refresh_focus(auto: &UIAutomation) -> FocusCache {
 /// 真机发现 #4:burst 末/停止瞬间的读回与应用的输入提交管线竞态(实测停止在
 /// 最后按键后 231ms,文档尚未提交→读到空,值事件缺失)——有界沉降重试:
 /// ≤3 次、150ms 间隔(ACTL_SETTLE_MS 同族思想),耗尽如实返回无事件。
-fn capture_value(auto: &UIAutomation, expected_title: Option<&str>) -> Option<Value> {
+/// 真机发现 #11(rec-ma-5 复验轮):护栏曾按窗口标题精确比对——编辑会改标题
+/// (脏标记星号:marker4 → *marker4),读回全程被拒、值事件系统性缺失;
+/// 演示轮偶然成功只因标题从录制起就带星号。护栏改比焦点根 HWND(稳定身份)。
+fn capture_value(auto: &UIAutomation, expected_hwnd: Option<isize>) -> Option<Value> {
     for attempt in 0..3 {
-        if let Some(event) = read_focus_value(auto, expected_title) {
+        if let Some(event) = read_focus_value(auto, expected_hwnd) {
             return Some(event);
         }
         if attempt < 2 {
@@ -396,13 +399,14 @@ fn capture_value(auto: &UIAutomation, expected_title: Option<&str>) -> Option<Va
     None
 }
 
-/// 单次读回尝试。守卫:焦点根窗须与运行一致(不一致 = 焦点已换,读到的会是
-/// 别的元素);密码焦点不读(脱敏不可关闭)。Value → Text 文档区回退链(真机
-/// 发现 #3:TextPattern 型应用无 ValuePattern,与 verify 的 value/text 通道同族)。
-fn read_focus_value(auto: &UIAutomation, expected_title: Option<&str>) -> Option<Value> {
+/// 单次读回尝试。守卫:焦点根窗须与键入时一致(按 HWND;不一致 = 焦点已换,
+/// 读到的会是别的元素);密码焦点不读(脱敏不可关闭)。Value → Text 文档区
+/// 回退链(真机发现 #3:TextPattern 型应用无 ValuePattern,与 verify 的
+/// value/text 通道同族)。
+fn read_focus_value(auto: &UIAutomation, expected_hwnd: Option<isize>) -> Option<Value> {
     let (hwnd, title) = crate::kbd::focused_root_window()?;
-    if let Some(expected) = expected_title
-        && expected != title
+    if let Some(expected) = expected_hwnd
+        && expected != hwnd
     {
         return None;
     }
@@ -541,9 +545,9 @@ pub fn run_session(cfg: &SessionConfig) -> Result<SessionOutcome, CtlError> {
 
     let mut events: Vec<Value> = vec![header];
     let mut focus: Option<FocusCache> = None;
-    // 键入 burst 待收口状态:(焦点窗标题, 最后键事件 t)——值读回的触发时机 =
-    // 静默 300ms / 点击事件 / 会话终点。
-    let mut pending_keys: Option<(Option<String>, u64)> = None;
+    // 键入 burst 待收口状态:(焦点根 HWND, 最后键事件 t)——值读回的触发时机 =
+    // 静默 300ms / 点击事件 / 会话终点。HWND 而非标题:编辑会改标题(发现 #11)。
+    let mut pending_keys: Option<(Option<isize>, u64)> = None;
     let mut skipped_own: u64 = 0;
     let started = Instant::now();
     let mut last_state_ms = started_ms;
@@ -587,7 +591,7 @@ pub fn run_session(cfg: &SessionConfig) -> Result<SessionOutcome, CtlError> {
                     // 点击终结键入 burst:先补值读回(提交后最终文本,IME 中文的
                     // 唯一可靠来源),值事件先于点击事件入 trace(docs/06 R2)。
                     if let Some(expected) = pending_keys.take()
-                        && let Some(value) = capture_value(&auto, expected.0.as_deref())
+                        && let Some(value) = capture_value(&auto, expected.0)
                     {
                         append_event(&mut trace, &mut events, value)?;
                     }
@@ -625,7 +629,7 @@ pub fn run_session(cfg: &SessionConfig) -> Result<SessionOutcome, CtlError> {
                         }
                         let focus = focus.as_ref().unwrap();
                         // 记录 burst 待收口状态(密码焦点不进——值读回会泄露)。
-                        pending_keys = Some((focus.title.clone(), raw.t_ms));
+                        pending_keys = Some((focus.hwnd, raw.t_ms));
                         json!({
                             "t": raw.t_ms, "kind": "key", "vk": vk, "mods": mods,
                             "ime": vk == 0xE5, "injected": injected,
@@ -646,7 +650,7 @@ pub fn run_session(cfg: &SessionConfig) -> Result<SessionOutcome, CtlError> {
         // 焦点最可能仍在输入控件上——值配对成功率最高的时机)。
         if let Some((expected, last_t)) = pending_keys.clone()
             && unix_ms().saturating_sub(last_t) >= 300
-            && let Some(value) = capture_value(&auto, expected.as_deref())
+            && let Some(value) = capture_value(&auto, expected)
         {
             pending_keys = None;
             append_event(&mut trace, &mut events, value)?;
@@ -678,7 +682,7 @@ pub fn run_session(cfg: &SessionConfig) -> Result<SessionOutcome, CtlError> {
     }
     // 会话终点补最后一次值读回(最后一段键入可能直到停止都没等到静默/点击)。
     if let Some(expected) = pending_keys.take()
-        && let Some(value) = capture_value(&auto, expected.0.as_deref())
+        && let Some(value) = capture_value(&auto, expected.0)
     {
         append_event(&mut trace, &mut events, value)?;
     }
