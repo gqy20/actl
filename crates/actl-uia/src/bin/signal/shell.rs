@@ -18,6 +18,9 @@ static PRESSED: Mutex<Option<model::Control>> = Mutex::new(None);
 static VIEW: Mutex<Option<model::View>> = Mutex::new(None);
 static REQUEST_MESSAGE: Mutex<String> = Mutex::new(String::new());
 static MENU_FLOW: Mutex<Option<(String, bool)>> = Mutex::new(None);
+/// 菜单打开时录制项的(1-based 序号, 是否为"开始")——序号随前置动态项
+/// (流程暂停/继续)有无而漂移,menu_action 按存储序号匹配(menu() 同轮写入)。
+static MENU_RECORD: Mutex<Option<(usize, bool)>> = Mutex::new(None);
 static CURSOR: Mutex<Option<ActionCursor>> = Mutex::new(None);
 static PREPARING: Mutex<String> = Mutex::new(String::new());
 static CAPTURES: Mutex<Vec<u32>> = Mutex::new(Vec::new());
@@ -329,6 +332,31 @@ unsafe fn tick(hwnd: HWND) {
             );
         }
     }
+    // 录制反馈(details 行 + 错误弹窗,flow_ui 同模式)。
+    let record_message = super::record_ui::message();
+    if !record_message.is_empty() {
+        v.details.push_str(&format!("\n{record_message}"));
+        let is_new = REQUEST_MESSAGE
+            .lock()
+            .map(|mut old| {
+                let changed = *old != record_message;
+                *old = record_message.clone();
+                changed
+            })
+            .unwrap_or(false);
+        if is_new && record_message.contains('：') {
+            super::popup::show(
+                hwnd,
+                vec!["录制操作未完成".into(), record_message.clone()],
+                false,
+            );
+        }
+    }
+    // 录制中状态(docs/76 §9:信号条有明确提示,反后台录制)——tick 轮询发现,
+    // label 前缀触发标题/托盘/条面刷新;会话结束(停止/上限)自动回落。
+    if super::record_ui::active_session(&paths).is_some() && !v.label.contains("录制中") {
+        v.label = format!("录制中·{}", v.label);
+    }
     // 标题/图标只在四要素变化时更新;展开行内容(second/elapsed)变化只触发重绘,
     // 避免运行中每秒重建托盘图标。
     let (changed, content) = if let Ok(mut old) = VIEW.lock() {
@@ -630,10 +658,32 @@ unsafe fn menu(hwnd: HWND) {
     if let Ok(mut stored) = MENU_FLOW.lock() {
         *stored = action;
     }
+    // 录制触发面(docs/79 §8 R4):无活跃会话→开始;有→停止。动态项在流程
+    // 操作之后,序号存 MENU_RECORD 供 menu_action 匹配。
+    let start_recording = super::record_ui::active_session(&paths).is_none();
+    lines.push(if start_recording {
+        "开始录制".into()
+    } else {
+        "停止录制".into()
+    });
+    if let Ok(mut stored) = MENU_RECORD.lock() {
+        *stored = Some((lines.len(), start_recording)); // lines.len() = 1-based 序号
+    }
     super::popup::show(hwnd, lines, true);
 }
 
 unsafe fn menu_action(hwnd: HWND, cmd: usize) {
+    // 录制项先于固定序号匹配:它的序号可能是 7 或 8(流程暂停/继续有无),
+    // 与固定 7(流程操作)仅在流程项缺席时重叠——MENU_FLOW 为 None 时两者不冲突。
+    if let Some((cmd_record, start)) = MENU_RECORD.lock().ok().and_then(|slot| *slot)
+        && cmd == cmd_record
+    {
+        if let Err(error) = super::record_ui::request(start) {
+            super::popup::show(hwnd, vec!["录制操作未启动".into(), error], false);
+        }
+        tick(hwnd);
+        return;
+    }
     match cmd {
         1 | 2 => {
             let result = if cmd == 1 {

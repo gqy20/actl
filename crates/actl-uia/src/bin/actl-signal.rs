@@ -50,6 +50,8 @@ mod popup;
 mod probe;
 #[path = "signal/probe_worker.rs"]
 mod probe_worker;
+#[path = "signal/record_ui.rs"]
+mod record_ui;
 #[path = "signal/shell.rs"]
 mod shell;
 #[path = "signal/task_notice.rs"]

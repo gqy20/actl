@@ -123,6 +123,8 @@
 
 停止热键（演示中一个动作可达）：急停 Ctrl+Alt+F12 已开"会话控制热键"先例——PRD 非目标的"热键"指动作触发面板，会话安全控制不同类；边界在 spec 里写明，v1 可先不做。选右键菜单而非信号条常驻按钮：细条 overlay 挤空间且易误触，右键是显式意图动作、零占位。
 
+**R4 落地（2026-10-04，`crates/actl-uia/src/bin/signal/record_ui.rs` + shell.rs 接线）**：菜单动态项恒在（无会话→"开始录制"，有→"停止录制"，序号存 MENU_RECORD 随前置流程动态项漂移）；执行走后台线程 spawn `actl record-start/record-stop`（record-stop 等终态 ≤15s 不阻塞窗口线程；envelope 解析为反馈文案）；反馈经 tick 进 details 行 + 错误弹窗（flow_ui 同模式）；**信号条 label 前缀"录制中"**（tick 轮询 records/ 发现——§8.2.1 的会话状态文件由此兑现；会话结束自动回落）。点击菜单本身发生在 actl-signal 窗口上，录制 trace 的 signal pid 过滤排除它。`record-pause` 未实现（CLI 无此命令，v1 不设菜单项）；右键真机验收与人工演示轮合并进行。
+
 ### 8.2 代码核实带出的三个设计点
 
 1. **会话状态文件必须落盘**：菜单动态项靠磁盘发现会话（flow discover 先例）——`record-start` 不能只是进程内存态，会话状态文件的位置/格式是 R1 的一部分而非 R4 补充；
