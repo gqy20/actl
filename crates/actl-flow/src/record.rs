@@ -603,7 +603,7 @@ fn vk_char(vk: u64, shift: bool) -> Option<char> {
 
 /// 渲染 flow-v1 兼容草稿(必须可 flow-validate;TODO 是注释不是步骤)。
 pub fn render(draft: &Draft, stop_reason: &str, trace_path: &str) -> String {
-    use crate::route::yaml_scalar;
+    use crate::route::{arg_scalar, yaml_scalar};
     let mut out = String::new();
     out.push_str(
         "# actl recording draft (mechanical compile, UNVERIFIED) — docs/06 R1/R2 / docs/79\n",
@@ -637,14 +637,17 @@ pub fn render(draft: &Draft, stop_reason: &str, trace_path: &str) -> String {
             out.push_str(&format!("    title: {}\n", yaml_scalar(&step.title)));
             out.push_str("    run:\n");
             out.push_str(&format!("      command: {}\n", yaml_scalar(&step.command)));
-            let args: Vec<String> = step.args.iter().map(|a| yaml_scalar(a)).collect();
+            // {input: name} 绑定必须裸输出为 YAML 流映射(真机发现 #6:经 yaml_scalar
+            // 引号后成为纯字符串,inputs 替换永不发生,字面量直达命令——flow-validate
+            // 只查字符串合法性放行,运行时才失败)。
+            let args: Vec<String> = step.args.iter().map(|a| arg_scalar(a)).collect();
             out.push_str(&format!("      args: [{}]\n", args.join(", ")));
             if let Some(verify_args) = &step.verify {
                 // 写步骤:机械验证 + retry: never(schema:副作用必带验证,默认
                 // read_only 不可重放写入)——效果级验证留给 agent 改写轮。
                 out.push_str("    verify:\n");
                 out.push_str("      command: verify\n");
-                let verify: Vec<String> = verify_args.iter().map(|a| yaml_scalar(a)).collect();
+                let verify: Vec<String> = verify_args.iter().map(|a| arg_scalar(a)).collect();
                 out.push_str(&format!("      args: [{}]\n", verify.join(", ")));
                 out.push_str("    retry: never\n");
             }
@@ -1051,10 +1054,11 @@ mod tests {
         assert_eq!(steps[1]["run"]["args"][3], "5990");
         assert!(steps[1].get("verify").is_none());
         assert!(steps[1].get("retry").is_none());
-        assert_eq!(steps[0]["run"]["args"][2], "{input: window}");
+        // 绑定是 YAML 流映射(发现 #6):裸 {input: name} 解析为对象,替换才发生。
+        assert_eq!(steps[0]["run"]["args"][2]["input"], "window");
         assert_eq!(steps[0]["verify"]["args"][1], "id:num7Button");
         assert_eq!(steps[0]["retry"], "never");
-        assert_eq!(steps[2]["run"]["args"][2], "{input: window_2}");
+        assert_eq!(steps[2]["run"]["args"][2]["input"], "window_2");
         assert_eq!(steps[3]["run"]["args"][0], "ctrl+s");
         assert_eq!(steps[3]["verify"]["args"][1], "id:results");
         assert_eq!(steps[4]["run"]["args"][1], "h");

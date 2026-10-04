@@ -181,6 +181,20 @@ fn goal_step(spec: &ExploreSpec) -> Vec<String> {
 }
 
 /// YAML 标量渲染:需要时双引号(冒号/引号/控制字符/首尾空白/空串/流标点)。
+/// 注意:{input: name} 绑定**不走这里**(arg_scalar)——它必须是 YAML 流映射
+/// 而非字符串(inputs 替换只认映射对象,真机发现 #6)。
+pub(crate) fn arg_scalar(text: &str) -> String {
+    if is_input_binding(text) {
+        return text.into();
+    }
+    yaml_scalar(text)
+}
+
+/// `{input: name}` 形态的完整参数绑定(generalize_windows 生成的精确格式)。
+pub(crate) fn is_input_binding(text: &str) -> bool {
+    text.starts_with("{input: ") && text.ends_with('}') && !text[8..text.len() - 1].contains('}')
+}
+
 pub(crate) fn yaml_scalar(text: &str) -> String {
     // 数字/布尔/null 形态的纯量必须加引号:YAML 会把它们解析成非字符串,
     // 而 flow schema 要求 args 全字符串(真机发现 #5:--timeout 8022 裸数字
