@@ -8,8 +8,8 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-actl-core = { path = "../actl-core", version = "0.2.0" }
-actl-uia = { path = "../actl-uia", version = "0.2.0" }
+actl-core = { path = "../actl-core", version = "0.2.1" }
+actl-uia = { path = "../actl-uia", version = "0.2.1" }
 serde.workspace = true
 serde_json.workspace = true
 tungstenite.workspace = true

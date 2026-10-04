@@ -101,9 +101,11 @@ actl get role:Document --property text --app Word                # 读回全文
 
 **它不抢你的手。** 默认全部走 UIA 后台调用,不碰你的鼠标键盘;需要真实移动鼠标的动作(拖拽等)必须显式 `--physical` 声明。输入前核对物理前台窗口,你正在打字时它拒绝注入,绝不踩掉你的按键。
 
-**流程是文件,不是黑盒。** 多步任务写成 YAML 流程(带输入声明、验证步骤、暂停点),`flow-run` 一步执行、断点可恢复。跑完的流程沉淀成可复用模板——同一个任务第二次就是一条命令的事。
+**流程是文件,不是黑盒。** 多步任务写成 YAML 流程(带输入声明、验证步骤、暂停点),`flow-run` 一步执行、断点可恢复。跑偏了不要从头重跑——`flow-revise` 版本化修订原地续跑(旧计划字节归档、谱系可审计);环境准备步用 `ensure:` 幂等声明,重跑前缀自动短路;写步动手前先听前台弹层,未知弹窗停下判读而不是硬闯。跑完的流程沉淀成可复用模板——同一个任务第二次就是一条命令的事。
 
-### 命令一览(70 条,`actl commands` 自发现)
+**你演示一遍,它变成流程。** 信号条右键「开始录制」,人用鼠标键盘真实操作一遍,`record-stop` 出机械可复放的 YAML 草稿(IME 中文提交值、窗口等待、输入参数化全自动编译),agent 改写一轮后单命令重放。人演示与 agent 自主探索两条路,在回写层汇成同一份应用知识。
+
+### 命令一览(76 条,`actl commands` 自发现)
 
 | 类别 | 命令 |
 |---|---|
@@ -112,7 +114,8 @@ actl get role:Document --property text --app Word                # 读回全文
 | 窗口 | `launch` `focus-window` `close-window` `resize-window` `minimize-window` `restore-window` `wait` `batch` |
 | 验证 | `verify` `extract` `verify-file` `verify-rows` `verify-owner` `verify-closed` `verify-window` `verify-clipboard` |
 | 剪贴板 | `get-clipboard` `set-clipboard` |
-| 流程 | `flow-validate` `flow-run` `flow-status` `flow-pause` `flow-resume` `flow-clean` `explore-writeback` |
+| 流程 | `flow-validate` `flow-run` `flow-status` `flow-pause` `flow-resume` `flow-revise` `flow-evidence` `flow-clean` `explore-writeback` |
+| 录制 | `record-start` `record-worker` `record-stop` `record-status` |
 | 浏览器 | `browser-launch` `browser-navigate` `browser-read` `browser-type` `browser-click` `browser-close` `browser-list` `browser-verify` |
 | 应用注册 | `app-register` `app-list` `app-remove` |
 | 桌面与诊断 | `desktop-prepare` `desktop-restore` `display-start` `display-status` `execution-status` `execution-recover` `focus-report` `front-report` `history` `task-archive` `preview` |
@@ -129,11 +132,13 @@ actl get role:Document --property text --app Word                # 读回全文
 
 ## 项目状态
 
-当前 v0.2.0(M3 阶段):70 条命令全链路可用——计算器与记事本端到端任务、跨
+当前 v0.2.1(M3 阶段):76 条命令全链路可用——计算器与记事本端到端任务、跨
 3 应用数据搬运、浏览器自有 CDP 通道(登录态会话/内容投影/坐标兜底)、框选/长按/
-轨迹拖拽指针扩展、探索模式(有界自主探索+决策卡外抛)均实测落地;应用知识以
-pack 形式沉淀,流程以 YAML 治理。场景结论持续沉淀进 docs 与应用档案。阶段划分
-与版本口径见 [ROADMAP](https://github.com/gqy20/actl/blob/main/docs/ROADMAP.md)。
+轨迹拖拽指针扩展、探索模式(有界自主探索+决策卡外抛)、**GUI 录制(人演示→
+YAML,右键启停)、焦点元素寻址(`focused:`,树不可见应用的单次注入打字)、
+运行时治理(失败采集包/弹层门禁/修订续跑/幂等步骤/进程看门狗)**均实测落地;
+应用知识以 pack 形式沉淀,流程以 YAML 治理。场景结论持续沉淀进 docs 与应用档案。
+阶段划分与版本口径见 [ROADMAP](https://github.com/gqy20/actl/blob/main/docs/ROADMAP.md)。
 
 ## 参与开发
 
