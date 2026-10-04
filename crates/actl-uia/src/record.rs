@@ -471,31 +471,10 @@ fn write_state(dir: &Path, status: &str, extra: Value) {
 pub fn run_session(cfg: &SessionConfig) -> Result<SessionOutcome, CtlError> {
     fs::create_dir_all(&cfg.dir).map_err(|e| internal(format!("records dir: {e}")))?;
     let started_ms = unix_ms();
-    write_state(
-        &cfg.dir,
-        "recording",
-        json!({"started_ms": started_ms, "max_seconds": cfg.max_seconds, "events": 0, "skipped_own": 0}),
-    );
-
-    let auto = UIAutomation::new().map_err(internal)?;
-    // 真机发现 #1:钩子事件坐标是物理屏幕坐标,而 WindowFromPoint/ElementFromPoint
-    // 按调用线程的 DPI 感知解释坐标——多显示器混合 DPI 下错位(实测点击反查命中
-    // 隔壁屏元素、窗口元数据全空)。会话线程设 PER_MONITOR_AWARE_V2 对齐口径。
-    unsafe {
-        SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-    }
     let own_pid = unsafe { GetCurrentProcessId() };
-    let signal_pid = unsafe {
-        FindWindowW(w!("actl_signal_window"), None)
-            .ok()
-            .map(|hwnd| {
-                let mut pid = 0;
-                GetWindowThreadProcessId(hwnd, Some(&mut pid));
-                pid
-            })
-            .filter(|pid| *pid != 0)
-    };
-
+    // trace 先落盘、显式 flush,然后才发 startup 确认——契约语义是
+    // 「recording 状态可见 = trace 已物化」(record-status 的 lines 至少为 1)。
+    // 修复前确认先于 header,快机竞态侥幸、CI 慢机读到 0 行(golden 分叉)。
     let mut trace = BufWriter::new(
         OpenOptions::new()
             .create(true)
@@ -515,6 +494,30 @@ pub fn run_session(cfg: &SessionConfig) -> Result<SessionOutcome, CtlError> {
     trace
         .write_all(b"\n")
         .map_err(|e| internal(e.to_string()))?;
+    trace.flush().map_err(|e| internal(e.to_string()))?;
+    write_state(
+        &cfg.dir,
+        "recording",
+        json!({"started_ms": started_ms, "max_seconds": cfg.max_seconds, "events": 0, "skipped_own": 0}),
+    );
+
+    let auto = UIAutomation::new().map_err(internal)?;
+    // 真机发现 #1:钩子事件坐标是物理屏幕坐标,而 WindowFromPoint/ElementFromPoint
+    // 按调用线程的 DPI 感知解释坐标——多显示器混合 DPI 下错位(实测点击反查命中
+    // 隔壁屏元素、窗口元数据全空)。会话线程设 PER_MONITOR_AWARE_V2 对齐口径。
+    unsafe {
+        SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    }
+    let signal_pid = unsafe {
+        FindWindowW(w!("actl_signal_window"), None)
+            .ok()
+            .map(|hwnd| {
+                let mut pid = 0;
+                GetWindowThreadProcessId(hwnd, Some(&mut pid));
+                pid
+            })
+            .filter(|pid| *pid != 0)
+    };
 
     // 钩子线程(测试缝:禁用钩子也会话协议全真,docs/06)。
     let hooks_disabled = std::env::var_os("ACTL_RECORD_DISABLE_HOOKS").is_some_and(|v| v == "1");
