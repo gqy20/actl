@@ -115,20 +115,35 @@ PRD 定向（2026-09-28）：提供**独立 MCP 适配服务，在被控 Windows
   `actl <命令>` 子进程（与信号条 spawn record-start 同模式）——预告、开始/继续
   本地放行、急停、看门狗、输入锁**全部原样生效**。远端发起的写操作照样要在本地
   信号条上放行：**远程受监督操作是特性**。
-- **急停代次本地独占**：远端结构性无法清急停——`execution-recover`/
-  `display-start`/`desktop-restore` 进**危险动词排除表**，不进远端工具面
-  （显示端死了本地人重启）。
+- **急停代次本地独占**：远端结构性无法清急停——排除表初版四条：
+  `execution-recover`（停止/任务状态修复，急停纪律的结构性延伸）、
+  `display-start`（显示端生命周期归本地人）、`desktop-restore`（初版保守排除，
+  实现轮可按「动监督机制才出局」原则重议——它有恢复记录护栏兜底）、
+  `record-worker`（record-start 派生的内部进程缝，非用户动词）。排除原则：
+  **操作本地监督与恢复机制本身的动词出局；用户可见副作用（点窗/打字/剪贴板）
+  不出局**——后者是信号条预告的管辖对象。排除不是静默的：远端调用排除动词
+  返回明确 PROTOCOL 错误（本地专属动词+原因）。急停后远端调用自动 fail-closed
+  （spawn 子进程绑停止代次）——无需为封锁远端额外排除任何命令。
 - 配对/认证：模式 A = token 仪式（§3.1）；Origin 校验 MUST。
 - 审计：每调用一个 `ACTL_TASK_ID`（`mcp-<随机短id>`），`actl history --task` 全程可查。
 
-### 5.2 能力面（v1 克制）
+### 5.2 能力面（v1 克制；2026-10-05 修订：三层懒加载）
 
 - **一个通用工具** `actl`：`{command, args[]}` → spawn 子进程 → envelope 映射
   tool result（`ok:false` → `isError:true`；error 的 code/hint/evidence 全保留进
   structuredContent——远端 agent 拿到的失败信息与本地完全同构，自愈路径不变）；
-- **一个资源** `actl://commands`：`actl commands` 的完整 schema（docs/06「等价
-  于 MCP tools/list 的 CLI 形态」的兑现——自发现机制直接复用，不做 76 工具镜像，
-  永不漂移）；actl 的哲学：**技能层携带用法知识，传输层只做搬运**；
+- **知识三层懒加载**（上下文成本核算——全量 commands 资源作主入口会被客户端
+  自动读取，单会话 15-25K tokens 不可接受；分层后与本地 agent 的 token 经济
+  完全同构）：
+  1. **工具描述携带紧凑速查**（SKILL.md 命令速查同源，九族一行一条）——随
+     tools/list 一次性加载，~700 tokens，仅列远端可用面（排除表已过滤）；
+  2. **资源模板 `actl://help/{command}`**——单命令完整帮助（CLI `-h` 四要素
+     文本按 URI 暴露，docs/06 §3.5 的既有纪律直接复用）——按需 ~300-500
+     tokens/次；排除动词的模板不存在（读不到即面外）；
+  3. 全量 `actl commands` JSON **从资源面移除**，仅作为可显式调用的命令为
+     机括/调试场景付费；
+- 支持面 = 全部命令 − 排除表（§5.1），不做 76 工具镜像、永不漂移；actl 的
+  哲学：**技能层携带用法知识，传输层只做搬运**；
 - 不实现 MRTR/elicitation：我们的授权模型是本地信号条放行（远端调用发起后被控端
   用户本地点「开始」），不需要客户端侧交互轮次——顺带钉死「远端永远无法自助
   获取权限」。
@@ -161,10 +176,11 @@ PRD 定向（2026-09-28）：提供**独立 MCP 适配服务，在被控 Windows
 ## 7. 实施切分
 
 - **轮 1（spec，一次 PR）**：`crates/actl-mcp`（lib+bin）+ rmcp server + 模式 A
-  监听（--listen/--token，Origin 校验）+ `actl` 通用工具 + 子进程派发 + envelope
-  映射 + 危险动词排除表 + `ACTL_TASK_ID` 映射 + `actl://commands` 资源 + **离线
-  契约测试**（喂 JSON-RPC、断言 spawn 参数与映射——CI 可跑）+ ADR/登记/CHANGELOG
-  /docs/06 协议面 + release.yml publish 顺序。
+  监听（--listen/--token，Origin 校验）+ `actl` 通用工具（描述携带速查表）+
+  `actl://help/{command}` 资源模板（按需懒加载）+ 子进程派发 + envelope
+  映射 + 危险动词排除表（静态表+契约测试：排除动词返回明确 PROTOCOL）+
+  `ACTL_TASK_ID` 映射 + **离线契约测试**（喂 JSON-RPC、断言 spawn 参数与
+  映射——CI 可跑）+ ADR/登记/CHANGELOG/docs/06 协议面 + release.yml publish 顺序。
 - **轮 2**：取消（断连 kill）、进度通知（可选）、`mcp-setup` 只读诊断（防火墙/
   token/客户端配置行打印）、skills 远程使用指南。
 - **轮 3（可选）**：模式 B（SSH + rmcp stdio 传输）、官方 tasks 扩展对齐、TLS。
