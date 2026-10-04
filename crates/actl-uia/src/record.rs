@@ -648,7 +648,7 @@ pub fn run_session(cfg: &SessionConfig) -> Result<SessionOutcome, CtlError> {
         }
         // 键入静默 ≥300ms = burst 末:读回提交值(用户还没点下一个目标,
         // 焦点最可能仍在输入控件上——值配对成功率最高的时机)。
-        if let Some((expected, last_t)) = pending_keys.clone()
+        if let Some((expected, last_t)) = pending_keys
             && unix_ms().saturating_sub(last_t) >= 300
             && let Some(value) = capture_value(&auto, expected)
         {
