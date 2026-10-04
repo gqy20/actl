@@ -1,14 +1,15 @@
+# 2026-10-04：search/open_queue 路线真机复验通过（manual→verified，focused 输入通道）。
 # 2026-09-29：关联 PS 已迁入 workflow；新模板协议预检通过，真实写入复验待完成。
 # 2026-09-29 静态维护：修改过的路线标为 manual，待新版真机复验；verified_date 保留历史日期。
 # 来源: docs/24；docs/27-batch1-deep-tests.md；搜索、播放切换与队列真机验证。
 pack_format: 1
 name: cloudmusic
 display: 网易云音乐
-launch: cloudmusic
+launch: cloudmusic           # 冷启动窗口 ~30s 才现（process started 但 window_not_found 不是失败，等即可）；关闭主窗后托盘常驻（5 进程属设计，勿 taskkill）
 window: "hwnd:{hwnd}"
 app_version: "3.1.41.205529"
-verified_date: 2026-09-28
-verified_env: Windows 10.0.26200.0 zh-cn
+verified_date: 2026-10-04
+verified_env: Windows 10.0.26200.0 zh-cn（2026-10-04 search/open_queue 复验：find 唯一 Edit → click 聚焦 → type focused: 单调用 → enter）
 quirks:
   - id: current_execution_contract
     note: search_ref/search_snapshot_id、queue_ref/queue_snapshot_id 分别来自紧邻的 find，先核对唯一 Edit 或 MenuItem。搜索提交前断言具体搜索框焦点；若输入导致身份变化，重新 find 后更新这对变量。读取未知或错误不能当作暂停、空查询或空队列。
@@ -33,14 +34,14 @@ routes:
     steps:
       - ["get", "role:Document", "--property", "text", "--app", "{window}"]
   - id: search
-    description: 确认唯一搜索 Edit 及空查询后，中文粘贴并提交；已有查询先在该框内全选
-    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
-    status: manual
-    verify: 结果页出现提交的查询标题及对应歌曲/歌手；输入框 name 仅作提示词，不作内容断言。
+    description: 唯一 Edit 点击聚焦后 focused: 单调用输入并提交（2026-10-04 真机复验，中文 3 字符一次送达）
+    status: verified
+    verify: 结果页快照含查询词（输入框 name 是推荐词，不作内容断言）
     steps:
       - ["find", "--role", "Edit", "--app", "{window}"]
-      - ["type", "{search_ref}", "{query}", "--paste", "--app", "{window}", "--snapshot", "{search_snapshot_id}"]
-      - ["press", "enter", "--app", "{window}", "--target", "{search_ref}", "--snapshot", "{search_snapshot_id}"]
+      - ["click", "{search_ref}", "--app", "{window}"]
+      - ["type", "focused:", "{query}", "--app", "{window}"]
+      - ["press", "enter", "--app", "{window}"]
       - ["snapshot", "--app", "{window}"]
   - id: toggle_playback
     description: Ctrl+P 切换播放状态；workflows/cloudmusic-playback.yml 交替比较键盘与 UIA，每轮恢复初始状态
@@ -51,11 +52,11 @@ routes:
       - ["press", "ctrl+p", "--app", "{window}"]
       - ["get", "id:btn_pc_minibar_play", "--app", "{window}"]
   - id: open_queue
-    description: 限定 MenuItem 消除播放列表入口同名歧义
-    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
-    status: manual
-    verify: 队列展开出现 Table，截图和当前歌曲对应；再次点击入口可收起。
+    description: 限定 MenuItem 消除播放列表入口同名歧义（2026-10-04 真机复验展开方向）
+    status: verified
+    verify: 队列展开出现 Table（find --role Table total=1）；收起方向 2026-10-04 未完全证实——二次点击返回 ok 但 Table 树内残留，待复查（疑似面板动画或 ref 陈旧）。
     steps:
       - ["find", "--name", "playlist", "--role", "MenuItem", "--app", "{window}"]
-      - ["click", "{queue_ref}", "--app", "{window}", "--snapshot", "{queue_snapshot_id}"]
+      - ["click", "{queue_ref}", "--app", "{window}"]
+      - ["find", "--role", "Table", "--app", "{window}"]
       - ["snapshot", "--app", "{window}"]
