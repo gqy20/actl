@@ -25,7 +25,11 @@
 
 ### 流程与集成
 
-- [ ] 流程扩展：循环、嵌套分支、计划修订迁移
+- [ ] **运行时治理（2026-10-04 与用户讨论定向：弹层优先机制化 + 突发应对 + 修改后续跑；事故动因见 [80 发现 #11 增补](80-record-acceptance.md)——弹窗滞留两事故与 005-011 六轮全程重跑）**。两轮 spec 弧，依赖有序：
+  **第一轮「失败采集与弹层门禁」**：① `failure_bundle`——uncertain 步落定时自动归集：错误 envelope + 失败瞬间弹层快照（front-report）+ 定向元素快照（`app_context` 通道已有，固定进包）+ 环境标记（前台/锁屏/窗口差集）；flow-status 可读，`flow-evidence --id --step` 取包——失败判读从「数条诊断命令」变「读一个包」；② 写步步前弹层门禁——front 层非 clear 且分类 unknown → pause 出 `popup_pending` 偏差卡（复用 needs_review/决策卡机制，不新增状态）；③ 偏差分类 + 默认策略表（flow/pack 可声明 `popup_handlers`：白名单弹窗自处置留痕、unknown 永远上抛；`foreground_lost`=用户让行不记败、瞬态有界自重试、`state_drift`=uncertain+受控调节菜单 retry/skip-step/resume-from/abort）——把 AGENTS 人肉弹层纪律变成引擎语义。
+  **第二轮「修订续跑与抗突发写法」**：④ `flow-revise` 计划版本化修订续跑——步骤级 diff（按 id 对齐新增/删除/修改/不变）、修订作为版本事件**追加**（旧计划字节不覆盖，run 历史含版本谱系与指纹链）、已完成步保留条件=规格未变（结果带 `plan_version` 溯源；写步规格变更需 `--accept-rerun` 显式授权）、失败步以修订本身为重试授权、续跑前 freshness/resume_check 重立前置——替代「改模板另开新 id 全程重跑」；⑤ `ensure:` 幂等语义步骤——环境准备先验证满足则跳过、不满足才执行，重跑/续跑前缀成本趋零（v7 的 launch/清空步是手写雏形）。
+  设计边界：调节粒度=步边界（不做指令级打断，注入中急停由停止代次兜底）；冻结计划的四不变量（结果溯源/无静默变更/写步不盲重放/重试先重立前置）全部保持——修订续跑是把「冻结」升级为「版本化」，不是开洞。
+- [ ] 流程扩展（余项）：循环、嵌套分支（计划修订迁移已并入运行时治理的 `flow-revise`）
 - [ ] 浏览器通道余量：flow 级 uncertain 持久化、pipe 传输 spike（`--remote-debugging-pipe`）、`--user-agent` 覆盖（headless UA 壁垒站点）、选择器索引消歧、batch 组合验收
 - [ ] WebView2 专项验收（键盘跨原生/网页、屏幕阅读器、多屏 DPI、缺失运行时回退）
 - [ ] 中央任务提示专项验收：真实失败/停止/接管暂停、显示端重启后旧流程恢复、跨屏 DPI 与减少动态设置（[75](75-action-start-notification.md)）
