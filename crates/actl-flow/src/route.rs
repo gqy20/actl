@@ -93,14 +93,18 @@ pub fn extract(state: &ExploreState, run_id: &str) -> Result<RouteFragment, CtlE
         .filter(|entry| entry.outcome == "acted")
         .map(|entry| {
             // 输入原语:text 动作导出为 type 步骤(文本随证据保存);其余为 click。
+            // 通道判据与引擎执行侧同口径(非 ASCII → --paste,record.rs 内容子句):
+            // 导出步骤直接可重放,中文路线不在重放时退回键盘通道。
             match &entry.text {
-                Some(text) => vec![
-                    "type".into(),
-                    entry.selector.clone(),
-                    text.clone(),
-                    "--app".into(),
-                    "{window}".into(),
-                ],
+                Some(text) => {
+                    let mut step = vec!["type".into(), entry.selector.clone(), text.clone()];
+                    if !text.is_ascii() {
+                        step.push("--paste".into());
+                    }
+                    step.push("--app".into());
+                    step.push("{window}".into());
+                    step
+                }
                 None => vec![
                     "click".into(),
                     entry.selector.clone(),
@@ -508,9 +512,12 @@ mod tests {
     #[test]
     fn typed_steps_export_as_type_with_text() {
         // 输入原语:text 动作导出为 type 步骤,文本随路线保存(重放可用)。
+        // 非 ASCII 文本导出时注入 --paste(与引擎执行侧同口径)——重放直接
+        // 走剪贴板通道,不在真机上退回不可靠的键盘路径。
         let log = vec![
             acted("id:openDialog", "auto"),
             typed("id:fileName", "报告.txt"),
+            typed("id:fileName2", "report.txt"),
         ];
         let s = state(true, log, Default::default());
         let fragment = extract(&s, "explore-t1-input").unwrap();
@@ -529,9 +536,21 @@ mod tests {
                 "type".to_string(),
                 "id:fileName".to_string(),
                 "报告.txt".to_string(),
+                "--paste".to_string(),
                 "--app".to_string(),
                 "{window}".to_string()
             ]
+        );
+        assert_eq!(
+            fragment.steps[2],
+            vec![
+                "type".to_string(),
+                "id:fileName2".to_string(),
+                "report.txt".to_string(),
+                "--app".to_string(),
+                "{window}".to_string()
+            ],
+            "ASCII text keeps the keyboard channel in exported routes"
         );
         // YAML 渲染往返保真(含中文文本)
         let parsed: serde_json::Value =

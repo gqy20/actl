@@ -587,22 +587,29 @@ fn act(
     // 通道;STALE_REF(元素重建)按帧内候选的有界重试语义,下轮重新
     // 观察获得新 ref。无 ref/无快照 id(含 MockHost 默认)回退选择器路径。
     let typed = spec.texts.get(selector);
+    // --paste 判据(与录制编译器 record.rs 同口径的内容子句):非 ASCII 文本
+    // 走键盘通道不可靠(docs/06 type --paste),输入原语自动切换剪贴板通道;
+    // ASCII 保持键盘。引擎是发起方,观察不到 IME 键,故只取内容判据。
+    let paste = typed.is_some_and(|t| !t.is_ascii());
     let anchor = current_anchor(spec, state);
     let ref_target = framed
         .and_then(|element| element.ref_id.clone())
         .filter(|_| state.snapshot_id.as_deref().is_some_and(|s| !s.is_empty()));
     let action = match (ref_target, typed) {
-        (Some(ref_id), Some(text)) => invocation(
-            "type",
-            vec![
+        (Some(ref_id), Some(text)) => {
+            let mut args = vec![
                 ref_id,
                 text.clone(),
                 "--snapshot".into(),
                 state.snapshot_id.clone().unwrap_or_default(),
                 "--app".into(),
                 anchor.clone(),
-            ],
-        ),
+            ];
+            if paste {
+                args.insert(2, "--paste".into());
+            }
+            invocation("type", args)
+        }
         (Some(ref_id), None) => invocation(
             "click",
             vec![
@@ -613,15 +620,18 @@ fn act(
                 anchor.clone(),
             ],
         ),
-        (None, Some(text)) => invocation(
-            "type",
-            vec![
+        (None, Some(text)) => {
+            let mut args = vec![
                 selector.into(),
                 text.clone(),
                 "--app".into(),
                 anchor.clone(),
-            ],
-        ),
+            ];
+            if paste {
+                args.insert(2, "--paste".into());
+            }
+            invocation("type", args)
+        }
         (None, None) => invocation("click", vec![selector.into(), "--app".into(), anchor]),
     };
     match host.execute(&action) {

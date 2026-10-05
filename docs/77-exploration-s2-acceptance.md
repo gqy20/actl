@@ -100,7 +100,7 @@ S3 真机闭环验收通过:回写(证据收集)、人工复核迁移(用户裁�
 
 - find 歧义链路:probe `id:ContentButton` 因同名多菜单按钮 find AMBIGUOUS 判死,队列自动回退 `id:File` 执行——死候选剪枝与回退在真机工作正常。
 - 窗口标题随输入变化(`*actl-explore-accept - Notepad`),验证了 app 锚用稳定后缀(Notepad)的设计。
-- 中文文本输入:引擎 v1 的 type 走键盘通道,中文 IME 下不可靠(已知,docs/09);本轮用 ASCII 文本,中文输入留待 --paste 通道选项(spec 决策)。
+- 中文文本输入:引擎 v1 的 type 走键盘通道,中文 IME 下不可靠(已知,docs/09);本轮用 ASCII 文本,中文输入留待 --paste 通道选项(spec 决策)。**已收口(2026-10-05)**:texts 原语按内容自动选通道(非 ASCII → `--paste`,与录制编译器同口径),writeback 导出同步注入——引擎执行侧与导出路线重放均不再走中文键盘退路,详见 [06 §L2](06-design-blueprint.md);真机中文 texts 探索轮并入后续路线积累批次验证。
 
 ### 清理
 

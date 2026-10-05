@@ -1081,6 +1081,11 @@ fn texts_type_into_edit_completes() {
         host.types,
         vec![("id:fileName".to_string(), "报告.txt".to_string())]
     );
+    // 非 ASCII 文本自动切剪贴板通道(内容判据,与录制编译器 record.rs 同口径)
+    assert!(
+        host.raw_actions[0].iter().any(|a| a == "--paste"),
+        "non-ASCII texts must use the --paste channel"
+    );
     assert!(host.clicks.is_empty());
     let state = load(&store).unwrap().expect("state");
     assert_eq!(state.actions, 1);
@@ -1089,6 +1094,66 @@ fn texts_type_into_edit_completes() {
         state.action_log[0].text.as_deref(),
         Some("报告.txt"),
         "type 动作的文本入日志(路线导出用)"
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn texts_ascii_keeps_keyboard_channel() {
+    // ASCII 文本保持键盘通道:--paste 不注入(内容判据只看非 ASCII)。
+    let mut spec = spec(&["文件名"], "name:report.txt");
+    spec.texts.insert("id:fileName".into(), "report.txt".into());
+    let (root, store, mut run) = setup(&spec);
+    let mut host = MockHost::new(vec![
+        vec![el("Edit", "文件名", Some("fileName"))],
+        vec![
+            el("Edit", "文件名", Some("fileName")),
+            el("Text", "report.txt", None),
+        ],
+    ]);
+    host.transitions.insert("id:fileName".into(), Some(1));
+    execute(&spec, &mut run, &store, &mut host, None, None).expect("type completes");
+    assert_eq!(run.status, Status::Completed);
+    assert_eq!(
+        host.types,
+        vec![("id:fileName".to_string(), "report.txt".into())]
+    );
+    assert!(
+        !host.raw_actions[0].iter().any(|a| a == "--paste"),
+        "ASCII texts keep the keyboard channel"
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn texts_non_ascii_ref_bound_uses_paste() {
+    // ref 绑定形态的输入原语:非 ASCII 文本同样注入 --paste(位置在文本后,
+    // --snapshot 之前——CLI 交错旗标语义)。
+    let mut spec = spec(&["文件名"], "name:报告.txt");
+    spec.texts.insert("id:fileName".into(), "报告.txt".into());
+    let (root, store, mut run) = setup(&spec);
+    let mut host = MockHost::new(vec![
+        vec![el_ref("Edit", "文件名", Some("fileName"), "@e1")],
+        vec![
+            el("Edit", "文件名", Some("fileName")),
+            el("Text", "报告.txt", None),
+        ],
+    ]);
+    host.transitions.insert("id:fileName".into(), Some(1));
+    execute(&spec, &mut run, &store, &mut host, None, None).expect("type completes");
+    assert_eq!(run.status, Status::Completed);
+    assert_eq!(
+        host.raw_actions[0],
+        vec![
+            "@e1".to_string(),
+            "报告.txt".to_string(),
+            "--paste".to_string(),
+            "--snapshot".to_string(),
+            "s-mock1".to_string(),
+            "--app".to_string(),
+            "测试应用".to_string()
+        ],
+        "ref-bound non-ASCII texts carry --paste after the text argument"
     );
     let _ = std::fs::remove_dir_all(&root);
 }

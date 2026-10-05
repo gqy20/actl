@@ -14,7 +14,7 @@
 
 ### 高优先（用户标记）
 
-- [ ] **探索模式（用户标记关键）**：S1–S3、L2 原语与先验飞轮已全部真机通过（[77](77-exploration-s2-acceptance.md)）。待办：①~~观察锚点随弹窗转移~~（2026-10-05 已落地并真机验收,[77 锚点转移增补](77-exploration-s2-acceptance.md);剩余 RuntimeBroker pid 放宽待复现）；②type 的 `--paste` 通道选项（中文 IME）；③路线积累（§7 目标 5 条已 2 条）；④L0 命中重放 skill 层流程化、UCB 统计剪枝
+- [ ] **探索模式（用户标记关键）**：S1–S3、L2 原语与先验飞轮已全部真机通过（[77](77-exploration-s2-acceptance.md)）。待办：①~~观察锚点随弹窗转移~~（2026-10-05 已落地并真机验收,[77 锚点转移增补](77-exploration-s2-acceptance.md);剩余 RuntimeBroker pid 放宽待复现）；②~~type 的 `--paste` 通道选项~~（2026-10-05 落地:texts 原语内容判据自动选通道 + writeback 导出同口径注入,真机中文轮并入路线积累批次）；③路线积累（§7 目标 5 条已 2 条）；④L0 命中重放 skill 层流程化、UCB 统计剪枝
 - [ ] release-review-draft 写段联测（待用户授权，[43](43-release-review-draft.md)）
 
 ### 流程与集成
