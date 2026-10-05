@@ -1240,5 +1240,5 @@ impl ExploreState {
 }
 
 #[cfg(test)]
-#[path = "explore_tests.rs"]
+#[path = "explore_tests/mod.rs"]
 mod tests;
