@@ -337,3 +337,105 @@ fn help_resource_is_absent_for_excluded_and_unknown_commands() {
         );
     }
 }
+
+/// 互操作测试:真实 rmcp 客户端栈(SDK 自带,与真实 MCP 客户端同代码路径)
+/// ↔ actl-mcp 服务端——补上契约测试(手写裸 HTTP)覆盖不到的「客户端
+/// 实现互操作」面:生命周期协商、tools/list、tools/call 真实派发、
+/// 资源读取、排除动词错误语义。
+#[tokio::test]
+async fn rmcp_client_interop_full_loop() {
+    let server = start_server();
+    use rmcp::ClientServiceExt as _;
+    let mut config =
+        rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig::with_uri(
+            format!("http://127.0.0.1:{}/mcp", server.port),
+        );
+    // rmcp 的 bearer_auth() 自带 Bearer 前缀——此处传纯 token。
+    config.auth_header = Some(TOKEN.to_string());
+    let transport = rmcp::transport::StreamableHttpClientTransport::from_config(config);
+    let client = rmcp::model::ClientConfig::new(
+        rmcp::model::ClientCapabilities::default(),
+        rmcp::model::Implementation::new("interop-test", "0.0.1"),
+    )
+    .serve_with_lifecycle(
+        transport,
+        rmcp::ClientLifecycleMode::Auto {
+            preferred_versions: vec![rmcp::model::ProtocolVersion::V_2026_07_28],
+            legacy_version: None,
+        },
+    )
+    .await
+    .expect("client connects and negotiates");
+    let _server_info = client.peer_info();
+
+    // tools/list:单工具 actl,描述携带速查
+    let tools = client
+        .list_tools(Default::default())
+        .await
+        .expect("tools/list");
+    assert_eq!(tools.tools.len(), 1, "exactly one generic tool");
+    assert_eq!(tools.tools[0].name, "actl");
+    let description = tools.tools[0].description.as_deref().unwrap_or_default();
+    assert!(
+        description.contains("snapshot"),
+        "quickref must be embedded"
+    );
+
+    // tools/call:真实派发到 actl status
+    let result = client
+        .call_tool(
+            rmcp::model::CallToolRequestParams::new("actl").with_arguments(
+                serde_json::json!({"command": "status", "args": []})
+                    .as_object()
+                    .expect("object")
+                    .clone(),
+            ),
+        )
+        .await
+        .expect("tools/call dispatches");
+    assert_eq!(result.is_error, Some(false), "{result:?}");
+    let structured = result
+        .structured_content
+        .expect("envelope in structuredContent");
+    assert_eq!(structured["ok"], true, "{structured}");
+    assert_eq!(structured["command"], "status");
+
+    // resources/read:帮助模板(四要素文本)
+    let resource = client
+        .read_resource(rmcp::model::ReadResourceRequestParams::new(
+            "actl://help/verify-window",
+        ))
+        .await
+        .expect("resources/read");
+    let text = match &resource.contents[0] {
+        rmcp::model::ResourceContents::TextResourceContents { text, .. } => text.clone(),
+        other => panic!("expected text contents, got {other:?}"),
+    };
+    assert!(text.contains("Usage") && text.contains("Example"), "{text}");
+
+    // 排除动词:isError + PROTOCOL local-only
+    let result = client
+        .call_tool(
+            rmcp::model::CallToolRequestParams::new("actl").with_arguments(
+                serde_json::json!({"command": "execution-recover", "args": []})
+                    .as_object()
+                    .expect("object")
+                    .clone(),
+            ),
+        )
+        .await
+        .expect("excluded verb returns an error result, not a transport error");
+    assert_eq!(result.is_error, Some(true));
+    let structured = result
+        .structured_content
+        .expect("structured error envelope");
+    assert_eq!(structured["error"]["code"], "PROTOCOL");
+    assert!(
+        structured["error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("local-only")
+    );
+
+    let _ = client.cancel().await;
+}

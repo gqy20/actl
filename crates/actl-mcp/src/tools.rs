@@ -50,9 +50,10 @@ impl Adapter {
     /// verbatim (`ok:false` → tool error with code/hint/evidence preserved).
     ///
     /// Command families (read actl://help/{command} for full arguments):
-    /// {QUICKREF}
+    /// {QUICKREF} ——速查由 `list_tools` 覆写动态注入(宏描述是字面量,
+    /// 互操作测试实证占位符不会展开;三层懒加载第 1 层的真实落点)。
     #[tool(
-        description = "Run one actl CLI command on the controlled Windows device (UIA-precise, JSON-verifiable). Pass command + literal args; errors carry code/hint/evidence for self-recovery. Full per-command docs: read resource template actl://help/{command}."
+        description = "Run one actl CLI command on the controlled Windows desktop (UIA-precise, JSON-verifiable). Pass command + literal args; errors carry code/hint/evidence for self-recovery. Full per-command docs: read resource template actl://help/{command}."
     )]
     async fn actl(
         &self,
@@ -84,6 +85,33 @@ impl ServerHandler for Adapter {
              after every write. Remote write actions require approval on the \
              local signal bar. Command families: {QUICKREF}"
         ))
+    }
+
+    /// 覆写宏生成的 list_tools:动态注入速查表(三层懒加载第 1 层,
+    /// ~700 tokens 一次性)。宏描述是字面量,占位符不会展开——互操作
+    /// 测试实证此缺口后由此收口。
+    async fn list_tools(
+        &self,
+        _request: Option<rmcp::model::PaginatedRequestParams>,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<rmcp::model::ListToolsResult, McpError> {
+        let mut tools = Self::tool_router().list_all();
+        for tool in &mut tools {
+            if tool.name == "actl" {
+                let base = tool.description.take().unwrap_or_default();
+                tool.description = Some(
+                    format!(
+                        "{base}\nCommand families \
+                         (read actl://help/{{command}} for full arguments):\n{QUICKREF}"
+                    )
+                    .into(),
+                );
+            }
+        }
+        Ok(rmcp::model::ListToolsResult {
+            tools,
+            ..Default::default()
+        })
     }
 
     /// 资源面只有一个模板(docs/82 §5.2 三层懒加载第 2 层):单命令完整帮助

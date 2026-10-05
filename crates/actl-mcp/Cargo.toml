@@ -30,3 +30,8 @@ workspace = true
 [[bin]]
 name = "actl-mcp"
 path = "src/main.rs"
+
+# 互操作测试用客户端栈(仅测试构建——真实 MCP 客户端与 actl-mcp 服务端的
+# 端到端验证;不进运行时依赖面)。
+[dev-dependencies]
+rmcp = { version = "3.5", features = ["client", "transport-streamable-http-client-reqwest"] }
