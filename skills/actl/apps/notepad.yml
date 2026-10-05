@@ -1,0 +1,27 @@
+# 2026-10-05 首建：记事本(Store 版)应用档案。来源:探索轮 explore-l2-notepad-input-zh
+# (中文 texts 走引擎自动 --paste 通道的真机首验)+ 本轮夹具清场的会话复活实证。
+pack_format: 1
+name: notepad
+display: 记事本(Windows 11 Store)
+launch: "C:/Users/gqy17/AppData/Local/Microsoft/WindowsApps/notepad.exe"
+window: "Notepad"
+app_version: "11.2607.14.0"
+verified_date: 2026-10-05
+verified_env: Windows 10.0.26200.0 zh-cn（2026-10-05 探索轮 goal_met + 重放证据见路线 verify 注）
+quirks:
+  - id: launch_resolution
+    note: System32\notepad.exe 不存在(26200 移除),HKCU App Paths 注册 Store 版但 `actl launch notepad.exe` 解析不到(launch 的 App Paths 查询不含 HKCU 面)——用执行别名全路径(见 launch 字段);bash 会话裸名 `notepad` 会被 Git usr/bin 存根抢解析(os error 193)。另实证 launch 的 --wait-window 参数疑似被透传给被启程序当文件名(弹出「找不到 --wait-window ... .txt」),窗口就绪用 `wait --window` 分离确认。
+  - id: session_restore_revival
+    note: 关窗 ≠ 清会话:窗口级 close 后重启会把 TabState/云同步的脏标签逐个复活(marker4/5/anchor-save/marker3/marker 链,文件已删仍复活)。破环 = 标签级 `ctrl+w` → 「不保存」(白名单清理动词)逐标签废弃,末标签后应用自然退出;勿 taskkill(AGENTS 禁令,会话复活更糟)。
+  - id: title_shape
+    note: 标题「无标题 - Notepad」,输入后「*<内容前缀> - Notepad」(脏星号+内容随输入变——hwnd 提取按 class "Notepad" 匹配,勿按标题精确匹配,同 docs/80 发现 #11)。稳定锚 = "Notepad" 后缀。
+  - id: edit_area_channel
+    note: 编辑区 = `name:文本编辑器` role:Document,值读回走 `--property value`;中文输入必须 --paste 剪贴板通道(键盘通道中文 IME 不可靠,docs/09)——引擎 texts 原语已按内容判据自动注入(2026-10-05),手写步骤显式带 --paste。
+routes:
+  - id: explore_explore_l2_notepad_input_zh
+    description: 在记事本输入中文验收文本——探索回写(run explore-l2-notepad-input-zh)
+    status: unverified
+    verify: "目标断言:verify --value name:文本编辑器 探索验收中文 --property value --contains --app {window};待人工复核(重放证据 replay 轮,fixtures/flows/replay-notepad-input.yml)"
+    steps:
+      - ["type", "name:文本编辑器", "探索验收中文", "--paste", "--app", "{window}"]
+      - ["verify", "--value", "name:文本编辑器", "探索验收中文", "--property", "value", "--contains", "--app", "{window}"]

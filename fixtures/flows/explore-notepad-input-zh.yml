@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=../../schemas/flow-v1.schema.json
+# 探索模式 L2 验收(中文轮):texts 值为非 ASCII 文本 → 引擎按内容判据自动注入
+# --paste 走剪贴板通道(2026-10-05 落地,与录制编译器同口径;ASCII 键盘路径
+# 由孪生夹具 explore-notepad-input.yml 覆盖)。真机验证 ② 通道选项。
+# 前置:全新无标题记事本(标题含 Notepad);app 锚用稳定的 Notepad 后缀。
+# 预期:status=completed,actions=1(type,剪贴板通道),decisions=0,goal_met=true;
+# 副证据:剪贴板残留输入文本(paste 通道的物理痕迹)。
+version: 1
+name: explore-l2-notepad-input-zh
+explore:
+  task: 在记事本输入中文验收文本
+  app: Notepad
+  keywords: [文本, 编辑]
+  texts: {'name:文本编辑器': '探索验收中文'}
+  goal: {command: verify, args: [--value, 'name:文本编辑器', '探索验收中文', --property, value, --contains, --app, Notepad]}
+  budgets: {actions: 3, decisions: 2}

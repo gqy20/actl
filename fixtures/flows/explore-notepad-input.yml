@@ -1,8 +1,9 @@
 # yaml-language-server: $schema=../../schemas/flow-v1.schema.json
 # 探索模式 L2 验收:输入原语。texts 键 name:文本编辑器(编辑区 Document)的
 # 值并入关键词激活评分;候选命中执行 type(键盘护栏/--app fail-closed 全复用)。
-# 文本用 ASCII(中文 IME 下键盘通道不可靠是已知限制,docs/09;引擎 v1 的
-# type 不带 --paste,中文文本输入留待后续通道选项)。
+# 文本用 ASCII(键盘通道用例;中文 IME 下键盘通道不可靠是已知限制,docs/09——
+# 非 ASCII 文本由引擎按内容判据自动切 --paste 剪贴板通道,孪生夹具
+# explore-notepad-input-zh.yml 覆盖)。
 # 前置:全新无标题记事本(标题含 Notepad)。app 锚用稳定的 Notepad 后缀
 # (无标题前缀随内容变化)。
 # 预期:status=completed,actions=1(type),decisions=0,goal_met=true。

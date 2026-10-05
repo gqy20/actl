@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=../../schemas/flow-v1.schema.json
+# S3 路线积累:pack 路线 explore_explore_l2_notepad_input_zh(explore-writeback 回写,
+# run explore-l2-notepad-input-zh)的 agent 侧重放。type 步骤走 --paste 剪贴板
+# 通道(引擎内容判据,2026-10-05);重放通过 = 真机走通证据(人工复核迁移 verified 用)。
+# 前置:全新无标题记事本(干净会话——脏会话破环见 apps/notepad.yml session_restore_revival)。
+version: 1
+name: replay-notepad-input
+steps:
+  - id: type_zh_text
+    title: 路线步骤:输入中文验收文本(paste 通道)
+    run:
+      command: type
+      args: ['name:文本编辑器', 探索验收中文, --paste, --app, Notepad]
+    verify:
+      command: verify
+      args: [--value, 'name:文本编辑器', 探索验收中文, --property, value, --contains, --app, Notepad]
+    retry: never
