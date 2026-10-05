@@ -111,6 +111,14 @@ pub struct ExploreState {
     /// 关键词投影零命中后已放宽为 skeleton(每任务一次)。
     #[serde(default)]
     pub widened: bool,
+    /// 当前观察锚窗的 `--app`(锚点转移后与 spec.app 分离;None = 未转移,
+    /// 仍锚定 spec.app)。观察/动作/goal 折叠门全部跟随本锚(docs/42 锚点
+    /// 转移:动作打开对话框后,观察前沿与动作派发改锚到新窗)。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor_app: Option<String>,
+    /// 锚点转移历史(栈底为转移前的锚;锚窗消失时出栈回退宿主窗)。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub anchor_stack: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_fingerprint: Option<String>,
     #[serde(default)]
@@ -175,6 +183,8 @@ impl ExploreState {
             seen: BTreeSet::new(),
             visited: BTreeSet::new(),
             widened: false,
+            anchor_app: None,
+            anchor_stack: Vec::new(),
             last_fingerprint: None,
             last_elements: Vec::new(),
             last_actor: None,
@@ -244,61 +254,77 @@ enum ActOutcome {
     Boundary,
 }
 
+/// 当前观察锚窗的 `--app`:锚点转移后与 spec.app 分离(docs/42 锚点
+/// 转移)。观察/动作/跨窗探测的自身排除全部以此为锚。
+fn current_anchor(spec: &ExploreSpec, state: &ExploreState) -> String {
+    state.anchor_app.clone().unwrap_or_else(|| spec.app.clone())
+}
+
+/// 快照一窗并归账(观察与锚点转移探测共用):词表投影、审计字节、
+/// 快照 id(帧内 ref 的身份锚点)、观察窗 pid/标题采集(跨窗探测过滤依据)。
+fn snapshot_window(
+    host: &mut impl Host,
+    state: &mut ExploreState,
+    app: &str,
+    keywords: Option<&str>,
+) -> Result<Vec<ElementOut>, CtlError> {
+    let mut args = vec!["--app".into(), app.to_string()];
+    match keywords {
+        Some(keywords) if !keywords.is_empty() => {
+            args.push("--keywords".into());
+            args.push(keywords.to_string());
+            args.push("--skeleton".into());
+        }
+        _ => {
+            args.push("--skeleton".into());
+        }
+    }
+    let (snapshot_id, value) = host.execute_snapshot(args)?;
+    let bytes = serde_json::to_vec(&value)
+        .map_err(|e| CtlError::internal(e.to_string()))?
+        .len() as u64;
+    state.observations += 1;
+    state.audit.observation_bytes += bytes;
+    state.snapshot_id = (!snapshot_id.is_empty()).then_some(snapshot_id);
+    // 观察窗身份(pid/标题)——跨窗探测的过滤依据(同进程弹窗/对话框)。
+    if let Some(window) = value.get("window") {
+        if let Some(pid) = window.get("pid").and_then(|p| p.as_u64()) {
+            state.window_pid = Some(pid as u32);
+        }
+        if let Some(title) = window.get("title").and_then(|t| t.as_str()) {
+            state.window_title = Some(title.to_owned());
+        }
+    }
+    let elements: Vec<ElementOut> = serde_json::from_value(
+        value
+            .get("elements")
+            .cloned()
+            .ok_or_else(|| CtlError::protocol("snapshot output missing elements"))?,
+    )
+    .map_err(|e| CtlError::protocol(format!("snapshot elements decode: {e}")))?;
+    if elements.len() > ELEMENTS_CAP {
+        state.frames_truncated += 1;
+    }
+    Ok(elements)
+}
+
 fn observe(
     spec: &ExploreSpec,
     state: &mut ExploreState,
     host: &mut impl Host,
 ) -> Result<Vec<ElementOut>, CtlError> {
-    let mut snapshot =
-        |args: Vec<String>, state: &mut ExploreState| -> Result<Vec<ElementOut>, CtlError> {
-            // 快照通道(ref 绑定动作的身份锚点):execute_snapshot 返回
-            // snapshot_id,与帧元素同轮记录——引擎动作用 `click @eN
-            // --snapshot <id>` 走捕获身份解析(发现 #6 的结构性收口)。
-            let (snapshot_id, value) = host.execute_snapshot(args)?;
-            let bytes = serde_json::to_vec(&value)
-                .map_err(|e| CtlError::internal(e.to_string()))?
-                .len() as u64;
-            state.observations += 1;
-            state.audit.observation_bytes += bytes;
-            state.snapshot_id = (!snapshot_id.is_empty()).then_some(snapshot_id);
-            // 观察窗身份(pid/标题)——跨窗探测的过滤依据(同进程弹窗/对话框)。
-            if let Some(window) = value.get("window") {
-                if let Some(pid) = window.get("pid").and_then(|p| p.as_u64()) {
-                    state.window_pid = Some(pid as u32);
-                }
-                if let Some(title) = window.get("title").and_then(|t| t.as_str()) {
-                    state.window_title = Some(title.to_owned());
-                }
-            }
-            let elements: Vec<ElementOut> = serde_json::from_value(
-                value
-                    .get("elements")
-                    .cloned()
-                    .ok_or_else(|| CtlError::protocol("snapshot output missing elements"))?,
-            )
-            .map_err(|e| CtlError::protocol(format!("snapshot elements decode: {e}")))?;
-            if elements.len() > ELEMENTS_CAP {
-                state.frames_truncated += 1;
-            }
-            Ok(elements)
-        };
     let keywords = effective_keywords(spec).join(",");
-    let mut args = vec!["--app".into(), spec.app.clone()];
-    if !keywords.is_empty() {
-        args.push("--keywords".into());
-        args.push(keywords);
-        args.push("--skeleton".into());
-    } else {
-        args.push("--skeleton".into());
-    }
-    let mut elements = snapshot(args, state)?;
+    let anchor = current_anchor(spec, state);
+    let elements = snapshot_window(
+        host,
+        state,
+        &anchor,
+        (!keywords.is_empty()).then_some(keywords.as_str()),
+    )?;
     // 零命中放宽阶梯:关键词→skeleton,每任务一次,放宽事件入状态(widened)。
     if elements.is_empty() && !spec.keywords.is_empty() && !state.widened {
         state.widened = true;
-        elements = snapshot(
-            vec!["--app".into(), spec.app.clone(), "--skeleton".into()],
-            state,
-        )?;
+        return snapshot_window(host, state, &anchor, None);
     }
     Ok(elements)
 }
@@ -543,7 +569,8 @@ fn act(
     let vouched = framed.is_some();
     if !vouched {
         let (flag, value) = probe_args(selector)?;
-        let probe = invocation("find", vec!["--app".into(), spec.app.clone(), flag, value]);
+        let anchor = current_anchor(spec, state);
+        let probe = invocation("find", vec!["--app".into(), anchor, flag, value]);
         if let Err(error) = host.execute(&probe) {
             if error.code == ErrorCode::Aborted && (host.stopped() || store.pause_requested()) {
                 return Ok(ActOutcome::Boundary);
@@ -560,6 +587,7 @@ fn act(
     // 通道;STALE_REF(元素重建)按帧内候选的有界重试语义,下轮重新
     // 观察获得新 ref。无 ref/无快照 id(含 MockHost 默认)回退选择器路径。
     let typed = spec.texts.get(selector);
+    let anchor = current_anchor(spec, state);
     let ref_target = framed
         .and_then(|element| element.ref_id.clone())
         .filter(|_| state.snapshot_id.as_deref().is_some_and(|s| !s.is_empty()));
@@ -572,7 +600,7 @@ fn act(
                 "--snapshot".into(),
                 state.snapshot_id.clone().unwrap_or_default(),
                 "--app".into(),
-                spec.app.clone(),
+                anchor.clone(),
             ],
         ),
         (Some(ref_id), None) => invocation(
@@ -582,7 +610,7 @@ fn act(
                 "--snapshot".into(),
                 state.snapshot_id.clone().unwrap_or_default(),
                 "--app".into(),
-                spec.app.clone(),
+                anchor.clone(),
             ],
         ),
         (None, Some(text)) => invocation(
@@ -591,13 +619,10 @@ fn act(
                 selector.into(),
                 text.clone(),
                 "--app".into(),
-                spec.app.clone(),
+                anchor.clone(),
             ],
         ),
-        (None, None) => invocation(
-            "click",
-            vec![selector.into(), "--app".into(), spec.app.clone()],
-        ),
+        (None, None) => invocation("click", vec![selector.into(), "--app".into(), anchor]),
     };
     match host.execute(&action) {
         Ok(()) => {
@@ -653,6 +678,92 @@ fn rewrite_goal_app(goal: &Invocation, app: &str) -> Invocation {
 /// 跨窗 goal 探测预算:整个运行的探测轮次上限(每轮一次 list-windows +
 /// ≤3 次 goal 窗口重写)。
 const PROBE_EPISODE_BUDGET: u32 = 2;
+
+/// 锚点转移预算:goal 转移与观察锚点转移共用 anchor_transfers 计数
+/// (有界探索不变量——双转移通道不得双倍跳)。
+const ANCHOR_TRANSFER_BUDGET: u32 = 4;
+/// 每次锚点转移探测的候选窗上限。
+const ANCHOR_TRANSFER_CANDIDATES: usize = 3;
+
+/// 锚点转移探测(docs/42 锚点转移;动作打开对话框后的观察前沿跟随):
+/// 动作后新窗出生且与任务相关时,把观察/动作锚改到新窗。判据三重:
+/// ①同 pid(对话框与宿主窗同进程);②非当前锚/栈内窗(排除回跳);
+/// ③**关键词帧非空——自校验判据**:对候选窗跑任务词投影,零命中的窗
+/// (toast/无关通知)自动出局,不需要启发式。命中即转移:差分基准清零
+/// (新窗全量元素按 added 进入前沿,转移帧不参与前后帧差分),上一动作
+/// 归因为 reveals(动作揭示了新界面)。机会性增强:枚举/快照失败不传播。
+fn maybe_transfer_anchor(
+    spec: &ExploreSpec,
+    state: &mut ExploreState,
+    host: &mut impl Host,
+) -> Result<bool, CtlError> {
+    if state.anchor_transfers >= ANCHOR_TRANSFER_BUDGET {
+        return Ok(false);
+    }
+    let Some(pid) = state.window_pid else {
+        return Ok(false);
+    };
+    let anchor = current_anchor(spec, state);
+    // 排除集:当前锚 + 转移历史(栈)——已锚定过的窗不回跳。
+    let mut excluded: Vec<String> = vec![anchor.clone()];
+    excluded.extend(state.anchor_stack.iter().cloned());
+    let keywords = effective_keywords(spec).join(",");
+
+    let Ok(value) = host.execute_output(&invocation("list-windows", vec![])) else {
+        return Ok(false);
+    };
+    let windows = value
+        .get("windows")
+        .and_then(|w| w.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let mut tried = 0;
+    let mut seen_titles = BTreeSet::new();
+    for window in &windows {
+        let title = window
+            .get("title")
+            .and_then(|t| t.as_str())
+            .unwrap_or_default();
+        let same_pid = window.get("pid").and_then(|p| p.as_u64()) == Some(u64::from(pid));
+        if !same_pid
+            || title.is_empty()
+            || !seen_titles.insert(title.to_owned())
+            || excluded
+                .iter()
+                .any(|anchor| anchor == title || anchor.contains(title) || title.contains(anchor))
+        {
+            continue;
+        }
+        // 判据③:关键词帧非空才转移(任务相关性自校验)。
+        let elements = match snapshot_window(
+            host,
+            state,
+            title,
+            (!keywords.is_empty()).then_some(keywords.as_str()),
+        ) {
+            Ok(elements) => elements,
+            Err(_) => continue, // 候选窗快照失败(如瞬态):跳过,不传播
+        };
+        if elements.is_empty() {
+            tried += 1;
+            if tried >= ANCHOR_TRANSFER_CANDIDATES {
+                break;
+            }
+            continue;
+        }
+        // 转移:归因 + 差分基准重置 + 栈入账。
+        if let Some(actor) = state.last_actor.take() {
+            state.tried.insert(actor, "reveals".into());
+        }
+        state.last_fingerprint = None;
+        state.last_elements.clear();
+        state.anchor_stack.push(anchor);
+        state.anchor_app = Some(title.to_owned());
+        state.anchor_transfers += 1;
+        return Ok(true);
+    }
+    Ok(false)
+}
 
 /// 同进程跨窗探测:goal 目标在锚窗缺席时,枚举同 pid 的其他窗口(对话框/
 /// 弹窗与主窗同进程),把 goal 的 --app 逐个改写为候选窗标题重试。
@@ -846,6 +957,18 @@ pub fn execute(
                 host.sleep_ms(OBSERVATION_RETRY_SETTLE_MS);
                 continue;
             }
+            // 锚窗消失(如对话框被自身动作关闭):栈回退宿主窗,一次出栈
+            // 一轮,回退不判失败(锚点转移的正常收尾)。回退到 spec.app
+            // 归一化为 None(折叠门语义)。栈空时直接归位。
+            Err(error) if error.code == ErrorCode::NotFound && state.anchor_app.is_some() => {
+                let previous = state.anchor_stack.pop();
+                state.anchor_app = match previous {
+                    Some(previous) if previous != spec.app => Some(previous),
+                    _ => None,
+                };
+                persist(store, &state)?;
+                continue;
+            }
             Err(error) => {
                 state.errors += 1;
                 state.goal_met = Some(false);
@@ -872,8 +995,10 @@ pub fn execute(
             Fatal(CtlError),
         }
         let existence_goal = spec.goal.args.iter().any(|a| a == "--exists");
-        // 跨窗转移后 goal 已锚定其他窗口:折叠(锚窗帧)不适用。
-        let folded = if state.goal_window.is_none() {
+        // 跨窗转移后 goal 已锚定其他窗口:折叠(锚窗帧)不适用。观察锚点
+        // 转移后同理——折叠按锚窗帧判定,goal 目标窗(spec.app/goal_window)
+        // 与锚窗分歧时折叠结果不可信,回退 COM 权威路径。
+        let folded = if state.goal_window.is_none() && state.anchor_app.is_none() {
             parse_goal_fold(spec).and_then(|fold| evaluate_fold(&elements, &fold))
         } else {
             None
@@ -886,9 +1011,13 @@ pub fn execute(
             }
         } else {
             // goal 窗口:转移后的目标窗,否则探索锚窗。
+            // goal 核验的窗口优先序(goal-锚合流):已确立的 goal 窗 >
+            // 当前观察锚(动作刚打开的对话框最可能就是核验目标) > 声明
+            // 锚。前两者失配走 NotFound → L2 同 pid 探测兜底,语义不变。
             let goal_app = state
                 .goal_window
                 .clone()
+                .or_else(|| state.anchor_app.clone())
                 .unwrap_or_else(|| spec.app.clone());
             let goal_call = rewrite_goal_app(&spec.goal, &goal_app);
             match host.execute_output(&goal_call) {
@@ -987,7 +1116,11 @@ pub fn execute(
             state.queue.remove(0);
             let mode = next_mode.take().unwrap_or("fallback");
             match act(spec, &mut state, store, host, &selector, mode)? {
-                ActOutcome::Acted | ActOutcome::Dead => {}
+                ActOutcome::Acted => {
+                    // 动作后锚点转移探测(对话框出生即跟随,docs/42 锚点转移)。
+                    maybe_transfer_anchor(spec, &mut state, host)?;
+                }
+                ActOutcome::Dead => {}
                 ActOutcome::HandoffPaused => {
                     run.status = Status::Paused;
                     run.reason = Some("handoff_pending".into());
@@ -1040,7 +1173,11 @@ pub fn execute(
             GateOutcome::AutoExecute(index) => {
                 let selector = candidates[index].selector.clone();
                 match act(spec, &mut state, store, host, &selector, "auto")? {
-                    ActOutcome::Acted | ActOutcome::Dead => {}
+                    ActOutcome::Acted => {
+                        // 动作后锚点转移探测(对话框出生即跟随,docs/42 锚点转移)。
+                        maybe_transfer_anchor(spec, &mut state, host)?;
+                    }
+                    ActOutcome::Dead => {}
                     ActOutcome::HandoffPaused => {
                         run.status = Status::Paused;
                         run.reason = Some("handoff_pending".into());

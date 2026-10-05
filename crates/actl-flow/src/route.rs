@@ -366,6 +366,8 @@ mod tests {
             seen: Default::default(),
             visited: Default::default(),
             widened: false,
+            anchor_app: None,
+            anchor_stack: Vec::new(),
             last_fingerprint: None,
             last_elements: vec![ElementOut {
                 ref_id: None,
