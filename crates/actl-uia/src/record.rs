@@ -557,9 +557,11 @@ pub fn run_session(cfg: &SessionConfig) -> Result<SessionOutcome, CtlError> {
     let stop_path = cfg.dir.join("stop-requested");
     let stop_reason;
 
-    // 看门狗心跳:事件处理 = 进展(长录制会话不误杀)。
-    actl_core::watchdog::reset();
+    // 看门狗心跳:每轮批处理 = 进展(长录制会话与用户合法停顿不误杀;
+    // 原实现只在循环前重置一次——空转超期限即误杀,潜伏缺陷)。批内单步
+    // 卡死(UIA 反查挂起)则心跳停止,照常触顶。
     loop {
+        actl_core::watchdog::reset();
         if stop_path.exists() {
             stop_reason = "requested";
             break;

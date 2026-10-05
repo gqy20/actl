@@ -15,6 +15,7 @@
 
 ### Fixed
 
+- **进程看门狗默认降档 300s→120s + 心跳修真（[06 §7.7](docs/06-design-blueprint.md)）**：降档动机 = 尾段挂起族滞尾自清速度（300s 下每轮真机验收积压楔死进程的体感）。前置把心跳修成真语义——原 wait×4/录制的心跳只在**循环前**重置一次（轮询/空转超期限即误杀的潜伏缺陷,录制用户停顿 5 分钟也会被杀）,现改循环内逐轮/逐批;树扫描（`collect` 前沿循环）补**逐节点心跳**——合法长路径（全树扫描分钟级,网易云 126s 实证）全部带心跳不受默认降档影响,心跳停止的单点卡死才触顶。契约测试显式设 800ms 不受默认值影响。
 - **尾段挂起族根治（两轮,2026-10-06;真机实证:工作完成后进程不退出,内核态不可杀,300s 看门狗后仍滞留）**：根因 = UIElement 的 Drop（跨进程 `Release`）与读取调用同族无界,而析构路径无看门狗覆盖——thread_local 定位缓存、栈内局部、反序析构让 guard 先于 COM 资源退出三个暴露点。修复:① **成功路径硬退出**——envelope 落盘 flush 后 `process::exit(0)`（与既有错误路径对称,析构链整个跳过;状态落盘不依赖 Drop——`finish(phase)` 显式调用、Journal 每事件即 flush）;② **COM 元素不出 actl-uia 域**——`ResolvedInfo` 元数据面 + `Located::into_info()` 消费式转换（调用点在看门狗区内,显式 drop 与声明顺序无关）,read_property/verify 三分支/click/set_value/cache_store 全收编,VerifyOutcome 与 click 返回签名不再携带 COM。真机验证:原卡死命令序列（snapshot/get/find）在修复后 808ms/429ms 干净退出、零僵尸积压。残余暴露面（select/toggle/pointer/type 的 Located 返回路径）记 ROADMAP 待审计;析构纪律入 [06](docs/06-design-blueprint.md)。
 - **读路径 UIA 看门狗缺口（真机实证 2026-10-05:`get --property value` 挂起超 300s）**：`read_property` 与 `verify` 的 Value/Checked 分支补 `watchdog::enter()` 区段（20s 击杀留 stderr 标记,`ACTL_UIA_WATCHDOG_MS` 可调）——与 click pattern 派发（493d163）同族,定位覆盖止于 locate,属性/模式读取是最后的裸区段;探索引擎 goal 断言走同路径,裸区段即整轮探索的挂点。
 - **launch 选项后置静默失效**：trailing_var_arg 语义下程序名后的 token 原样转发子进程——`launch <prog> --wait-window X` 中选项从未生效且子进程把选项当参数（记事本弹「找不到 --wait-window….txt」实证,`window_ready:false` 假象）;现 fail-fast PROTOCOL 带选项前置指引（只拦本命令独有 `--wait-window`,`--timeout` 是常见子进程参数不拦）。契约测试 + help 同步。

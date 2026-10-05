@@ -53,6 +53,10 @@ fn collect<T: Clone>(
     let mut pending = vec![(root, 0, None)];
     while let Some((element, depth, parent)) = pending.pop() {
         actl_core::wait_control::check()?;
+        // 进程看门狗心跳:前沿每弹出一个节点 = 进展——全树扫描合法地可达
+        // 分钟级(网易云全树 126s 实证),无心跳会被默认期限误杀;单点卡死
+        // (children 调用挂起)则心跳停止,照常触顶。
+        actl_core::watchdog::reset();
         if entries.len() >= max_nodes {
             reasons.push("node_limit");
             break;
