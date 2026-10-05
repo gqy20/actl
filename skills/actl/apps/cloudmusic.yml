@@ -1,4 +1,4 @@
-# 2026-10-05：收起方向识图复验通过——Table 树内残留系 Electron UIA 树滞留（推翻 2026-10-04 误判）；主窗口拒绝程序化关闭（close-window 双语义 NOT_ACTIONABLE），清理需人工。
+# 2026-10-05：收起方向识图复验通过——Table 树内残留系 Electron UIA 树滞留（推翻 2026-10-04 误判）；主窗 frameless 吞系统关闭语义（close-window 双语义无效），实测像素定位 + 物理点击自绘 X 可关。
 # 2026-10-04：search/open_queue 路线真机复验通过（manual→verified，focused 输入通道）。
 # 2026-09-29：关联 PS 已迁入 workflow；新模板协议预检通过，真实写入复验待完成。
 # 2026-09-29 静态维护：修改过的路线标为 manual，待新版真机复验；verified_date 保留历史日期。
@@ -10,7 +10,7 @@ launch: cloudmusic           # 冷启动窗口 ~30s 才现（process started 但
 window: "hwnd:{hwnd}"
 app_version: "3.1.41.205529"
 verified_date: 2026-10-05
-verified_env: Windows 10.0.26200.0 zh-cn（2026-10-04 search/open_queue 复验：find 唯一 Edit → click 聚焦 → type focused: 单调用 → enter；2026-10-05 收起方向识图复验 + 程序化关闭拒绝诊断）
+verified_env: Windows 10.0.26200.0 zh-cn（2026-10-04 search/open_queue 复验：find 唯一 Edit → click 聚焦 → type focused: 单调用 → enter；2026-10-05 收起方向识图复验 + 关闭路径实测：像素定位 X + 物理点击 → 托盘隐藏）
 quirks:
   - id: current_execution_contract
     note: search_ref/search_snapshot_id、queue_ref/queue_snapshot_id 分别来自紧邻的 find，先核对唯一 Edit 或 MenuItem。搜索提交前断言具体搜索框焦点；若输入导致身份变化，重新 find 后更新这对变量。读取未知或错误不能当作暂停、空查询或空队列。
@@ -25,7 +25,7 @@ quirks:
   - id: collapse_tree_lag
     note: 队列面板收起后 find --role Table 仍 total=1——Electron UIA 树滞留，不代表面板未收起（2026-10-05 识图证实：面板视觉已收起、入口按钮非激活）。收起/展开的状态核验用整窗截图，不用树内元素存在性。
   - id: programmatic_close_refused
-    note: 主窗口拒绝程序化关闭：close-window 裸 WM_CLOSE 与 --system-close（SC_CLOSE）均 NOT_ACTIONABLE「close posted but the window still lives」——诊断证实无模态、无 owned 弹窗、无页内确认（front-report 干净、find 按钮全为播放器 UI）、窗口真实可见非托盘隐藏。清理需人工点标题栏 X 或托盘退出；勿循环重试 close。
+    note: 主窗 frameless（WS_SYSMENU=False），标题栏按钮网页自绘、不入 UIA 树；进程外 WM_CLOSE/SC_CLOSE（close-window 双语义）与 UIA WindowPattern.Close 全部无效，但 UI 线程健在（WM_NULL 即应、SC_MINIMIZE 正常）——是应用吞关闭语义，非挂起非模态。可行关闭路径：screenshot --hwnd 截窗 → 标题栏右上像素簇分析取最右按钮中心（实测窗口 [864,328,2977,1832] 时关闭 X 在 (2878,400)；视觉模型读坐标偏差 ~25px，以像素簇为准）→ focus-window → click xy:<物理坐标> --physical；成功即隐藏到托盘=关闭达成（进程常驻属设计）。勿全树 find --name（本窗实测 126s）；坐标以 actl 物理口径为准——非 DPI 感知进程（PowerShell）的 GetWindowRect 返回 0.5× 逻辑坐标，勿混用。
 routes:
   - id: observe
     description: 根据 list-windows 确认目标 HWND 后读取控件树

@@ -13,7 +13,7 @@
 
 ### Documentation and validation
 
-- **遗留验收三项收口（2026-10-05）**：① **健壮性基建第一轮真机验收**——[81 §9](docs/81-word-style-flow.md)：009 轮 10 步全链 completed 总 155s，七件基建逐项生效（UIA 区段看门狗、close 存活复核、定位缓存 `resolved_by:"cache"`、save-disk meta 断言、StepRecord 逐步耗时画像）；evidence 二进制指纹级补跑（note-typo-010）入 ROADMAP 待桌面空闲。② **录制值读回 #4 双轨收口**——[80](docs/80-record-acceptance.md)：dev+探针三轮（rec-ma-7/8/9）+ 证据二进制正式轮（rec-ma-12，fnv128=519b005f，burst 末值 `UNIQROUND12v` 精确命中，13 键全捕获），挂起项清零。③ **网易云队列「收起」方向复验**——识图证实收起成功，推翻 2026-10-04「Table 树内残留=未收起」误判：系 Electron UIA 树滞留，收起核验走截图不走树；同轮诊断新发现主窗口对程序化 WM_CLOSE/SC_CLOSE 双语义拒绝（无模态/无弹窗/无页内确认），pack 新增 `collapse_tree_lag`/`programmatic_close_refused` 两条 quirk。
+- **遗留验收三项收口（2026-10-05）**：① **健壮性基建第一轮真机验收**——[81 §9](docs/81-word-style-flow.md)：009 轮 10 步全链 completed 总 155s，七件基建逐项生效（UIA 区段看门狗、close 存活复核、定位缓存 `resolved_by:"cache"`、save-disk meta 断言、StepRecord 逐步耗时画像）；evidence 二进制指纹级补跑（note-typo-010）入 ROADMAP 待桌面空闲。② **录制值读回 #4 双轨收口**——[80](docs/80-record-acceptance.md)：dev+探针三轮（rec-ma-7/8/9）+ 证据二进制正式轮（rec-ma-12，fnv128=519b005f，burst 末值 `UNIQROUND12v` 精确命中，13 键全捕获），挂起项清零。③ **网易云队列「收起」方向复验**——识图证实收起成功，推翻 2026-10-04「Table 树内残留=未收起」误判：系 Electron UIA 树滞留，收起核验走截图不走树；同轮关闭攻坚查明主窗为 **frameless（WS_SYSMENU=False）**：进程外 WM_CLOSE/SC_CLOSE 与 UIA WindowPattern.Close 全部无效而 UI 线程健在（WM_NULL 即应、SC_MINIMIZE 正常），可行路径为**像素定位自绘 X + `click xy --physical`**（实测成功→托盘隐藏），close-window 报告诚实非缺陷；配方与 DPI 坐标口径教训入 pack 两条 quirk（`collapse_tree_lag`/`programmatic_close_refused`）。
 
 
 ## [0.2.1] - 2026-10-05
