@@ -747,6 +747,15 @@ fn finish(command_name: &'static str, result: Result<CommandOutput, CtlError>, d
                 "{}",
                 serde_json::to_string(&env).expect("envelope serializes")
             );
+            // 成功路径硬退出(与下方错误路径对称):析构链上有无界阻塞面——
+            // thread_local 定位缓存与栈上的 UIElement COM 代理,其 Drop 是
+            // 对目标应用的跨进程 Release(提供程序不泵消息即无限阻塞,
+            // 尾段挂起族根因,2026-10-06 定位);SignalSession 的 worker
+            // join 同为无界。状态落盘不依赖析构(finish(phase) 已显式调用、
+            // Journal 每事件即 flush、stop::Scope 仅清 TLS);进程死亡时
+            // OS 断连清理 COM 通道是 providers 必须容忍的正常路径。
+            let _ = std::io::Write::flush(&mut std::io::stdout());
+            std::process::exit(0);
         }
         Err(err) => {
             let env = ErrorEnvelope::new(command_name, &err, duration_ms);

@@ -10,7 +10,7 @@ use windows::Win32::System::DataExchange::{
 };
 use windows::Win32::System::Memory::{GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalUnlock};
 
-use crate::locate::{Located, locate};
+use crate::locate::locate;
 
 /// get:读取元素属性;`property` 白名单,缺省返回基本全集。
 /// 属性白名单。`value` = ValuePattern 直读;`text` = TextPattern 文档正文
@@ -55,6 +55,10 @@ pub fn read_property(
     // 记事本 Document 上跨进程 COM 无界阻塞,进程级 300s 看门狗之后仍不收——
     // value/text/name/role 等模式调用与 click pattern 派发同族,locate 覆盖
     // 止于定位,读取是裸区段)。
+    // 2026-10-06 增补:UIElement 的跨进程 Release 同属无界调用——guard 声明
+    // 在 loc 之后,反序析构会让 Release 裸奔(真机实证:值读取成功后挂死在
+    // 析构,内核态不可杀)。看门狗是单槽不能嵌套,故用显式 drop 保证
+    // Release 也在区内、且与声明顺序无关。
     let _watchdog = crate::watchdog::enter();
     let want = |p: &str| property.map(|sel| sel == p).unwrap_or(true);
     let (value, value_via) = if want("value") {
@@ -80,7 +84,7 @@ pub fn read_property(
     if property == Some("text") {
         crate::read_channel::require(text.as_ref(), "text-pattern")?;
     }
-    Ok(PropertyInfo {
+    let info = PropertyInfo {
         name: if want("name") {
             Some(
                 loc.element
@@ -122,7 +126,10 @@ pub fn read_property(
         value_via,
         text,
         unsupported,
-    })
+    };
+    // 显式 Release 进看门狗区(反序析构会让它裸奔——见函数头注释)。
+    drop(loc);
+    Ok(info)
 }
 
 fn read_value_via(elem: &UIElement) -> Result<(Option<String>, Option<&'static str>), CtlError> {
@@ -153,7 +160,9 @@ pub enum VerifyKind {
 }
 
 pub struct VerifyOutcome {
-    pub located: Located,
+    /// 定位元数据(COM 元素不出域:见 ResolvedInfo 注释,Release 必须在
+    /// 看门狗区内完成——verify 各分支在区内 into_info)。
+    pub resolved: crate::locate::ResolvedInfo,
     pub actual: Option<String>,
     pub mode: &'static str,
     pub channel: Option<&'static str>,
@@ -175,8 +184,10 @@ pub fn verify(
     match kind {
         VerifyKind::Exists => {
             let loc = locate(app, target, near)?;
+            // Exists 无元素读取,但 Release 本身是跨进程调用——进区段再 into_info。
+            let _watchdog = crate::watchdog::enter();
             Ok(VerifyOutcome {
-                located: loc,
+                resolved: loc.into_info(),
                 actual: None,
                 mode: "exists",
                 channel: None,
@@ -207,6 +218,7 @@ pub fn verify(
                 ),
                 _ => read_value_via(&loc.element)?,
             };
+            let resolved = loc.into_info();
             crate::read_channel::require(
                 actual.as_ref(),
                 channel.unwrap_or("value-or-text-pattern"),
@@ -227,7 +239,7 @@ pub fn verify(
                 ));
             }
             Ok(VerifyOutcome {
-                located: loc,
+                resolved,
                 actual,
                 mode: match (property.as_str(), contains) {
                     ("name", false) => "name",
@@ -246,11 +258,12 @@ pub fn verify(
             let _watchdog = crate::watchdog::enter();
             let state = crate::read_channel::toggle(&loc.element)?;
             crate::read_channel::require(state.as_ref(), "toggle-pattern")?;
+            let resolved = loc.into_info();
             if state.as_deref() != Some("On") {
                 return Err(fail("checked", state));
             }
             Ok(VerifyOutcome {
-                located: loc,
+                resolved,
                 actual: state,
                 mode: "checked",
                 channel: Some("toggle-pattern"),

@@ -41,64 +41,70 @@ pub fn click(
     app: Option<&str>,
     target: &Target,
     near: Option<&str>,
-) -> Result<(Located, &'static str), CtlError> {
+) -> Result<(crate::locate::ResolvedInfo, &'static str), CtlError> {
     let loc = locate(app, target, near)?;
     let _t = actl_core::trace::scope("click.pattern");
     // pattern 派发区段进 UIA 看门狗(真机实证 2026-10-05:菜单项 invoke
     // 打开 flyout 时跨进程 COM 无界阻塞——locate/identity/observation 已
     // 覆盖,动作模式调用是最后一个裸区段;20s 击杀留 stderr 标记)。
+    // 2026-10-06 增补:UIElement 的 Drop(跨进程 Release)同族——单出口
+    // into_info 消费式转元数据,Ok/Err 两路径的 Release 都留在区内。
     let _watchdog = crate::watchdog::enter();
-    if loc.element.get_pattern::<UIInvokePattern>().is_ok() {
-        crate::feedback::semantic("click", &loc.element, &loc.window_title, || {
-            loc.element
-                .get_pattern::<UIInvokePattern>()
-                .map_err(internal)?
-                .invoke()
-                .map_err(internal)
-        })?;
-        return Ok((loc, "invoke"));
-    }
-    if loc.element.get_pattern::<UISelectionItemPattern>().is_ok() {
-        crate::feedback::semantic("select", &loc.element, &loc.window_title, || {
-            loc.element
-                .get_pattern::<UISelectionItemPattern>()
-                .map_err(internal)?
-                .select()
-                .map_err(internal)
-        })?;
-        return Ok((loc, "selection-item"));
-    }
-    // 复选框/开关:点击语义 = Toggle(状态翻转)
-    if loc.element.get_pattern::<UITogglePattern>().is_ok() {
-        crate::feedback::semantic("toggle", &loc.element, &loc.window_title, || {
-            loc.element
-                .get_pattern::<UITogglePattern>()
-                .map_err(internal)?
-                .toggle()
-                .map_err(internal)
-        })?;
-        return Ok((loc, "toggle"));
-    }
-    // 折叠面板/树节点:点击语义 = ExpandCollapse
-    if loc.element.get_pattern::<UIExpandCollapsePattern>().is_ok() {
-        crate::feedback::semantic("expand", &loc.element, &loc.window_title, || {
-            loc.element
-                .get_pattern::<UIExpandCollapsePattern>()
-                .map_err(internal)?
-                .expand()
-                .map_err(internal)
-        })?;
-        return Ok((loc, "expand-collapse"));
-    }
-    Err(CtlError::new(
-        ErrorCode::NotActionable,
-        format!(
-            "{} ({}) exposes none of Invoke/SelectionItem/Toggle/ExpandCollapse; \
-             scroll/focus first, try `set-value`, or `--physical` for a real click",
-            target.describe(),
-            loc.role
-        ),
-    ))
+    let pattern = (|| {
+        if loc.element.get_pattern::<UIInvokePattern>().is_ok() {
+            crate::feedback::semantic("click", &loc.element, &loc.window_title, || {
+                loc.element
+                    .get_pattern::<UIInvokePattern>()
+                    .map_err(internal)?
+                    .invoke()
+                    .map_err(internal)
+            })?;
+            Ok("invoke")
+        } else if loc.element.get_pattern::<UISelectionItemPattern>().is_ok() {
+            crate::feedback::semantic("select", &loc.element, &loc.window_title, || {
+                loc.element
+                    .get_pattern::<UISelectionItemPattern>()
+                    .map_err(internal)?
+                    .select()
+                    .map_err(internal)
+            })?;
+            Ok("selection-item")
+        }
+        // 复选框/开关:点击语义 = Toggle(状态翻转)
+        else if loc.element.get_pattern::<UITogglePattern>().is_ok() {
+            crate::feedback::semantic("toggle", &loc.element, &loc.window_title, || {
+                loc.element
+                    .get_pattern::<UITogglePattern>()
+                    .map_err(internal)?
+                    .toggle()
+                    .map_err(internal)
+            })?;
+            Ok("toggle")
+        }
+        // 折叠面板/树节点:点击语义 = ExpandCollapse
+        else if loc.element.get_pattern::<UIExpandCollapsePattern>().is_ok() {
+            crate::feedback::semantic("expand", &loc.element, &loc.window_title, || {
+                loc.element
+                    .get_pattern::<UIExpandCollapsePattern>()
+                    .map_err(internal)?
+                    .expand()
+                    .map_err(internal)
+            })?;
+            Ok("expand-collapse")
+        } else {
+            Err(CtlError::new(
+                ErrorCode::NotActionable,
+                format!(
+                    "{} ({}) exposes none of Invoke/SelectionItem/Toggle/ExpandCollapse; \
+                     scroll/focus first, try `set-value`, or `--physical` for a real click",
+                    target.describe(),
+                    loc.role
+                ),
+            ))
+        }
+    })();
+    let info = loc.into_info();
+    pattern.map(|pattern| (info, pattern))
 }
 
 /// type:定位 → SetFocus →(护栏)→ 逐字键盘输入或剪贴板粘贴。
@@ -384,25 +390,30 @@ pub fn set_value(
 ) -> Result<InputResult, CtlError> {
     let loc = locate(app, target, near)?;
     // Value pattern 调用同进 UIA 看门狗(click pattern 派发同理由)。
+    // 2026-10-06 增补:单出口 + 显式 drop,Release 留在区内(见 into_info 契约)。
     let _watchdog = crate::watchdog::enter();
-    loc.element.get_pattern::<UIValuePattern>().map_err(|_| {
-        CtlError::new(
-            ErrorCode::NotActionable,
-            format!(
-                "{} ({}) exposes no Value pattern; try `type` (keyboard path) instead",
-                target.describe(),
-                loc.role
-            ),
-        )
-    })?;
-    crate::feedback::semantic("set-value", &loc.element, &loc.window_title, || {
-        loc.element
-            .get_pattern::<UIValuePattern>()
-            .map_err(internal)?
-            .set_value(value)
-            .map_err(internal)
-    })?;
-    Ok((&loc).into())
+    let result = (|| {
+        loc.element.get_pattern::<UIValuePattern>().map_err(|_| {
+            CtlError::new(
+                ErrorCode::NotActionable,
+                format!(
+                    "{} ({}) exposes no Value pattern; try `type` (keyboard path) instead",
+                    target.describe(),
+                    loc.role
+                ),
+            )
+        })?;
+        crate::feedback::semantic("set-value", &loc.element, &loc.window_title, || {
+            loc.element
+                .get_pattern::<UIValuePattern>()
+                .map_err(internal)?
+                .set_value(value)
+                .map_err(internal)
+        })?;
+        Ok(InputResult::from(&loc))
+    })();
+    drop(loc);
+    result
 }
 
 /// select:在容器内按选项名选中一项(SelectionItem pattern;06 §3.6 与

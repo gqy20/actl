@@ -91,19 +91,19 @@ pub(crate) fn click(
             "window": loc.window_title,
         })
     } else {
-        let (loc, pattern) = actl_uia::click(app, &target, near)?;
+        let (info, pattern) = actl_uia::click(app, &target, near)?;
         json!({
             "action": "click",
             "target": target.describe(),
-            "resolved_by": loc.resolved_by,
+            "resolved_by": info.resolved_by,
             "pattern": pattern,
             "input_effects": { "keyboard": "none", "clipboard": "untouched", "pointer": "none" },
             "resolved": {
-                "role": loc.role,
-                "name": loc.name,
-                "automation_id": loc.automation_id,
+                "role": info.role,
+                "name": info.name,
+                "automation_id": info.automation_id,
             },
-            "window": loc.window_title,
+            "window": info.window_title,
         })
     };
 

@@ -23,6 +23,40 @@ pub struct Located {
     pub(crate) element: UIElement,
 }
 
+/// 定位结果的元数据面。COM 元素(UIElement)不出本 crate 域:跨函数边界携带
+/// 会让它的 Drop(跨进程 Release)裸奔在无看门狗区段——2026-10-06 真机实证
+/// (get 在读取成功后挂死在析构,内核态不可杀)。调用方只消费这些字段。
+pub struct ResolvedInfo {
+    pub window_title: String,
+    pub role: String,
+    pub name: Option<String>,
+    pub automation_id: Option<String>,
+    pub resolved_by: &'static str,
+}
+
+impl Located {
+    /// 消费式转元数据:显式 drop COM 元素。**调用点必须已在看门狗区内**——
+    /// Release 是跨进程调用,提供程序不泵消息时无限阻塞。
+    pub(crate) fn into_info(self) -> ResolvedInfo {
+        let Located {
+            window_title,
+            role,
+            name,
+            automation_id,
+            resolved_by,
+            element,
+        } = self;
+        drop(element);
+        ResolvedInfo {
+            window_title,
+            role,
+            name,
+            automation_id,
+            resolved_by,
+        }
+    }
+}
+
 /// 进程内定位缓存(docs/81 提速轮):同 (app,target) 的连续解析在键入序列中
 /// 每次都重扫目标窗全树(Word 级巨型树实测 DFS 2-3s/次,是每键 4.4s 的大头)。
 /// 缓存最近一次成功解析的元素;命中时以 RuntimeId + 归属根窗口双复核替代
@@ -116,7 +150,12 @@ pub fn locate(app: Option<&str>, target: &Target, near: Option<&str>) -> Result<
         return Ok(hit);
     }
     let located = locate_full(app, target, near)?;
-    cache_store(&key, &located);
+    {
+        // cache_store 的 RuntimeId 读取是跨进程 COM 调用,进看门狗区段
+        // (locate_full 的区段已随其返回退出,这里是裸段)。
+        let _guard = crate::watchdog::enter();
+        cache_store(&key, &located);
+    }
     Ok(located)
 }
 

@@ -682,7 +682,7 @@ pub(crate) fn verify_cmd(
         "action": "verify",
         "mode": out.mode,
         "target": target.describe(),
-        "resolved_by": out.located.resolved_by,
+        "resolved_by": out.resolved.resolved_by,
         "actual": out.actual,
         "channel": out.channel,
     })

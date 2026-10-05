@@ -48,7 +48,7 @@
 - [ ] UIA 观察长阻塞的**根因定位**（防护已落地：进程级看门狗 + UIA 区段看门狗双保险；根因——60s NOT_FOUND 未复现、故障提供程序未确认，见 [41](41-logging-metadata.md)、[65](65-observation-blocking-diagnosis.md)）
 - [ ] UWP 挂起恢复（类配对后疑似绕开，更长放置待证）
 - [ ] 前台交接 v9 人工接管/嵌套/多窗口真机矩阵（[62](62-foreground-handoff.md)）
-- [ ] **尾段挂起族**：工作完成但进程不退出（record-stop 首例 → 本批扩至 flow-run/flow-resume/get/launch 尾段,僵尸堆积）;引擎与状态落盘不受影响,但每真机调用产滞尾进程——待根因定位（同 COM 挂起族? 或 shutdown 路径）
+- [ ] **尾段挂起族（根因已定位,主修复已落地 2026-10-06）**：根因 = UIElement 的 Drop（跨进程 Release）与读取同族无界,而析构路径无任何看门狗覆盖——三个暴露点:thread_local 定位缓存/栈内 Drop（envelope 前后两形态）+ 反序析构让 guard 先于资源退出。修复两轮:① main.rs 成功路径硬退出（与错误路径对称,析构链跳过）;② `into_info`/显式 drop 家族——COM 元素不出 actl-uia 域（read/verify/click/set_value + cache_store 全收编,真机验证 get 808ms/429ms 干净退出零积压,见 [06 析构纪律](06-design-blueprint.md)）。**残余:select/toggle/pointer/type 家族的 Located 返回路径（同模式待审计）**;修复前内核楔死僵尸（持 ghost2 映像）待重启清退。
 
 ## 维护
 

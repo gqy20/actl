@@ -261,6 +261,15 @@ list-windows 前台兜底:UIA 桌面子树在 provider 楔死时漏窗(无标题
 UIA 看门狗(引擎行为):定位/树观察/焦点查询区段超过 ACTL_UIA_WATCHDOG_MS
   (默认 20000,0=禁用)时进程带退出码 125 自毙——无界 COM 挂起从"永久僵尸"
   变"限内诚实失败"(docs/81 §8 僵尸事故根治)
+**析构纪律(2026-10-06,尾段挂起族根治)**:UIElement 的 Drop(跨进程 Release)与
+  读取/调用同族无界——看门狗是单槽时间戳不能嵌套,guard 声明在资源之后会因
+  反序析构让 Release 裸奔(真机实证:值读取成功后挂死在析构,内核态不可杀)。
+  两条铁律:① **成功路径硬退出**——envelope 落盘 flush 后 `std::process::exit(0)`,
+  与错误路径对称,析构链整个跳过(状态落盘不依赖 Drop:finish(phase) 显式调用、
+  Journal 每事件即 flush);② **COM 元素不出 actl-uia 域**——跨函数返回携带
+  `Located` 会让调用方裸奔 Release;结果结构携带 `ResolvedInfo`
+  (`Located::into_info()` 消费式转换,**调用点必须已在看门狗区内**)。
+  残余暴露面(同模式待审计):select/toggle/pointer/type 家族的 Located 返回路径。
 wait --element 瞬态重试:STALE_REF/INTERNAL 观察瞬态按"尚未出现"继续轮询
   (wait --gone 同款语义),超时如实失败;非瞬态立即上抛
 ```
