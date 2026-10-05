@@ -218,6 +218,20 @@ uncertain 步变更即重试授权，谱系经 flow-status 的 revisions 可见�
 
 ## 应用路线(Office 实测背书)
 
+**L0 路线命中重放——任务到达的第一分岔(docs/42 分层 L0,知识飞轮的读侧)**:动手前先读
+目标应用的 `apps/<slug>.yml` 路线,按序分岔:
+
+1. **命中 `status: verified` 的路线(goal 与所需输入对得上)** → 直接重放,零探索:
+   ≥3 步按验收脚本纪律转成 flow 文件放 `workflows/` 交给 `flow-run`(获得
+   verify/暂停/治理),短路线走 batch。路线步骤是语义选择器 + `{window}` 绑定
+   (绑定当前窗口锚),pack 不存 ref——refs 永远当轮重新观察;verify 字段即断言,
+   如实核对,失败不静默重试。
+2. **只有 unverified 或无路线** → 不得直接执行,走探索引擎:flow 文件写 `explore:`
+   段(task/app/keywords/goal 四要素,见 docs/06 探索节),`flow-run` 启动;决策卡
+   经 flow-status 的 `data.decision_card` 读取,`flow-resume --id <run> --decision
+   <choice_id>` 应答。完成后 `explore-writeback --id <run>` 抽路线片段,合并进
+   pack(恒 unverified,人工复核转 verified)——下次同类任务即走分岔 1,闭环。
+
 操作 Excel/Word/微信前先读对应档案:`apps/excel.yml`、`apps/word.yml`、`apps/wechat.yml`(含路线
 steps、quirks 与解法、验证方法;路线的 `status` 是信任分级,`unverified` 不得直接执行)。
 浏览器(Edge/Chrome,知识外溢到 WebView2/Electron 系)读 `apps/browser.yml`。
