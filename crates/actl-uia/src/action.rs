@@ -44,6 +44,10 @@ pub fn click(
 ) -> Result<(Located, &'static str), CtlError> {
     let loc = locate(app, target, near)?;
     let _t = actl_core::trace::scope("click.pattern");
+    // pattern 派发区段进 UIA 看门狗(真机实证 2026-10-05:菜单项 invoke
+    // 打开 flyout 时跨进程 COM 无界阻塞——locate/identity/observation 已
+    // 覆盖,动作模式调用是最后一个裸区段;20s 击杀留 stderr 标记)。
+    let _watchdog = crate::watchdog::enter();
     if loc.element.get_pattern::<UIInvokePattern>().is_ok() {
         crate::feedback::semantic("click", &loc.element, &loc.window_title, || {
             loc.element
@@ -379,6 +383,8 @@ pub fn set_value(
     near: Option<&str>,
 ) -> Result<InputResult, CtlError> {
     let loc = locate(app, target, near)?;
+    // Value pattern 调用同进 UIA 看门狗(click pattern 派发同理由)。
+    let _watchdog = crate::watchdog::enter();
     loc.element.get_pattern::<UIValuePattern>().map_err(|_| {
         CtlError::new(
             ErrorCode::NotActionable,
