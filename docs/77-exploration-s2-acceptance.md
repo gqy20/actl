@@ -158,3 +158,19 @@ S3 真机闭环验收通过:回写(证据收集)、人工复核迁移(用户裁�
 ### 清理
 
 对话框经 HWND 优雅取消(close-window ok,非 taskkill)、记事本优雅关闭,窗口清单 Notepad/另存为 计数归零。会话自动保存的未保存标签(`actl-explore-accept`)保留在案(此前已记录)。
+
+## 锚点转移真机验收（2026-10-05 轮 A+B）：对话框内继续动作——通过
+
+设计 docs/42 锚点转移（观察/动作锚从不可变 spec.app 升为状态）。轮 A（提交 96280cc）：`anchor_app`/`anchor_stack` 状态化、三判据转移（同 pid + 非当前锚/栈内窗 + **关键词帧非空自校验**——零命中窗自动出局）、差分基准重置（转移帧全量按 added）、**goal-锚合流**（goal 核验窗口优先序 = goal 窗 > 当前锚 > 声明锚——测试实证双转移浪费后提前落地）、锚窗消失出栈回退、goal 转移与锚转移共用预算。MockHost 4 项新测试 + 既有跨窗 goal 测试更新为合流语义。
+
+**轮 B 真机链（run anchor-b-02，dev 二进制）**：记事本「文件 → 另存为 → 输入文件名 → 保存」全链——
+
+- **动作链**（action_log 逐条）：`id:File`（开菜单，reveals）→ `name:另存为`（开对话框，reveals）→ **锚点转移到对话框**（anchor_transfers=1，观察前沿与动作派发改锚）→ `id:1001` type `anchor-save.txt`（texts 输入原语在**对话框内**执行，priors 控序平局）→ 决策卡应答 c1 → `id:1` 保存（answer 模式，acted）；
+- **栈回退**：对话框关闭后终态 `anchor_app` 归一化 None（出栈回到 `app: Notepad`——标题子串跨改名存活的设计）；
+- **goal 合流**：`verify-file --kind meta --size_min` 缺文件=AssertionFailed=NotMet（存在性继续探索）、保存落盘后 Met，**completed**；
+- **落盘核验**：`anchor-save.txt` 存在、内容 `anchor round b` 精确；
+- 诚实记账：`id:1001` 的效果标 `no_effect`（对话框帧无 UI 变化——归因如实）；决策卡平局外抛一次（对话框内「保存按钮/新建文件夹」平局——设计行为，texts 输入后按钮非独占领先）。
+
+**附带真发现（当轮修复）**：点击「打开菜单」的 pattern 派发区段（get_pattern/invoke）**没有 UIA 看门狗覆盖**——菜单项 invoke 打开 flyout 时跨进程 COM 无界阻塞（真机两度实证，进程级看门狗 300s 才收尸）。修复：click 的 pattern 派发与 set-value 的 Value pattern 调用补 `watchdog::enter()` 区段（20s 击杀留 stderr 标记）。locate/identity/observation 已有覆盖，动作模式调用是最后一个裸区段。
+
+遗留：对话框决策平局需要应答（priors 只救了 type 目标，保存按钮平局是词表设计问题——非缺陷）；轮 C（RuntimeBroker pid 放宽）待复现。
