@@ -75,3 +75,9 @@
 - **① 流程砍重开循环**：save→save-disk(meta)→单次 close→离线 verify-styles 终态，10 步（原 12 步含两次冷启动+三次关闭周期）。
 - **环境事故与教训**：诊断期对挂起命令的 TaskStop 在 UIA RPC 中途杀进程，留下 8 个不可杀的 actl.exe 僵尸（内核态卡死、锁死主构建产物，被迫启用 target2 备用构建目录）+ Word 反复楔死——端到端验收（note-typo-005）三次尝试均在 open 步受阻**挂起待环境恢复**（僵尸自行退出或重启后用 `target2/debug/actl.exe flow-run --file skills/actl/workflows/word-note-typography.yml --id note-typo-006` 补测）。**新纪律：actl 命令挂起时优先等其自身超时（一切等待均有界），不做 TaskStop 中途击杀。**
 - 质量门禁：workspace 全测 0 失败 + fmt/clippy 干净（经 target2；正式 gate 待主产物解锁后补跑）。
+
+## 9. 009 轮收口（2026-10-05 增补）：端到端全链 completed——健壮性验收通过
+
+并行会话的补测轮（note-typo-009，2026-10-04 23:33 启动）在僵尸清退后环境恢复完成：**10 步全链 completed、总耗时 155s**（open 12s / focus 12s / fill×3 各 ~35s / save 7s / close 5s；逐步耗时由 StepRecord started/finished_ms 提供——健壮性第 ⑥ 件）。健壮性七件全链生效：UIA 区段看门狗（open/focus 的 12s 含 Word 巨型树扫描不再无界）、close-window 存活复核（close 步 4.7s 完成且窗口清单归零）、定位缓存（fill 步 ~35s 含缓存命中——`resolved_by:"cache"` 使每键成本从 4.4s 降下来）、save-disk meta 断言（36ms 完成落盘核对）。
+
+如实边界：`ownership`（read-only 产出步，verified=false 是只读步无验证语义）、`save-disk`/`verify-styles`（v=false 为 verify 属性缺省——save-disk 36ms 完成 meta 断言、verify-styles 32ms 完成样式断言，二者完成即通过）。二进制为 target2/debug 构建指纹 `a8fa93ed`（非 evidence 轮指纹——并行会话补测时主产物目录仍被僵尸锁定）；009 的 evidence 二进制指纹级补跑（note-typo-010）为非阻塞补强项，已入 ROADMAP 遗留验收（真机验收以 009 轮收口，桌面空闲时执行）。

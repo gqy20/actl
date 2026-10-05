@@ -11,6 +11,10 @@
 
 - **MCP 适配服务 actl-mcp（spec 轮 1-2，[docs/82](docs/82-mcp-adapter-research.md) / [06 §7.8](docs/06-design-blueprint.md)；PRD 2026-10-05 授权）**：远程访问被控 Windows 设备的独立服务——**独立 crate（不依赖任何 actl workspace crate，纯薄壳；async/tokio 仅限该 crate，ADR-001 定界修订由编译器强制）+ 官方 rmcp SDK（协议层不手写，用户裁定）**。① **传输模式 A**：`actl-mcp --listen [--token]`——默认 127.0.0.1 防意外暴露，LAN 显式 0.0.0.0；token 缺省 256-bit 生成 + stderr 配对横幅（人工抄 token = 设备主人知情授权）；axum 壳 Bearer 门禁（401）+ Origin 校验（403，规范 MUST）；明文 HTTP 仅限可信局域网；SSH/stdio 与 tasks 扩展后续可选。② **子进程派发模型（安全穿越）**：每次 tools/call spawn 真实 actl 子进程（ACTL_TASK_ID 审计、kill_on_drop 断连即杀→interrupted 恢复语义）——预告/放行/急停/看门狗全部本地权威，远端结构性无法绕过；急停后子进程绑停止代次自动 fail-closed；envelope 唯一权威，非法输出合成诚实错误不伪造 ok。③ **能力面三层懒加载**：通用 `actl` 工具（速查 ~700 tokens 一次性）+ `actl://help/{command}` 资源模板（按需 ~300-500）+ 全量 schema 不进资源面；支持面 = 全部命令 − 排除表（execution-recover/display-start/desktop-restore/record-worker——操作本地监督机制的动词出局，排除不静默）；`ok:false`→`isError`，code/hint/evidence 全保留（远端失败信息与本地同构）。测试：库单测 9 + HTTP 契约 7 + **rmcp 客户端互操作 1**（SDK 自带客户端栈↔服务端全循环：生命周期协商、tools/list 速查嵌入、tools/call 真实派发、资源读取、排除动词错误语义——裸 HTTP 契约覆盖不到的客户端实现互操作面）；rmcp 强制 2026-07-28 无状态契约实证（_meta/Mcp-Name 头；bearer_auth 自带 Bearer 前缀——auth_header 传纯 token）；js-sys 0.3.85 锁对齐（wasm-bindgen-futures 精确钉死 vs chrono 冲突）。真机跨设备验收待用户场景。
 
+### Documentation and validation
+
+- **遗留验收三项收口（2026-10-05）**：① **健壮性基建第一轮真机验收**——[81 §9](docs/81-word-style-flow.md)：009 轮 10 步全链 completed 总 155s，七件基建逐项生效（UIA 区段看门狗、close 存活复核、定位缓存 `resolved_by:"cache"`、save-disk meta 断言、StepRecord 逐步耗时画像）；evidence 二进制指纹级补跑（note-typo-010）入 ROADMAP 待桌面空闲。② **录制值读回 #4 双轨收口**——[80](docs/80-record-acceptance.md)：dev+探针三轮（rec-ma-7/8/9）+ 证据二进制正式轮（rec-ma-12，fnv128=519b005f，burst 末值 `UNIQROUND12v` 精确命中，13 键全捕获），挂起项清零。③ **网易云队列「收起」方向复验**——识图证实收起成功，推翻 2026-10-04「Table 树内残留=未收起」误判：系 Electron UIA 树滞留，收起核验走截图不走树；同轮诊断新发现主窗口对程序化 WM_CLOSE/SC_CLOSE 双语义拒绝（无模态/无弹窗/无页内确认），pack 新增 `collapse_tree_lag`/`programmatic_close_refused` 两条 quirk。
+
 
 ## [0.2.1] - 2026-10-05
 
