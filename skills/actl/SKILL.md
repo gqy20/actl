@@ -296,6 +296,7 @@ collector 检索到结论 → actl 实时发消息回应。
 本地软件位置查找指南:[references/app-locations.md](references/app-locations.md)
 流程使用说明:[references/flows.md](references/flows.md)
 录制草稿改写说明:[references/record-rewrite.md](references/record-rewrite.md)
+MCP 远程使用(被控端启动配对/远端 agent 纪律/故障速查):[references/mcp-remote.md](references/mcp-remote.md)
 
 ### 本地应用别名
 

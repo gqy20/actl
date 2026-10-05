@@ -68,6 +68,13 @@ fn banner(listen: &str, token: &str) {
     eprintln!(
         "mode A: plaintext HTTP — trusted LAN only, never across untrusted networks (docs/82)"
     );
+    if listen.starts_with("0.0.0.0") || listen.starts_with("::") {
+        // LAN 形态:首次监听触发 Windows 防火墙系统确认(预期行为,一次性);
+        // 被拒则远端连接被防火墙静默丢弃——症状是"连接被拒",列入故障速查。
+        eprintln!(
+            "note: first LAN bind triggers the Windows firewall prompt (one time); declining blocks remote connections"
+        );
+    }
 }
 
 #[tokio::main]
