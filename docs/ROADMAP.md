@@ -14,7 +14,7 @@
 
 ### 高优先（用户标记）
 
-- [ ] **探索模式（用户标记关键）**：S1–S3、L2 原语与先验飞轮已全部真机通过（[77](77-exploration-s2-acceptance.md)）。待办：①~~观察锚点随弹窗转移~~（2026-10-05 已落地并真机验收,[77 锚点转移增补](77-exploration-s2-acceptance.md);剩余 RuntimeBroker pid 放宽待复现）；②~~type 的 `--paste` 通道选项~~（2026-10-05 落地:texts 原语内容判据自动选通道 + writeback 导出同口径注入,真机中文轮并入路线积累批次）；③路线积累（§7 目标 5 条已 2 条）；④~~L0 命中重放 skill 层流程化~~（2026-10-05 SKILL.md 双分岔指引落地）;UCB 统计剪枝（待 quirks 样本量）
+- [ ] **探索模式（用户标记关键）**：S1–S3、L2 原语与先验飞轮已全部真机通过（[77](77-exploration-s2-acceptance.md)）。待办：①~~观察锚点随弹窗转移~~（2026-10-05 已落地并真机验收,[77 锚点转移增补](77-exploration-s2-acceptance.md);剩余 RuntimeBroker pid 放宽待复现）；②~~type 的 `--paste` 通道选项~~（2026-10-05 落地:texts 原语内容判据自动选通道 + writeback 导出同口径注入,真机中文轮并入路线积累批次）；③路线积累（§7 目标 5 条已 **3** 条——#3 记事本中文输入 2026-10-05 全链+重放 verified 待人工复核;#4/#5 挂起待环境恢复（僵尸堆积,[77 末节](77-exploration-s2-acceptance.md)））；④~~L0 命中重放 skill 层流程化~~（2026-10-05 SKILL.md 双分岔指引落地）;UCB 统计剪枝（待 quirks 样本量）
 - [ ] release-review-draft 写段联测（待用户授权，[43](43-release-review-draft.md)）
 
 ### 流程与集成
@@ -48,6 +48,9 @@
 - [ ] UIA 观察长阻塞的**根因定位**（防护已落地：进程级看门狗 + UIA 区段看门狗双保险；根因——60s NOT_FOUND 未复现、故障提供程序未确认，见 [41](41-logging-metadata.md)、[65](65-observation-blocking-diagnosis.md)）
 - [ ] UWP 挂起恢复（类配对后疑似绕开，更长放置待证）
 - [ ] 前台交接 v9 人工接管/嵌套/多窗口真机矩阵（[62](62-foreground-handoff.md)）
+- [ ] **尾段挂起族**：工作完成但进程不退出（record-stop 首例 → 本批扩至 flow-run/flow-resume/get/launch 尾段,僵尸堆积）;引擎与状态落盘不受影响,但每真机调用产滞尾进程——待根因定位（同 COM 挂起族? 或 shutdown 路径）
+- [ ] `get --property value` 读路径无看门狗区段（实测超 300s 进程级看门狗仍未收——与 493d163 修的 click pattern 同族,watchdog 裸区段又一例）
+- [ ] `launch --wait-window` 参数疑似透传给被启程序（「找不到 --wait-window....txt」弹窗实证）;`launch` 的 App Paths 解析面不含 HKCU（notepad.exe 注册在 HKCU 解析不到）
 
 ## 维护
 

@@ -174,3 +174,17 @@ S3 真机闭环验收通过:回写(证据收集)、人工复核迁移(用户裁�
 **附带真发现（当轮修复）**：点击「打开菜单」的 pattern 派发区段（get_pattern/invoke）**没有 UIA 看门狗覆盖**——菜单项 invoke 打开 flyout 时跨进程 COM 无界阻塞（真机两度实证，进程级看门狗 300s 才收尸）。修复：click 的 pattern 派发与 set-value 的 Value pattern 调用补 `watchdog::enter()` 区段（20s 击杀留 stderr 标记）。locate/identity/observation 已有覆盖，动作模式调用是最后一个裸区段。
 
 遗留：对话框决策平局需要应答（priors 只救了 type 目标，保存按钮平局是词表设计问题——非缺陷）；轮 C（RuntimeBroker pid 放宽）待复现。
+
+## 探索路线 #3：记事本中文输入（2026-10-05 第二批）——全链通过
+
+**背景**：② --paste 通道选项收口的真机验证轮（引擎内容判据落地后）+ 路线积累 2/5→3/5。证据二进制 fnv128=81ee14e8（含 8e6cec5）。
+
+**探索轮**（run explore-l2-notepad-input-zh，fixture `explore-notepad-input-zh.yml`）：三方平局卡（编辑 Button/编辑 MenuItem/文本编辑器 Document 同分 8——L2 同款非构造歧义）应答 c3 后单步执行；**goal_met:true**（actions=1, decisions=1, errors=0）。**② 三重物理证据**：① goal 断言 verify --value --contains 通过；② 窗口标题变 `*探索验收中文 - Notepad`（中文 5 字符实际送达）；③ 剪贴板残留 `探索验收中文`（paste 通道的物理痕迹——键盘通道不触剪贴板）。**writeback 导出同口径实证**：type 步骤含 `--paste`（route.rs 内容判据真机生效）。
+
+**重放**（run replay-notepad-input-01，fixture `replay-notepad-input.yml`）：全步 completed、`verified:true`（attempts:1，5.5s，state.json）——人工复核迁移 verified 的走通证据（复核待用户）。
+
+**路线 #3 归档**：`apps/notepad.yml` 首建（unverified，四条 quirk）。**夹具会话事故与破环**：新启记事本被 TabState/云同步复活出录制轮脏标签链（marker4→marker5→anchor-save→无标题→marker3→marker，窗口级 close 不清会话）；破环 = 标签级 `ctrl+w` + 「不保存」逐个废弃，末标签后应用自然退出（入 pack quirk）。
+
+**环境退化记录（诚实）**：本批尾段挂起族扩散——flow-run/flow-resume/get value/launch 均出现"工作完成、进程不退出"（envelope 后滞尾或不出），僵尸堆积（exited=True 幽灵记录 20+）。引擎侧工作与状态落盘不受影响（state.json 均如实），但每轮真机调用产 1-2 个滞尾进程。**路线 #4/#5 与轮 C 挂起待环境恢复**（僵尸自退或重启后），不在退化环境上继续堆真机轮。
+
+**新代码发现（登记待办）**：① `get --property value` 读路径无看门狗区段（实测超 300s 进程级看门狗仍未收——与 493d163 修的 click pattern 同族，watchdog 裸区段又一例）；② `launch` 的 `--wait-window` 参数疑似被透传给被启程序（记事本弹「找不到 --wait-window Notepad --timeout 20000.txt」，launch 的 option 双重处理待复现立案）；③ `actl launch notepad.exe` 解析不到 HKCU App Paths 注册（解析面只查 HKLM）。
