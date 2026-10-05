@@ -51,6 +51,11 @@ pub fn read_property(
         )));
     }
     let loc = locate(app, target, near)?;
+    // 属性读取区段进 UIA 看门狗(真机实证 2026-10-05:get --property value 在
+    // 记事本 Document 上跨进程 COM 无界阻塞,进程级 300s 看门狗之后仍不收——
+    // value/text/name/role 等模式调用与 click pattern 派发同族,locate 覆盖
+    // 止于定位,读取是裸区段)。
+    let _watchdog = crate::watchdog::enter();
     let want = |p: &str| property.map(|sel| sel == p).unwrap_or(true);
     let (value, value_via) = if want("value") {
         read_value_via(&loc.element)?
@@ -183,6 +188,9 @@ pub fn verify(
             property,
         } => {
             let loc = locate(app, target, near)?;
+            // 断言值读取同进 UIA 看门狗(read_property 同族;探索引擎的
+            // goal 断言走此路径,裸区段即整轮探索的挂点)。
+            let _watchdog = crate::watchdog::enter();
             let (actual, channel) = match property.as_str() {
                 "name" => (
                     Some(
@@ -234,6 +242,8 @@ pub fn verify(
         }
         VerifyKind::Checked => {
             let loc = locate(app, target, near)?;
+            // Toggle 状态读取同进 UIA 看门狗(read_property 同族)。
+            let _watchdog = crate::watchdog::enter();
             let state = crate::read_channel::toggle(&loc.element)?;
             crate::read_channel::require(state.as_ref(), "toggle-pattern")?;
             if state.as_deref() != Some("On") {

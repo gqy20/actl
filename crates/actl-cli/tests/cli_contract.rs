@@ -541,6 +541,22 @@ fn launch_unknown_program_is_not_found_exit_1() {
 }
 
 #[test]
+fn launch_options_after_program_are_rejected_with_guidance() {
+    // trailing_var_arg 语义:程序名后的 token 原样转发子进程——--wait-window
+    // 写在程序名后曾静默失效且子进程收到垃圾参数(2026-10-05 真机实证:
+    // 记事本把选项当文件名打开)。现 fail-fast 指引选项前置,业务失败
+    // PROTOCOL exit 1。
+    let (code, stdout) = actl(&["launch", "some-program-name", "--wait-window", "Notepad"]);
+    assert_eq!(code, 2, "guard fires before resolution, no spawn attempted");
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
+    assert_eq!(v["error"]["code"], "PROTOCOL", "{v}");
+    assert!(
+        v["error"]["message"].as_str().unwrap().contains("precede"),
+        "guidance must say options precede the program: {v}"
+    );
+}
+
+#[test]
 fn window_commands_without_selector_is_protocol() {
     let (code, stdout) = actl(&["close-window"]);
     assert_eq!(

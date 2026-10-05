@@ -330,6 +330,17 @@ pub(crate) fn launch(
     let Some(program) = args.first() else {
         return Err(CtlError::protocol("launch requires a program name"));
     };
+    // trailing_var_arg 语义:程序名之后的一切 token 都原样转发给子进程——
+    // 选项写在程序名后会静默失效且子进程收到垃圾参数(真机实证 2026-10-05:
+    // `launch notepad.exe --wait-window X` 使记事本把选项当文件名打开)。
+    // fail-fast 指引选项前置,不静默吞;只拦本命令的独有选项 --wait-window
+    // (--timeout 是常见子进程参数,不拦)。
+    if args[1..].iter().any(|a| a == "--wait-window") {
+        return Err(CtlError::protocol(
+            "launch options must precede the program name; tokens after the program are \
+             forwarded to the child verbatim (write `launch --wait-window <title> <program> ...`)",
+        ));
+    }
     // 解析优先级:app-registry 别名 → App Paths 注册表 → 原样(继续走 PATH)
     let program = actl_uia::app_registry::resolve(program)
         .ok()

@@ -3,14 +3,14 @@
 pack_format: 1
 name: notepad
 display: 记事本(Windows 11 Store)
-launch: "C:/Users/gqy17/AppData/Local/Microsoft/WindowsApps/notepad.exe"
+launch: notepad.exe
 window: "Notepad"
 app_version: "11.2607.14.0"
 verified_date: 2026-10-05
 verified_env: Windows 10.0.26200.0 zh-cn（2026-10-05 探索轮 goal_met + 重放证据见路线 verify 注）
 quirks:
   - id: launch_resolution
-    note: System32\notepad.exe 不存在(26200 移除),HKCU App Paths 注册 Store 版但 `actl launch notepad.exe` 解析不到(launch 的 App Paths 查询不含 HKCU 面)——用执行别名全路径(见 launch 字段);bash 会话裸名 `notepad` 会被 Git usr/bin 存根抢解析(os error 193)。另实证 launch 的 --wait-window 参数疑似被透传给被启程序当文件名(弹出「找不到 --wait-window ... .txt」),窗口就绪用 `wait --window` 分离确认。
+    note: System32\notepad.exe 不存在(26200 移除),Store 版注册在 HKCU App Paths——`actl launch notepad.exe` 已可解析(2026-10-05 修复真机验证);bash 会话裸名 `notepad`(无 .exe)仍会被 Git usr/bin 存根抢解析(os error 193)。launch 选项必须写在程序名之前(trailing token 原样转发子进程,`--wait-window` 后置会被 PROTOCOL 守卫拒绝带指引);窗口就绪用 `wait --window` 分离确认。
   - id: session_restore_revival
     note: 关窗 ≠ 清会话:窗口级 close 后重启会把 TabState/云同步的脏标签逐个复活(marker4/5/anchor-save/marker3/marker 链,文件已删仍复活)。破环 = 标签级 `ctrl+w` → 「不保存」(白名单清理动词)逐标签废弃,末标签后应用自然退出;勿 taskkill(AGENTS 禁令,会话复活更糟)。
   - id: title_shape

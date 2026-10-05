@@ -49,8 +49,6 @@
 - [ ] UWP 挂起恢复（类配对后疑似绕开，更长放置待证）
 - [ ] 前台交接 v9 人工接管/嵌套/多窗口真机矩阵（[62](62-foreground-handoff.md)）
 - [ ] **尾段挂起族**：工作完成但进程不退出（record-stop 首例 → 本批扩至 flow-run/flow-resume/get/launch 尾段,僵尸堆积）;引擎与状态落盘不受影响,但每真机调用产滞尾进程——待根因定位（同 COM 挂起族? 或 shutdown 路径）
-- [ ] `get --property value` 读路径无看门狗区段（实测超 300s 进程级看门狗仍未收——与 493d163 修的 click pattern 同族,watchdog 裸区段又一例）
-- [ ] `launch --wait-window` 参数疑似透传给被启程序（「找不到 --wait-window....txt」弹窗实证）;`launch` 的 App Paths 解析面不含 HKCU（notepad.exe 注册在 HKCU 解析不到）
 
 ## 维护
 

@@ -1057,23 +1057,26 @@ pub fn foreground_window() -> Option<(String, isize)> {
 }
 
 /// App Paths 解析(launch 的通用增强):裸程序名(WINWORD/notepad)不在 PATH 时,
-/// 查注册表 `HKLM\...\App Paths\<name[.exe]>` 默认值取完整路径——Office/
-/// 商店别名类应用的注册位置。仅在名字不含路径分隔符时尝试。
+/// 查注册表 App Paths 键取完整路径——Office/商店别名类应用的注册位置。
+/// HKLM(机器级)先查,HKCU(用户级)补面:Store 版 notepad.exe 只注册在 HKCU
+/// (真机实证 2026-10-05:actl launch notepad.exe 曾 NotFound)。仅在名字不含
+/// 路径分隔符时尝试。
 pub fn resolve_app_path(program: &str) -> Option<String> {
     use windows::Win32::System::Registry::{
-        HKEY_LOCAL_MACHINE, KEY_QUERY_VALUE, REG_SZ, RegCloseKey, RegOpenKeyExW, RegQueryValueExW,
+        HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_QUERY_VALUE, REG_SZ, RegCloseKey,
+        RegOpenKeyExW, RegQueryValueExW,
     };
     use windows::core::PCWSTR;
     let bs = char::from_u32(0x5C)?; // U+005C 反斜杠(补丁工具转义规避,见 git 史)
     if program.contains(bs) || program.contains('/') {
         return None;
     }
-    let lookup = |subkey: String| -> Option<String> {
+    let lookup = |root: HKEY, subkey: String| -> Option<String> {
         let wpath: Vec<u16> = subkey.encode_utf16().chain(std::iter::once(0)).collect();
         let mut hkey = Default::default();
         let opened = unsafe {
             RegOpenKeyExW(
-                HKEY_LOCAL_MACHINE,
+                root,
                 PCWSTR(wpath.as_ptr()),
                 None,
                 KEY_QUERY_VALUE,
@@ -1108,7 +1111,15 @@ pub fn resolve_app_path(program: &str) -> Option<String> {
     };
     let sep = std::path::MAIN_SEPARATOR_STR;
     let base = format!("SOFTWARE{sep}Microsoft{sep}Windows{sep}CurrentVersion{sep}App Paths");
-    lookup(format!("{base}{sep}{program}")).or_else(|| lookup(format!("{base}{sep}{program}.exe")))
+    [HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER]
+        .into_iter()
+        .flat_map(|root| {
+            [
+                lookup(root, format!("{base}{sep}{program}")),
+                lookup(root, format!("{base}{sep}{program}.exe")),
+            ]
+        })
+        .find_map(|hit| hit)
 }
 
 /// 元素的原生 HWND 公开入口(capture 窗口域用)
@@ -1253,5 +1264,60 @@ mod identity_regression_tests {
     fn missing_window_identity_must_not_authorize_replay() {
         assert!(!super::runtime_ids_match(&[], &[]));
         assert!(!super::runtime_ids_match(&[], &[42]));
+    }
+}
+
+#[cfg(test)]
+mod app_paths_tests {
+    use super::resolve_app_path;
+    use windows::Win32::System::Registry::{
+        HKEY_CURRENT_USER, KEY_SET_VALUE, REG_OPTION_VOLATILE, REG_SZ, RegCloseKey,
+        RegCreateKeyExW, RegSetValueExW,
+    };
+    use windows::core::PCWSTR;
+
+    fn wide(s: &str) -> Vec<u16> {
+        s.encode_utf16().chain(std::iter::once(0)).collect()
+    }
+
+    /// Store 版应用(如 notepad.exe)只注册在 HKCU——解析面必须覆盖用户根。
+    /// volatile 键自注册自清理(进程退出即消),不污染机器注册表。
+    #[test]
+    fn hkcu_app_paths_root_is_consulted() {
+        let bs = char::from_u32(0x5C).unwrap(); // U+005C(补丁工具转义规避,同 resolve_app_path)
+        let name = format!("actl-test-{}.exe", actl_core::snapshot::new_snapshot_id());
+        let subkey =
+            format!("SOFTWARE{bs}Microsoft{bs}Windows{bs}CurrentVersion{bs}App Paths{bs}{name}");
+        let wsub = wide(&subkey);
+        let mut hkey = Default::default();
+        let created = unsafe {
+            RegCreateKeyExW(
+                HKEY_CURRENT_USER,
+                PCWSTR(wsub.as_ptr()),
+                None,
+                PCWSTR::null(),
+                REG_OPTION_VOLATILE,
+                KEY_SET_VALUE,
+                None,
+                &mut hkey,
+                None,
+            )
+        };
+        assert!(created.is_ok(), "volatile test key creation");
+        let expected = format!("E:{bs}some{bs}actl{bs}test{bs}path.exe");
+        let value_bytes: Vec<u8> = wide(&expected)
+            .into_iter()
+            .flat_map(|u| u.to_le_bytes())
+            .collect();
+        let set = unsafe { RegSetValueExW(hkey, None, None, REG_SZ, Some(value_bytes.as_slice())) };
+        unsafe {
+            let _ = RegCloseKey(hkey);
+        }
+        assert!(set.is_ok(), "default value write");
+        assert_eq!(
+            resolve_app_path(&name).as_deref(),
+            Some(expected.as_str()),
+            "HKCU-only registration must resolve"
+        );
     }
 }
