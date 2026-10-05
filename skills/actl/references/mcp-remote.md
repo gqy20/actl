@@ -1,8 +1,8 @@
 # actl MCP 远程使用（模式 A）
 
 > 面向两类读者：**被控端设备主人**（启动服务与配对）与**远端 agent**（经 MCP
-> 调用本设备）。协议与设计全文见 [docs/82](../../../docs/82-mcp-adapter-research.md)、
-> [docs/06 §7.8](../../../docs/06-design-blueprint.md)。
+> 调用本设备）。协议与设计全文见仓库 docs/82-mcp-adapter-research.md 与
+> docs/06-design-blueprint.md §7.8（不随包分发，查主仓库）。
 
 ## 被控端：启动与配对（设备主人）
 

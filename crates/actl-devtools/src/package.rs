@@ -29,13 +29,39 @@ fn collect(base: &Path, path: &Path, items: &mut BTreeMap<String, Vec<u8>>) -> R
         {
             let text = std::str::from_utf8(&data).map_err(io)?;
             require(
-                !text.contains("://") && !text.contains("mailto:") && !text.contains("www."),
+                !text.contains("mailto:") && !text.contains("www."),
                 "skill contains external URL",
             )?;
+            require(!external_url(text), "skill contains external URL")?;
         }
         items.insert(name, data);
     }
     Ok(())
+}
+
+/// skills 不携带外部网络指针的纪律(2026-10-04 前打包事故的 lint)。窄豁免
+/// (mcp-remote.md 增补):① `actl://` 是自有 URN(资源模板寻址,非网络);
+/// ② http/https 仅放行本机与尖括号占位符(MCP 接入配置的格式示例)——
+/// 真实外域仍然全拒,纪律意图不变。
+fn external_url(text: &str) -> bool {
+    text.match_indices("://").any(|(at, _)| {
+        let scheme: String = text[..at]
+            .chars()
+            .rev()
+            .take_while(|c| c.is_ascii_alphanumeric() || *c == '+' || *c == '-')
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
+        if scheme.eq_ignore_ascii_case("actl") {
+            return false;
+        }
+        let host = text[at + 3..]
+            .split(['/', ':', '>', '"', '\n', ' '])
+            .next()
+            .unwrap_or("");
+        !(host.is_empty() || host == "localhost" || host == "127.0.0.1" || host.starts_with('<'))
+    })
 }
 pub fn build(root: &Path, binaries: &Path, out: &Path, version: &str) -> Result<Value> {
     require(
@@ -50,7 +76,7 @@ pub fn build(root: &Path, binaries: &Path, out: &Path, version: &str) -> Result<
     for name in ["README.md", "LICENSE", "skills"] {
         collect(root, &root.join(name), &mut entries)?;
     }
-    for name in ["actl.exe", "actl-signal.exe"] {
+    for name in ["actl.exe", "actl-signal.exe", "actl-mcp.exe"] {
         entries.insert(name.into(), fs::read(binaries.join(name)).map_err(io)?);
     }
     for name in [
@@ -59,6 +85,7 @@ pub fn build(root: &Path, binaries: &Path, out: &Path, version: &str) -> Result<
         "skills/actl/references/error-codes.md",
         "skills/actl/workflows/README.md",
         "skills/actl/references/flows.md",
+        "skills/actl/references/mcp-remote.md",
         "skills/actl/references/task-records.md",
         "skills/actl/workflows/assets/seed.docx",
         "skills/actl/workflows/assets/seed.xlsx",
@@ -180,6 +207,7 @@ mod tests {
         fs::create_dir(&root).unwrap();
         fs::write(root.join("actl.exe"), "CLI").unwrap();
         fs::write(root.join("actl-signal.exe"), "display").unwrap();
+        fs::write(root.join("actl-mcp.exe"), "mcp").unwrap();
         let out = root.join("dist");
         let r = build(&crate::root(), &root, &out, "test").unwrap();
         assert_eq!(r["verified"], true);
@@ -188,5 +216,18 @@ mod tests {
         fs::remove_file(root.join("actl-signal.exe")).unwrap();
         assert!(build(&crate::root(), &root, &root.join("bad"), "test").is_err());
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn external_url_lint_allows_own_urn_and_local_placeholders() {
+        // 窄豁免面:actl:// URN、localhost/127.0.0.1/尖括号占位符;
+        // 真实外域(含 https)仍然全拒——纪律意图不变。
+        assert!(!external_url("读取资源模板 actl://help/{command} 按需"));
+        assert!(!external_url("\"url\":\"http://<device>:7600/mcp\""));
+        assert!(!external_url("见 http://localhost:3000 本机"));
+        assert!(!external_url("见 https://127.0.0.1:8443 本机"));
+        assert!(external_url("见 https://github.com/foo/bar"));
+        assert!(external_url("文档在 http://example.com/docs"));
+        assert!(external_url("连接 ws://remote.host:1"));
     }
 }

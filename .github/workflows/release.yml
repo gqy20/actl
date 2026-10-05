@@ -97,7 +97,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Build release binaries
-        run: cargo build --release --bin actl --bin actl-signal
+        run: cargo build --release --bin actl --bin actl-signal --bin actl-mcp
 
       - name: Package and smoke test
         shell: bash
@@ -110,6 +110,8 @@ jobs:
           # 注意:裸跑 actl(缺子命令)是 clap 错误路径,退出码 2,不能当冒烟
           ./target/release/actl.exe status
           ./target/release/actl.exe commands
+          # actl-mcp 冒烟走 --version(clap 元命令,人类文本/exit 0)
+          ./target/release/actl-mcp.exe --version
 
           cargo xtask package --version "$VERSION" --binary-dir target/release --output dist
 
