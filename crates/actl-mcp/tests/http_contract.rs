@@ -292,7 +292,7 @@ fn help_resource_template_serves_real_command_help() {
         None,
         body,
         Some("resources/read"),
-        &uri_like,
+        uri_like,
     );
     assert_eq!(status, 200, "{response}");
     let json: serde_json::Value = serde_json::from_str(&response).expect("json-rpc");
@@ -321,7 +321,7 @@ fn help_resource_is_absent_for_excluded_and_unknown_commands() {
             None,
             &body,
             Some("resources/read"),
-            &uri,
+            uri,
         );
         assert!(status < 500, "{uri}: {status} {response}");
         let json: serde_json::Value = serde_json::from_str(&response).ok().unwrap_or_default();

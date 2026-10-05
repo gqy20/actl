@@ -81,6 +81,8 @@ jobs:
         run: cargo publish -p actl-flow
       - name: Publish actl-cli
         run: cargo publish -p actl-cli
+      - name: Publish actl-mcp
+        run: cargo publish -p actl-mcp
 
   release:
     name: Package and publish (windows/amd64)

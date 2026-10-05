@@ -34,7 +34,7 @@ serde-saphyr 与标准文件锁要求的 MSRV 已同步根 Cargo.toml；实际�
 
 ## 3. 依赖清单
 
-2026-10-05 用户授权 MCP 适配服务（docs/82）：新增边界协议依赖 `rmcp`（官方 Rust SDK，跟 3.x stable，feature 最小集 server），**scope 仅 `actl-mcp` crate**；tokio 等为其传递依赖，`cargo tree -p actl-core/actl-cli` 不可见。随授权明确**预算口径**：核心执行路径（core/uia/flow/cli/browser）直依赖 ≤9 规则不变；边界适配 crate 的协议依赖在本表单独登记，传递依赖不腐蚀核心。协议层不手写（用户裁定：依赖数量不构成手写协议的理由——手写=自造维护债）。
+2026-10-05 用户授权 MCP 适配服务（docs/82）：新增边界协议依赖 `rmcp`（官方 Rust SDK，跟 3.x stable，feature 最小集 server），**scope 仅 `actl-mcp` crate**；tokio 等为其传递依赖，`cargo tree -p actl-core/actl-cli` 不可见。随授权明确**预算口径**：核心执行路径（core/uia/flow/cli/browser）直依赖 ≤9 规则不变；边界适配 crate 的协议依赖在本表单独登记，传递依赖不腐蚀核心。协议层不手写（用户裁定：依赖数量不构成手写协议的理由——手写=自造维护债）。**实现落地（同日，轮 1-2）**：actl-mcp 实际直接依赖 rmcp 3.5（server + transport-streamable-http-server）、axum 0.8（HTTP 壳承载 Bearer/Origin 中间件）、tokio 1（rmcp 既成运行时显式化：process/signal）、getrandom 0.4（256-bit 配对 token 熵源）、clap 4.5（本 crate 自有，非 workspace 共享——workspace 无 clap 声明）；serde/serde_json 沿 workspace。actl-mcp 不依赖任何 actl workspace crate（纯薄壳，协议边界编译器强制）。
 
 2026-09-30 用户授权详情页使用 TypeScript + WebView2：增加 webview2-com 0.39.1（MIT），直接 Rust 依赖总数上限及实际数量为 9。该库沿用 windows 0.62，不引入 async/tokio；COM 回调与现有 Win32 消息泵集成，仅 actl-uia 接触 unsafe。TS 页面使用 pnpm 管理 TypeScript/Vite 开发工具，零前端运行时库；锁文件入库，Node/pnpm 仅构建与预览需要，发布嵌入本地静态页面、依赖机器已有 Evergreen WebView2。原生状态条、全局急停与所有授权/恢复校验继续由 Rust 执行。
 
@@ -54,7 +54,9 @@ serde-saphyr 与标准文件锁要求的 MSRV 已同步根 Cargo.toml；实际�
 | UIA 高层封装 | `uiautomation`(**0.25,M0 评估期**:actl-uia 的 dev-dep,供 examples/probe 使用) | 评估结论(M1 采用或自写薄封装)写入 [spike-findings](spike-findings.md) |
 | CLI | `clap`(derive) | 4.6 | 子命令即契约;help 文本与 `commands` schema 从 doc comment 同源生成(06 §3.5) |
 | CDP websocket | `tungstenite` | =0.29(仅 handshake) | actl-browser 专用；同步阻塞 IO 无 tokio(ADR-001 兼容)；白名单域外不实现(安全边界,docs/72 §8) |
-| MCP 协议 | `rmcp`(官方) | 跟 3.x stable | **仅 actl-mcp**(边界适配,ADR-001 修订)；tokio 为其传递依赖,核心 crate 不可见；协议层不手写(2026-10-05 授权,docs/82) |
+| MCP 协议 | `rmcp`(官方) | =3.5 | **仅 actl-mcp**(边界适配,ADR-001 修订)；server+streamable-http-server 最小 feature；协议层不手写(2026-10-05 授权,docs/82) |
+| MCP HTTP 壳 | `axum` | 跟 0.8 stable | 仅 actl-mcp:承载 StreamableHttpService + Bearer/Origin 中间件 |
+| MCP 熵源 | `getrandom` | 跟 stable | 仅 actl-mcp:256-bit 配对 token(纯安全 API 无 unsafe) |
 | 序列化 | `serde` + `serde_json` | 跟 stable | envelope 唯一出口 |
 | 流程 YAML | `serde-saphyr` | =1.3.0 | actl-flow；预算限制、重复键拒绝；不启用 include/robotics；实际外部直接依赖去重为 7（含 UIA 开发依赖） |
 | ZIP/OOXML | `zip` | =8.2.0 | 仅 deflate-flate2-zlib-rs；运行时检查与开发打包共用 |

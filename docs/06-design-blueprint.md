@@ -689,6 +689,18 @@ allow_then_resume；执行时仍重新检查停止标志、运行锁及步骤状
 该窗口不提供输入动作显示租约，也不解除原有显示就绪约束；停止标志只能通过明确操作解除。
 JSON envelope 版本保持 1；CLI 使用结构化错误与 evidence 返回运行状态。
 
+## 7.8 MCP 适配服务（actl-mcp，2026-10-05 spec 轮 1-2）
+
+独立 crate `actl-mcp`（bin `actl-mcp.exe`，**不依赖任何 actl workspace crate**——纯薄壳；async/tokio 仅限该 crate，ADR-001 定界修订，crate 边界由编译器强制）。协议实现用官方 rmcp SDK（协议层不手写——用户裁定：依赖数量不构成手写理由）。设计全文 [82](82-mcp-adapter-research.md)。
+
+**传输模式 A**：`actl-mcp --listen <addr:port> [--token <t>]`——默认 127.0.0.1（fail-safe 防意外暴露），LAN 显式 0.0.0.0；`--token` 缺省生成 256-bit 并打 stderr 配对横幅（token + 客户端 .mcp.json 行 + 局域网警告——人工抄 token 即设备主人知情授权的配对仪式）；axum 壳层 Bearer 门禁（401 无 id JSON-RPC 错误体）+ Origin 校验（规范 MUST，跨源 403）；明文 HTTP 仅限可信局域网，跨公网不支持。SSH/stdio（rmcp 现成）与官方 tasks 扩展为后续可选。
+
+**子进程派发模型（安全穿越的结构性保证）**：每次 tools/call spawn 真实 `actl <命令>` 子进程（`ACTL_TASK_ID=mcp-<hex>` 审计映射；`kill_on_drop`——请求取消/HTTP 断连即杀子进程，run 留 interrupted/uncertain，恢复走 flow-resume 既有语义）。预告、开始/继续本地放行、急停、看门狗、输入锁在被控端本地原样生效——**远端结构性无法绕过任何一环**；急停后 spawn 的子进程绑停止代次，远端调用自动 fail-closed。stdout envelope 是唯一权威结果；子进程非零退出或 stdout 不可解析（clap 参数错/看门狗自毙）时合成诚实错误 envelope（保留退出码与 stderr 尾巴，绝不伪造 ok）。
+
+**能力面（三层懒加载，上下文经济与本地 agent 同构）**：① 通用工具 `actl`（{command, args[]}，描述携带九族速查 ~700 tokens 一次性）；② 资源模板 `actl://help/{command}`（单命令 -h 四要素文本，按需 ~300-500 tokens/次；排除动词模板不存在）；③ 全量 commands schema 不进资源面（客户端自动读取会全员买单 15-25K tokens）——作为普通命令显式调用。支持面 = 全部命令 − 排除表：`execution-recover`（停止状态修复）、`display-start`（显示端生命周期）、`desktop-restore`（初版保守排除）、`record-worker`（内部进程缝）——排除原则：操作本地监督与恢复机制本身的动词出局；用户可见副作用不出局（信号条预告管辖）；排除不静默（明确 PROTOCOL 错误 + 原因）。envelope → tool result 映射：`ok:false` → `isError:true`，code/hint/evidence 全保留进 structuredContent——远端 agent 拿到的失败信息与本地完全同构。
+
+**测试**：库单测（envelope 直通/clap 错合成/参数透传/映射语义）+ HTTP 契约 7 项（真实服务进程 + 裸 TCP 线格式：401×2/403 跨源/工具调用真实派发/排除动词明确错误/unknown 方法不崩服务存活/真命令帮助四要素/排除与未知命令无伪造帮助）。规范实证：2026-07-28 无状态契约由 rmcp 强制（请求须带 _meta protocolVersion + clientCapabilities；Mcp-Name 头与 body 一致）。真机跨设备验收（真实 MCP 客户端接入）待用户场景。
+
 ## 8. 里程碑
 
 各阶段范围、工期、验收的**唯一来源**:[ROADMAP](ROADMAP.md)。本文不重复维护版本计划。
