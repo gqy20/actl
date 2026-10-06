@@ -27,9 +27,9 @@ pub fn capture(
     actl_core::stop::check_current()?;
     let auto = UIAutomation::new().map_err(crate::internal)?;
     let root = crate::scoped_locate::window(&auto, Some(app))?;
-    let window_identity = crate::identity::observed_identity(&root)?;
+    let window_identity = crate::identity::observed_identity_strict(&root)?;
     let located = crate::scoped_locate::locate(&auto, &root, &selector)?;
-    let identity = crate::identity::observed_identity(&located.element)?;
+    let identity = crate::identity::observed_identity_strict(&located.element)?;
     let scope =
         json!({"version":1,"selector":within,"identity":identity,"depth":depth,"limit":limit});
     let observed = crate::observation::tree_bounded(&located.element, depth, limit)?;
@@ -39,11 +39,11 @@ pub fn capture(
         crate::window::append_observed(observed, &mut nodes, &mut element_identities)?;
     ensure_identity(
         &identity,
-        &crate::identity::observed_identity(&located.element)?,
+        &crate::identity::observed_identity_strict(&located.element)?,
     )?;
     ensure_identity(
         &window_identity,
-        &crate::identity::observed_identity(&root)?,
+        &crate::identity::observed_identity_strict(&root)?,
     )?;
     actl_core::stop::check_current()?;
     Ok((
@@ -116,7 +116,7 @@ pub(crate) fn replay(
     })?;
     ensure_identity(
         &scope["identity"],
-        &crate::identity::observed_identity(&located.element)?,
+        &crate::identity::observed_identity_strict(&located.element)?,
     )?;
     let observed = crate::observation::tree_bounded(&located.element, depth, limit)?;
     let mut counter = 0;
@@ -130,7 +130,7 @@ pub(crate) fn replay(
             if counter == want {
                 ensure_identity(
                     &scope["identity"],
-                    &crate::identity::observed_identity(&located.element)?,
+                    &crate::identity::observed_identity_strict(&located.element)?,
                 )?;
                 actl_core::stop::check_current()?;
                 return Ok(entry.element);

@@ -509,7 +509,12 @@ pub(crate) fn append_observed(
             parent: entry.parent,
         };
         if actl_core::is_interactive_role(&node.role) {
-            identities.push(crate::identity::observed_identity(&element)?);
+            // null 身份入树(2026-10-06 spec:无 RuntimeId 的交互元素降级
+            // 不炸整轮观察——Word 任务窗格 MenuItem 实证;ref 编号照常,
+            // 回放守卫对该元素如实拒绝)。
+            identities.push(
+                crate::identity::observed_identity(&element)?.unwrap_or(serde_json::Value::Null),
+            );
         }
         nodes.push(node);
     }

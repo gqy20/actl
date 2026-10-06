@@ -20,7 +20,11 @@ pub(crate) fn identity(element: &UIElement) -> Value {
     })
 }
 
-pub(crate) fn observed_identity(element: &UIElement) -> Result<Value, CtlError> {
+/// 身份判定三态(2026-10-06 spec 决策落地):`None` = 元素无 RuntimeId/
+/// pid(Word 任务窗格 MenuItem 实证——非异常,降级为 null 身份入树,ref
+/// 编号照常但回放守卫会如实拒绝该元素);`Some(v)` = 正常身份;
+/// `Err` = 读取本身的通道故障(如实上抛)。
+pub(crate) fn observed_identity(element: &UIElement) -> Result<Option<Value>, CtlError> {
     use crate::read_channel::failure;
     let runtime_id = element
         .get_runtime_id()
@@ -31,28 +35,34 @@ pub(crate) fn observed_identity(element: &UIElement) -> Result<Value, CtlError> 
         .or_else(|_| element.get_process_id().map(|p| p as i32))
         .map_err(|e| failure("identity.pid", e))?;
     if runtime_id.is_empty() || pid == 0 {
-        // 失败时刻上下文汇流(2026-10-06 基建:诊断靠错误自述,不靠人回溯
-        // 输出):失败元素的已知属性(缓存读零往返)+ OS 前台窗 + 标题语义
-        // 分类——Word 兼容模式文档整轮根因,答案原本在标题里但从不进错误。
-        let role = crate::observation::role_of(element)
-            .map(|r| format!("{r:?}"))
-            .unwrap_or_default();
-        let name = crate::observation::name_of(element).unwrap_or_default();
-        return Err(CtlError::with_evidence(
-            ErrorCode::Internal,
-            "observed element has no usable runtime identity",
-            json!({
-                "element": { "role": role, "name": name, "runtime_id_len": runtime_id.len(), "pid": pid },
-                "diagnostic": crate::diagnostic::failure_context(),
-            }),
-        ));
+        eprintln!(
+            "· identity-less interactive element (null 身份入树): role={:?} name={:?}",
+            crate::observation::role_of(element)
+                .map(|r| format!("{r:?}"))
+                .unwrap_or_default(),
+            crate::observation::name_of(element).unwrap_or_default()
+        );
+        return Ok(None);
     }
-    Ok(json!({
+    Ok(Some(json!({
         "runtime_id":runtime_id, "pid":pid,
         "role":format!("{:?}", element.get_control_type().map_err(|e| failure("identity.role", e))?),
         "automation_id":element.get_automation_id().map_err(|e| failure("identity.automation_id", e))?,
         "name":element.get_name().map_err(|e| failure("identity.name", e))?,
-    }))
+    })))
+}
+
+/// 动作链严格版:身份必须真实存在(消费分轨纪律——动作/预览需要可校验
+/// 身份;None 在此路径 = NOT_ACTIONABLE 带证据,如实拒绝)。
+pub(crate) fn observed_identity_strict(element: &UIElement) -> Result<Value, CtlError> {
+    match observed_identity(element)? {
+        Some(v) => Ok(v),
+        None => Err(CtlError::with_evidence(
+            ErrorCode::NotActionable,
+            "action target has no runtime identity; re-observe or choose another element",
+            json!({ "diagnostic": crate::diagnostic::failure_context() }),
+        )),
+    }
 }
 
 pub(crate) fn same_instance(expected: &Value, current: &Value) -> bool {

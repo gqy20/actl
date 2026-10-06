@@ -73,7 +73,7 @@ pub(crate) fn window_action(
     focus: bool,
 ) -> Result<ActionGuard, CtlError> {
     let _dpi = crate::capture::Pmv2Guard::enter();
-    let identity = crate::identity::observed_identity(win)?;
+    let identity = crate::identity::observed_identity_strict(win)?;
     let title = win.get_name().map_err(crate::internal)?;
     let before = target(win, &title);
     let mut action = prepare(
@@ -84,7 +84,8 @@ pub(crate) fn window_action(
         },
         before.clone(),
     )?;
-    if !crate::identity::same_instance(&identity, &crate::identity::observed_identity(win)?) {
+    if !crate::identity::same_instance(&identity, &crate::identity::observed_identity_strict(win)?)
+    {
         return Err(CtlError::new(
             ErrorCode::NotActionable,
             "window changed during action preparation",
@@ -181,7 +182,7 @@ pub(crate) fn semantic<T>(
 }
 
 fn semantic_identity(elem: &UIElement) -> Result<serde_json::Value, CtlError> {
-    let identity = crate::identity::observed_identity(elem)?;
+    let identity = crate::identity::observed_identity_strict(elem)?;
     let auto = uiautomation::UIAutomation::new().map_err(crate::internal)?;
     let walker = auto.get_raw_view_walker().map_err(crate::internal)?;
     let mut current = elem.clone();
@@ -190,7 +191,7 @@ fn semantic_identity(elem: &UIElement) -> Result<serde_json::Value, CtlError> {
             .get_native_window_handle()
             .map_err(|e| crate::read_channel::failure("semantic.host_handle", e))?;
         if !handle.is_invalid() {
-            let host = crate::identity::observed_identity(&current)?;
+            let host = crate::identity::observed_identity_strict(&current)?;
             return Ok(serde_json::json!({"target":identity,
                 "host":{"runtime_id":host["runtime_id"], "pid":host["pid"]}}));
         }

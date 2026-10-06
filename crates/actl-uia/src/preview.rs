@@ -36,7 +36,7 @@ pub fn validate(
 }
 
 fn observe(element: &uiautomation::UIElement) -> Result<([i32; 4], Value), CtlError> {
-    let identity = crate::identity::observed_identity(element)?;
+    let identity = crate::identity::observed_identity_strict(element)?;
     if element
         .is_offscreen()
         .map_err(|e| crate::read_channel::failure("preview.offscreen", e))?
