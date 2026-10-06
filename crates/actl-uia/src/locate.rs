@@ -541,9 +541,8 @@ fn collect_until_ref(
 }
 
 fn strict_role(elem: &UIElement) -> Result<String, CtlError> {
-    elem.get_control_type()
-        .map(|v| format!("{v:?}"))
-        .map_err(|e| crate::read_channel::failure("control_type", e))
+    // 缓存优先(walk 产物元素经 tree_bounded 预取,零往返;其他来源回退实时)。
+    crate::observation::role_of(elem).map(|v| format!("{v:?}"))
 }
 
 fn collect_matches(
@@ -565,12 +564,8 @@ fn collect_matches(
         } else {
             0
         };
-        let name = element
-            .get_name()
-            .map_err(|e| crate::read_channel::failure("name", e))?;
-        let id = element
-            .get_automation_id()
-            .map_err(|e| crate::read_channel::failure("automation_id", e))?;
+        let name = crate::observation::name_of(&element)?;
+        let id = crate::observation::automation_id_of(&element)?;
         let hit = match target {
             Target::Name(s) if fuzzy => actl_core::target::fuzzy_contains(&name, s),
             Target::Name(s) => name.contains(s.as_str()),

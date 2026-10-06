@@ -50,6 +50,9 @@
 - [ ] 前台交接 v9 人工接管/嵌套/多窗口真机矩阵（[62](62-foreground-handoff.md)）
 - [ ] **尾段挂起族（根因已定位,主修复已落地 2026-10-06）**：根因 = UIElement 的 Drop（跨进程 Release）与读取同族无界,而析构路径无任何看门狗覆盖。修复两轮:① main.rs 成功路径硬退出（与错误路径对称,析构链跳过）;② `into_info`/显式 drop 家族全收编（read/verify/click/set_value/select/toggle/pointer×4/type/press/cache_store——**Located 出域审计完成,残余项清零**）。**内核态残余已定性(2026-10-06 doctor 线程态探查)**:幽灵 = 每进程仅剩 1 线程卡 Wait/UserRequest(用户态同步原语等待,对端已死)——envelope 送达与主体清退均成功,仅进程终结被最后一根线卡住;MiniDump 无法附加(dump 失败本身佐证楔死),精确线程归属待 dump 工具(转储级定位降级为可选——doctor + 自动 ghost 规避 + 重启清退已工程化)。
 
+- [ ] **树级缓存（「第二次观察免费」）——设计再评估后挂起（2026-10-06）**：原设想以窗口 RuntimeId 键控缓存已观察树 + 失效判定。设计推演结论:① 节点级缓存无 COM 代理 → 无法做 locate 缓存式的元素级 RuntimeId 复核,失效判定只剩 WinEvent 钩子(需消息泵线程,工程量大)或有界 TTL(陈旧风险违背 fail-closed);② 主要重复观察方（探索引擎/flow verify）**语义上就需要新鲜帧**（差分/断言）,缓存反而破坏语义;真实重复收益集中在 batch 的连续 find/snapshot——频次低。**结论:价值窄于最初评估,等真实重复消费方出现再立项**;轻量替代（定位缓存/属性预取/provider 快路径）已覆盖主要痛点。
+- [ ] **跨设备树扫描受控 A/B（重树）**：属性预取的重树收益（往返主导场景）待 NetEase/Word 级树的受控前后对比。
+
 ## 维护
 
 - [ ] 显示端按钮触发的暂停/继续 request_id 核对

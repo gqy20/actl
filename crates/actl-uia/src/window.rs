@@ -500,22 +500,10 @@ pub(crate) fn append_observed(
         let element = entry.element;
         let node = UiNode {
             depth: entry.depth,
-            role: format!(
-                "{:?}",
-                element
-                    .get_control_type()
-                    .map_err(|e| crate::read_channel::failure("control_type", e))?
-            ),
-            name: Some(
-                element
-                    .get_name()
-                    .map_err(|e| crate::read_channel::failure("name", e))?,
-            ),
-            automation_id: Some(
-                element
-                    .get_automation_id()
-                    .map_err(|e| crate::read_channel::failure("automation_id", e))?,
-            ),
+            // 缓存优先(tree_bounded 属性预取——逐元素三连读零往返)。
+            role: format!("{:?}", crate::observation::role_of(&element)?),
+            name: Some(crate::observation::name_of(&element)?),
+            automation_id: Some(crate::observation::automation_id_of(&element)?),
             parent: entry.parent,
         };
         if actl_core::is_interactive_role(&node.role) {

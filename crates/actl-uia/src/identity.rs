@@ -25,8 +25,10 @@ pub(crate) fn observed_identity(element: &UIElement) -> Result<Value, CtlError> 
     let runtime_id = element
         .get_runtime_id()
         .map_err(|e| failure("identity.runtime_id", e))?;
+    // pid 缓存优先(walk 产物经 tree_bounded 预取;其他来源回退实时)。
     let pid = element
-        .get_process_id()
+        .get_cached_process_id()
+        .or_else(|_| element.get_process_id().map(|p| p as i32))
         .map_err(|e| failure("identity.pid", e))?;
     if runtime_id.is_empty() || pid == 0 {
         return Err(CtlError::internal(

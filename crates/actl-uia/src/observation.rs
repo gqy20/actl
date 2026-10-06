@@ -13,6 +13,26 @@ pub(crate) fn cached_hwnd(element: &UIElement) -> Option<isize> {
     (!handle.0.is_null()).then_some(handle.0 as isize)
 }
 
+/// 缓存优先属性读(见 tree_bounded 属性预取):walk 产物元素的三连读变零
+/// 往返;缓存未命中(元素来自其他调用路径,无预取)回退实时读。
+pub(crate) fn role_of(elem: &UIElement) -> Result<uiautomation::types::ControlType, CtlError> {
+    elem.get_cached_control_type()
+        .or_else(|_| elem.get_control_type())
+        .map_err(|e| crate::read_channel::failure("control_type", e))
+}
+
+pub(crate) fn name_of(elem: &UIElement) -> Result<String, CtlError> {
+    elem.get_cached_name()
+        .or_else(|_| elem.get_name())
+        .map_err(|e| crate::read_channel::failure("name", e))
+}
+
+pub(crate) fn automation_id_of(elem: &UIElement) -> Result<String, CtlError> {
+    elem.get_cached_automation_id()
+        .or_else(|_| elem.get_automation_id())
+        .map_err(|e| crate::read_channel::failure("automation_id", e))
+}
+
 pub(crate) struct Entry<T> {
     pub element: T,
     pub depth: u32,
@@ -100,8 +120,19 @@ pub(crate) fn tree_bounded(
     // 看门狗区段:树观察遍历 provider 全树,是 COM 挂起的高发面(docs/81 §8)
     let _watchdog = crate::watchdog::enter();
     let auto = UIAutomation::new().map_err(crate::internal)?;
-    let condition = auto.create_true_condition().map_err(crate::internal)?;
     let cache = auto.create_cache_request().map_err(crate::internal)?;
+    // 属性预取(2026-10-06 性能轮):Name/ControlType/AutomationId/ProcessId 入缓存请求——消费端
+    // (collect_matches/append_observed/observed_identity)逐元素三连读变零往返缓存读
+    // (真机 A/B:find --name 2.4-2.6s vs 无预取 5.7-7.0s;纯 walk 中性)。cached-first 回退实时。
+    for property in [
+        UIProperty::Name,
+        UIProperty::ControlType,
+        UIProperty::AutomationId,
+        UIProperty::ProcessId,
+    ] {
+        cache.add_property(property).map_err(crate::internal)?;
+    }
+    let condition = auto.create_true_condition().map_err(crate::internal)?;
     cache
         .set_tree_filter(condition.clone())
         .map_err(crate::internal)?;
