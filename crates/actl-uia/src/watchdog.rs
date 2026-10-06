@@ -36,6 +36,18 @@ impl Drop for UiaCallScope {
     }
 }
 
+/// 重臂当前区段(不新建、不清除):树扫描等**逐节点推进**的长路径在循环里
+/// 每次迭代调用——区段语义从「整段 wall clock」变为「单次跨进程调用」的
+/// 有界性。真机实证(2026-10-06):冷 provider 的合法慢扫描在整段口径下
+/// 撞 20s 限误杀(网易云全树 find 三度中止),逐节点重臂后慢推进不再触限、
+/// 单点卡死的 children 调用照常 20s 击杀。
+/// 单槽约束:enter/drop 是全局单槽时间戳——嵌套调用 enter 后 drop 会清零
+/// 外层区段(调用方必须保证「嵌套守卫调用之后不再依赖外层区段」,见
+/// scroll_element 的两段式先例);rearm 只刷新时间戳,无此约束。
+pub fn rearm() {
+    IN_UIA_SINCE_MS.store(unix_ms(), Ordering::Release);
+}
+
 /// 进入一个 UIA 调用区段;drop 时清除登记。首次调用懒启动守护线程。
 pub fn enter() -> UiaCallScope {
     IN_UIA_SINCE_MS.store(unix_ms(), Ordering::Release);
