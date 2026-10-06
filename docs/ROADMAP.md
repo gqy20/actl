@@ -74,3 +74,9 @@
 - **物化拒答自动回落已落地**：Word 的 MSAA 桥在大树/兼容模式文档上报「Malformed Cacheresponse pTreeStructure」——tree_bounded 物化分支捕获该类 provider 错误后自动回落逐节点遍历（stderr 留痕「物化被 provider 拒答,回落逐节点遍历」,真机实证回落生效;legacy 的错误如实上抛不吞）。
 - **010 阻塞根因闭环（修正）**：note-typo-010.docx 为**兼容模式文档**——其交互元素 RuntimeId 为空（全新 Word 进程同样报「observed element has no usable runtime identity」,find/snapshot/locate 全被挡,与遍历模式无关）——fill-1 自始被文档类挡住(legacy 同败,一致)。**解锁路径:模板重存为非兼容模式 docx**(下轮:验证模板另存后 010 resume)。
 - 空白文档 Word 物化正常(93 元素/逐字节一致/1.55x);actl restore/focus 对暂停运行窗口的拒绝是**守护正确行为**(010 paused 态不乱动,非故障——原生 ShowWindow 可恢复)。
+
+## 2026-10-07 010 续跑实录（null 身份 + P0 看门狗修复后）
+- **P0 修复实证**：reset() 恒等式 bug 修复后，fill-2 完成（此前 120s 硬顶误杀）；fill-1/fill-2/open/ownership/focus 全部 completed。
+- **null 身份 spec 实证**：Word 打开文档（此前必炸「no usable runtime identity」）205 元素快照成功、12.9s——同现场从不可观察变为可观察。
+- **fill-3 新阻塞（如实入档）**：运行时门禁「弹层门禁」把 Word 的**停靠导航窗格**（in-tree 常驻面板，内容为模板标题导航树「笔记 2026-10-04 过程记录 心得」）误判为 unknown 弹层 → popup_pending 拦截 fill-3。**根因：门禁未区分「停靠面板」与「真弹窗」**——需对 in-tree 常驻面板做降噪判定（参照 0.2.1 Win11 空壳降噪先例），或以步骤目标窗格与面板不相交放行。fill-3 本身 ASSARTION_FAILED "normalized text differs"（模板三段填充内容差异——需读文档核对后决定 --retry-step）。
+- Word 侧遗留：此现场导航窗格可通过点击其「关闭」Button 移除（真机关闭后弹保存提示→「不保存」→进程退出——但流程无法依赖此操作（它关掉了文档）。
