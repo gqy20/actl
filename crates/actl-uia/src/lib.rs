@@ -78,8 +78,8 @@ pub use action::{
 };
 pub use idle::{idle_ms, wait_idle};
 pub use locate::{
-    Located, StableOutcome, WaitPredicate, WaitProp, locate, wait_element, wait_gone,
-    wait_property, wait_stable,
+    Located, ResolvedInfo, StableOutcome, WaitPredicate, WaitProp, find_by_id_provider, locate,
+    wait_element, wait_gone, wait_property, wait_stable,
 };
 pub use pointer::{
     CoordOutcome, DragPathOutcome, PointerAction, PointerSpec, click_physical, drag_path_physical,

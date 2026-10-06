@@ -100,13 +100,27 @@ pub fn pointer_physical(
     near: Option<&str>,
     action: PointerAction,
     no_activate: bool,
-) -> Result<(Located, (i32, i32), bool), CtlError> {
-    use windows::Win32::Foundation::POINT;
-    use windows::Win32::UI::WindowsAndMessaging::{GA_ROOT, GetAncestor, WindowFromPoint};
-
+) -> Result<(crate::locate::ResolvedInfo, (i32, i32), bool), CtlError> {
     crate::feedback::check_stop()?;
     let _dpi = crate::capture::Pmv2Guard::enter();
     let loc = locate(app, target, near)?;
+    // COM 工作(可见性/可点性/命中检查/注入前核验)与 Release 都在区内
+    // (inner 拿引用,早退 Err 也经 wrapper 的 into_info 覆盖——析构纪律)。
+    let _watchdog = crate::watchdog::enter();
+    let result = pointer_physical_inner(&loc, target, action, no_activate);
+    let info = loc.into_info();
+    result.map(|(point, scrolled)| (info, point, scrolled))
+}
+
+fn pointer_physical_inner(
+    loc: &Located,
+    target: &Target,
+    action: PointerAction,
+    no_activate: bool,
+) -> Result<((i32, i32), bool), CtlError> {
+    use windows::Win32::Foundation::POINT;
+    use windows::Win32::UI::WindowsAndMessaging::{GA_ROOT, GetAncestor, WindowFromPoint};
+
     let scrolled = ensure_visible(&loc.element);
     // clickable point 缺失时的受控退化:BoundingRectangle 中心 + 命中检查把关
     // (mmui/Qt 导航图标等不暴露 clickable point;命中检查不过仍拒,fail-closed 保留)
@@ -208,7 +222,7 @@ pub fn pointer_physical(
         }
         Ok(())
     })?;
-    Ok((loc, (px, py), scrolled))
+    Ok(((px, py), scrolled))
 }
 
 /// 物理注入公共尾段:输入占用锁 → 修饰键空置检查 → 一批 SendInput。
@@ -444,7 +458,7 @@ pub fn click_physical(
     app: Option<&str>,
     target: &Target,
     near: Option<&str>,
-) -> Result<(Located, (i32, i32), bool), CtlError> {
+) -> Result<(crate::locate::ResolvedInfo, (i32, i32), bool), CtlError> {
     pointer_physical(app, target, near, PointerAction::LeftClick, false)
 }
 
@@ -485,19 +499,27 @@ pub fn drag_path_physical(
             // 元素模式:沿用 drag_physical 的定位语义,取两端 clickable point
             let (_, (fx, fy), _) = pointer_physical(app, from, None, PointerAction::Hover, false)?;
             let to_loc = locate(app, to, None)?;
+            // 目标端 COM 工作与 Release 在区内(元素分支;坐标分支无 COM)。
+            let _guard = crate::watchdog::enter();
             let _ = ensure_visible(&to_loc.element);
-            let Some(dest) = to_loc.element.get_clickable_point().ok().flatten() else {
-                return Err(CtlError::new(
-                    ErrorCode::NotActionable,
-                    format!(
-                        "{} exposes no clickable point for drag destination",
-                        to.describe()
-                    ),
-                ));
+            let point = match to_loc.element.get_clickable_point().ok().flatten() {
+                Some(dest) => (dest.get_x(), dest.get_y()),
+                None => {
+                    // 显式 Release 进区内再返回错误(早退路径同理)。
+                    let _info = to_loc.into_info();
+                    return Err(CtlError::new(
+                        ErrorCode::NotActionable,
+                        format!(
+                            "{} exposes no clickable point for drag destination",
+                            to.describe()
+                        ),
+                    ));
+                }
             };
-            let end = (dest.get_x(), dest.get_y());
             let win = to_loc.window_title.clone();
-            ((fx, fy), end, win)
+            // 释放进区内:后续 inject 无 COM 区段,但 Release 不应裸奔。
+            let _ = to_loc.into_info();
+            ((fx, fy), point, win)
         }
     };
     let mut points = Vec::with_capacity(waypoints.len() + 2);
@@ -652,22 +674,30 @@ pub fn drag_physical(
     from_near: Option<&str>,
     to: &Target,
     to_near: Option<&str>,
-) -> Result<(Located, (i32, i32), bool), CtlError> {
-    let (_, (fx, fy), from_scrolled) =
+) -> Result<(crate::locate::ResolvedInfo, (i32, i32), bool), CtlError> {
+    let (from_info, (fx, fy), from_scrolled) =
         pointer_physical(app, from, from_near, PointerAction::Hover, false)?;
     let to_loc = locate(app, to, to_near)?;
-    let to_scrolled = ensure_visible(&to_loc.element);
-    let Some(dest) = to_loc.element.get_clickable_point().ok().flatten() else {
-        return Err(CtlError::new(
-            ErrorCode::NotActionable,
-            format!(
-                "{} exposes no clickable point for drag destination",
-                to.describe()
-            ),
-        ));
-    };
-    let point = (dest.get_x(), dest.get_y());
     let source = locate(app, from, from_near)?;
+    // 目标端/源端 COM 工作与 Release 在区内;注入回调只做 Win32 命中检查
+    // (无 COM 区段,不清单槽)。
+    let _watchdog = crate::watchdog::enter();
+    let to_scrolled = ensure_visible(&to_loc.element);
+    let point = match to_loc.element.get_clickable_point().ok().flatten() {
+        Some(dest) => (dest.get_x(), dest.get_y()),
+        None => {
+            // 早退路径:先区内释放两处元素再返回错误。
+            let _ = to_loc.into_info();
+            let _ = source.into_info();
+            return Err(CtlError::new(
+                ErrorCode::NotActionable,
+                format!(
+                    "{} exposes no clickable point for drag destination",
+                    to.describe()
+                ),
+            ));
+        }
+    };
     let before = crate::feedback::target(&source.element, &source.window_title).bounds;
     let dest_before = crate::feedback::target(&to_loc.element, &to_loc.window_title).bounds;
     inject_pointer_at(
@@ -702,11 +732,10 @@ pub fn drag_physical(
             crate::feedback::check_stop()
         },
     )?;
-    Ok((
-        locate(app, from, from_near)?,
-        (fx, fy),
-        from_scrolled || to_scrolled,
-    ))
+    // 区内释放(原实现行尾第三次重定位只为了返回 Located——元数据用 from 侧即可)。
+    let _ = to_loc.into_info();
+    let _ = source.into_info();
+    Ok((from_info, (fx, fy), from_scrolled || to_scrolled))
 }
 
 /// scroll:UIA Scroll pattern 优先(容器语义,后台);无 pattern → 物理滚轮。
@@ -716,11 +745,15 @@ pub fn scroll_element(
     target: &Target,
     near: Option<&str>,
     notches: i32,
-) -> Result<(Located, &'static str), CtlError> {
+) -> Result<(crate::locate::ResolvedInfo, &'static str), CtlError> {
     use uiautomation::patterns::UIScrollPattern;
     use uiautomation::types::ScrollAmount;
 
     let loc = locate(app, target, near)?;
+    // Scroll pattern 调用与 Release 在区内完成;物理兜底(pointer_physical
+    // 自带看门狗,其 enter/drop 会清零单槽)必须放在 into_info 之后——两段式。
+    let _watchdog = crate::watchdog::enter();
+    let mut uia_ok = false;
     if let Ok(scroll) = loc.element.get_pattern::<UIScrollPattern>() {
         let amount = if notches >= 0 {
             ScrollAmount::SmallIncrement
@@ -747,10 +780,14 @@ pub fn scroll_element(
         }
         if ok {
             feedback.delivered();
-            return Ok((loc, "uia-scroll"));
+            uia_ok = true;
         }
+    }
+    let info = loc.into_info();
+    if uia_ok {
+        return Ok((info, "uia-scroll"));
     }
     // 物理兜底:滚轮打在元素 clickable point 上
     let _ = pointer_physical(app, target, near, PointerAction::Wheel { notches }, false)?;
-    Ok((loc, "physical-wheel"))
+    Ok((info, "physical-wheel"))
 }

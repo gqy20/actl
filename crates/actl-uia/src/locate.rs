@@ -617,6 +617,49 @@ fn fast_exact_ids(
         .map_err(|e| crate::read_channel::failure("id.query", e))
 }
 
+/// find --id(单一精确条件)的 provider 侧快路径:Subtree FindAll +
+/// AutomationId 等值条件——**单次跨进程调用**替代全树遍历(冷 provider 重树
+/// 分钟级 → 秒级,网易云 126s 实证的痛点面)。id 为精确等值语义,与全树
+/// 过滤等价(不漏报);--name/--role 是子串语义,UIA 属性条件只支持等值,
+/// 无法走此路径(诚实边界,docs/06)。命中元素元数据读取在区内完成;空 vec
+/// = 树内无命中(调用方回落原全树路径保快照面)。返回元素不在快照树内,
+/// 无 @eN ref(与 find 的 L4 virtual_hit 同形态)。
+pub fn find_by_id_provider(app: Option<&str>, id: &str) -> Result<Vec<ResolvedInfo>, CtlError> {
+    let auto = UIAutomation::new().map_err(crate::internal)?;
+    let walker = auto.create_tree_walker().map_err(crate::internal)?;
+    let root = match app {
+        Some(pattern) => crate::window::find_window(&auto, &walker, pattern)?,
+        None => crate::window::top_level_of_focused(&auto, &walker)?,
+    };
+    let window_title = root.get_name().unwrap_or_default();
+    let hits = fast_exact_ids(&auto, &root, &Target::Id(id.to_string()))?.unwrap_or_default();
+    // 元数据读取进看门狗区(命中集窄,N 次 O(1) 属性读)。
+    let _watchdog = crate::watchdog::enter();
+    let mut out = Vec::with_capacity(hits.len());
+    for element in hits {
+        let role = format!(
+            "{:?}",
+            element
+                .get_control_type()
+                .map_err(|e| crate::read_channel::failure("role", e))?
+        );
+        let name = element
+            .get_name()
+            .map_err(|e| crate::read_channel::failure("name", e))?;
+        let automation_id = element
+            .get_automation_id()
+            .map_err(|e| crate::read_channel::failure("automation_id", e))?;
+        out.push(ResolvedInfo {
+            window_title: window_title.clone(),
+            role,
+            name: Some(name),
+            automation_id: Some(automation_id),
+            resolved_by: "provider-exact",
+        });
+    }
+    Ok(out)
+}
+
 // ─── L4 虚拟化容器兜底(M2 观察层强化,spike 2026-09-26 证真) ───────────────
 // Explorer/任务管理器等大列表的 ListItem 不物化(US1 实测:等 6s + F5 后 walker
 // 遍历仍 0 命中),ItemContainerPattern::FindItemByProperty 由 provider 侧

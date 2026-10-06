@@ -231,6 +231,35 @@ pub(crate) fn find_cmd(
             "find needs at least one of --name/--role/--id (full-tree dump is `snapshot`)",
         ));
     }
+    // --id 单一条件:provider 侧精确快路径(单次跨进程调用,冷 provider 重树
+    // 分钟级→秒级;id 精确等值语义与全树过滤等价不漏报)。命中走 L4 同形态
+    // (无 @eN ref,target 语义);无命中回落原全树路径(保快照面与 L4 兜底)。
+    // --name/--role 为子串语义,UIA 属性条件只支持等值,不走此路径。
+    if id.is_some() && name.is_none() && role.is_none() {
+        let hits = actl_uia::find_by_id_provider(app, id.unwrap_or_default())?;
+        if !hits.is_empty() {
+            let limit_n = limit.unwrap_or(20);
+            let total = hits.len();
+            let elements: Vec<Value> = hits
+                .iter()
+                .take(limit_n)
+                .map(|h| {
+                    json!({
+                        "ref": null, "role": h.role, "name": h.name,
+                        "automation_id": h.automation_id,
+                        "target": format!("id:{}", id.unwrap_or_default()),
+                    })
+                })
+                .collect();
+            return Ok(json!({
+                "window": {"title": hits[0].window_title},
+                "total": total,
+                "elements": elements,
+                "resolved_by": "provider-exact",
+            })
+            .into());
+        }
+    }
     let cap = actl_uia::capture(app)?;
     cap.require_complete()?;
     let mut builder = SnapshotBuilder::new(actl_uia::MAX_ELEMENTS + 1);

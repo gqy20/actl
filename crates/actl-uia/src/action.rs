@@ -120,6 +120,22 @@ pub fn type_text(
     verify_value: Option<&str>,
 ) -> Result<TypeOutcome, CtlError> {
     let loc = locate(app, target, near)?;
+    // SetFocus/值读回等 COM 调用与 Release 在区内(inner 引用 loc,早退 Err
+    // 也经 wrapper 的 into_info 覆盖——析构纪律)。
+    let _watchdog = crate::watchdog::enter();
+    let result = type_text_inner(&loc, app, target, text, paste, verify_value);
+    let _ = loc.into_info();
+    result
+}
+
+fn type_text_inner(
+    loc: &Located,
+    app: Option<&str>,
+    target: &Target,
+    text: &str,
+    paste: bool,
+    verify_value: Option<&str>,
+) -> Result<TypeOutcome, CtlError> {
     let identity = crate::identity::identity(&loc.element);
     let _lock = input::InputLock::acquire(timing().lock_wait_ms)?;
     let mut action = crate::feedback::prepare(
@@ -155,7 +171,7 @@ pub fn type_text(
     action.executing();
     let total = text.chars().count();
     let outcome = |delivered: usize, stopped_early: bool| TypeOutcome {
-        located: (&loc).into(),
+        located: loc.into(),
         delivered,
         total,
         stopped_early,
@@ -235,6 +251,8 @@ pub fn press_keys_targeted(
 ) -> Result<Option<String>, CtlError> {
     let _lock = input::InputLock::acquire(timing().lock_wait_ms)?;
     let loc = target.map(|t| locate(app, t, None)).transpose()?;
+    // 目标核验(FocusGuard/元素读)与 Release 在区内;注入为键盘通道无 COM。
+    let _watchdog = crate::watchdog::enter();
     let _focus = loc
         .as_ref()
         .map(|l| crate::identity::FocusGuard::enter(&l.element))
@@ -260,6 +278,8 @@ pub fn press_keys_targeted(
     action.executing();
     kbd::send_key_spec(spec)?;
     action.delivered();
+    // Release 在区内(返回值仅标题字符串,无 COM 出域)。
+    drop(loc);
     Ok(focused)
 }
 
@@ -424,52 +444,59 @@ pub fn select_option(
     container: &Target,
     option: &str,
     near: Option<&str>,
-) -> Result<(Located, String, &'static str), CtlError> {
+) -> Result<(crate::locate::ResolvedInfo, String, &'static str), CtlError> {
     let loc = locate(app, container, near)?;
-    let hits = selection_items_under(&loc.element, option, false);
-    let (items, level) = if hits.len() == 1 {
-        (hits, "exact-name")
-    } else if hits.is_empty() {
-        let fuzzy = selection_items_under(&loc.element, option, true);
-        if fuzzy.is_empty() {
-            return Err(CtlError::new(
-                ErrorCode::NotFound,
-                format!(
-                    "no selectable item named {option:?} under {} (exact and substring)",
-                    container.describe()
-                ),
+    // 选项匹配的子树扫描与 SelectionItem 调用进看门狗;命中列表的元素
+    // 与 loc 的 Release 都须在区内完成(闭包内析构,见 into_info 契约)。
+    let _watchdog = crate::watchdog::enter();
+    let outcome = (|| {
+        let hits = selection_items_under(&loc.element, option, false);
+        let (items, level) = if hits.len() == 1 {
+            (hits, "exact-name")
+        } else if hits.is_empty() {
+            let fuzzy = selection_items_under(&loc.element, option, true);
+            if fuzzy.is_empty() {
+                return Err(CtlError::new(
+                    ErrorCode::NotFound,
+                    format!(
+                        "no selectable item named {option:?} under {} (exact and substring)",
+                        container.describe()
+                    ),
+                ));
+            }
+            (fuzzy, "substring-name")
+        } else {
+            (hits, "exact-name")
+        };
+        if items.len() > 1 {
+            let names: Vec<String> = items
+                .iter()
+                .filter_map(|e| e.get_name().ok())
+                .take(5)
+                .collect();
+            return Err(CtlError::with_evidence(
+                ErrorCode::Ambiguous,
+                format!("{option:?} matches {} selectable items", items.len()),
+                serde_json::json!({ "candidates": names }),
             ));
         }
-        (fuzzy, "substring-name")
-    } else {
-        (hits, "exact-name")
-    };
-    if items.len() > 1 {
-        let names: Vec<String> = items
-            .iter()
-            .filter_map(|e| e.get_name().ok())
-            .take(5)
-            .collect();
-        return Err(CtlError::with_evidence(
-            ErrorCode::Ambiguous,
-            format!("{option:?} matches {} selectable items", items.len()),
-            serde_json::json!({ "candidates": names }),
-        ));
-    }
-    let item = &items[0];
-    let name = item.get_name().unwrap_or_default();
-    crate::feedback::semantic("select", item, &loc.window_title, || {
-        item.get_pattern::<UISelectionItemPattern>()
-            .map_err(|_| {
-                CtlError::new(
-                    ErrorCode::NotActionable,
-                    format!("{name:?} exposes no SelectionItem pattern"),
-                )
-            })?
-            .select()
-            .map_err(internal)
-    })?;
-    Ok((loc, name, level))
+        let item = &items[0];
+        let name = item.get_name().unwrap_or_default();
+        crate::feedback::semantic("select", item, &loc.window_title, || {
+            item.get_pattern::<UISelectionItemPattern>()
+                .map_err(|_| {
+                    CtlError::new(
+                        ErrorCode::NotActionable,
+                        format!("{name:?} exposes no SelectionItem pattern"),
+                    )
+                })?
+                .select()
+                .map_err(internal)
+        })?;
+        Ok((name, level))
+    })();
+    let info = loc.into_info();
+    outcome.map(|(name, level)| (info, name, level))
 }
 
 /// 容器子树内收集支持 SelectionItem 且名字匹配的元素。
@@ -520,30 +547,35 @@ pub fn toggle_element(
     app: Option<&str>,
     target: &Target,
     near: Option<&str>,
-) -> Result<(Located, String), CtlError> {
+) -> Result<(crate::locate::ResolvedInfo, String), CtlError> {
     let loc = locate(app, target, near)?;
-    let pattern = loc.element.get_pattern::<UITogglePattern>().map_err(|_| {
-        CtlError::new(
-            ErrorCode::NotActionable,
-            format!(
-                "{} ({}) exposes no Toggle pattern; `click` dispatches toggle semantics for checkboxes",
-                target.describe(),
-                loc.role
-            ),
-        )
-    })?;
-    crate::feedback::semantic("toggle", &loc.element, &loc.window_title, || {
-        loc.element
-            .get_pattern::<UITogglePattern>()
-            .map_err(internal)?
-            .toggle()
-            .map_err(internal)
-    })?;
-    let state = pattern
-        .get_toggle_state()
-        .map(|s| format!("{s:?}"))
-        .unwrap_or_else(|_| "unknown".into());
-    Ok((loc, state))
+    // Toggle pattern 调用与状态读进看门狗;Release 在区内(见 into_info 契约)。
+    let _watchdog = crate::watchdog::enter();
+    let state = (|| {
+        let pattern = loc.element.get_pattern::<UITogglePattern>().map_err(|_| {
+            CtlError::new(
+                ErrorCode::NotActionable,
+                format!(
+                    "{} ({}) exposes no Toggle pattern; `click` dispatches toggle semantics for checkboxes",
+                    target.describe(),
+                    loc.role
+                ),
+            )
+        })?;
+        crate::feedback::semantic("toggle", &loc.element, &loc.window_title, || {
+            loc.element
+                .get_pattern::<UITogglePattern>()
+                .map_err(internal)?
+                .toggle()
+                .map_err(internal)
+        })?;
+        Ok(pattern
+            .get_toggle_state()
+            .map(|s| format!("{s:?}"))
+            .unwrap_or_else(|_| "unknown".into()))
+    })();
+    let info = loc.into_info();
+    state.map(|state| (info, state))
 }
 
 /// paste:ctrl+v 注入到目标窗口的**当前焦点/选中处**(pack 路线的关键原语:

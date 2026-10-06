@@ -57,6 +57,9 @@ fn collect<T: Clone>(
         // 分钟级(网易云全树 126s 实证),无心跳会被默认期限误杀;单点卡死
         // (children 调用挂起)则心跳停止,照常触顶。
         actl_core::watchdog::reset();
+        // UIA 区段重臂:同上——整段 wall clock 口径会误杀合法慢扫描
+        // (冷 provider 实证三度 20s 中止);重臂后口径 = 单次跨进程调用。
+        crate::watchdog::rearm();
         if entries.len() >= max_nodes {
             reasons.push("node_limit");
             break;
