@@ -108,8 +108,24 @@ fn collect<T: Clone>(
     Ok(Observed { entries, reasons })
 }
 
+/// 观察树(默认物化):纯观察消费——snapshot/find 的输出序列化后元素即弃,
+/// 物化安全且拿满提速(N→1 往返)。
 pub(crate) fn tree(root: &UIElement) -> Result<Observed<UIElement>, CtlError> {
     tree_bounded(root, crate::window::MAX_DEPTH, crate::window::MAX_ELEMENTS)
+}
+
+/// 动作链树(恒逐节点 live):元素将被携带出函数做 pattern 调用与身份核验
+/// (locate 链的 click/type/focus/set-value、extract 的 Grid 读取)——
+/// GetCachedChildren 的缓存视图存根对 live 调用在部分 provider(Word 的
+/// MSAA 桥,2026-10-06 实证:focus NOT_ACTIONABLE/身份读空,legacy 即恢复)
+/// 上失败,动作链一律 live 遍历(消费分轨,docs/06)。
+pub(crate) fn tree_live(root: &UIElement) -> Result<Observed<UIElement>, CtlError> {
+    tree_bounded_mode(
+        root,
+        crate::window::MAX_DEPTH,
+        crate::window::MAX_ELEMENTS,
+        true,
+    )
 }
 
 pub(crate) fn tree_bounded(
@@ -117,14 +133,24 @@ pub(crate) fn tree_bounded(
     depth: u32,
     limit: usize,
 ) -> Result<Observed<UIElement>, CtlError> {
+    tree_bounded_mode(root, depth, limit, false)
+}
+
+/// `live` = 动作链(逐节点);false = 观察(物化,ACTL_WALK_LEGACY 可全局
+/// 强制 legacy——对照组/逃生舱)。
+fn tree_bounded_mode(
+    root: &UIElement,
+    depth: u32,
+    limit: usize,
+    live: bool,
+) -> Result<Observed<UIElement>, CtlError> {
     // 看门狗区段:树观察遍历 provider 全树,是 COM 挂起的高发面(docs/81 §8)。
     // 2026-10-07 子树物化(方案2,屏幕阅读器同款技术):缓存请求 TreeScope=
     // Subtree——一次 build_updated_cache 把整棵子树+属性+父子链接拉进本地,
     // collect 的 children 闭包改走 get_cached_children()(纯本地,零跨进程
     // 往返)——N 次往返变 1 次。collect 循环原封不动(上限/顺序/refs 编号
-    // 语义完全保留)。物化是单次长调用,UIA 区段 20s 限即它的界(巨树可
-    // ACTL_UIA_WATCHDOG_MS 放宽);个别 provider 对 Subtree 缓存支持差时
-    // ACTL_WALK_LEGACY=1 回落逐节点 RPC 遍历(亦是重树 A/B 的对照组)。
+    // 语义完全保留)。物化是单次长调用,UIA 区段 20s 限即它的界(巨树/冷
+    // Office 可 ACTL_UIA_WATCHDOG_MS 放宽,010 实测 60s 有效)。
     let _watchdog = crate::watchdog::enter();
     let auto = UIAutomation::new().map_err(crate::internal)?;
     let cache = auto.create_cache_request().map_err(crate::internal)?;
@@ -143,7 +169,7 @@ pub(crate) fn tree_bounded(
     cache
         .set_tree_filter(condition.clone())
         .map_err(crate::internal)?;
-    let legacy = std::env::var_os("ACTL_WALK_LEGACY").is_some_and(|v| v != "0");
+    let legacy = live || std::env::var_os("ACTL_WALK_LEGACY").is_some_and(|v| v != "0");
     let materialized_scope = if legacy {
         TreeScope::Element
     } else {
@@ -153,7 +179,7 @@ pub(crate) fn tree_bounded(
         .set_tree_scope(materialized_scope)
         .map_err(crate::internal)?;
     if legacy {
-        // 逐节点 RPC 遍历(原实现,属性预取保留)。
+        // 逐节点 RPC 遍历(动作链默认/原实现,属性预取保留)。
         collect(root.clone(), depth, limit, |element| {
             crate::observation_query::children(
                 element,

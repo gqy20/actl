@@ -528,7 +528,7 @@ fn collect_until_ref(
     want: u32,
     counter: &mut u32,
 ) -> Result<Option<UIElement>, CtlError> {
-    for entry in crate::observation::tree(elem)?.require_complete()? {
+    for entry in crate::observation::tree_live(elem)?.require_complete()? {
         let role = strict_role(&entry.element)?;
         if actl_core::is_interactive_role(&role) {
             *counter += 1;
@@ -555,7 +555,7 @@ fn collect_matches(
     out: &mut Vec<Candidate>,
 ) -> Result<(), CtlError> {
     *counter = 0;
-    for entry in crate::observation::tree(elem)?.require_complete()? {
+    for entry in crate::observation::tree_live(elem)?.require_complete()? {
         let element = entry.element;
         let role = strict_role(&element)?;
         let ref_no = if actl_core::is_interactive_role(&role) {
@@ -699,7 +699,7 @@ fn locate_virtualized(
         return Ok(None);
     };
     let value = Variant::from(value);
-    let entries = crate::observation::tree(root)?.require_complete()?;
+    let entries = crate::observation::tree_live(root)?.require_complete()?;
     let mut hit = None;
     for entry in entries {
         let c = entry.element;

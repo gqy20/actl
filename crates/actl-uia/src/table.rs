@@ -87,7 +87,7 @@ pub fn extract_table(app: Option<&str>, target: &Target) -> Result<TableResult, 
             fallback_reason: None,
         });
     }
-    let entries = crate::observation::tree(&loc.element)?.require_complete()?;
+    let entries = crate::observation::tree_live(&loc.element)?.require_complete()?;
     let mut table: Vec<Vec<String>> = Vec::new();
     let mut active_row: Option<(u32, usize)> = None;
     for entry in entries.into_iter().skip(1) {
