@@ -21,6 +21,7 @@ fn main() -> ExitCode {
         Some("gate") => gate(),
         Some("dev") => dev(),
         Some("evidence") => evidence(),
+        Some("doctor") => doctor(),
         Some("fmt") => code(run(&["fmt", "--all"])),
         Some("regress") => regress(),
         Some("timing") => timing(),
@@ -33,6 +34,7 @@ fn main() -> ExitCode {
                  cargo xtask setup   install git hooks + activate pinned toolchain (run once after clone)\n  \
                  cargo xtask dev     diagnosis loop: incremental DEBUG build of actl (seconds; never --release here)\n  \
                  cargo xtask evidence  evidence round: RELEASE build + binary fingerprint logged to target/evidence/\n  \
+                 cargo xtask doctor  one-shot diagnosis: process census (live/ghost), build-artifact locks, ghost images, display status\n  \
                  cargo xtask gate    quality gate: file-lines + pnpm UI verify + fmt --check + clippy -D warnings + tests (= pre-push = CI)\n  \
                  cargo xtask fmt     format all code
                  cargo xtask fixture CASE | diagnose KIND | package [OPTIONS]
@@ -63,6 +65,7 @@ fn code(ok: bool) -> ExitCode {
 /// 证据二进制由 `cargo xtask evidence` 单独产出(显式声明证据轮)。
 fn dev() -> ExitCode {
     let started = std::time::Instant::now();
+    ghost_locked_exes(&["debug"]);
     let ok = run(&["build", "-p", "actl-cli"]);
     eprintln!("· dev build took {}ms", started.elapsed().as_millis());
     if ok {
@@ -81,6 +84,7 @@ fn dev() -> ExitCode {
 /// 噪音。每轮验收只调用一次;调用本身即"进入证据轮"的显式声明。
 fn evidence() -> ExitCode {
     let started = std::time::Instant::now();
+    ghost_locked_exes(&["release"]);
     let ok = run(&["build", "--release", "-p", "actl-cli"]);
     eprintln!("· release build took {}ms", started.elapsed().as_millis());
     if !ok {
@@ -187,6 +191,8 @@ fn setup() -> ExitCode {
 /// 各步耗时随 `· <step> Nms` 打进 stderr(观测先行:慢环节按 AGENTS 性能纪律头内比较)。
 fn gate() -> ExitCode {
     let gate_started = std::time::Instant::now();
+    // 测试步骤全量构建(含 debug 双二进制)——先规避锁,避免"拒绝访问"中断整轮门禁。
+    ghost_locked_exes(&["debug"]);
     if !timed("file-lines", file_lines_gate) {
         return ExitCode::FAILURE;
     }
@@ -604,4 +610,148 @@ fn lint_packs(dir_arg: Option<&str>) -> ExitCode {
         eprintln!("✗ lint-packs: {bad} problem(s) across {files} packs");
         ExitCode::FAILURE
     }
+}
+
+// ── 构建锁规避与一键诊断(2026-10-06;docs/81 §8 僵尸事故的日常摩擦面) ──
+// 锁探针语义实证:运行中进程的映像,write-open 被拒(DELETE 共享拒绝是
+// cargo "failed to remove file 拒绝访问"的根因);改名(ghost-rename)
+// 始终可用——楔死进程攥住的是旧映像名,构建产物换新名即可重建。
+
+/// 目标二进制:构建会被僵尸/显示端锁住的产物面。
+fn builtin_exes(profiles: &[&str]) -> Vec<std::path::PathBuf> {
+    profiles
+        .iter()
+        .flat_map(|p| {
+            [
+                std::path::PathBuf::from("target").join(p).join("actl.exe"),
+                std::path::PathBuf::from("target")
+                    .join(p)
+                    .join("actl-signal.exe"),
+            ]
+        })
+        .collect()
+}
+
+/// 锁探针:write-open 失败 = 有进程映射该映像(运行中或内核楔死滞留)。
+fn image_locked(path: &std::path::Path) -> bool {
+    if !path.exists() {
+        return false;
+    }
+    std::fs::OpenOptions::new().write(true).open(path).is_err()
+}
+
+/// 构建前置:被锁产物自动 ghost-rename(改名不影响持锁进程——它攥旧名,
+/// cargo 写新文件)。惯例沿用手工 ghost/ghost2/ghostN 先例;提示走 stderr。
+fn ghost_locked_exes(profiles: &[&str]) {
+    for exe in builtin_exes(profiles) {
+        if !image_locked(&exe) {
+            continue;
+        }
+        // with_extension 换掉最后一个扩展:actl.exe -> actl.exe.ghostN
+        let mut n = 0;
+        let target = loop {
+            let candidate = exe.with_extension(format!(
+                "{}.ghost{}",
+                exe.extension().and_then(|e| e.to_str()).unwrap_or(""),
+                n
+            ));
+            if !candidate.exists() {
+                break candidate;
+            }
+            n += 1;
+        };
+        match std::fs::rename(&exe, &target) {
+            Ok(()) => {
+                eprintln!(
+                    "· 构建锁规避: {} 被运行中/楔死进程持有,已改名 {} (旧映像随进程退出回收)",
+                    exe.display(),
+                    target.display()
+                );
+            }
+            Err(error) => {
+                eprintln!(
+                    "! 锁规避失败 {} -> {}: {error}(手工改名后重试)",
+                    exe.display(),
+                    target.display()
+                );
+            }
+        }
+    }
+}
+
+/// 一键诊断:进程普查(活/幽灵分组)+ 四产物锁探针 + ghost 残留盘点 +
+/// 显示端状态。人类可读输出(诊断工具,不进 stdout 契约面)。
+fn doctor() -> ExitCode {
+    eprintln!("== actl 进程普查(活 = 未退出;幽灵 = HasExited 仍枚举,内核对象滞留) ==");
+    let census = std::process::Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-Command",
+            "Get-Process actl, actl-signal -ErrorAction SilentlyContinue | ForEach-Object { \
+             '{0,-12} pid={1,-7} exited={2,-5} start={3} path={4}' -f \
+             $_.ProcessName, $_.Id, $_.HasExited, \
+             $_.StartTime.ToString('MM-dd HH:mm:ss'), $_.Path }",
+        ])
+        .output();
+    match census {
+        Ok(out) if out.status.success() => {
+            let text = String::from_utf8_lossy(&out.stdout);
+            if text.trim().is_empty() {
+                eprintln!("  (无 actl/actl-signal 进程)");
+            } else {
+                for line in text.lines().filter(|l| !l.trim().is_empty()) {
+                    eprintln!("  {line}");
+                }
+            }
+        }
+        Ok(out) => eprintln!("  普查失败: exit={}", out.status),
+        Err(error) => eprintln!("  普查失败: {error}"),
+    }
+    eprintln!("== 构建产物锁探针(write-open 被拒 = 有进程映射) ==");
+    for exe in builtin_exes(&["debug", "release"]) {
+        let state = if !exe.exists() {
+            "absent"
+        } else if image_locked(&exe) {
+            "LOCKED"
+        } else {
+            "free"
+        };
+        eprintln!("  {state:6} {}", exe.display());
+    }
+    eprintln!("== ghost 残留映像(楔死进程的旧映像,重启后可清) ==");
+    let mut ghosts = 0;
+    for dir in ["target/debug", "target/release", "target2/debug"] {
+        let dir = std::path::Path::new(dir);
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                let name = name.to_string_lossy();
+                if name.contains(".ghost") {
+                    ghosts += 1;
+                    eprintln!("  {}", entry.path().display());
+                }
+            }
+        }
+    }
+    if ghosts == 0 {
+        eprintln!("  (无)");
+    }
+    eprintln!("== 显示端状态 ==");
+    let actl = std::path::Path::new("target/debug/actl.exe");
+    if actl.exists() {
+        match std::process::Command::new(actl)
+            .arg("display-status")
+            .output()
+        {
+            Ok(out) => {
+                let line = String::from_utf8_lossy(&out.stdout);
+                eprintln!("  {}", line.trim());
+            }
+            Err(error) => eprintln!("  display-status 失败: {error}"),
+        }
+    } else {
+        eprintln!("  (target/debug/actl.exe 不存在;先 cargo xtask dev)");
+    }
+    eprintln!("提示: 构建前自动规避锁 = cargo xtask dev/evidence/gate;楔死幽灵重启后清退。");
+    ExitCode::SUCCESS
 }
