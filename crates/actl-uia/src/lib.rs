@@ -18,6 +18,7 @@ mod bg_style;
 #[allow(unsafe_op_in_unsafe_fn)] // GDI/WIC 直调集中在该模块
 mod capture;
 pub mod desktop;
+mod diagnostic;
 pub mod display_gate;
 pub mod display_support;
 mod feedback;

@@ -31,8 +31,20 @@ pub(crate) fn observed_identity(element: &UIElement) -> Result<Value, CtlError> 
         .or_else(|_| element.get_process_id().map(|p| p as i32))
         .map_err(|e| failure("identity.pid", e))?;
     if runtime_id.is_empty() || pid == 0 {
-        return Err(CtlError::internal(
+        // 失败时刻上下文汇流(2026-10-06 基建:诊断靠错误自述,不靠人回溯
+        // 输出):失败元素的已知属性(缓存读零往返)+ OS 前台窗 + 标题语义
+        // 分类——Word 兼容模式文档整轮根因,答案原本在标题里但从不进错误。
+        let role = crate::observation::role_of(element)
+            .map(|r| format!("{r:?}"))
+            .unwrap_or_default();
+        let name = crate::observation::name_of(element).unwrap_or_default();
+        return Err(CtlError::with_evidence(
+            ErrorCode::Internal,
             "observed element has no usable runtime identity",
+            json!({
+                "element": { "role": role, "name": name, "runtime_id_len": runtime_id.len(), "pid": pid },
+                "diagnostic": crate::diagnostic::failure_context(),
+            }),
         ));
     }
     Ok(json!({
