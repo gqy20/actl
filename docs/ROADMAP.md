@@ -95,3 +95,8 @@
 - **null 身份 spec 实证**：Word 打开文档（此前必炸「no usable runtime identity」）205 元素快照成功、12.9s——同现场从不可观察变为可观察。
 - **fill-3 新阻塞（如实入档）**：运行时门禁「弹层门禁」把 Word 的**停靠导航窗格**（in-tree 常驻面板，内容为模板标题导航树「笔记 2026-10-04 过程记录 心得」）误判为 unknown 弹层 → popup_pending 拦截 fill-3。**根因：门禁未区分「停靠面板」与「真弹窗」**——需对 in-tree 常驻面板做降噪判定（参照 0.2.1 Win11 空壳降噪先例），或以步骤目标窗格与面板不相交放行。fill-3 本身 ASSARTION_FAILED "normalized text differs"（模板三段填充内容差异——需读文档核对后决定 --retry-step）。
 - Word 侧遗留：此现场导航窗格可通过点击其「关闭」Button 移除（真机关闭后弹保存提示→「不保存」→进程退出——但流程无法依赖此操作（它关掉了文档）。
+
+## 2026-10-07 fill-3 判读轮实录（显示端 blocked 收口）
+- **fill-3 挂点初步判读**：trace 轮启动即遇显示端 covered_or_offscreen 拒绝——根因是 **Windows 锁屏界面（LogonUI）覆盖全屏**（WindowFromPoint 任意点命中锁屏窗口）。用户离开桌面后机器自动锁屏——显示端信号条被判定「被盖」，launch/display-start 全部拒发（守护正确行为：锁屏态不注入输入）。
+- **010 fill-3 的 type 挂点判读未完成**（需解锁桌面才能复现 trace 轮）；降噪+null 身份+模板 patch 三层修复已在其他轮实证，fill-3 挂点在用户解锁后可一轮 trace 收口。
+- **显示端锁屏行为（入档为 quirk 面）**：锁屏后 companion 窗口被盖、lease state=hidden；正确路径是显示端在锁屏期不注入（不自动解锁、不绕过），解锁后自动恢复。
