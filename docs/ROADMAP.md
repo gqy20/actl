@@ -20,7 +20,10 @@
 ### 流程与集成
 
 - [ ] 流程扩展（余项）：循环、嵌套分支
+- [ ] **选区读取原语（2026-10-07 登记，实施前 spec + PRD §1.3 授权）**：Quicker 类动作的核心上下文通道（[10 §6](10-quicker-demand-research.md) 点名「对 AI 接口最有价值」）——读当前窗口用户选中内容（文本/文件/表格区域），UIA Text/Selection 优先，取不到如实 unavailable 不猜测；与 get-clipboard、`focused:` 合成显式上下文面。若选区只能经 Ctrl+C 获取须显式物理授权并申报焦点/剪贴板影响，不伪装成纯读取
+- [ ] **虚拟化列表全量收集动词（2026-10-07 登记，实施前 spec + PRD §1.3 授权）**：「检索→提取全部结果」任务类的共同缺口——单屏一把读已通（快照/TextPattern 文档通道），虚拟化边界外的条目靠上层手写滚动循环（微信 RecyclerListView、网易云 Electron 列表、资源管理器 ListView、VSCode quickInput 同墙不同组件）。形态：给定容器 ref 的有界收集（滚动→观察→差分→收敛，预算耗尽如实上报截断）；实现形态（flow 循环步骤 vs 引擎有界动词）随 spec 裁定，与「流程扩展（余项）」联动；验收靶候选=资源管理器 fixture（系统自带应用可复现，fixture 清单扩项随实施裁定）
 - [ ] 浏览器通道余量：flow 级 uncertain 持久化、pipe 传输 spike（`--remote-debugging-pipe`）、`--user-agent` 覆盖（headless UA 壁垒站点）、选择器索引消歧、batch 组合验收
+- [ ] **browser-read 列表枚举形态（协议面变更，spec 三件套同 PR）**：CDP 轨多匹配读动词——现状唯一匹配纪律（0→NOT_FOUND、>1→AMBIGUOUS），枚举靠位置谓词绕行（[73 round7](73-browser-twitter-scenario.md)）；批量通道的并行语义契约已预留（[06 P3 修正](06-design-blueprint.md)——CDP 读是唯一预留并行方向）
 - [ ] WebView2 专项验收（键盘跨原生/网页、屏幕阅读器、多屏 DPI、缺失运行时回退）
 - [ ] 中央任务提示专项验收：真实失败/停止/接管暂停、显示端重启后旧流程恢复、跨屏 DPI 与减少动态设置（[75](75-action-start-notification.md)）
 - [ ] agent 自驱授权白名单通道（仅真实需求时立项，[32](32-desktop-handoff.md)）
@@ -34,6 +37,8 @@
 - [ ] Excel 写入闭环（当前：UIA 树空属 Office 慢启动，需 MSAA 路线或等待）
 - [ ] Zotero 导入导出
 - [ ] 腾讯会议 draft-date 键盘路线（ctrl+a+paste+tab，QDateEdit set-value 无效）
+- [ ] 资源管理器档案与保存框路径交接（快选快切类高频需求，[10 §4.2](10-quicker-demand-research.md)）：搜索/过滤→结果清单收集（L4 fallback-3 原型场景）；当前路径读取（地址栏 view_1012）→ 另存/打开对话框路径交接。零件已齐（地址栏可读、对话框 Edit 可填），缺应用档案与打包原语。⚠ explorer 关闭纪律见长期观察项「极端规模重树」条（勿按 pid 关）
+- [ ] 浏览器扩展操作面余量（UIA 轨三批已沉淀 [16 §5.5](16-browser-scenarios.md) / browser.yml `extension_surfaces`）：①右键菜单扩展项复验（机制在，两次被用户桌面并发占用护栏正确拒绝，待空闲）；②CDP 自有会话扩展操作实测（persistent profile 保留扩展策略已定 [72](72-browser-cdp-integration.md)，chrome 层归 UIA 的路径无实测证据，chrome 层 Invoke E_FAIL 同款风险预期）；③扩展弹层内写动作成链（现存证据只覆盖「读」）
 - [ ] 应用 pack 长尾维护
 
 ### 遗留验收
@@ -52,6 +57,8 @@
 
 - [ ] **树级缓存（「第二次观察免费」）——设计再评估后挂起（2026-10-06）**：原设想以窗口 RuntimeId 键控缓存已观察树 + 失效判定。设计推演结论:① 节点级缓存无 COM 代理 → 无法做 locate 缓存式的元素级 RuntimeId 复核,失效判定只剩 WinEvent 钩子(需消息泵线程,工程量大)或有界 TTL(陈旧风险违背 fail-closed);② 主要重复观察方（探索引擎/flow verify）**语义上就需要新鲜帧**（差分/断言）,缓存反而破坏语义;真实重复收益集中在 batch 的连续 find/snapshot——频次低。**结论:价值窄于最初评估,等真实重复消费方出现再立项**;轻量替代（定位缓存/属性预取/provider 快路径）已覆盖主要痛点。
 - [ ] **极端规模重树 A/B（收窄至 Word 级非虚拟化大树）**：provider 支持度与虚拟化交互均已消除（2026-10-07:资源管理器 6866 文件目录实测——列表虚拟化是 provider 侧行为,双模式各见 294 元素/find total=17 一致/输出逐字节一致;虚拟化应用观察树天然保持小,极端规模只能来自 Word 类非虚拟化大树——与 Word 物化验证并轮做）。⚠ 资源管理器关闭纪律:close-window --pid 对 explorer.exe 危险（shell 进程持任务栏/桌面,本轮拒绝属安全巧合）——一律按唯一标题或精确 hwnd 关,勿按 pid。
+- [ ] **键盘/IME 编码语义余量**（[09 §3.5](09-input-backends-review.md)）：VK/扫描码/扩展键/左右修饰键/目标线程布局未成完整模型；中文输入刚需已由 `--paste` 剪贴板通道覆盖，余量是编码完备性边界（方向键/数字键盘/代理对等）——按真实失败案例收口，不预防性铺
+- [ ] **无人值守调度（定位裁定：当前不立项）**：触发层归上层（agent 侧调度），actl 不做 scheduler/常驻（PRD 非目标：触发面板/热键、常驻 agent）；出现真实需求时按 PRD §1.3 另行评审
 
 ## 维护
 
