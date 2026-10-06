@@ -153,10 +153,37 @@ fn tree_bounded_mode(
     // Office 可 ACTL_UIA_WATCHDOG_MS 放宽,010 实测 60s 有效)。
     let _watchdog = crate::watchdog::enter();
     let auto = UIAutomation::new().map_err(crate::internal)?;
+    let legacy = live || std::env::var_os("ACTL_WALK_LEGACY").is_some_and(|v| v != "0");
+    // 观察分支:物化默认,provider 拒答/结构损坏时自动回落逐节点(观察只读,
+    // 回落代价只是一次慢遍历——Word 的 MSAA 桥在大树/兼容模式上报
+    // 「Malformed Cacheresponse pTreeStructure」类缓存结构损坏,2026-10-06
+    // 实证;legacy 的错误如实上抛,不静默吞)。
+    if legacy {
+        let cache = make_cache(&auto, TreeScope::Element)?;
+        collect_per_node(root, depth, limit, &cache)
+    } else {
+        let cache = make_cache(&auto, TreeScope::Subtree)?;
+        match root
+            .build_updated_cache(&cache)
+            .map_err(crate::internal)
+            .and_then(|materialized| {
+                collect(materialized, depth, limit, |element| {
+                    Ok(element.get_cached_children().unwrap_or_default())
+                })
+            }) {
+            Ok(observed) => Ok(observed),
+            Err(error) => {
+                eprintln!("· 物化被 provider 拒答({error:?}),回落逐节点遍历");
+                let cache = make_cache(&auto, TreeScope::Element)?;
+                collect_per_node(root, depth, limit, &cache)
+            }
+        }
+    }
+}
+
+/// 构建带属性预取的缓存请求(scope 决定观察物化形态或逐节点属性)。
+fn make_cache(auto: &UIAutomation, scope: TreeScope) -> Result<UICacheRequest, CtlError> {
     let cache = auto.create_cache_request().map_err(crate::internal)?;
-    // 属性预取(2026-10-06 性能轮):Name/ControlType/AutomationId/ProcessId 入缓存请求——消费端
-    // (collect_matches/append_observed/observed_identity)逐元素三连读变零往返缓存读
-    // (真机 A/B:find --name 2.4-2.6s vs 无预取 5.7-7.0s;纯 walk 中性)。cached-first 回退实时。
     for property in [
         UIProperty::Name,
         UIProperty::ControlType,
@@ -166,34 +193,28 @@ fn tree_bounded_mode(
         cache.add_property(property).map_err(crate::internal)?;
     }
     let condition = auto.create_true_condition().map_err(crate::internal)?;
-    cache
-        .set_tree_filter(condition.clone())
-        .map_err(crate::internal)?;
-    let legacy = live || std::env::var_os("ACTL_WALK_LEGACY").is_some_and(|v| v != "0");
-    let materialized_scope = if legacy {
-        TreeScope::Element
-    } else {
-        TreeScope::Subtree
-    };
-    cache
-        .set_tree_scope(materialized_scope)
-        .map_err(crate::internal)?;
-    if legacy {
-        // 逐节点 RPC 遍历(动作链默认/原实现,属性预取保留)。
-        collect(root.clone(), depth, limit, |element| {
-            crate::observation_query::children(
-                element,
-                &condition,
-                &cache,
-                crate::observation_query::Scope::ElementChildren,
-            )
-        })
-    } else {
-        let materialized = root.build_updated_cache(&cache).map_err(crate::internal)?;
-        collect(materialized, depth, limit, |element| {
-            Ok(element.get_cached_children().unwrap_or_default())
-        })
-    }
+    cache.set_tree_filter(condition).map_err(crate::internal)?;
+    cache.set_tree_scope(scope).map_err(crate::internal)?;
+    Ok(cache)
+}
+
+/// 逐节点 RPC 遍历(动作链默认/原实现,属性预取保留)。
+fn collect_per_node(
+    root: &UIElement,
+    depth: u32,
+    limit: usize,
+    cache: &UICacheRequest,
+) -> Result<Observed<UIElement>, CtlError> {
+    let auto = UIAutomation::new().map_err(crate::internal)?;
+    let condition = auto.create_true_condition().map_err(crate::internal)?;
+    collect(root.clone(), depth, limit, |element| {
+        crate::observation_query::children(
+            element,
+            &condition,
+            cache,
+            crate::observation_query::Scope::ElementChildren,
+        )
+    })
 }
 
 pub(crate) fn children(root: &UIElement) -> Result<Vec<UIElement>, CtlError> {
