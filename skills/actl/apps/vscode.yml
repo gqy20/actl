@@ -1,3 +1,4 @@
+# 2026-10-07：子树物化真机验证轮——Electron/Chromium provider 支持 Subtree 缓存物化(两模式 snapshot 输出逐字节一致),物化 ~1.4-1.5x(372 节点交错 A/B 中位);ACTL_WALK_LEGACY=1 为逐节点对照/回落。空 profile+资源管理器树约 372 节点,automation id 集中在 workbench.parts.*/status.*(与 within:id 路线吻合)。
 # 2026-09-29：新版 vscode-edit workflow 26/26 通过；未按原样执行的通用路线仍为 manual，verified_date 保留档案历史日期。
 # 来源: docs/24-application-adaptation-round1.md；docs/25-deep-edit-search-tests.md；docs/27-batch1-deep-tests.md。
 pack_format: 1
