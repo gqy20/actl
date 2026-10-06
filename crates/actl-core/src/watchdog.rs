@@ -16,6 +16,8 @@ use std::time::Duration;
 static DEADLINE_MS: AtomicU64 = AtomicU64::new(0);
 /// 最近一次进展的绝对时刻(unix ms),供终止诊断报"卡了多久"。
 static LAST_PROGRESS_MS: AtomicU64 = AtomicU64::new(0);
+/// 武装时配置的期限宽度(unix ms);reset 续命用——进展即续满整窗。
+static ARMED_WINDOW_MS: AtomicU64 = AtomicU64::new(0);
 
 const ENV_MS: &str = "ACTL_WATCHDOG_MS";
 /// 看门狗默认期限:2 分钟(2026-10-06 由 300s 降档)。合法长路径全部带心跳
@@ -28,6 +30,7 @@ pub const DEFAULT_MS: u64 = 120_000;
 /// 武装看门狗并启动监视线程;`timeout_ms == 0` 显式关闭(调试/诊断用)。
 /// 幂等:重复调用只刷新期限,不叠加线程。
 pub fn arm(timeout_ms: u64) {
+    ARMED_WINDOW_MS.store(timeout_ms, Ordering::Relaxed);
     DEADLINE_MS.store(unix_ms() + timeout_ms, Ordering::Relaxed);
     LAST_PROGRESS_MS.store(unix_ms(), Ordering::Relaxed);
     if timeout_ms == 0 {
@@ -63,15 +66,18 @@ pub fn arm(timeout_ms: u64) {
 /// 进展心跳:重置期限。调用点 = 有界循环的每一轮(步派发/等待轮询/
 /// 恢复重试/录制事件)。未武装时为无操作。
 pub fn reset() {
-    let deadline = DEADLINE_MS.load(Ordering::Relaxed);
-    if deadline == 0 {
-        return;
+    let window = ARMED_WINDOW_MS.load(Ordering::Relaxed);
+    if window == 0 {
+        return; // 未武装(或显式关闭)
     }
     let now = unix_ms();
     LAST_PROGRESS_MS.store(now, Ordering::Relaxed);
-    // 期限按当前时刻顺延:进展即续命,总时长不受限。
-    let span = deadline.saturating_sub(now);
-    DEADLINE_MS.store(now + span, Ordering::Relaxed);
+    // 进展即续满整窗(P0 修复 2026-10-06):原实现 span = deadline-now 后
+    // deadline = now+span 是恒等式——期限从不移动,看门狗退化为「总时长
+    // 硬顶」。300s 默认时代长期潜伏(整轮 <300s 掩盖),降档 120s 后被
+    // 010 实证引爆:fill-3 进展正常(杀进程消息「no progress for 110ms」
+    // ——进展明明在发生)仍被杀。语义:心跳每跳一次,无进展窗口从头计。
+    DEADLINE_MS.store(now + window, Ordering::Relaxed);
 }
 
 /// 环境配置:ACTL_WATCHDOG_MS(毫秒;0=关)。缺省 DEFAULT_MS。
