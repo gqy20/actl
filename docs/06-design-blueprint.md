@@ -266,6 +266,16 @@ UIA 看门狗(引擎行为):定位/树观察/焦点查询区段超过 ACTL_UIA_W
   (冷 provider 合法慢扫描在整段口径下被 20s 误杀,网易云全树三度中止实证);
   单槽约束:嵌套 enter/drop 会清零外层区段——嵌套守卫调用之后不得再依赖
   外层区段(scroll_element 两段式先例)。
+**子树物化（2026-10-07,方案2——观察面的 N→1 往返收口）**：树观察的缓存请求
+  `TreeScope=Subtree`——`build_updated_cache` **一次调用**把整棵子树+属性+父子链接
+  拉进本地缓存,树遍历走 `get_cached_children()`(纯本地,零跨进程往返)——N 次
+  children 往返变 1 次物化调用(屏幕阅读器同款技术)。collect 循环原封不动
+  (上限/顺序/refs 编号语义逐字节保留——真机 diff 实证)。物化是单次长调用,
+  UIA 区段 20s 限即其界(巨树 `ACTL_UIA_WATCHDOG_MS` 放宽);个别 provider 对
+  Subtree 缓存支持差或对照实验时 `ACTL_WALK_LEGACY=1` 回落逐节点 RPC 遍历。
+  真机:记事本 find --name 615ms(逐节点 776ms,预取版 2.4s,原始 5.7s);
+  计算器 XAML 同过。**子串搜索(网易云 126s 痛点)的 0 命中探测同趟免费**
+  (物化+过滤一次完成,方案3 被吸收)。
 **find --id provider 快路径(2026-10-06)**:单一精确条件(--id,无 --name/--role)
   时走 Subtree FindAll + AutomationId 等值条件——单次跨进程调用替代全树遍历
   (真机:记事本 258ms vs 全树 1146ms,重树上分钟级→秒级)。id 为精确等值

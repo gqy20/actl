@@ -117,7 +117,14 @@ pub(crate) fn tree_bounded(
     depth: u32,
     limit: usize,
 ) -> Result<Observed<UIElement>, CtlError> {
-    // 看门狗区段:树观察遍历 provider 全树,是 COM 挂起的高发面(docs/81 §8)
+    // 看门狗区段:树观察遍历 provider 全树,是 COM 挂起的高发面(docs/81 §8)。
+    // 2026-10-07 子树物化(方案2,屏幕阅读器同款技术):缓存请求 TreeScope=
+    // Subtree——一次 build_updated_cache 把整棵子树+属性+父子链接拉进本地,
+    // collect 的 children 闭包改走 get_cached_children()(纯本地,零跨进程
+    // 往返)——N 次往返变 1 次。collect 循环原封不动(上限/顺序/refs 编号
+    // 语义完全保留)。物化是单次长调用,UIA 区段 20s 限即它的界(巨树可
+    // ACTL_UIA_WATCHDOG_MS 放宽);个别 provider 对 Subtree 缓存支持差时
+    // ACTL_WALK_LEGACY=1 回落逐节点 RPC 遍历(亦是重树 A/B 的对照组)。
     let _watchdog = crate::watchdog::enter();
     let auto = UIAutomation::new().map_err(crate::internal)?;
     let cache = auto.create_cache_request().map_err(crate::internal)?;
@@ -136,17 +143,31 @@ pub(crate) fn tree_bounded(
     cache
         .set_tree_filter(condition.clone())
         .map_err(crate::internal)?;
+    let legacy = std::env::var_os("ACTL_WALK_LEGACY").is_some_and(|v| v != "0");
+    let materialized_scope = if legacy {
+        TreeScope::Element
+    } else {
+        TreeScope::Subtree
+    };
     cache
-        .set_tree_scope(TreeScope::Element)
+        .set_tree_scope(materialized_scope)
         .map_err(crate::internal)?;
-    collect(root.clone(), depth, limit, |element| {
-        crate::observation_query::children(
-            element,
-            &condition,
-            &cache,
-            crate::observation_query::Scope::ElementChildren,
-        )
-    })
+    if legacy {
+        // 逐节点 RPC 遍历(原实现,属性预取保留)。
+        collect(root.clone(), depth, limit, |element| {
+            crate::observation_query::children(
+                element,
+                &condition,
+                &cache,
+                crate::observation_query::Scope::ElementChildren,
+            )
+        })
+    } else {
+        let materialized = root.build_updated_cache(&cache).map_err(crate::internal)?;
+        collect(materialized, depth, limit, |element| {
+            Ok(element.get_cached_children().unwrap_or_default())
+        })
+    }
 }
 
 pub(crate) fn children(root: &UIElement) -> Result<Vec<UIElement>, CtlError> {
