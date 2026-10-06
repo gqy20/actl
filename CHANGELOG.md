@@ -15,6 +15,7 @@
 
 ### Fixed
 
+- **lint-packs 选择器形态建议（知识层杠杆,advisory 不计失败）**：⑤ 号检查对 `name:` 步骤给提示——元素有稳定 AutomationId 优先 `id:`（find --id 走 provider 单调用快路径）,`name:` 子串语义保留给无 id 元素（Electron/CEF 系普遍无 automation id）。现状点名 7 pack 共 20 处（微信 7/腾讯会议 4/Zotero 4 等——多为无 id 应用,属合理保留）;选择器优先级约定入 [PACKS.md](skills/actl/PACKS.md)。**不做无证据的 name:→id: 批量改写**（真实观察确认 id 存在才改,先探测再写死纪律）。
 - **树扫描属性预取（2026-10-06 性能轮）**：`tree_bounded` 的缓存请求带上 Name/ControlType/AutomationId/ProcessId——walk 后的逐元素三连读（collect_matches/append_observed/observed_identity 各自 get_*）从 N×3 次跨进程往返变为**零往返缓存读**（cached-first 助手,非 walk 来源元素回退实时读）。真机 A/B（记事本,同窗热态）：`find --name` 2.4-2.6s（低方差）vs 无预取 5.7-7.0s——**~2.5×**;纯 walk 路径中性;重树（往返主导）理论收益更大,受控 A/B 待后续轮。
 - **Located 出域审计收口 + 树扫描区段口径（2026-10-06,[06 析构纪律](docs/06-design-blueprint.md) 覆盖面扩展）**：select_option/toggle_element/pointer 家族(physical/drag×2/drag_path/scroll)/type_text/press_keys_targeted 全部收编 into_info 显式 drop 模式——**COM 元素不再跨函数出 actl-uia 域**(返回值全部元数据化;type_text 经 wrapper+inner 保 RAII 守卫生命周期,drag_physical 行尾第三次冗余重定位一并消除);树扫描 collect 前沿循环补 `rearm()` 逐节点重臂——区段口径从「整段 wall clock」变「单次跨进程调用」(冷 provider 合法慢扫描曾被 20s 误杀,网易云全树三度中止实证),单槽嵌套约束入契约文档。
 - **find --id provider 侧快路径（[06](docs/06-design-blueprint.md)）**：单一精确条件走 Subtree FindAll + AutomationId 等值——单次跨进程调用替代全树遍历(真机:记事本 258ms vs 1146ms,重树分钟级→秒级);命中走 L4 同形态(`resolved_by:"provider-exact"`,无快照绑定),无命中回落全树路径保契约。**--name/--role 子串语义不走此路径(UIA 属性条件仅等值——诚实边界)**。

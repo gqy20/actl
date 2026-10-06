@@ -598,6 +598,32 @@ fn lint_packs(dir_arg: Option<&str>) -> ExitCode {
                 bad += 1;
             }
         }
+        // ⑤ 选择器形态建议(知识层,advisory 不计失败):name: 走全树扫描,
+        // id: 走 provider 单调用快路径(2026-10-06 性能轮)——元素有稳定
+        // AutomationId 时优先 id:;name: 子串语义保留给无 id 的元素。
+        let mut name_selectors = 0usize;
+        for line in text.lines() {
+            let Some(start) = line.find("[\"") else {
+                continue;
+            };
+            let rest = &line[start + 2..];
+            let Some(cmd_end) = rest.find('"') else {
+                continue;
+            };
+            let rest = rest[cmd_end + 1..].trim_start();
+            let rest = rest.strip_prefix(',').unwrap_or(rest).trim_start();
+            if let Some(sel) = rest.strip_prefix('"')
+                && let Some(sel_end) = sel.find('"')
+                && sel[..sel_end].starts_with("name:")
+            {
+                name_selectors += 1;
+            }
+        }
+        if name_selectors > 0 {
+            eprintln!(
+                "· 提示 {rel}: {name_selectors} 处 name: 选择器——元素若有稳定 AutomationId 优先 id:(provider 快路径,单次跨进程调用;name: 子串语义保留给无 id 元素)"
+            );
+        }
     }
     if files == 0 {
         eprintln!("✗ lint-packs: no .yml packs found");
