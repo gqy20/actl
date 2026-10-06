@@ -57,6 +57,21 @@ impl SignalPaths {
             }
         }
     }
+
+    /// 错误路径专用(2026-10-06 基建②完整状态联动):**无锁**尽力读——错误
+    /// 构造不得阻塞(控制锁可能被运行中的调用持有);读不出标 unavailable,
+    /// 不影响错误语义。诊断面:拒绝错误自述 execution 态 + 检查指引。
+    pub fn execution_status_best_effort(&self) -> serde_json::Value {
+        let generation = fs::read_to_string(self.generation_file()).ok();
+        let stop = generation
+            .as_deref()
+            .and_then(|g| self.read_stop(g).ok().flatten());
+        serde_json::json!({
+            "state": if stop.is_some() { "stopped" } else if generation.is_some() { "ready" } else { "unavailable" },
+            "generation": generation,
+            "paused_runs_hint": "actl execution-status / actl flow-status",
+        })
+    }
     fn generation_file(&self) -> std::path::PathBuf {
         self.dir.join("stop-generation")
     }

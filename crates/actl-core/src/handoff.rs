@@ -246,7 +246,13 @@ pub fn error(reason: &str) -> crate::CtlError {
     crate::CtlError::with_evidence(
         crate::ErrorCode::NotActionable,
         "desktop handoff required; user must choose Start/Continue in actl, then re-observe before retrying interrupted work",
-        serde_json::json!({"stage":"handoff", "reason":reason, "retry_input":false}),
+        serde_json::json!({
+            "stage":"handoff", "reason":reason, "retry_input":false,
+            // 状态联动(2026-10-06 基建②):拒绝自述 execution 态——暂停守护
+            // 拒绝时调用方直接看到「是谁持有现场」,不必反查。无锁尽力读,
+            // 错误路径不阻塞。
+            "execution": crate::state::SignalPaths::default().execution_status_best_effort(),
+        }),
     )
 }
 
