@@ -64,3 +64,8 @@
 1. 完成的实现从本文件移出，写入 CHANGELOG
 2. 新增范围先核对 PRD 非目标
 3. 优先修可靠性与补验收，不以铺命令数量代替业务结果
+
+## 2026-10-06 Word 轮实录（物化第五族验证 + note-typo-010 补跑受阻）
+- **物化 Office 族数据点**：空白文档 93 元素双模式输出逐字节一致、交错 A/B 物化 ~1.55x（各族最高）。
+- **Word×物化交互问题（待根因，重要）**：① 冷启动 Word 的物化单次调用 >20s 被 UIA 区段杀（放宽 60s 后 open 步 234s 完成——逐节点 rearm 语义在冷启动上更耐受）；② focus 步在物化模式 NOT_ACTIONABLE、legacy 模式即恢复（坐实交互问题）；③ 失败采集快照报「无可用运行时身份」（物化元素的 live RuntimeId 读在 Word 上异常——其余四族快照身份实证正常）。**Word/Office 轮走 ACTL_WALK_LEGACY=1 是当前稳妥形态**；根因（cache-only 元素的 pattern/live 读边界）需专门诊断轮。
+- **note-typo-010 补跑（evidence fnv128=2c670b4d）受阻如实保留**：open(234s 冷启动)/ownership/focus 完成（legacy 模式），fill-1 NOT_ACTIONABLE(uncertain) 暂停——Word 实例交互待 flow-evidence 诊断包分析后 flow-resume 续跑；现场（Word 窗口+运行状态）保留。
