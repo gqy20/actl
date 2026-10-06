@@ -20,16 +20,19 @@
 ### 流程与集成
 
 - [ ] 流程扩展（余项）：循环、嵌套分支
+- [ ] flow 歧义候选串联与自动缩小查询（[63](63-simple-workflow-conditions.md) 明言待办归 ROADMAP 而未登记，2026-10-07 差集补录）：候选纠正接 flow 需独立身份与冻结计划协议（[64](64-bounded-observation-recovery.md)）；preview `--candidate` 原语已落地（[46](46-target-preview.md) 第三批）但未与 flow 接线
+- [ ] flow 锚点标题插值：动态标题窗口（如音乐窗口标题随曲目变）静态计划无法锚定，v1 无插值（[43](43-release-review-draft.md) 待 M3 契约扩展）
+- [ ] 执行器保留子命令错误原文：verify-file 的 NOT_ACTIONABLE 在 step 证据仅留 code、丢 message 原文（[68 待办](68-combined-batch-first-round.md)——错误契约自带恢复路径，证据应完整携带）
 - [ ] **选区读取原语（2026-10-07 登记，实施前 spec + PRD §1.3 授权）**：Quicker 类动作的核心上下文通道（[10 §6](10-quicker-demand-research.md) 点名「对 AI 接口最有价值」）——读当前窗口用户选中内容（文本/文件/表格区域），UIA Text/Selection 优先，取不到如实 unavailable 不猜测；与 get-clipboard、`focused:` 合成显式上下文面。若选区只能经 Ctrl+C 获取须显式物理授权并申报焦点/剪贴板影响，不伪装成纯读取
 - [ ] **虚拟化列表全量收集动词（2026-10-07 登记，实施前 spec + PRD §1.3 授权）**：「检索→提取全部结果」任务类的共同缺口——单屏一把读已通（快照/TextPattern 文档通道），虚拟化边界外的条目靠上层手写滚动循环（微信 RecyclerListView、网易云 Electron 列表、资源管理器 ListView、VSCode quickInput 同墙不同组件）。形态：给定容器 ref 的有界收集（滚动→观察→差分→收敛，预算耗尽如实上报截断）；实现形态（flow 循环步骤 vs 引擎有界动词）随 spec 裁定，与「流程扩展（余项）」联动；验收靶候选=资源管理器 fixture（系统自带应用可复现，fixture 清单扩项随实施裁定）
 - [ ] 浏览器通道余量：flow 级 uncertain 持久化、pipe 传输 spike（`--remote-debugging-pipe`）、`--user-agent` 覆盖（headless UA 壁垒站点）、选择器索引消歧、batch 组合验收
 - [ ] **browser-read 列表枚举形态（协议面变更，spec 三件套同 PR）**：CDP 轨多匹配读动词——现状唯一匹配纪律（0→NOT_FOUND、>1→AMBIGUOUS），枚举靠位置谓词绕行（[73 round7](73-browser-twitter-scenario.md)）；批量通道的并行语义契约已预留（[06 P3 修正](06-design-blueprint.md)——CDP 读是唯一预留并行方向）
 - [ ] WebView2 专项验收（键盘跨原生/网页、屏幕阅读器、多屏 DPI、缺失运行时回退）
-- [ ] 中央任务提示专项验收：真实失败/停止/接管暂停、显示端重启后旧流程恢复、跨屏 DPI 与减少动态设置（[75](75-action-start-notification.md)）
+- [ ] 中央任务提示专项验收：真实失败/停止/接管暂停、显示端重启后旧流程恢复、跨屏 DPI 与减少动态设置（[75](75-action-start-notification.md)）；并轨补入：急停真实按钮 + 跨进程解除完整交互（[35](35-stop-lifecycle.md)/[39](39-flow-observation-recovery.md) 尾自 2026-09-28 悬置——真实按钮路径待验收，与真实停止项同轮收口）
 - [ ] agent 自驱授权白名单通道（仅真实需求时立项，[32](32-desktop-handoff.md)）
 - [ ] MCP 远程访问适配（轮 1-2 已实现并活体验证：[82](82-mcp-adapter-research.md) / [06 §7.8](06-design-blueprint.md)；**剩余：跨设备真实客户端接入验收 + 模式 B（SSH/stdio）与 tasks 扩展（轮 3 可选）**）
 - [ ] 本地 serve 与增量观察
-- [ ] 游戏场景（Minecraft 命令通道）
+- [ ] 游戏场景（Minecraft 命令通道）——含指针原语缺口（[17 §3](17-game-scenarios.md) M3 候选，「手工搭」路线才需要）：`mouse-move dx,dy` 增量移动（前置 GLFW raw-input spike）、鼠标按键 down/up 拆分带时长（按住挖掘）、节奏敏感动作时窗参数
 
 ### 应用深化
 
@@ -45,6 +48,9 @@
 
 - [ ] 非开发机 US3 复现（用户裁定 2026-10-02 搁置——作为已知限制已记录于 0.2.0 CHANGELOG；机器到位后补验）
 - [ ] Word 流程 evidence 二进制补跑 note-typo-010（009 真机验收已收口，[81 §9](81-word-style-flow.md)；此为指纹级补强，桌面空闲时执行）
+- [ ] Phase 2 人工/专用环境验收子集（[44](44-phase2-acceptance.md) 表格聚合）：观察故障注入五类（空值/截断/控件重建/虚拟化/provider 故障——[50](50-deep-container-query.md) 的 provider 重建待验收同族）、监听冗余 hook 失效现场验收（[39](39-flow-observation-recovery.md)）、外部对照 Blender/Photoshop/Minecraft 可用环境
+- [ ] 浏览器场景实测余项聚合：B 站登录态真视频页评论读取复验（`bili-deep5.sh`，[16 §7](16-browser-scenarios.md)）；持久 profile 真实站点登录验收待用户选站（[72](72-browser-cdp-integration.md)）；settle 噪声鲁棒（16 登记 M3 候选未动）；epub 临时 profile 删除竞争（[73](73-browser-twitter-scenario.md) v1 缺口五条中唯一未收口——close 后延迟重试）；CUA 检查 CDP 超时孤立核验（[71](71-signal-webview-details.md)）；xhs「展开更多评论」低优先附带
+- [ ] preview-choice computer-use 真机鼠标点击验收（[46](46-target-preview.md)：两轮 "window is not a usable app window" 失败如实保留）
 
 <!-- 2026-10-05 收口移出：录制值读回 #4 双轨收口（rec-ma-12 证据二进制轮，[80](80-record-acceptance.md)）；健壮性基建 009 轮 10 步 155s 全链通过（[81 §9](81-word-style-flow.md)）；网易云收起方向识图证实（pack 同步，Table 树滞留非未收起）——见 CHANGELOG Unreleased。 -->
 
@@ -59,6 +65,8 @@
 - [ ] **极端规模重树 A/B（收窄至 Word 级非虚拟化大树）**：provider 支持度与虚拟化交互均已消除（2026-10-07:资源管理器 6866 文件目录实测——列表虚拟化是 provider 侧行为,双模式各见 294 元素/find total=17 一致/输出逐字节一致;虚拟化应用观察树天然保持小,极端规模只能来自 Word 类非虚拟化大树——与 Word 物化验证并轮做）。⚠ 资源管理器关闭纪律:close-window --pid 对 explorer.exe 危险（shell 进程持任务栏/桌面,本轮拒绝属安全巧合）——一律按唯一标题或精确 hwnd 关,勿按 pid。
 - [ ] **键盘/IME 编码语义余量**（[09 §3.5](09-input-backends-review.md)）：VK/扫描码/扩展键/左右修饰键/目标线程布局未成完整模型；中文输入刚需已由 `--paste` 剪贴板通道覆盖，余量是编码完备性边界（方向键/数字键盘/代理对等）——按真实失败案例收口，不预防性铺
 - [ ] **无人值守调度（定位裁定：当前不立项）**：触发层归上层（agent 侧调度），actl 不做 scheduler/常驻（PRD 非目标：触发面板/热键、常驻 agent）；出现真实需求时按 PRD §1.3 另行评审
+- [ ] **评测基建提案在案（待裁定，不承诺实施）**：[40](40-automated-testing-evaluation.md) 自动化测试评估系统与 [78](78-comparative-benchmark-suite.md) 三方对比测试集均自述「调研+提案，未实施」（78 含六个待用户裁定开放问题）——与「无人值守调度」同款定位裁定形态，裁定期满未启动再明确关闭
+- [ ] **显示层 spec 小项**：device 字段设备粒度折叠（[11 §15.4](11-desktop-interaction-and-display-research.md)「随下一个 spec 批次」）、演示速度配置（[19](19-history-and-user-experience.md) 未实现）
 
 ## 维护
 
