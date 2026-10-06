@@ -4,19 +4,38 @@
 //! OS 前台窗 + 标题语义分类(兼容模式/脏星号/最小化态迹象)。
 use serde_json::{Value, json};
 
-/// 失败现场上下文:前台窗标题/类 + 标题语义分类。两次原生调用,零 UIA。
-pub(crate) fn failure_context() -> Value {
+/// 当前观察目标窗标题(capture 解析窗口后设置;单命令进程内生命周期)。
+thread_local! {
+    static OBSERVATION_TARGET: std::cell::RefCell<Option<String>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// capture/树扫描入口调用:登记本次观察的目标窗标题(失败时上下文汇流用)。
+pub fn set_observation_target(title: &str) {
+    OBSERVATION_TARGET.with(|t| *t.borrow_mut() = Some(title.to_string()));
+}
+
+/// 失败现场上下文:前台窗标题/类 + 观察目标窗 + 各自标题语义分类。
+/// 前台两次原生调用零 UIA;目标窗来自登记(无额外调用)。
+pub fn failure_context() -> Value {
     let foreground = foreground_window();
     let title = foreground
         .as_ref()
         .map(|(t, _)| t.as_str())
         .unwrap_or_default();
+    let target = OBSERVATION_TARGET
+        .with(|t| t.borrow().clone())
+        .unwrap_or_default();
     json!({
         "foreground_window": {
             "title": title,
             "class": foreground.as_ref().map(|(_, c)| c.as_str()).unwrap_or(""),
+            "flags": classify_title(title),
         },
-        "title_flags": classify_title(title),
+        "observation_target": {
+            "title": target,
+            "flags": classify_title(&target),
+        },
     })
 }
 

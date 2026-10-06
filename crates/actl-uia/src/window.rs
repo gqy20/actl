@@ -125,6 +125,8 @@ pub fn capture(app: Option<&str>) -> Result<CaptureResult, CtlError> {
 
     let mut nodes = Vec::new();
     let mut element_identities = Vec::new();
+    // 登记观察目标窗(失败上下文汇流:identity 错误自述目标窗+标题分类)。
+    crate::diagnostic::set_observation_target(&window.title);
     let truncation_reasons = {
         let _t = actl_core::trace::scope("capture.walk");
         walk(

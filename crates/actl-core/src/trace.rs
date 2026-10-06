@@ -85,9 +85,29 @@ pub fn scope(stage: &'static str) -> TraceScope {
 impl Drop for TraceScope {
     fn drop(&mut self) {
         stage(self.stage, self.started);
+        slow_phase_notice(self.stage, self.started);
     }
 }
 
+/// 慢阶段默认告警(2026-10-06 基建③:trace 常态化——代价与信号的平衡点):
+/// 超过阈值的阶段无论 ACTL_TRACE 是否启用都 stderr 一行(快路径零噪音;
+/// 慢阶段是「为何这么久」的第一现场——Word open 12s/locate.dfs 3s 级)。
+/// 阈值默认 2000ms,ACTL_SLOW_SCOPE_MS 可调(0=关)。
+fn slow_phase_notice(stage: &str, started: Instant) {
+    let slow_ms: u128 = std::env::var("ACTL_SLOW_SCOPE_MS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(2000);
+    if slow_ms == 0 {
+        return;
+    }
+    let elapsed = started.elapsed().as_millis();
+    if elapsed >= slow_ms {
+        eprintln!(
+            "[actl-slow] {stage} {elapsed}ms exceeds {slow_ms}ms — set ACTL_TRACE=1 for the full phase breakdown"
+        );
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -19,7 +19,7 @@ use std::time::Instant;
 
 use actl_core::{CtlError, Envelope, ErrorEnvelope};
 use clap::FromArgMatches;
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::cli::{Cli, Command, DesktopCommand, app_of, command_name};
 use crate::{interact::*, query::*};
@@ -757,7 +757,17 @@ fn finish(command_name: &'static str, result: Result<CommandOutput, CtlError>, d
             let _ = std::io::Write::flush(&mut std::io::stdout());
             std::process::exit(0);
         }
-        Err(err) => {
+        Err(mut err) => {
+            // 单命令失败轻量采集(2026-10-06 基建①:flow-evidence 的下沉——
+            // 直连 CLI 失败原本只有错误信封,诊断材料全靠人手工补采):
+            // INTERNAL 级失败自动落一份窗口清单+失败上下文快照,evidence 附
+            // 路径。采集自身失败静默跳过(诊断旁路不得影响错误语义)。
+            if err.code == actl_core::ErrorCode::Internal {
+                if let Some(path) = failure_capture(command_name) {
+                    let evidence = err.evidence.get_or_insert_with(|| json!({}));
+                    evidence["failure_capture"] = json!(path);
+                }
+            }
             let env = ErrorEnvelope::new(command_name, &err, duration_ms);
             println!(
                 "{}",
@@ -772,4 +782,40 @@ fn finish(command_name: &'static str, result: Result<CommandOutput, CtlError>, d
             std::process::exit(code);
         }
     }
+}
+
+/// INTERNAL 失败的轻量采集包:原生窗口清单 + 失败上下文(前台/目标窗/标题
+/// 分类)。纯本地采集(观察失败时 UIA 通道不可信——原生 Win32 走 actl-uia
+/// 的 native_windows);写 `LOCALAPPDATA/actl/failures/<时间戳>.json`。
+fn failure_capture(command_name: &str) -> Option<String> {
+    let dir = std::env::var_os("LOCALAPPDATA")
+        .map(std::path::PathBuf::from)
+        .map(|base| base.join("actl").join("failures"))?;
+    std::fs::create_dir_all(&dir).ok()?;
+    let stamp = actl_core::state::unix_ms();
+    let path = dir.join(format!("{stamp}-{command_name}.json"));
+    let windows = actl_uia::native_windows()
+        .ok()
+        .and_then(|rows| {
+            serde_json::to_value(
+                rows.iter()
+                    .map(|w| {
+                        json!({"title":w.title,"class":w.class,"pid":w.pid,
+                               "hwnd":w.hwnd,"visible":w.visible,"foreground":w.foreground})
+                    })
+                    .collect::<Vec<_>>(),
+            )
+            .ok()
+        })
+        .unwrap_or_else(|| json!("unavailable"));
+    let bundle = json!({
+        "command": command_name,
+        "captured_ms": stamp,
+        "windows": windows,
+        "context": actl_uia::diagnostic::failure_context(),
+    });
+    serde_json::to_vec(&bundle).ok().and_then(|bytes| {
+        std::fs::write(&path, bytes).ok()?;
+        Some(path.to_string_lossy().into_owned())
+    })
 }
