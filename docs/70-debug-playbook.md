@@ -32,6 +32,16 @@
 （Internal 纳入是 2026-09-30 实证：冷启动窗口 UIA 抖动，有界 3 次/15s 不吞真错误）。
 **给易瞬态的步骤配 recovery 预算是模板标配**（vscode 7 步、zotero 9 步、excel 13 步已配）。
 
+**`wait --stable` 手写参数建议**（third-hand 消费级 settle 轮询的对照参数，见
+[08 增补](08-agent-cli-jev-design-proposal.md)；`--stable` 采样间隔 settle 250ms、
+连续两次不变即判稳是引擎默认）：
+- 走完一次写/导航后要判稳，`--timeout` 给 **≥3000ms**：动画/搜索结果类常见 1-2s
+  中间重绘，250ms×2 的默认口径会以"稳定"接受一个中间态——预算小于 3s 的
+  settle 等于没等；
+- 判稳通过≠业务生效：`--stable` 采样通道是 text > value > name 的元素视图，
+  配 `verify`/`verify-file` 收业务断言（ensure-element-value.yml 的两段式）；
+- 双快照对照（`snapshot-diff`）前先 `--stable`，否则差分里全是过渡帧噪声。
+
 ## 3. Windows 原生表面 vs 引擎正斜杠约定
 
 引擎把 `${run.dir}` 统一正斜杠（记录一致性），但三个原生表面拒收正斜杠，全部实证过：

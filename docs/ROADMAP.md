@@ -20,7 +20,7 @@
 ### 流程与集成
 
 - [ ] 流程扩展（余项）：循环、嵌套分支
-- [ ] flow 歧义候选串联与自动缩小查询（[63](63-simple-workflow-conditions.md) 明言待办归 ROADMAP 而未登记，2026-10-07 差集补录）：候选纠正接 flow 需独立身份与冻结计划协议（[64](64-bounded-observation-recovery.md)）；preview `--candidate` 原语已落地（[46](46-target-preview.md) 第三批）但未与 flow 接线
+- [ ] flow 歧义候选串联与自动缩小查询（[63](63-simple-workflow-conditions.md) 明言待办归 ROADMAP 而未登记，2026-10-07 差集补录）：候选纠正接 flow 需独立身份与冻结计划协议（[64](64-bounded-observation-recovery.md)）；preview `--candidate` 原语已落地（[46](46-target-preview.md) 第三批）但未与 flow 接线；AMBIGUOUS 证据已附 context 上下文行（2026-10-08，重复标签带所在容器文本——串联的候选输入面已备，[08 §13](08-agent-cli-jev-design-proposal.md)）
 - [ ] flow 锚点标题插值：动态标题窗口（如音乐窗口标题随曲目变）静态计划无法锚定，v1 无插值（[43](43-release-review-draft.md) 待 M3 契约扩展）
 - [ ] 执行器保留子命令错误原文：verify-file 的 NOT_ACTIONABLE 在 step 证据仅留 code、丢 message 原文（[68 待办](68-combined-batch-first-round.md)——错误契约自带恢复路径，证据应完整携带）
 - [ ] **选区读取原语（2026-10-07 登记，实施前 spec + PRD §1.3 授权）**：Quicker 类动作的核心上下文通道（[10 §6](10-quicker-demand-research.md) 点名「对 AI 接口最有价值」）——读当前窗口用户选中内容（文本/文件/表格区域），UIA Text/Selection 优先，取不到如实 unavailable 不猜测；与 get-clipboard、`focused:` 合成显式上下文面。若选区只能经 Ctrl+C 获取须显式物理授权并申报焦点/剪贴板影响，不伪装成纯读取
@@ -30,6 +30,7 @@
 - [ ] WebView2 专项验收（键盘跨原生/网页、屏幕阅读器、多屏 DPI、缺失运行时回退）
 - [ ] 中央任务提示专项验收：真实失败/停止/接管暂停、显示端重启后旧流程恢复、跨屏 DPI 与减少动态设置（[75](75-action-start-notification.md)）；并轨补入：急停真实按钮 + 跨进程解除完整交互（[35](35-stop-lifecycle.md)/[39](39-flow-observation-recovery.md) 尾自 2026-09-28 悬置——真实按钮路径待验收，与真实停止项同轮收口）
 - [ ] agent 自驱授权白名单通道（仅真实需求时立项，[32](32-desktop-handoff.md)）
+- [ ] Jev 任务模式闭环（仅真实需求时立项，[08 §13 增补](08-agent-cli-jev-design-proposal.md)——third-hand 实证对照、弱完成证据不采纳的立场与切入点修正：增量在探索决策步/AMBIGUOUS 消歧/任务闭环，不在 grounding；前置零件 AMBIGUOUS context 与 `find --capable` 已落地，候选工程先于模型）
 - [ ] MCP 远程访问适配（轮 1-2 已实现并活体验证：[82](82-mcp-adapter-research.md) / [06 §7.8](06-design-blueprint.md)；**剩余：跨设备真实客户端接入验收 + 模式 B（SSH/stdio）与 tasks 扩展（轮 3 可选）**）
 - [ ] 本地 serve 与增量观察
 - [ ] 游戏场景（Minecraft 命令通道）——含指针原语缺口（[17 §3](17-game-scenarios.md) M3 候选，「手工搭」路线才需要）：`mouse-move dx,dy` 增量移动（前置 GLFW raw-input spike）、鼠标按键 down/up 拆分带时长（按住挖掘）、节奏敏感动作时窗参数
