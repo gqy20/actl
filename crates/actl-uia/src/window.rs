@@ -1172,8 +1172,6 @@ fn runtime_ids_match(recorded: &[i32], current: &[i32]) -> bool {
     !recorded.is_empty() && recorded == current
 }
 
-/// 朴素分类提示(不裁决,判读归调用方):按弹窗文本关键词给类别。
-
 /// 停靠面板白名单(门禁降噪):常驻面板名称词——命中且无弹窗语义文本
 /// (保存/确认/错误/更新)即视为停靠面板,不进前台引导层。保守设计:
 /// 只降噪已知词,新面板仍走 unknown 拦截(误放行代价 >> 误拦截代价,
@@ -1202,6 +1200,7 @@ fn is_docked_pane(text: &str) -> bool {
     let has_dialog = dialog_markers.iter().any(|m| text.contains(m));
     hit_pane && !has_dialog
 }
+/// 朴素分类提示(不裁决,判读归调用方):按弹窗文本关键词给类别。
 fn classify_front_text(text: &str) -> &'static str {
     if text.contains("找不到") || text.contains("错误") || text.contains("失败") {
         "error"

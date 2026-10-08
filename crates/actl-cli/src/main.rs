@@ -764,11 +764,11 @@ fn finish(command_name: &'static str, result: Result<CommandOutput, CtlError>, d
             // 直连 CLI 失败原本只有错误信封,诊断材料全靠人手工补采):
             // INTERNAL 级失败自动落一份窗口清单+失败上下文快照,evidence 附
             // 路径。采集自身失败静默跳过(诊断旁路不得影响错误语义)。
-            if err.code == actl_core::ErrorCode::Internal {
-                if let Some(path) = failure_capture(command_name) {
-                    let evidence = err.evidence.get_or_insert_with(|| json!({}));
-                    evidence["failure_capture"] = json!(path);
-                }
+            if err.code == actl_core::ErrorCode::Internal
+                && let Some(path) = failure_capture(command_name)
+            {
+                let evidence = err.evidence.get_or_insert_with(|| json!({}));
+                evidence["failure_capture"] = json!(path);
             }
             let env = ErrorEnvelope::new(command_name, &err, duration_ms);
             println!(

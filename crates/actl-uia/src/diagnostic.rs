@@ -4,7 +4,8 @@
 //! OS 前台窗 + 标题语义分类(兼容模式/脏星号/最小化态迹象)。
 use serde_json::{Value, json};
 
-/// 当前观察目标窗标题(capture 解析窗口后设置;单命令进程内生命周期)。
+// 当前观察目标窗标题(capture 解析窗口后设置;单命令进程内生命周期)。
+// (thread_local! 宏调用不携带文档注释——rustdoc 不为其生成文档)
 thread_local! {
     static OBSERVATION_TARGET: std::cell::RefCell<Option<String>> =
         const { std::cell::RefCell::new(None) };
