@@ -32,8 +32,8 @@ pub mod watchdog;
 
 pub use keys::{Key, KeySpec, parse_key_expr};
 pub use snapshot::{
-    ElementOut, INTERACTIVE_ROLES, Projection, SnapshotBuilder, SnapshotOutput, UiNode,
-    is_interactive_role, new_snapshot_id,
+    Capability, ElementOut, INTERACTIVE_ROLES, Projection, SnapshotBuilder, SnapshotOutput, UiNode,
+    is_click_target_role, is_interactive_role, is_type_input_role, new_snapshot_id,
 };
 pub use target::{Target, parse_target};
 

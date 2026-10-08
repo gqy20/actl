@@ -207,14 +207,22 @@ fn property_data(target: &str, info: actl_uia::PropertyInfo) -> Value {
 
 /// find:条件查元素,复用 snapshot 的 ref 编号(同一 DFS,同一编号空间,
 /// find 的 @eN 与 snapshot 的 @eN 可互换)。至少一个过滤条件,反对全树 dump。
+/// `--capable click|type`:role 表派生的建议性动作兼容过滤(06 §3.6),
+/// 零额外属性读;滤空即如实空结果,实际能力以动作时 pattern 判定为准。
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn find_cmd(
     target: Option<&str>,
     name: Option<&str>,
     role: Option<&str>,
     id: Option<&str>,
+    capable: Option<&str>,
     app: Option<&str>,
     limit: Option<usize>,
 ) -> Result<CommandOutput, CtlError> {
+    // 取值校验先于任何 UIA 触碰(参数语义错误与观察失败分开)
+    let capability = capable
+        .map(actl_core::snapshot::Capability::parse)
+        .transpose()?;
     if let Some(raw) = target {
         let target = actl_core::parse_target(raw)?;
         let loc = actl_uia::locate(app, &target, None)?;
@@ -235,12 +243,17 @@ pub(crate) fn find_cmd(
     // 分钟级→秒级;id 精确等值语义与全树过滤等价不漏报)。命中走 L4 同形态
     // (无 @eN ref,target 语义);无命中回落原全树路径(保快照面与 L4 兜底)。
     // --name/--role 为子串语义,UIA 属性条件只支持等值,不走此路径。
+    // --capable 对快路径命中做同口径过滤;滤空回落全树路径重判,非静默分叉。
     if id.is_some() && name.is_none() && role.is_none() {
         let hits = actl_uia::find_by_id_provider(app, id.unwrap_or_default())?;
-        if !hits.is_empty() {
+        let filtered: Vec<_> = hits
+            .into_iter()
+            .filter(|h| capability.is_none_or(|c| c.matches_role(&h.role)))
+            .collect();
+        if !filtered.is_empty() {
             let limit_n = limit.unwrap_or(20);
-            let total = hits.len();
-            let elements: Vec<Value> = hits
+            let total = filtered.len();
+            let elements: Vec<Value> = filtered
                 .iter()
                 .take(limit_n)
                 .map(|h| {
@@ -252,7 +265,7 @@ pub(crate) fn find_cmd(
                 })
                 .collect();
             return Ok(json!({
-                "window": {"title": hits[0].window_title},
+                "window": {"title": filtered[0].window_title},
                 "total": total,
                 "elements": elements,
                 "resolved_by": "provider-exact",
@@ -294,6 +307,7 @@ pub(crate) fn find_cmd(
             id.map(|i| e.automation_id.as_deref() == Some(i))
                 .unwrap_or(true)
         })
+        .filter(|e| capability.map(|c| c.matches_role(&e.role)).unwrap_or(true))
         .collect();
     // 虚拟化容器兜底:已物化树 0 命中且查询可映射为精确属性时,走定位链 L4
     // (ItemContainerPattern;Explorer 文件列表等,US1 开放项)。命中元素不在
@@ -314,6 +328,7 @@ pub(crate) fn find_cmd(
             .as_ref()
             .is_none_or(|r| loc.role.to_lowercase().contains(r))
         && id.is_none_or(|i| loc.automation_id.as_deref() == Some(i))
+        && capability.is_none_or(|c| c.matches_role(&loc.role))
     {
         virtual_hit = Some((
             actl_core::snapshot::ElementOut {

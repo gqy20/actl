@@ -756,6 +756,9 @@ pub(crate) enum Command {
         /// Match AutomationId exactly
         #[arg(long)]
         id: Option<String>,
+        /// Filter by action-compatibility (advisory, role-derived): click | type
+        #[arg(long, conflicts_with = "target")]
+        capable: Option<String>,
         /// Target window by title substring or hwnd:<n> (default: focused window)
         #[arg(long)]
         app: Option<String>,
@@ -1354,7 +1357,7 @@ Errors: NOT_FOUND / AMBIGUOUS | NOT_ACTIONABLE no clickable point or occluded"
             "Example:\n  actl list-windows\n  actl list-windows --native\n  actl list-windows --native --hwnd 123\nEach entry: title/class/pid + stacking facts (foreground, topmost, minimized, visible, z_order 0=top, rect, owner_title).\n--native reads Win32 top-level HWNDs without UIA, including hidden/untitled windows; not a list of task-owned resources. --hwnd requires --native and directly queries one handle, including child windows.\nErrors: INTERNAL native observation failed; never substituted with an empty list | PROTOCOL invalid HWND"
         }
         "find" => {
-            "Example:\n  actl find --name 保存 --role button --app 记事本\nRefs interchangeable with snapshot @eN. Zero realized hits + exact name/id falls through to virtualized containers (resolved_by: item-container).\nErrors: PROTOCOL needs >=1 filter | NOT_FOUND nothing matches"
+            "Example:\n  actl find --name 保存 --role button --app 记事本\n  actl find --capable type --role edit --app 记事本\nRefs interchangeable with snapshot @eN. Zero realized hits + exact name/id falls through to virtualized containers (resolved_by: item-container). --capable click|type is a role-derived advisory filter (type = Edit/Document text holders; actual capability still judged at action time, NOT_ACTIONABLE).\nErrors: PROTOCOL needs >=1 filter | PROTOCOL unknown --capable | NOT_FOUND nothing matches"
         }
         "get-clipboard" => {
             "Example:\n  actl get-clipboard\nErrors: NOT_ACTIONABLE clipboard held by another process"

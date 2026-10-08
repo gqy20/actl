@@ -65,6 +65,47 @@ pub fn is_interactive_role(role: &str) -> bool {
     INTERACTIVE_ROLES.contains(&role)
 }
 
+/// 动作兼容分类(find --capable,06 §3.6):role 表派生的**建议性**筛选,
+/// 零额外属性读——click = 可交互角色减纯文本载体;type = 文本载体
+/// (Edit/Document;Word/浏览器正文即 Document,word-edit 流程实证)。
+/// 实际可操作性以动作时 pattern 分派判定(NOT_ACTIONABLE),本分类不构成承诺。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Capability {
+    Click,
+    TypeInput,
+}
+
+impl Capability {
+    /// 解析 CLI 取值 click|type;未知值 PROTOCOL(参数语义错误)。
+    pub fn parse(raw: &str) -> Result<Self, CtlError> {
+        match raw.trim() {
+            "click" => Ok(Self::Click),
+            "type" => Ok(Self::TypeInput),
+            other => Err(CtlError::protocol(format!(
+                "unknown --capable value {other:?}: expected click | type"
+            ))),
+        }
+    }
+
+    pub fn matches_role(&self, role: &str) -> bool {
+        match self {
+            Self::Click => is_click_target_role(role),
+            Self::TypeInput => is_type_input_role(role),
+        }
+    }
+}
+
+/// 文本输入载体角色(type 的建议性候选池)。
+pub fn is_type_input_role(role: &str) -> bool {
+    role == "Edit" || role == "Document"
+}
+
+/// 点击目标角色:可交互减纯文本载体(Edit/Document 无 Invoke/Toggle 等分派
+/// pattern,click 通常 NOT_ACTIONABLE——从 click 池排除是诚实分类)。
+pub fn is_click_target_role(role: &str) -> bool {
+    is_interactive_role(role) && !is_type_input_role(role)
+}
+
 /// 进程内唯一的短 id(s 前缀 + 时间戳十六进制 + 原子计数)。
 pub fn new_snapshot_id() -> String {
     static COUNTER: AtomicU32 = AtomicU32::new(0);
@@ -342,6 +383,26 @@ mod tests {
             .filter_map(|e| e.ref_id.as_deref())
             .collect();
         assert_eq!(refs, vec!["@e1", "@e2"]); // Button、Edit 依次编号,Window/Pane/Text 无 ref
+    }
+
+    #[test]
+    fn capability_classification_is_role_derived_and_advisory() {
+        // type 池:Edit/Document(Word/浏览器正文即 Document)
+        assert!(Capability::parse("type").unwrap().matches_role("Edit"));
+        assert!(Capability::parse("type").unwrap().matches_role("Document"));
+        // click 池:可交互减纯文本载体
+        assert!(Capability::parse("click").unwrap().matches_role("Button"));
+        assert!(Capability::parse("click").unwrap().matches_role("ListItem"));
+        assert!(!Capability::parse("click").unwrap().matches_role("Edit"));
+        assert!(
+            !Capability::parse("click").unwrap().matches_role("Text"),
+            "非交互角色"
+        );
+        assert!(!Capability::parse("type").unwrap().matches_role("Button"));
+        // 未知取值 PROTOCOL;取值 trim 容忍
+        let err = Capability::parse("bogus").unwrap_err();
+        assert_eq!(err.code, ErrorCode::Protocol);
+        assert!(Capability::parse(" click ").is_ok());
     }
 
     #[test]

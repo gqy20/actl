@@ -520,6 +520,32 @@ fn commands_schema_carries_view_and_stable_args() {
         find_args("wait").contains(&"stable".to_string()),
         "wait schema lists stable"
     );
+    assert!(
+        find_args("find").contains(&"capable".to_string()),
+        "find schema lists capable"
+    );
+}
+
+#[test]
+fn find_help_documents_capable_filter() {
+    // spec:--capable click|type 建议性动作兼容过滤(角色表派生,零额外属性
+    // 读;实际能力动作时 pattern 判定)。help 四要素齐备进 after_help 表。
+    let (code, stdout) = actl(&["find", "--help"]);
+    assert_eq!(code, 0);
+    assert!(stdout.contains("--capable"), "help: {stdout}");
+    assert!(stdout.contains("click | type"), "help: {stdout}");
+    assert!(stdout.contains("role-derived advisory"), "help: {stdout}");
+    assert!(stdout.contains("Errors:"), "help: {stdout}");
+}
+
+#[test]
+fn find_unknown_capable_value_is_protocol() {
+    // --capable 取值白名单:未知值 PROTOCOL,且在触碰 UIA 之前拒绝
+    let (code, stdout) = actl(&["find", "--name", "anything", "--capable", "bogus"]);
+    assert_eq!(code, 2);
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
+    assert_eq!(v["error"]["code"], "PROTOCOL", "{v}");
+    assert!(v["error"]["message"].as_str().unwrap().contains("capable"));
 }
 
 #[test]

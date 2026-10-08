@@ -173,7 +173,7 @@ actl find --target 'uia:{"match":{"role":"Button","name":"确定"},"within":{"id
 - get/click/type/set-value/select/toggle/指针命令/press --target/extract/screenshot --element/
   verify/wait 的元素目标均接受该形式，动作与输入护栏不变。物理鼠标仍要求原命令的显式授权。
   wait 对组合定位的观察错误直接传播，不将其当作消失；NOT_FOUND 仍表示尚未出现或已消失。
-- `find --target <uia:JSON>` 用于唯一定位诊断，与旧过滤 flags 及 limit 互斥；输出
+- `find --target <uia:JSON>` 用于唯一定位诊断，与旧过滤 flags（含 --capable）及 limit 互斥；输出
   `{window:{title},total:1,elements:[{ref:null,role,name,automation_id,target}],resolved_by:"uia-composite"}`，
   不返回 snapshot_id。带 resolved_by 的命令响应同样标识 uia-composite。
 - flow 在执行任何步骤前校验各目标位置及 element: 后置条件里的组合查询，正文参数不按选择器解释。
@@ -214,6 +214,10 @@ snapshot [--app X] [--skeleton]     # 可交互元素树 + @eN ref + snapshot_id
                                      # 窗口无 Document → NOT_FOUND,不静默回退)
 find --role button [--name "确定"]   # 条件查元素(带 ref);与 snapshot 的分工见 §3.6
                                      # 已物化树 0 命中且可映射精确属性时走 L4 虚拟化容器(§5)
+                                     # --capable click|type:role 表派生的建议性动作兼容过滤
+                                     # (type=Edit/Document 文本载体,click=可交互减文本载体)——
+                                     # 零额外属性读,滤空即如实空结果;实际能力仍以动作时
+                                     # pattern 判定为准(NOT_ACTIONABLE),分类不构成承诺
 get @e3 [--property p] [--raw]      # 读元素属性;--raw 全量含 pattern 支持(合并原 inspect)
                                      # property 白名单含 text(TextPattern 文档正文专用通道,
                                      # 与 value 分工:Chromium 的 Document Value=URL 会掩盖正文)
