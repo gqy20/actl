@@ -39,6 +39,45 @@ pub(crate) struct Entry<T> {
     pub parent: Option<usize>,
 }
 
+/// 候选元素的"上下文行":沿索引父链上溯,最近**具名**祖先的 name。
+/// AMBIGUOUS 证据消歧用(重复标签靠"所在行/容器"文本区分,docs/06 §4):
+/// 遍历根(索引 0,窗口)豁免——标题对调用方已知,无消歧价值;上溯有界
+/// 8 跳;超长截断 120 字符加省略号。名字读走缓存闭包(walk 产物零往返)。
+pub(crate) fn nearest_named_ancestor<T>(
+    entries: &[Entry<T>],
+    index: usize,
+    name: impl Fn(&T) -> Result<String, CtlError>,
+) -> Result<Option<String>, CtlError> {
+    const MAX_HOPS: usize = 8;
+    const MAX_CHARS: usize = 120;
+    let mut hops = 0usize;
+    let mut idx = index;
+    while let Some(parent) = entries[idx].parent {
+        if parent == 0 || hops >= MAX_HOPS {
+            break;
+        }
+        let ancestor_name = name(&entries[parent].element)?;
+        if !ancestor_name.trim().is_empty() {
+            return Ok(Some(truncate_chars(&ancestor_name, MAX_CHARS)));
+        }
+        idx = parent;
+        hops += 1;
+    }
+    Ok(None)
+}
+
+fn truncate_chars(text: &str, max: usize) -> String {
+    if text.chars().count() <= max {
+        return text.to_string();
+    }
+    let cut = text
+        .char_indices()
+        .nth(max)
+        .map(|(i, _)| i)
+        .unwrap_or(text.len());
+    format!("{}…", &text[..cut])
+}
+
 pub(crate) struct Observed<T> {
     pub entries: Vec<Entry<T>>,
     pub reasons: Vec<&'static str>,
@@ -329,6 +368,66 @@ pub(crate) fn parent(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn chain(names: &[&str]) -> Vec<Entry<usize>> {
+        // 线性链:0=根(窗口),i 的父是 i-1;names[i] 即该索引的名字
+        names
+            .iter()
+            .enumerate()
+            .map(|(i, _)| Entry {
+                element: i,
+                depth: i as u32,
+                parent: if i == 0 { None } else { Some(i - 1) },
+            })
+            .collect()
+    }
+
+    #[test]
+    fn nearest_named_ancestor_picks_closest_named_skipping_unnamed() {
+        // 根(名) - 空名 Pane - "List A" - 空名 Cell - 候选:最近具名 = List A
+        let entries = chain(&["Window", "", "List A", "", ""]);
+        let ctx = nearest_named_ancestor(&entries, 4, |i| {
+            Ok(["Window", "", "List A", "", ""][*i].into())
+        });
+        assert_eq!(ctx.unwrap().as_deref(), Some("List A"));
+    }
+
+    #[test]
+    fn nearest_named_ancestor_skips_root_even_when_only_named() {
+        // 直接父就是根:窗口标题不作为上下文(调用方已知 --app)
+        let entries = chain(&["Window", "", ""]);
+        let ctx = nearest_named_ancestor(&entries, 2, |i| Ok(["Window", "", ""][*i].into()));
+        assert_eq!(ctx.unwrap(), None);
+    }
+
+    #[test]
+    fn nearest_named_ancestor_none_when_all_unnamed() {
+        let entries = chain(&["Window", "", "", ""]);
+        let ctx = nearest_named_ancestor(&entries, 3, |i| Ok(["Window", "", "", ""][*i].into()));
+        assert_eq!(ctx.unwrap(), None);
+    }
+
+    #[test]
+    fn nearest_named_ancestor_is_hop_bounded() {
+        // 候选 idx10:祖先 idx9..2 是 8 跳内(全空名),idx1="Far" 在第 9 跳
+        // ——不采(上下文取近不取远,超出即 None)
+        let names = ["Root", "Far", "", "", "", "", "", "", "", "", ""];
+        let entries = chain(&names);
+        let ctx = nearest_named_ancestor(&entries, 10, |i| Ok(names[*i].to_string()));
+        assert_eq!(ctx.unwrap(), None);
+    }
+
+    #[test]
+    fn nearest_named_ancestor_truncates_long_names() {
+        let long = "x".repeat(200);
+        let names = vec!["Window", long.as_str(), ""];
+        let entries = chain(&names);
+        let ctx = nearest_named_ancestor(&entries, 2, |i| Ok(names[*i].to_string()));
+        let ctx = ctx.unwrap().unwrap();
+        assert_eq!(ctx.chars().count(), 121); // 120 + 省略号
+        assert!(ctx.ends_with('…'));
+    }
+
     #[test]
     fn depth_cut_is_not_complete() {
         let result = collect(0, 1, 10, |n| Ok(if *n < 2 { vec![n + 1] } else { vec![] })).unwrap();

@@ -460,28 +460,9 @@ fn select(
             }
         }
     }
-    // AMBIGUOUS + 结构化候选(每个含可重放的 ref)
-    let evidence: Vec<serde_json::Value> = matches
-        .iter()
-        .take(8)
-        .map(|c| {
-            serde_json::json!({
-                "ref": format!("@e{}", c.ref_no),
-                "role": c.role,
-                "name": c.name,
-                "automation_id": c.automation_id,
-            })
-        })
-        .collect();
-    Err(CtlError::with_evidence(
-        ErrorCode::Ambiguous,
-        format!(
-            "{} matches {} elements in the window; pick one by @eN or role ordinal              (--near anchor also applies)",
-            target.describe(),
-            matches.len()
-        ),
-        serde_json::json!({ "candidates": evidence }),
-    ))
+    // AMBIGUOUS + 结构化候选(每个含可重放的 ref;重复标签附 context 上下文行)
+    let shown: Vec<CandidateMeta> = matches.iter().take(8).map(Candidate::meta).collect();
+    Err(ambiguous_error(&target.describe(), matches.len(), &shown))
 }
 
 fn center(r: &uiautomation::types::Rect) -> (i32, i32) {
@@ -511,13 +492,78 @@ fn located_from(
         element: elem,
     })
 }
-/// 定位链候选(ref 与 snapshot 同源编号,可直接重放)
+/// 定位链候选(ref 与 snapshot 同源编号,可直接重放;context = 最近具名
+/// 祖先文本,AMBIGUOUS 证据消歧用,见 ambiguous_error)
 struct Candidate {
     element: UIElement,
     ref_no: u32,
     role: String,
     name: Option<String>,
     automation_id: Option<String>,
+    context: Option<String>,
+}
+
+/// 证据候选的纯元数据面(无 COM 依赖,单测/golden 钉契约用)。
+#[derive(Debug, Clone)]
+struct CandidateMeta {
+    ref_no: u32,
+    role: String,
+    name: Option<String>,
+    automation_id: Option<String>,
+    context: Option<String>,
+}
+
+impl Candidate {
+    fn meta(&self) -> CandidateMeta {
+        CandidateMeta {
+            ref_no: self.ref_no,
+            role: self.role.clone(),
+            name: self.name.clone(),
+            automation_id: self.automation_id.clone(),
+            context: self.context.clone(),
+        }
+    }
+}
+
+/// AMBIGUOUS 错误与候选证据(docs/06 §4 错误码表):每个候选含可重放 @eN;
+/// **重复标签**(trim 后同名,含空名)附 `context` = 所在容器/行的最近具名
+/// 祖先文本——唯一标签自明不带,控制证据体积;重复但无具名祖先时 context
+/// 为 null(如实:消歧需要上下文而树内没有,引导改用 --near / 序数)。
+fn ambiguous_error(target: &str, total: usize, cands: &[CandidateMeta]) -> CtlError {
+    let duplicated: std::collections::HashSet<String> = {
+        let mut seen = std::collections::HashSet::new();
+        let mut dups = std::collections::HashSet::new();
+        for c in cands {
+            let key = c.name.as_deref().unwrap_or("").trim().to_string();
+            if !seen.insert(key.clone()) {
+                dups.insert(key);
+            }
+        }
+        dups
+    };
+    let evidence: Vec<serde_json::Value> = cands
+        .iter()
+        .map(|c| {
+            let mut obj = serde_json::json!({
+                "ref": format!("@e{}", c.ref_no),
+                "role": c.role,
+                "name": c.name,
+                "automation_id": c.automation_id,
+            });
+            if duplicated.contains(c.name.as_deref().unwrap_or("").trim()) {
+                obj["context"] = serde_json::json!(c.context);
+            }
+            obj
+        })
+        .collect();
+    CtlError::with_evidence(
+        ErrorCode::Ambiguous,
+        format!(
+            "{} matches {} elements in the window; pick one by @eN or role ordinal              (--near anchor also applies)",
+            target, total
+        ),
+        serde_json::json!({ "candidates": evidence }),
+    )
 }
 
 /// @eN 在完整观察的树中重放；观察失败与 ref 消失分开。
@@ -555,17 +601,18 @@ fn collect_matches(
     out: &mut Vec<Candidate>,
 ) -> Result<(), CtlError> {
     *counter = 0;
-    for entry in crate::observation::tree_live(elem)?.require_complete()? {
-        let element = entry.element;
-        let role = strict_role(&element)?;
+    let entries = crate::observation::tree_live(elem)?.require_complete()?;
+    for (index, entry) in entries.iter().enumerate() {
+        let element = &entry.element;
+        let role = strict_role(element)?;
         let ref_no = if actl_core::is_interactive_role(&role) {
             *counter += 1;
             *counter
         } else {
             0
         };
-        let name = crate::observation::name_of(&element)?;
-        let id = crate::observation::automation_id_of(&element)?;
+        let name = crate::observation::name_of(element)?;
+        let id = crate::observation::automation_id_of(element)?;
         let hit = match target {
             Target::Name(s) if fuzzy => actl_core::target::fuzzy_contains(&name, s),
             Target::Name(s) => name.contains(s.as_str()),
@@ -574,12 +621,17 @@ fn collect_matches(
             _ => false,
         };
         if hit {
+            // 命中才派生上下文(缓存读零往返);命中集通常窄,代价可忽略
+            let context = crate::observation::nearest_named_ancestor(&entries, index, |e| {
+                crate::observation::name_of(e)
+            })?;
             out.push(Candidate {
-                element,
+                element: element.clone(),
                 ref_no,
                 role,
                 name: Some(name),
                 automation_id: Some(id),
+                context,
             });
         }
     }
@@ -839,9 +891,77 @@ pub fn wait_gone(app: Option<&str>, target: &Target, timeout_ms: u64) -> Result<
 
 #[cfg(test)]
 mod tests {
-    use super::container_query_for;
+    use super::{CandidateMeta, ambiguous_error, container_query_for};
     use actl_core::target::Target;
     use windows::Win32::UI::Accessibility::{UIA_AutomationIdPropertyId, UIA_NamePropertyId};
+
+    fn meta(
+        ref_no: u32,
+        role: &str,
+        name: Option<&str>,
+        automation_id: &str,
+        context: Option<&str>,
+    ) -> CandidateMeta {
+        CandidateMeta {
+            ref_no,
+            role: role.to_string(),
+            name: name.map(str::to_string),
+            automation_id: Some(automation_id.to_string()),
+            context: context.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn ambiguous_evidence_attaches_context_only_for_duplicate_labels() {
+        let cands = vec![
+            meta(1, "Button", Some("Play"), "b1", Some("Hello · Adele")),
+            meta(2, "Button", Some("Play"), "b2", Some("Skyfall · Adele")),
+            meta(5, "Button", Some("Stop"), "b3", Some("irrelevant")),
+        ];
+        let error = ambiguous_error("name:Play", 3, &cands);
+        assert_eq!(error.code, actl_core::ErrorCode::Ambiguous);
+        let evidence = error.evidence.unwrap();
+        let cands = evidence["candidates"].as_array().unwrap();
+        assert_eq!(cands[0]["context"], "Hello · Adele");
+        assert_eq!(cands[1]["context"], "Skyfall · Adele");
+        assert!(
+            cands[2].get("context").is_none(),
+            "unique label carries no context (volume control)"
+        );
+        assert_eq!(cands[0]["ref"], "@e1");
+    }
+
+    #[test]
+    fn ambiguous_evidence_empty_name_duplicates_carry_null_when_no_ancestor() {
+        // 两个空名 Edit:消歧必须靠 context;树内无具名祖先 → null(如实,
+        // 不伪造)——引导调用方改用 --near 锚或序数
+        let cands = vec![
+            meta(3, "Edit", Some(""), "e1", None),
+            meta(4, "Edit", Some(""), "e2", None),
+        ];
+        let error = ambiguous_error("role:Edit", 2, &cands);
+        let evidence = error.evidence.unwrap();
+        let cands = evidence["candidates"].as_array().unwrap();
+        assert_eq!(cands[0]["context"], serde_json::Value::Null);
+        assert_eq!(cands[1]["context"], serde_json::Value::Null);
+    }
+
+    #[test]
+    fn ambiguous_envelope_matches_golden() {
+        // 契约 golden(06 §4 错误码表):证据字段集 ref/role/name/
+        // automation_id + 条件 context;消息与 hint 原样钉住
+        let cands = vec![
+            meta(1, "Button", Some("Play"), "b1", Some("Hello · Adele")),
+            meta(2, "Button", Some("Play"), "b2", Some("Skyfall · Adele")),
+            meta(5, "Button", Some("Stop"), "b3", None),
+        ];
+        let error = ambiguous_error("name:Play", 3, &cands);
+        let envelope = actl_core::ErrorEnvelope::new("find", &error, 0);
+        let expected: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/golden/ambiguous_candidates.json"))
+                .unwrap();
+        assert_eq!(serde_json::to_value(envelope).unwrap(), expected);
+    }
 
     #[test]
     fn l4_maps_name_and_id_to_exact_property_queries() {

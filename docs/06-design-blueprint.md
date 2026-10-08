@@ -492,7 +492,7 @@ L2  actl commands     机器 schema:全命令+参数的 JSON(agent 自发现入�
 | `NOT_FOUND` | 选择器无匹配 | 用 find 放宽条件 |
 | `PERM_DENIED` | 权限不足(UIPI/管理员窗口) | 提示用户以管理员重开,勿重试 |
 | `TIMEOUT` | wait/谓词或 UIA 提供程序明确超时（`UIA_E_TIMEOUT`） | 重估前置状态 |
-| `AMBIGUOUS` | 匹配到多个元素(附候选 evidence,含可重放 @eN) | 收紧条件 / `--near` 锚点 / `role:X#N` 序数 |
+| `AMBIGUOUS` | 匹配到多个元素(附候选 evidence,含可重放 @eN;**重复标签附 `context`**=最近具名祖先文本——所在行/容器,8 跳有界 120 字符截断;无具名祖先时为 null。唯一标签不带 context 控制证据体积) | 收紧条件 / `--near` 锚点 / `role:X#N` 序数 |
 | `NOT_ACTIONABLE` | 元素存在但不可操作(disabled/offscreen) | 先 scroll/focus;hint 会指向 `set-value` |
 | `ASSERTION_FAILED` | `verify`/`--expect` 断言未成立 | 检查前置步骤(`--expect` 默认 2s 轮询后判定) |
 | `PROTOCOL` | 协议/参数错误(不可恢复) | 修正命令参数 |
