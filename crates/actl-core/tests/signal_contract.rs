@@ -202,11 +202,16 @@ fn cancelled_and_partial_actions_never_generate_click_feedback() {
 
 #[test]
 fn handoff_failure_requires_human_and_preserves_machine_reason() {
-    let error = actl_core::handoff::error("human_takeover_or_grant_expired");
+    // execution 态从隔离目录读(2026-10-08 修复):golden 不得依赖本机
+    // %LOCALAPPDATA% 真实代次——基建②(72b2671)给 handoff 证据加 execution
+    // 字段时本测试未同步注入化,机器上有状态即红(主分支既有红项)。
+    let p = paths();
+    let error = actl_core::handoff::error_at(&p, "human_takeover_or_grant_expired");
     let envelope = actl_core::ErrorEnvelope::new("type", &error, 0);
     let expected: serde_json::Value =
         serde_json::from_str(include_str!("golden/handoff_yielded.json")).unwrap();
     assert_eq!(serde_json::to_value(envelope).unwrap(), expected);
+    let _ = std::fs::remove_dir_all(p.dir);
 }
 
 #[test]

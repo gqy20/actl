@@ -9,7 +9,12 @@
     "evidence": {
       "stage": "handoff",
       "reason": "human_takeover_or_grant_expired",
-      "retry_input": false
+      "retry_input": false,
+      "execution": {
+        "state": "unavailable",
+        "generation": null,
+        "paused_runs_hint": "actl execution-status / actl flow-status"
+      }
     }
   },
   "duration_ms": 0

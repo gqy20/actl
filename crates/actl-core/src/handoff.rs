@@ -243,6 +243,13 @@ pub fn external_input(injected: bool, tag: usize) -> bool {
 }
 
 pub fn error(reason: &str) -> crate::CtlError {
+    error_at(&crate::state::SignalPaths::default(), reason)
+}
+
+/// 路径注入版(测试隔离):execution 态从给定目录尽力读。生产路径走
+/// [`error`](fn.error.html)(机器级 %LOCALAPPDATA%)——golden 契约不得
+/// 依赖本机真实代次。
+pub fn error_at(paths: &crate::state::SignalPaths, reason: &str) -> crate::CtlError {
     crate::CtlError::with_evidence(
         crate::ErrorCode::NotActionable,
         "desktop handoff required; user must choose Start/Continue in actl, then re-observe before retrying interrupted work",
@@ -251,7 +258,7 @@ pub fn error(reason: &str) -> crate::CtlError {
             // 状态联动(2026-10-06 基建②):拒绝自述 execution 态——暂停守护
             // 拒绝时调用方直接看到「是谁持有现场」,不必反查。无锁尽力读,
             // 错误路径不阻塞。
-            "execution": crate::state::SignalPaths::default().execution_status_best_effort(),
+            "execution": paths.execution_status_best_effort(),
         }),
     )
 }
