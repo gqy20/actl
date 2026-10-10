@@ -191,7 +191,13 @@ pub fn failure_evidence(policy: EvidencePolicy, error: &CtlError) -> Option<serd
             },
         );
     }
-    let mut value = serde_json::json!({"redacted":true});
+    let mut value = serde_json::json!({
+        "redacted": true,
+        // 错误原文(docs/68 待办收口):message 来自错误契约本身(envelope
+        // 已公开),不属于被 redaction 保护的秘密载荷——有界 200 字符随
+        // 证据携带,恢复路径不再需要重放才能看到失败原因。
+        "message": message_excerpt(error),
+    });
     for key in ["property", "channel", "comparison"] {
         if let Some(v) = source.get(key) {
             value[key] = v.clone();

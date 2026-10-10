@@ -21,7 +21,6 @@
 
 - [ ] 流程扩展（余项）：循环、嵌套分支
 - [ ] flow 锚点标题插值：动态标题窗口（如音乐窗口标题随曲目变）静态计划无法锚定，v1 无插值（[43](43-release-review-draft.md) 待 M3 契约扩展）
-- [ ] 执行器保留子命令错误原文：verify-file 的 NOT_ACTIONABLE 在 step 证据仅留 code、丢 message 原文（[68 待办](68-combined-batch-first-round.md)——错误契约自带恢复路径，证据应完整携带）
 - [ ] 浏览器通道余量：flow 级 uncertain 持久化、pipe 传输 spike（`--remote-debugging-pipe`）、`--user-agent` 覆盖（headless UA 壁垒站点）、选择器索引消歧、batch 组合验收
 - [ ] **browser-read 列表枚举形态（协议面变更，spec 三件套同 PR）**：CDP 轨多匹配读动词——现状唯一匹配纪律（0→NOT_FOUND、>1→AMBIGUOUS），枚举靠位置谓词绕行（[73 round7](73-browser-twitter-scenario.md)）；批量通道的并行语义契约已预留（[06 P3 修正](06-design-blueprint.md)——CDP 读是唯一预留并行方向）
 - [ ] WebView2 专项验收（键盘跨原生/网页、屏幕阅读器、多屏 DPI、缺失运行时回退）

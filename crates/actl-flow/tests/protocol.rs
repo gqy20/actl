@@ -5,9 +5,12 @@ fn native_query_phases_survive_metadata_redaction() {
     let expected: serde_json::Value =
         serde_json::from_str(include_str!("golden/observation_query_metadata.json")).unwrap();
     for stage in ["find_all_build_cache", "array_length", "array_elements"] {
+        // message 是错误契约自身字段(docs/68 收口:随证据携带),不属于
+        // 载荷 redaction 面——用中性词,使 contains("PRIVATE") 断言仍
+        // 只针对 evidence 载荷字段。
         let error = CtlError::with_evidence(
             ErrorCode::Timeout,
-            "PRIVATE",
+            "query timed out",
             serde_json::json!({
                 "channel":"children","native_code":-2146233083i64,
                 "observation_stage":stage,"observation_span_id":4,"observation_duration_ms":776,
@@ -49,7 +52,7 @@ fn observation_failure_keeps_phase_link_but_excludes_input_content() {
     );
     assert_eq!(
         actl_flow::failure_evidence(actl_flow::EvidencePolicy::Metadata, &invalid).unwrap(),
-        serde_json::json!({"redacted":true})
+        serde_json::json!({"redacted":true,"message":"timeout"})
     );
 }
 use actl_flow::{engine::*, store::Store, *};
@@ -117,7 +120,7 @@ fn recovery_metadata_preserves_safe_delivery_facts_only() {
     );
     assert_eq!(
         failure_evidence(EvidencePolicy::Metadata, &malformed).unwrap(),
-        serde_json::json!({"redacted":true})
+        serde_json::json!({"redacted":true,"message":"private"})
     );
 }
 
@@ -136,6 +139,42 @@ fn semantic_rejection_metadata_contract() {
         ))
         .unwrap()
     );
+}
+
+#[test]
+fn step_failure_evidence_keeps_message_even_with_real_evidence() {
+    // docs/68 待办收口:错误契约自带恢复路径(如 verify-file 的
+    // NOT_ACTIONABLE message),metadata 策略下原文也随 step 证据携带——
+    // 修复前只有无 evidence 的 synthetic 兜底带 message,带 evidence 的
+    // 失败反而丢原文,恢复需要重放才能看到原因。
+    let step = parse(
+        "version: 1\nname: t\nsteps:\n  - id: a\n    title: A\n    run: {command: write}\n    verify: {command: check}\n",
+    )
+    .unwrap()
+    .steps[0]
+    .clone();
+    let error = CtlError::with_evidence(
+        ErrorCode::NotActionable,
+        "docx is exclusively locked by another process while open",
+        serde_json::json!({"reason":"target_identity_changed"}),
+    );
+    let evidence = step_failure_evidence(&step, &error, "verify", "verify-file").unwrap();
+    assert_eq!(evidence["redacted"], true);
+    assert_eq!(evidence["reason"], "target_identity_changed");
+    assert!(
+        evidence["message"]
+            .as_str()
+            .is_some_and(|m| m.contains("exclusively locked")),
+        "message survives alongside real evidence"
+    );
+    // 有界:超长 message 截 200 字符
+    let long = CtlError::with_evidence(
+        ErrorCode::NotActionable,
+        "x".repeat(500),
+        serde_json::json!({"reason":"r"}),
+    );
+    let evidence = step_failure_evidence(&step, &long, "verify", "verify-file").unwrap();
+    assert_eq!(evidence["message"].as_str().unwrap().chars().count(), 200);
 }
 fn setup(plan: &Plan) -> (std::path::PathBuf, Store, Run) {
     let root = std::env::temp_dir().join(format!(

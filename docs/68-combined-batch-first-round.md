@@ -91,7 +91,7 @@ journal 的 consent_decision 记录了 4 组 `external_input → user_start → 
 ## 待办
 
 1. 三项路线修正（本轮已实现，gate + 提交后）以**新任务**重跑四软件整批验收。
-2. verify-file 的 NOT_ACTIONABLE 错误信息在 step 证据中仅留 code（synthetic），未保留 "native evidence unavailable: 共享冲突" 原文——执行器应保留子命令错误消息，改进项。
+2. ~~verify-file 的 NOT_ACTIONABLE 错误信息在 step 证据中仅留 code（synthetic），未保留 "native evidence unavailable: 共享冲突" 原文——执行器应保留子命令错误消息，改进项。~~（2026-10-11 收口：`failure_evidence` 的 metadata 分支统一附带有界 message（200 字符截断）——message 是错误契约自身字段，不属于载荷 redaction 保护面；golden×4 同步）
 
 ---
 

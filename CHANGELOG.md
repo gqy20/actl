@@ -7,6 +7,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **step 失败证据保留错误原文（[68 待办](docs/68-combined-batch-first-round.md) 收口）**：`failure_evidence` 的 metadata 分支统一附带有界 `message`（200 字符截断）——修复前只有**无** evidence 的 synthetic 兜底带原文，**带** evidence 的失败（如 verify-file NOT_ACTIONABLE 的共享冲突详情）反而只剩 code 丢原文，恢复路径必须重放才能看到原因。message 是错误契约自身字段（envelope 已公开），不属于载荷 redaction 保护面。golden×4 同步（evidence_metadata_v1/observation_metadata/observation_query_metadata/semantic_rejection_v1）+ docs/68 待办勾销 + 新增回归用例（原文随真实证据共存/超长截断）。
+
 ### Added
 
 - **`get-selection` 选区读取原语（spec，[06 §3.4 系统组](docs/06-design-blueprint.md)；ROADMAP 2026-10-07 登记 Quicker 差距项落地——[10 §6](docs/10-quicker-demand-research.md) 点名「对 AI 接口最有价值」的上下文通道）**：读当前用户选区，纯读取零注入。通道序：**TextPattern 范围**（kind=text，逐范围文本）→ **SelectionPattern 容器**（kind=items，逐项 role/name/automation_id）→ **如实 unavailable**（no_selection/no_selection_support，不猜测不回退剪贴板注入——物理 Ctrl+C 通道须显式物理授权，留给调用方组合，本命令不伪装成能读到）。目标缺省 `focused:`（选区随键盘焦点所在控件，与 `focused:` 寻址族合成显式上下文面）。**边界诚实语义（真机实证入实现）**：UIA 折叠光标（caret）的 GetSelection 返回退化空范围——过滤后全空 = `no_selection`，不把"只有插入点"报成有选区（记事本真机：ctrl+a 读回 ranges=["hello selection world"]、折叠光标如实 no_selection）。测试：cli 契约（help 四要素/PROTOCOL 坏目标）+ 真机验收（记事本输入→选中→读回全链、caret 边界、保存提示白名单清理——close 存活复核如实拦、点不保存后窗口归零）。
