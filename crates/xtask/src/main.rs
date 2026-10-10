@@ -21,7 +21,7 @@ fn main() -> ExitCode {
         Some("gate") => gate(),
         Some("dev") => dev(),
         Some("evidence") => evidence(),
-        Some("doctor") => doctor(),
+        Some("doctor") => doctor(std::env::args().nth(2).as_deref()),
         Some("fmt") => code(run(&["fmt", "--all"])),
         Some("regress") => regress(),
         Some("timing") => timing(),
@@ -34,7 +34,7 @@ fn main() -> ExitCode {
                  cargo xtask setup   install git hooks + activate pinned toolchain (run once after clone)\n  \
                  cargo xtask dev     diagnosis loop: incremental DEBUG build of actl (seconds; never --release here)\n  \
                  cargo xtask evidence  evidence round: RELEASE build + binary fingerprint logged to target/evidence/\n  \
-                 cargo xtask doctor  one-shot diagnosis: process census (live/ghost), build-artifact locks, ghost images, display status\n  \
+                 cargo xtask doctor [--clean]  one-shot diagnosis: process census (live/ghost), build-artifact locks, ghost images, display status; --clean also deletes ghost leftover images\n  \
                  cargo xtask gate    quality gate: file-lines + pnpm UI verify + fmt --check + clippy -D warnings + tests (= pre-push = CI)\n  \
                  cargo xtask fmt     format all code
                  cargo xtask fixture CASE | diagnose KIND | package [OPTIONS]
@@ -705,9 +705,37 @@ fn ghost_locked_exes(profiles: &[&str]) {
     }
 }
 
+/// ghost 残件映像清单:目标目录里被改名让路的旧产物——自动 ghost-rename
+/// (.ghostN)与手工改名(live-/locked- 先例)同族。判定:actl 家族且名字含
+/// `.exe.`(正规产物名不带二级后缀;actl-mcp.exe 等无关产物不误伤)。
+fn ghost_images() -> Vec<PathBuf> {
+    let mut ghosts = Vec::new();
+    for dir in ["target/debug", "target/release", "target2/debug"] {
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                let name = name.to_string_lossy();
+                if name.starts_with("actl") && name.contains(".exe.") {
+                    ghosts.push(entry.path());
+                }
+            }
+        }
+    }
+    ghosts
+}
+
 /// 一键诊断:进程普查(活/幽灵分组)+ 四产物锁探针 + ghost 残留盘点 +
-/// 显示端状态。人类可读输出(诊断工具,不进 stdout 契约面)。
-fn doctor() -> ExitCode {
+/// 显示端状态;`--clean` 顺带删除残件(仍被进程持有的如实保留,不硬删)。
+/// 人类可读输出(诊断工具,不进 stdout 契约面)。
+fn doctor(flag: Option<&str>) -> ExitCode {
+    let clean = match flag {
+        None => false,
+        Some("--clean") => true,
+        Some(other) => {
+            eprintln!("未知参数 {other:?}:用法 cargo xtask doctor [--clean]");
+            return ExitCode::FAILURE;
+        }
+    };
     eprintln!("== actl 进程普查(活 = 未退出;幽灵 = HasExited 仍枚举,内核对象滞留) ==");
     let census = std::process::Command::new("powershell")
         .args([
@@ -744,23 +772,25 @@ fn doctor() -> ExitCode {
         };
         eprintln!("  {state:6} {}", exe.display());
     }
-    eprintln!("== ghost 残留映像(楔死进程的旧映像,重启后可清) ==");
-    let mut ghosts = 0;
-    for dir in ["target/debug", "target/release", "target2/debug"] {
-        let dir = std::path::Path::new(dir);
-        if let Ok(entries) = std::fs::read_dir(dir) {
-            for entry in entries.flatten() {
-                let name = entry.file_name();
-                let name = name.to_string_lossy();
-                if name.contains(".ghost") {
-                    ghosts += 1;
-                    eprintln!("  {}", entry.path().display());
-                }
+    eprintln!("== ghost 残留映像(被改名让路的旧产物,--clean 可清) ==");
+    let ghosts = ghost_images();
+    for ghost in &ghosts {
+        eprintln!("  {}", ghost.display());
+    }
+    if ghosts.is_empty() {
+        eprintln!("  (无)");
+    }
+    if clean {
+        eprintln!("== ghost 残件清理(--clean) ==");
+        for ghost in &ghosts {
+            match std::fs::remove_file(ghost) {
+                Ok(()) => eprintln!("  已删除 {}", ghost.display()),
+                Err(error) => eprintln!(
+                    "  仍被持有,留待进程退出/重启后清: {} ({error})",
+                    ghost.display()
+                ),
             }
         }
-    }
-    if ghosts == 0 {
-        eprintln!("  (无)");
     }
     eprintln!("== 显示端状态 ==");
     let actl = std::path::Path::new("target/debug/actl.exe");
@@ -778,6 +808,8 @@ fn doctor() -> ExitCode {
     } else {
         eprintln!("  (target/debug/actl.exe 不存在;先 cargo xtask dev)");
     }
-    eprintln!("提示: 构建前自动规避锁 = cargo xtask dev/evidence/gate;楔死幽灵重启后清退。");
+    eprintln!(
+        "提示: 构建前自动规避锁 = cargo xtask dev/evidence/gate;残件清理 = cargo xtask doctor --clean(仍被持有的如实保留)。"
+    );
     ExitCode::SUCCESS
 }

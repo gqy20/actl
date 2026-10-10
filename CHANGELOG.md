@@ -9,6 +9,8 @@
 
 ### Added
 
+- **`cargo xtask doctor --clean`（构建工具，残件清理灰区收编）**：一键诊断顺带删除 ghost 残件映像；残件判定从只认自动 `.ghostN` 扩展为 actl 家族的二级后缀改名产物（手工 `live-`/`locked-` 先例同族——原盘点对手工残件漏报），仍被进程持有的如实保留不硬删。配套纪律入册（[AGENTS bash 条目](AGENTS.md)/[70 §4](docs/70-debug-playbook.md)）：脚本文件纪律只约束执行形态，不豁免工具/yml 优先级——进程普查、锁探针、残件清理这类管辖面直达工具，不再反射性写一次性脚本（2026-10-08 cleanup-check.ps1 重复 doctor 管辖面的教训）。
+
 - **AMBIGUOUS 候选证据附 `context` 上下文行（spec，[06 §4 错误码表](docs/06-design-blueprint.md)；third-hand 调研对照见 [08 增补](docs/08-agent-cli-jev-design-proposal.md)，"flow 歧义候选串联" ROADMAP 项的前置零件）**：多命中候选证据在既有 `{ref,role,name,automation_id}` 之外，**重复标签**（trim 后同名，含空名）附 `context` = 最近具名祖先文本（所在行/容器）——同标签兄弟控件从"调用方读整棵树自行分辨"变"证据自带区分度"。派生走索引父链上溯（walk 缓存读**零额外 COM 往返**，8 跳有界、120 字符截断；遍历根豁免，无具名祖先为 null 如实不造）；唯一标签不带 context 控制证据体积。测试：上下文派生纯函数 5 用例 + 条件发射/空名 null/golden envelope 契约 3 用例（`ambiguous_candidates.json`）。
 
 - **`find --capable click|type` 动作兼容过滤（spec，[06 §3.4 find](docs/06-design-blueprint.md)）**：role 表派生的**建议性**候选池过滤——type = Edit/Document 文本载体（Word/浏览器正文即 Document，word-edit 流程实证），click = 可交互角色减文本载体；零额外属性读。把 docs/31 输入护栏从"执行时 NOT_ACTIONABLE 拒绝"前移到"选择阶段规避"，省 agent 侧无效候选的试错往返。诚实边界：实际可操作性仍以动作时 pattern 分派判定为准，分类不构成承诺；滤空即如实空结果，provider 快路径/全树/L4 虚拟化命中**同口径过滤**（快路径滤空回落全树重判，非静默分叉）。未知取值 PROTOCOL（UIA 触碰前拒绝）；与 `--target` 互斥。测试：core 分类单测 + help 四要素 + cli 契约（schema 列出 capable / 未知值 PROTOCOL / 帮助文本）。
