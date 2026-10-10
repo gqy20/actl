@@ -24,7 +24,6 @@
 - [ ] flow 锚点标题插值：动态标题窗口（如音乐窗口标题随曲目变）静态计划无法锚定，v1 无插值（[43](43-release-review-draft.md) 待 M3 契约扩展）
 - [ ] 执行器保留子命令错误原文：verify-file 的 NOT_ACTIONABLE 在 step 证据仅留 code、丢 message 原文（[68 待办](68-combined-batch-first-round.md)——错误契约自带恢复路径，证据应完整携带）
 - [ ] **选区读取原语（2026-10-07 登记，实施前 spec + PRD §1.3 授权）**：Quicker 类动作的核心上下文通道（[10 §6](10-quicker-demand-research.md) 点名「对 AI 接口最有价值」）——读当前窗口用户选中内容（文本/文件/表格区域），UIA Text/Selection 优先，取不到如实 unavailable 不猜测；与 get-clipboard、`focused:` 合成显式上下文面。若选区只能经 Ctrl+C 获取须显式物理授权并申报焦点/剪贴板影响，不伪装成纯读取
-- [ ] **虚拟化列表全量收集动词（2026-10-07 登记，实施前 spec + PRD §1.3 授权）**：「检索→提取全部结果」任务类的共同缺口——单屏一把读已通（快照/TextPattern 文档通道），虚拟化边界外的条目靠上层手写滚动循环（微信 RecyclerListView、网易云 Electron 列表、资源管理器 ListView、VSCode quickInput 同墙不同组件）。形态：给定容器 ref 的有界收集（滚动→观察→差分→收敛，预算耗尽如实上报截断）；实现形态（flow 循环步骤 vs 引擎有界动词）随 spec 裁定，与「流程扩展（余项）」联动；验收靶候选=资源管理器 fixture（系统自带应用可复现，fixture 清单扩项随实施裁定）
 - [ ] 浏览器通道余量：flow 级 uncertain 持久化、pipe 传输 spike（`--remote-debugging-pipe`）、`--user-agent` 覆盖（headless UA 壁垒站点）、选择器索引消歧、batch 组合验收
 - [ ] **browser-read 列表枚举形态（协议面变更，spec 三件套同 PR）**：CDP 轨多匹配读动词——现状唯一匹配纪律（0→NOT_FOUND、>1→AMBIGUOUS），枚举靠位置谓词绕行（[73 round7](73-browser-twitter-scenario.md)）；批量通道的并行语义契约已预留（[06 P3 修正](06-design-blueprint.md)——CDP 读是唯一预留并行方向）
 - [ ] WebView2 专项验收（键盘跨原生/网页、屏幕阅读器、多屏 DPI、缺失运行时回退）
@@ -53,7 +52,8 @@
 - [ ] preview-choice computer-use 真机鼠标点击验收（[46](46-target-preview.md)：两轮 "window is not a usable app window" 失败如实保留）
 
 <!-- 2026-10-05 收口移出：录制值读回 #4 双轨收口（rec-ma-12 证据二进制轮，[80](80-record-acceptance.md)）；健壮性基建 009 轮 10 步 155s 全链通过（[81 §9](81-word-style-flow.md)）；网易云收起方向识图证实（pack 同步，Table 树滞留非未收起）——见 CHANGELOG Unreleased。 -->
-<!-- 2026-10-08 收口移出：Word 流程 evidence 二进制补跑（note-typo-012 干净轮 10 步全链 completed，fnv128=19f4b6a8，五层修复合力验证通过，[81 §10](81-word-style-flow.md)）——见 CHANGELOG Unreleased。 -->
+<!-- 2026-10-08 收口移出：Word 流程 evidence 二进制补跑（note-typo-012 干净轮 10 步全链 completed，fnv128=19f4b6a8，五层修复合力验证通过，[81 §10](81-word-style-flow.md)）；虚拟化列表全量收集动词（`collect` spec 落地+资源管理器 600 文件 fixture 真机验收通过，[06 §3.4](06-design-blueprint.md)）——见 CHANGELOG Unreleased。 -->
+
 
 ## 长期观察项
 
@@ -110,3 +110,9 @@
 ## 2026-10-08 012 干净轮收口（010 攻坚链合力验证通过）
 - **note-typo-012 全链 completed（证据二进制 fnv128=19f4b6a8）**：环境清零（进程/产物锁/显示端 0.2.1 匹配）后 10 步一次通过——fill-2/fill-3 干净复现坐实 010/011 卡点=环境污染而非代码缺陷；**默认行走模式**（物化观察+live 动作链）focus 步无 NOT_ACTIONABLE——10-06 实录「Word 轮走 ACTL_WALK_LEGACY=1 是当前稳妥形态」更新为：五层修复后默认模式已过全链（legacy 降为逃生舱非必选）；冷启动 UIA 区段杀当日复现一次（exit 125），既有 knob `ACTL_UIA_WATCHDOG_MS=60000` resume 续跑即收。详见 [81 §10](81-word-style-flow.md)。
 - **尾段挂起族新暴露点（如实）**：flow-resume 在 envelope 落盘后楔死（CPU 恒零、进程看门狗 120s 后仍存活——推测收尾期对已死 Word provider 的跨进程 Release，与 14944 同族）；已标记终止，残件归 doctor --clean。挂起族条目补此签名。
+
+## 2026-10-08 collect spec 落地与真机验收（虚拟化列表全量收集）
+- **`collect` 引擎有界动词落地（spec，[06 §3.4](06-design-blueprint.md)）**：复位到顶 → 每轮 1 LargeIncrement 页滚（语义 ScrollPattern 零注入）→ 沉降 → 新鲜观察 → 差分去重累积 → 空连两轮收敛；items 无 ref 重定向走 find；截断六因如实（max_items/max_rounds/scroll_reset_failed/scroll_pattern_missing/scroll_call_failed/container_rebuilt）。
+- **资源管理器 fixture 真机验收通过**：600 文件目录 **600/600 全收**（42 轮空连收敛、底部起步位验证复位到顶）、5 文件短列表 3 轮即 complete（无滚动 no-op 路径健康）、`--max-items 500` 截断如实（34 轮触发）；容器 AMBIGUOUS 双 List 用 `role:List#1` 序数直选。两窗口按精确 hwnd 优雅关闭，fixture 已清。
+- **三处真机否证（设计收敛的实证过程，详 CHANGELOG/06）**：① ItemContainer 枚举模式只盖物化窗（17/600 假报耗尽）——不采用；② 起始位置依赖（底部起步误判起始即末尾）——复位消除；③ 滚动位置信号 percent+view≥100 提前一页误报（漏尾 14 条）——完成权威只认空连两轮。**微信 RecyclerListView/网易云 Electron 列表（无 ScrollPattern 或分轨行为不同）的兜底路径真机覆盖待后续应用轮**——本验收靶为注册的资源管理器。
+- 顺带实证：scroll UIA 分支方向反转修复（`--down 5` via uia-scroll 物化窗下移 4-5 条）。
