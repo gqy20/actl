@@ -1,5 +1,7 @@
 //! read —— 读取与断言:get(属性白名单 + value/text 双通道)、verify(立即断言)、
-//! extract --table(Grid 直读/树扁平化)、剪贴板读写(CF_UNICODETEXT)。
+//! extract --table(Grid 直读/树扁平化)、get-selection(选区读取,
+//! TextPattern 范围优先→SelectionPattern 容器→如实 unavailable)、
+//! 剪贴板读写(CF_UNICODETEXT)。
 
 use actl_core::target::Target;
 use actl_core::{CtlError, ErrorCode};
@@ -404,4 +406,129 @@ pub fn focus_report() -> Result<serde_json::Value, CtlError> {
         "foreground": foreground,
         "focus_root_processes_agree": agree,
     }))
+}
+
+/// get-selection 结果面(选区读取,docs/10 Quicker 差距登记项):
+/// TextPattern 范围优先(文本选区)→ SelectionPattern 容器(列表勾选)→
+/// 如实 unavailable。纯读取零注入;物理 Ctrl+C 通道不做(须显式物理授权
+/// 的路径留给调用方组合,本命令不伪装成能读到)。
+pub struct SelectionOutcome {
+    pub available: bool,
+    /// available=false 时:无选区 pattern(no_selection_support)或
+    /// pattern 在但选区为空(no_selection)。
+    pub reason: Option<&'static str>,
+    /// "text"(TextPattern 范围)| "items"(SelectionPattern 容器)
+    pub kind: Option<&'static str>,
+    pub via: Option<&'static str>,
+    /// text 通道:各选区范围的文本。
+    pub ranges: Vec<String>,
+    /// items 通道:各选中元素的元数据。
+    pub items: Vec<serde_json::Value>,
+}
+
+/// 读取目标元素当前选区。调用方先 locate(元素来源任意,推荐 `focused:`
+/// ——用户选区随键盘焦点所在控件)。
+pub fn get_selection(
+    loc: &crate::locate::Located,
+    max_chars: usize,
+) -> Result<SelectionOutcome, CtlError> {
+    // TextPattern:GetSelection() 返回选区范围(空 vec = 无选区,不失败)
+    if let Ok(text) = {
+        let _watchdog = crate::watchdog::enter();
+        loc.element
+            .get_pattern::<uiautomation::patterns::UITextPattern>()
+    } {
+        let ranges = {
+            let _watchdog = crate::watchdog::enter();
+            text.get_selection()
+                .map_err(|e| crate::read_channel::failure("selection.ranges", e))?
+        };
+        if !ranges.is_empty() {
+            let mut texts = Vec::with_capacity(ranges.len());
+            for range in &ranges {
+                let text = {
+                    let _watchdog = crate::watchdog::enter();
+                    range
+                        .get_text(max_chars as i32)
+                        .map_err(|e| crate::read_channel::failure("selection.text", e))?
+                };
+                texts.push(text);
+            }
+            // UIA 退化范围(插入点)读为空串:过滤后全空 = 光标在但**什么都没
+            // 选**——如实 no_selection,不把"只有 caret"报成有选区(2026-10-11
+            // 记事本真机边界实证:折叠光标 GetSelection 返回 [""])。
+            texts.retain(|t| !t.is_empty());
+            if !texts.is_empty() {
+                return Ok(SelectionOutcome {
+                    available: true,
+                    reason: None,
+                    kind: Some("text"),
+                    via: Some("text-pattern"),
+                    ranges: texts,
+                    items: Vec::new(),
+                });
+            }
+            return Ok(SelectionOutcome {
+                available: false,
+                reason: Some("no_selection"),
+                kind: None,
+                via: None,
+                ranges: Vec::new(),
+                items: Vec::new(),
+            });
+        }
+        // TextPattern 在但无选区:仍要看 SelectionPattern(列表勾选类)
+    }
+    // SelectionPattern:GetSelection() 返回选中元素(空 vec = 无选区)
+    if let Ok(selection) = {
+        let _watchdog = crate::watchdog::enter();
+        loc.element
+            .get_pattern::<uiautomation::patterns::UISelectionPattern>()
+    } {
+        let elements = {
+            let _watchdog = crate::watchdog::enter();
+            selection
+                .get_selection()
+                .map_err(|e| crate::read_channel::failure("selection.items", e))?
+        };
+        if !elements.is_empty() {
+            let _watchdog = crate::watchdog::enter();
+            let mut items = Vec::with_capacity(elements.len());
+            for element in &elements {
+                let role = crate::observation::role_of(element).map(|r| format!("{r:?}"))?;
+                let name = crate::observation::name_of(element)?;
+                let automation_id = crate::observation::automation_id_of(element)?;
+                items.push(serde_json::json!({
+                    "role": role,
+                    "name": name,
+                    "automation_id": automation_id,
+                }));
+            }
+            return Ok(SelectionOutcome {
+                available: true,
+                reason: None,
+                kind: Some("items"),
+                via: Some("selection-pattern"),
+                ranges: Vec::new(),
+                items,
+            });
+        }
+        return Ok(SelectionOutcome {
+            available: false,
+            reason: Some("no_selection"),
+            kind: None,
+            via: None,
+            ranges: Vec::new(),
+            items: Vec::new(),
+        });
+    }
+    // 两个选区 pattern 都不支持:如实 unavailable(不猜测、不回退剪贴板)
+    Ok(SelectionOutcome {
+        available: false,
+        reason: Some("no_selection_support"),
+        kind: None,
+        via: None,
+        ranges: Vec::new(),
+        items: Vec::new(),
+    })
 }

@@ -30,6 +30,17 @@ pub(crate) enum DesktopCommand {
     ExecutionRecover,
     /// Report the three focus views (UIA focused element, physical focus root, foreground window) for selection diagnostics
     FocusReport,
+    /// Read the current user selection (text ranges or selected items) of the focused/target element; read-only, honest unavailable
+    GetSelection {
+        /// Target element holding the selection (default: focused: — the user's keyboard-focus control)
+        target: Option<String>,
+        /// Target window by title substring or hwnd:<n> (recommended with focused:)
+        #[arg(long)]
+        app: Option<String>,
+        /// Max characters per text range (default 8000)
+        #[arg(long)]
+        max_chars: Option<usize>,
+    },
     /// Report the app's front guidance layer (owned popups + in-tree dialog surfaces); read-only
     FrontReport {
         /// Target window by title substring or hwnd:<n>
@@ -1068,6 +1079,7 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
         Command::Desktop(DesktopCommand::DisplayStatus) => "display-status",
         Command::Desktop(DesktopCommand::ExecutionStatus) => "execution-status",
         Command::Desktop(DesktopCommand::FocusReport) => "focus-report",
+        Command::Desktop(DesktopCommand::GetSelection { .. }) => "get-selection",
         Command::Desktop(DesktopCommand::FrontReport { .. }) => "front-report",
         Command::Desktop(DesktopCommand::ExecutionRecover) => "execution-recover",
         Command::Desktop(DesktopCommand::TaskArchive { .. }) => "task-archive",
@@ -1248,6 +1260,9 @@ fn after_help_for(name: &str) -> Option<&'static str> {
         }
         "focus-report" => {
             "Example:\n  actl focus-report\nRead-only diagnostic: reports the UIA focused element, the physical focus root window (GetGUIThreadInfo) and the foreground window in one envelope, plus a process-agreement fact signal; use to arbitrate element-selection and focus disputes (UIA focus can misreport on WinUI; the physical layer is authoritative).\nErrors: INTERNAL UIA unavailable"
+        }
+        "get-selection" => {
+            "Example:\n  actl get-selection --app 记事本\n  actl get-selection focused:Edit --app 应用 --max-chars 2000\nRead-only: reads the current user selection of the target element (default focused: — the user's keyboard-focus control). Channels: TextPattern ranges (kind=text, per-range text) first, then SelectionPattern containers (kind=items, per-item role/name/automation_id). available=false + reason (no_selection | no_selection_support) is honest absence — never guessed, never falls back to clipboard injection; apps that only expose selection via Ctrl+C need an explicit physical combination instead.\nErrors: PROTOCOL bad target | NOT_FOUND/AMBIGUOUS target or focus owner mismatch | INTERNAL observation failure"
         }
         "front-report" => {
             "Example:\n  actl front-report --app 记事本\n  actl front-report --app hwnd:12345\nRead-only: reports the app's front guidance layer — owned native popups (title/visible/foreground) and in-tree dialog surfaces with full text and button labels, plus a naive classification hint (error/save/confirm/update/unknown; judgement stays with the caller). Apps guide the user through front popups: read this BEFORE acting; front_clear=true means no guidance layer. Never clicks anything.\nErrors: NOT_FOUND no window | INTERNAL observation failure"

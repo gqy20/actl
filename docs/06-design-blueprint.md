@@ -319,6 +319,17 @@ wait --element 瞬态重试:STALE_REF/INTERNAL 观察瞬态按"尚未出现"继�
 #### 系统(system)
 ```
 get-clipboard / set-clipboard   # 遵守 get-*/set-* 命名规则(原草案 clipboard-get/set 纠正)
+get-selection [--app X] [目标] [--max-chars N]
+                                     # 读当前用户选区(2026-10-11 spec,Quicker 差距登记项
+                                     # 落地):TextPattern 范围优先(kind=text,逐范围文本;
+                                     # UIA 退化插入点读为空串被过滤——折叠光标如实
+                                     # no_selection,不把"只有 caret"报成有选区,记事本
+                                     # 真机实证)→ SelectionPattern 容器(kind=items,逐项
+                                     # role/name/automation_id)→ 如实 unavailable
+                                     # (no_selection/no_selection_support)。纯读取零注入;
+                                     # 目标缺省 focused:(选区随键盘焦点所在控件)。
+                                     # 不做物理 Ctrl+C 通道(须显式物理授权,调用方组合,
+                                     # 本命令不伪装成能读到)。
 list-notifications              # 系统通知读取
 ```
 

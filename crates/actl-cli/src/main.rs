@@ -238,6 +238,29 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
                 .into())
         }
         Command::Desktop(DesktopCommand::FocusReport) => actl_uia::focus_report().map(Into::into),
+        Command::Desktop(DesktopCommand::GetSelection {
+            target,
+            app,
+            max_chars,
+        }) => {
+            let target = target.as_deref().unwrap_or("focused:");
+            let parsed = actl_core::parse_target(target)?;
+            let loc = actl_uia::locate(app.as_deref(), &parsed, None)?;
+            let outcome = actl_uia::get_selection(&loc, max_chars.unwrap_or(8000))?;
+            Ok(json!({
+                "action": "get-selection",
+                "target": parsed.describe(),
+                "resolved_by": loc.resolved_by,
+                "available": outcome.available,
+                "reason": outcome.reason,
+                "kind": outcome.kind,
+                "via": outcome.via,
+                "ranges": outcome.ranges,
+                "items": outcome.items,
+                "input_effects": { "keyboard": "none", "clipboard": "untouched", "pointer": "none" },
+            })
+            .into())
+        }
         Command::Desktop(DesktopCommand::FrontReport { app }) => {
             actl_uia::front_report(app).map(Into::into)
         }

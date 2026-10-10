@@ -235,6 +235,27 @@ fn front_report_help_documents_guidance_layer_discipline() {
 }
 
 #[test]
+fn get_selection_help_documents_honest_absence() {
+    // spec:选区读取(Quicker 差距登记项)——Text/Selection 双通道、
+    // available=false 如实缺勤不猜测、零注入进 help 四要素。
+    let (code, stdout) = actl(&["get-selection", "--help"]);
+    assert_eq!(code, 0);
+    assert!(stdout.contains("Read-only"), "help: {stdout}");
+    assert!(stdout.contains("no_selection_support"), "help: {stdout}");
+    assert!(stdout.contains("focused:"), "help: {stdout}");
+    assert!(stdout.contains("Errors:"), "help: {stdout}");
+}
+
+#[test]
+fn get_selection_bad_target_is_protocol() {
+    // 参数语义错误先于 UIA 触碰
+    let (code, stdout) = actl(&["get-selection", "just-a-word"]);
+    assert_eq!(code, 2);
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
+    assert_eq!(v["error"]["code"], "PROTOCOL", "{v}");
+}
+
+#[test]
 fn get_property_whitelist_includes_text_channel() {
     // value/text 分工(spec):text = TextPattern 文档正文专用通道,
     // 白名单外属性 → PROTOCOL exit 2,错误信息须列出 text(离线可测)

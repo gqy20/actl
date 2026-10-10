@@ -89,8 +89,8 @@ pub use pointer::{
     drag_physical, pointer_at_physical, pointer_physical, scroll_element,
 };
 pub use read::{
-    PROPS, PropertyInfo, VerifyKind, VerifyOutcome, get_clipboard_text, read_property,
-    set_clipboard_text, verify,
+    PROPS, PropertyInfo, SelectionOutcome, VerifyKind, VerifyOutcome, get_clipboard_text,
+    get_selection, read_property, set_clipboard_text, verify,
 };
 pub use window::{
     CaptureResult, MAX_DEPTH, MAX_ELEMENTS, WindowEntry, WindowInfo, WindowRef, capture,
