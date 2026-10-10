@@ -4,3 +4,10 @@
 xtask = "run -p xtask --"
 lint = "clippy --all-targets -- -D warnings"
 t = "test --workspace"
+
+# 测试线程栈:clap derive 在 debug 构建下构建整棵命令树的调用链随子命令
+# 数增长(2026-10-08 第 50 个子命令使 selector_input 全量解析测试越过
+# libtest 线程默认 2MB 栈,STATUS_STACK_OVERFLOW);真机二进制主线程栈
+# 充裕不受影响。8MB 对齐主线程水位,覆盖命令面继续增长。
+[env]
+RUST_MIN_STACK = "8388608"

@@ -17,6 +17,7 @@ mod action;
 mod bg_style;
 #[allow(unsafe_op_in_unsafe_fn)] // GDI/WIC 直调集中在该模块
 mod capture;
+mod collect;
 pub mod desktop;
 pub mod diagnostic;
 pub mod display_gate;
@@ -71,6 +72,7 @@ pub mod mouse;
 pub use capture::{
     ShotResult, screenshot_element, screenshot_rect, screenshot_screen, screenshot_window,
 };
+pub use collect::{CollectOptions, CollectReport, collect};
 pub use native_windows::{native_window, native_windows};
 
 pub use action::{

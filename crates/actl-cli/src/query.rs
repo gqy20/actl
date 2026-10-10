@@ -384,6 +384,64 @@ pub(crate) fn find_cmd(
     })
 }
 
+/// collect:虚拟化容器有界收集(06 §3.4;枚举主通道+滚动收敛兜底,两通道
+/// 零输入注入)。预算校验先于 UIA 触碰(参数语义错误与观察失败分开)。
+pub(crate) fn collect_cmd(
+    target_raw: &str,
+    role: Option<&str>,
+    rounds: Option<usize>,
+    max_items: Option<usize>,
+    app: Option<&str>,
+) -> Result<CommandOutput, CtlError> {
+    const DEFAULT_ROUNDS: usize = 50;
+    const DEFAULT_MAX_ITEMS: usize = 500;
+    const ROUNDS_LIMIT: usize = 200;
+    const MAX_ITEMS_LIMIT: usize = 5000;
+    let rounds = rounds.unwrap_or(DEFAULT_ROUNDS);
+    let max_items = max_items.unwrap_or(DEFAULT_MAX_ITEMS);
+    if !(1..=ROUNDS_LIMIT).contains(&rounds) {
+        return Err(CtlError::protocol(format!(
+            "collect --rounds must be 1..={ROUNDS_LIMIT}, got {rounds}"
+        )));
+    }
+    if !(1..=MAX_ITEMS_LIMIT).contains(&max_items) {
+        return Err(CtlError::protocol(format!(
+            "collect --max-items must be 1..={MAX_ITEMS_LIMIT}, got {max_items}"
+        )));
+    }
+    let target = actl_core::parse_target(target_raw)?;
+    let opts = actl_uia::CollectOptions {
+        max_rounds: rounds,
+        max_items,
+        settle_ms: 150,
+        role_filter: role.map(str::to_lowercase),
+    };
+    let report = actl_uia::collect(app, &target, &opts)?;
+    Ok(collect_data(&report, &target.describe()).into())
+}
+
+/// collect 成功 envelope 的 data 面(纯函数,golden 钉契约)。
+fn collect_data(report: &actl_uia::CollectReport, target: &str) -> Value {
+    json!({
+        "action": "collect",
+        "target": target,
+        "resolved_by": report.resolved_by,
+        "container": {
+            "role": report.container_role,
+            "name": report.container_name,
+            "automation_id": report.container_automation_id,
+        },
+        "total": report.items.len(),
+        "items": report.items,
+        "rounds": report.rounds,
+        "new_per_round": report.new_per_round,
+        "complete": report.complete,
+        "converged_by": report.converged_by,
+        "truncation_reason": report.truncation_reason,
+        "input_effects": { "keyboard": "none", "clipboard": "untouched", "pointer": "none" },
+    })
+}
+
 pub(crate) fn get_clipboard_cmd() -> Result<CommandOutput, CtlError> {
     let text = actl_uia::get_clipboard_text()?;
     Ok(json!({ "text": text }).into())
@@ -750,6 +808,56 @@ fn table_data(target: &str, table: actl_uia::TableResult) -> Value {
     })
 }
 
+#[cfg(test)]
+mod collect_contract_tests {
+    use super::*;
+
+    #[test]
+    fn collect_data_matches_golden_envelope() {
+        // 契约 golden(06 §3.4):成功 envelope 的 data 面钉死——字段集、
+        // items 形态(无 ref,role/name/automation_id/depth)、截断语义位
+        // (complete/truncation_reason)与零输入注入申报。
+        let report = actl_uia::CollectReport {
+            resolved_by: "primary",
+            container_role: "List".into(),
+            container_name: Some("文件".into()),
+            container_automation_id: None,
+            items: vec![
+                actl_core::collect::CollectItem {
+                    role: "ListItem".into(),
+                    name: Some("a.txt".into()),
+                    automation_id: None,
+                    depth: 3,
+                },
+                actl_core::collect::CollectItem {
+                    role: "ListItem".into(),
+                    name: Some("b.txt".into()),
+                    automation_id: Some("i2".into()),
+                    depth: 3,
+                },
+            ],
+            rounds: 0,
+            new_per_round: vec![],
+            complete: true,
+            converged_by: Some("empty-streak"),
+            truncation_reason: None,
+        };
+        let data = collect_data(&report, "role:List");
+        let golden: Value =
+            serde_json::from_str(include_str!("../tests/golden/collect_report.json")).unwrap();
+        assert_eq!(serde_json::to_value(data).unwrap(), golden);
+    }
+
+    #[test]
+    fn collect_budget_validation_rejects_out_of_range() {
+        // 参数语义错误先于 UIA 触碰(与观察失败分开)
+        assert!(collect_cmd("role:List", None, Some(0), None, None).is_err());
+        assert!(collect_cmd("role:List", None, Some(201), None, None).is_err());
+        assert!(collect_cmd("role:List", None, None, Some(0), None).is_err());
+        assert!(collect_cmd("role:List", None, None, Some(5001), None).is_err());
+        assert!(collect_cmd("not-a-target", None, None, None, None).is_err());
+    }
+}
 #[cfg(test)]
 mod window_baseline_tests {
     use super::*;

@@ -1,0 +1,21 @@
+{
+  "action": "collect",
+  "target": "role:List",
+  "resolved_by": "primary",
+  "container": {
+    "role": "List",
+    "name": "文件",
+    "automation_id": null
+  },
+  "total": 2,
+  "items": [
+    { "role": "ListItem", "name": "a.txt", "depth": 3 },
+    { "role": "ListItem", "name": "b.txt", "automation_id": "i2", "depth": 3 }
+  ],
+  "rounds": 0,
+  "new_per_round": [],
+  "complete": true,
+  "converged_by": "empty-streak",
+  "truncation_reason": null,
+  "input_effects": { "keyboard": "none", "clipboard": "untouched", "pointer": "none" }
+}

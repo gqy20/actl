@@ -9,6 +9,8 @@
 
 ### Added
 
+- **`collect` 虚拟化容器有界全量收集（spec，[06 §3.4](docs/06-design-blueprint.md)；ROADMAP 2026-10-07 登记项落地，形态裁定=引擎有界动词非 flow 循环）**：**先语义复位到顶**（收集语义=整表，不受用户遗留滚动位置影响）再滚动（每轮 1 LargeIncrement 页级，语义 ScrollPattern，**零输入注入**——物理轮组合留给调用方显式 `scroll --physical`，ADR-007）× 沉降 × 每轮新鲜容器观察 × 差分去重累积 × 收敛。**完成判据 = 纯经验（空连两轮零新增，`converged_by="empty-streak"`）**；容器 RuntimeId 终检防重建误报 complete。items 不带 `@eN`（虚拟化条目跨轮无 ref 稳定性，重定向走 find）；预算 1..=200 轮/1..=5000 条，截断如实 `complete=false + truncation_reason`（max_items/max_rounds/scroll_reset_failed/scroll_pattern_missing/scroll_call_failed/container_rebuilt）；`--role` 过滤只计过滤后条目。**设计过程中的三处真机否证（Explorer 600 文件 fixture，如实入档）**：① ItemContainerPattern 枚举模式只返当前物化窗（17/600）后假报耗尽——假完整，不采用；② 起始位置依赖（从底部起步误判"起始即末尾"）——复位到顶消除；③ 滚动位置信号（percent+view≥100）提前一页误报（触发后小步仍可推进、漏尾 14 条）——位置信号降为启发，完成权威只有空连两轮。测试：core 状态机单测 6 + golden envelope 契约 + cli 契约（help 四要素/PROTOCOL 预算校验/schema 自发现同步）。真机（资源管理器 fixture）：600 文件目录 **600/600 全收**（42 轮空连收敛、底部起步位验证复位）；5 文件短列表 3 轮即 complete；`--max-items 500` 截断如实；容器双 List 用序数直选；两窗口按 hwnd 优雅关闭。微信/网易云 Electron 列表的兜底路径真机覆盖待后续应用轮（本验收靶为注册的资源管理器）。
+
 - **`cargo xtask doctor --clean`（构建工具，残件清理灰区收编）**：一键诊断顺带删除 ghost 残件映像；残件判定从只认自动 `.ghostN` 扩展为 actl 家族的二级后缀改名产物（手工 `live-`/`locked-` 先例同族——原盘点对手工残件漏报），仍被进程持有的如实保留不硬删。配套纪律入册（[AGENTS bash 条目](AGENTS.md)/[70 §4](docs/70-debug-playbook.md)）：脚本文件纪律只约束执行形态，不豁免工具/yml 优先级——进程普查、锁探针、残件清理这类管辖面直达工具，不再反射性写一次性脚本（2026-10-08 cleanup-check.ps1 重复 doctor 管辖面的教训）。
 
 - **AMBIGUOUS 候选证据附 `context` 上下文行（spec，[06 §4 错误码表](docs/06-design-blueprint.md)；third-hand 调研对照见 [08 增补](docs/08-agent-cli-jev-design-proposal.md)，"flow 歧义候选串联" ROADMAP 项的前置零件）**：多命中候选证据在既有 `{ref,role,name,automation_id}` 之外，**重复标签**（trim 后同名，含空名）附 `context` = 最近具名祖先文本（所在行/容器）——同标签兄弟控件从"调用方读整棵树自行分辨"变"证据自带区分度"。派生走索引父链上溯（walk 缓存读**零额外 COM 往返**，8 跳有界、120 字符截断；遍历根豁免，无具名祖先为 null 如实不造）；唯一标签不带 context 控制证据体积。测试：上下文派生纯函数 5 用例 + 条件发射/空名 null/golden envelope 契约 3 用例（`ambiguous_candidates.json`）。
@@ -21,6 +23,7 @@
 
 ### Fixed
 
+- **测试线程栈上限（clap 命令树深度，[.cargo/config.toml](.cargo/config.toml)）**：debug 构建 clap derive 构建整棵命令树的调用链随子命令数增长——第 50 个子命令（collect）使 selector_input 全量解析测试越过 libtest 线程默认 2MB 栈（STATUS_STACK_OVERFLOW；真机二进制主线程栈充裕不受影响，契约测试 spawn 真二进制一直通过）。`[env] RUST_MIN_STACK=8388608` 仓库级统一（dev 内环/gate/CI 全覆盖），对齐主线程水位、覆盖命令面继续增长。
 - **scroll UIA 分支方向反转（真机核验通过）**：`scroll_element` 的语义分支把 notches≥0（`--up`）映射到 `SmallIncrement`（UIA 语义=**向下**滚），与物理滚轮分支（正=向上）反向——`--up` 经 UIA 通道实际向下滚。修为 `--up`→SmallDecrement/`--down`→SmallIncrement。真机实证：资源管理器列表顶部 `scroll --down 5`（via uia-scroll）后物化窗口下移 4-5 条（旧实现会因向下无空间而原地不动）。物理分支方向本就正确，不受影响。
 - **handoff golden 契约脱环境依赖（主分支既有红项）**：`handoff::error` 的 execution 态读改**路径注入化**（新增 `error_at(paths, reason)`，生产路径 `error` 不变）；`handoff_yielded.json` 补 [72b2671](docs/47-execution-recovery.md)（基建②）给 handoff 证据加 `execution` 字段时欠下的同步——原测试直读 `%LOCALAPPDATA%` 真实代次，任何有执行状态的机器必红（golden 含确定性 `state:"unavailable"`），隔离目录读后与本机状态解耦。
 - **子树物化（2026-10-07 方案2——观察面 N→1 往返收口）**：树观察缓存请求 `TreeScope=Subtree`——`build_updated_cache` **单次调用**物化整棵子树（属性+父子链接入本地缓存），遍历走 `get_cached_children()`（纯本地零往返）——N 次 children RPC 变 1 次。collect 循环不动（上限/顺序/refs 编号**逐字节保留**，真机 diff 实证两模式输出一致）；物化是单次长调用，UIA 区段 20s 限即其界；`ACTL_WALK_LEGACY=1` 回落逐节点遍历（provider 兼容逃生舱 + 重树 A/B 对照组）。真机：记事本 find --name **615ms**（逐节点 776ms / 预取版 2.4s / 原始 5.7s——对原始 **~10×**）；计算器 XAML 同过；**子串搜索 0 命中探测同趟免费**（方案3 被吸收）。重树（网易云级）受控 A/B 用 `ACTL_WALK_LEGACY` 同窗交错，记 ROADMAP。

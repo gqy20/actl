@@ -606,6 +606,19 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             app.as_deref(),
             *limit,
         ),
+        Command::Collect {
+            target,
+            role,
+            rounds,
+            max_items,
+            app,
+        } => collect_cmd(
+            target.as_str(),
+            role.as_deref(),
+            *rounds,
+            *max_items,
+            app.as_deref(),
+        ),
         Command::BrowserLaunch {
             browser_executable,
             url,

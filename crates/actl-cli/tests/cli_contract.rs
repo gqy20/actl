@@ -524,6 +524,11 @@ fn commands_schema_carries_view_and_stable_args() {
         find_args("find").contains(&"capable".to_string()),
         "find schema lists capable"
     );
+    assert!(
+        find_args("collect").contains(&"max_items".to_string())
+            && find_args("collect").contains(&"role".to_string()),
+        "collect schema lists max_items/role"
+    );
 }
 
 #[test]
@@ -546,6 +551,33 @@ fn find_unknown_capable_value_is_protocol() {
     let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
     assert_eq!(v["error"]["code"], "PROTOCOL", "{v}");
     assert!(v["error"]["message"].as_str().unwrap().contains("capable"));
+}
+
+#[test]
+fn collect_help_documents_bounded_semantics() {
+    // spec:有界收集(枚举主通道+滚动收敛兜底,零注入)、截断如实、items
+    // 无 ref 重定向走 find——help 四要素齐备进 after_help 表。
+    let (code, stdout) = actl(&["collect", "--help"]);
+    assert_eq!(code, 0);
+    assert!(stdout.contains("zero input injection"), "help: {stdout}");
+    assert!(stdout.contains("truncation_reason"), "help: {stdout}");
+    assert!(stdout.contains("re-target via find"), "help: {stdout}");
+    assert!(stdout.contains("Errors:"), "help: {stdout}");
+}
+
+#[test]
+fn collect_budget_and_target_errors_are_protocol() {
+    // 参数语义错误先于 UIA 触碰:预算越界/坏目标 → PROTOCOL,不碰窗口
+    for args in [
+        vec!["collect", "role:List", "--rounds", "0"],
+        vec!["collect", "role:List", "--max-items", "5001"],
+        vec!["collect", "just-a-word"],
+    ] {
+        let (code, stdout) = actl(&args);
+        assert_eq!(code, 2, "args: {args:?}");
+        let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
+        assert_eq!(v["error"]["code"], "PROTOCOL", "{v}");
+    }
 }
 
 #[test]

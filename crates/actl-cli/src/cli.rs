@@ -766,6 +766,23 @@ pub(crate) enum Command {
         #[arg(long)]
         limit: Option<usize>,
     },
+    /// Collect all items from a (virtualized) list container: bounded, zero input injection
+    Collect {
+        /// Target: list container (standard target grammar: name:/id:/role:/@eN/uia:)
+        target: String,
+        /// Filter items by role substring (case-insensitive), e.g. ListItem
+        #[arg(long)]
+        role: Option<String>,
+        /// Observation-round budget for the scroll-converge fallback (default 20, incl. first frame)
+        #[arg(long)]
+        rounds: Option<usize>,
+        /// Max items before honest truncation (default 500, max 5000)
+        #[arg(long)]
+        max_items: Option<usize>,
+        /// Target window by title substring or hwnd:<n> (0x ok; survives SPA title changes)
+        #[arg(long)]
+        app: Option<String>,
+    },
     /// Launch an isolated Chromium-family browser (Edge/Chrome) and bind one tab as an actl session (CDP channel, docs/72)
     BrowserLaunch {
         /// Executable path or app-registry alias (e.g. edge); see `actl app-list`
@@ -1033,7 +1050,8 @@ pub(crate) fn app_of(cmd: &Command) -> Option<String> {
         | Command::KeyDown { app, .. }
         | Command::KeyUp { app, .. }
         | Command::Wait { app, .. }
-        | Command::Find { app, .. } => app.clone(),
+        | Command::Find { app, .. }
+        | Command::Collect { app, .. } => app.clone(),
         _ => None,
     }
 }
@@ -1102,6 +1120,7 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
         Command::CloseWindow { .. } => "close-window",
         Command::ListWindows { .. } => "list-windows",
         Command::Find { .. } => "find",
+        Command::Collect { .. } => "collect",
         Command::BrowserLaunch { .. } => "browser-launch",
         Command::BrowserNavigate { .. } => "browser-navigate",
         Command::BrowserRead { .. } => "browser-read",
@@ -1358,6 +1377,9 @@ Errors: NOT_FOUND / AMBIGUOUS | NOT_ACTIONABLE no clickable point or occluded"
         }
         "find" => {
             "Example:\n  actl find --name 保存 --role button --app 记事本\n  actl find --capable type --role edit --app 记事本\nRefs interchangeable with snapshot @eN. Zero realized hits + exact name/id falls through to virtualized containers (resolved_by: item-container). --capable click|type is a role-derived advisory filter (type = Edit/Document text holders; actual capability still judged at action time, NOT_ACTIONABLE).\nErrors: PROTOCOL needs >=1 filter | PROTOCOL unknown --capable | NOT_FOUND nothing matches"
+        }
+        "collect" => {
+            "Example:\n  actl collect role:List --role listitem --app 资源管理器\n  actl collect id:1001 --role listitem --max-items 2000 --app 应用\nBounded full collection from a (virtualized) container — collection semantics = the whole table, independent of the user's leftover scroll position (semantic reset-to-top first). Each round: 1 LargeIncrement page scroll (semantic ScrollPattern only, zero input injection — compose scroll --physical manually if needed) → settle → fresh observe → diff-accumulate. complete is judged empirically (two consecutive zero-new rounds; provider position signals misfire early and are not trusted). Items carry no @eN refs — re-target via find. complete=false + truncation_reason = honest truncation (max_items / max_rounds / scroll_reset_failed / scroll_pattern_missing / scroll_call_failed / container_rebuilt).\nErrors: PROTOCOL bad args/target | NOT_FOUND/AMBIGUOUS container | observation errors propagate"
         }
         "get-clipboard" => {
             "Example:\n  actl get-clipboard\nErrors: NOT_ACTIONABLE clipboard held by another process"

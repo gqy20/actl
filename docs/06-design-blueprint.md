@@ -228,6 +228,22 @@ list-windows [--native [--hwnd <n>]] / list-surfaces # 窗口/虚拟桌面枚举
 extract @ref [--table]              # 结构化提取(表格→JSON 数组),@ref 指定容器
                                      # GridPattern 直读优先(source:"grid-pattern",带 row/col
                                      # 语义),树扁平化兜底(source:"tree-flatten");来源随结果上报
+collect <容器目标> [--role 子串]     # 虚拟化容器有界全量收集(2026-10-08 spec,ROADMAP
+      [--rounds N] [--max-items N]  # 登记形态裁定=引擎有界动词,非 flow 循环):先语义
+                                     # 复位到顶(收集语义=整表,不受用户遗留滚动位置
+                                     # 影响),再滚动(每轮 1 LargeIncrement 页级,语义
+                                     # ScrollPattern,零注入——物理轮组合留给调用方显式
+                                     # scroll --physical,ADR-007)×每轮新鲜观察×差分
+                                     # 去重累积;完成判据 = 纯经验(空连两轮——
+                                     # provider 滚动位置信号实证提前一页误报,
+                                     # 只当启发不当判据);**ItemContainer 枚举
+                                     # 模式实证只盖物化窗(17/600 后假报耗尽),
+                                     # 不采用**;items 不带 @eN(虚拟化条目跨轮
+                                     # 无 ref 稳定性,重定向走 find);截断如实:
+                                     # complete=false + truncation_reason(max_
+                                     # items/max_rounds/scroll_reset_failed/
+                                     # scroll_pattern_missing/scroll_call_failed/
+                                     # container_rebuilt)
 ```
 
 #### 交互(interact)
@@ -445,6 +461,7 @@ L2  actl commands     机器 schema:全命令+参数的 JSON(agent 自发现入�
 | `wait` vs `verify` | 数学上 verify ≈ wait --timeout 0,但认知分工不同:**耐心等待** vs **立即断言**;保留两个动词,断言失败统一 `ASSERTION_FAILED` |
 | `--expect P` | 执行成功后的隐式断言(默认 2s,失败 `ASSERTION_FAILED`)——"执行+验证"内联但不吞决策。P 文法 v2:`window:<substr>`(须**新窗口**出现,基线排除既有同名)| `element:<target>`(动作后目标元素**可解析**的后置条件,复用 wait 元素文法;已存在即成立——与 window: 的"新出现"刻意不对称:mmui 类应用 UIA 假成功的验证点是物化,失败 evidence 附 cause 区分"假成功"与"目标错误") |
 | `snapshot` vs `find` | **全局认知**(不知道界面有什么)vs **定向查找**(知道要什么,省 token) |
+| `find` vs `collect` | 定向找**一个**(唯一性纪律)vs 定向要**全部**(虚拟化列表的有界收集,条目无 ref) |
 | `scroll` vs `press pgdn` | 容器内滚动(UIA Scroll pattern)vs 焦点键滚动 |
 | `select` vs `set-value` | 离散选项 vs 文本值(combo box 用 select) |
 | `toggle` vs `click` | Toggle pattern 直调(无点击副作用、可读状态)vs 点击语义 |
