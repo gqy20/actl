@@ -81,3 +81,15 @@
 并行会话的补测轮（note-typo-009，2026-10-04 23:33 启动）在僵尸清退后环境恢复完成：**10 步全链 completed、总耗时 155s**（open 12s / focus 12s / fill×3 各 ~35s / save 7s / close 5s；逐步耗时由 StepRecord started/finished_ms 提供——健壮性第 ⑥ 件）。健壮性七件全链生效：UIA 区段看门狗（open/focus 的 12s 含 Word 巨型树扫描不再无界）、close-window 存活复核（close 步 4.7s 完成且窗口清单归零）、定位缓存（fill 步 ~35s 含缓存命中——`resolved_by:"cache"` 使每键成本从 4.4s 降下来）、save-disk meta 断言（36ms 完成落盘核对）。
 
 如实边界：`ownership`（read-only 产出步，verified=false 是只读步无验证语义）、`save-disk`/`verify-styles`（v=false 为 verify 属性缺省——save-disk 36ms 完成 meta 断言、verify-styles 32ms 完成样式断言，二者完成即通过）。二进制为 target2/debug 构建指纹 `a8fa93ed`（非 evidence 轮指纹——并行会话补测时主产物目录仍被僵尸锁定）；009 的 evidence 二进制指纹级补跑（note-typo-010）为非阻塞补强项，已入 ROADMAP 遗留验收（真机验收以 009 轮收口，桌面空闲时执行）。
+
+## 10. 012 干净轮收口（2026-10-08 增补）：证据二进制指纹级全链 completed——010 攻坚链五层修复合力验证通过
+
+010（补跑轮）与 011（10-07 上午再启）均因**现场污染**未完成（010：文档经多轮 Word 重启+手动操作后 fill-3 断言持续不符；011：fill-2 uncertain NOT_ACTIONABLE，与遗留僵尸进程时间窗吻合——两者失败记录均在 `%LOCALAPPDATA%\actl\flows\` 留档未覆盖）。本轮（note-typo-012，2026-10-08）在环境清零后完成：**10 步全链 completed，证据二进制 `target/release/actl.exe`（fnv128=19f4b6a849957c6173782508388de515，落 target/evidence/binary-log.txt）**——009 欠的"evidence 轮指纹"至此补齐。
+
+**环境准备（010/011 失败因素的逐项清零）**：actl/actl-signal/WINWORD 零进程（10-07 三僵尸自然消亡后残件经 doctor --clean 清退）、四构建产物锁全 free、显示端 0.2.1 匹配就绪（旧 0.2.0 伴生端按 WM_CLOSE 用户通道优雅换新，停止代次不受影响）。
+
+**执行形态**：首轮 `flow-run` 在 open/ownership 完成后被 UIA 区段看门狗杀（exit 125——冷启动 Word 慢日形态：desktop_children 6.7s/物化 6.1s 后单次 UIA 调用挂超 20s；**已知族的当日实证，非新缺陷**）；focus 步未派发、文档零污染，`ACTL_UIA_WATCHDOG_MS=60000`（既有 knob）`flow-resume` 续跑——热 Word 后全链一次通过：focus 8s / fill-1 27s / fill-2 29s / fill-3 29s / save 6s / save-disk 22ms / close 4s / verify-styles 28ms，resume 段总 207s（capture.walk 24.1s 在放宽预算内）。**fill-2/fill-3 干净通过坐实 010/011 卡点=环境污染而非代码缺陷**；五层修复合力验证：默认行走模式（物化观察+live 动作链，无 ACTL_WALK_LEGACY 逃生舱）下 focus 步无 NOT_ACTIONABLE。
+
+**产物与核验**：`%LOCALAPPDATA%\actl\flows\note-typo-012`（冻结计划+state）+ `flow-resources/note-typo-012/note-typo-012.docx`（13,737B）；flow 内 verify-styles 步完成（docx-styles 逐段断言）+ 独立复跑 `verify-file --kind meta` verified:true；Word 优雅关闭（close 步 verify-closed 过、进程清单归零）。如实边界同 009：ownership/save-disk/verify-styles 三步 v=false 为语义缺省非失败；handoff 全程无待决弹层（疑似显示端常驻预授权 Standing 生效，本轮未代点）。
+
+**新登记的残余暴露面（如实）**：flow-resume 在 envelope 落盘后进程未退（CPU 恒零楔死，进程看门狗 120s 窗口后仍存活；推测与 close 步已关 Word→收尾期跨进程 Release 对已死 provider 楔在内核态的 14944 同族）。已 Stop-Process 标记、后台包装任务已停，残件归 doctor --clean；**签名=尾段挂起族的 flow 命令收尾路径新暴露点**，入 ROADMAP 长期观察项。

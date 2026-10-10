@@ -48,19 +48,19 @@
 ### 遗留验收
 
 - [ ] 非开发机 US3 复现（用户裁定 2026-10-02 搁置——作为已知限制已记录于 0.2.0 CHANGELOG；机器到位后补验）
-- [ ] Word 流程 evidence 二进制补跑 note-typo-010（009 真机验收已收口，[81 §9](81-word-style-flow.md)；此为指纹级补强，桌面空闲时执行）
 - [ ] Phase 2 人工/专用环境验收子集（[44](44-phase2-acceptance.md) 表格聚合）：观察故障注入五类（空值/截断/控件重建/虚拟化/provider 故障——[50](50-deep-container-query.md) 的 provider 重建待验收同族）、监听冗余 hook 失效现场验收（[39](39-flow-observation-recovery.md)）、外部对照 Blender/Photoshop/Minecraft 可用环境
 - [ ] 浏览器场景实测余项聚合：B 站登录态真视频页评论读取复验（`bili-deep5.sh`，[16 §7](16-browser-scenarios.md)）；持久 profile 真实站点登录验收待用户选站（[72](72-browser-cdp-integration.md)）；settle 噪声鲁棒（16 登记 M3 候选未动）；epub 临时 profile 删除竞争（[73](73-browser-twitter-scenario.md) v1 缺口五条中唯一未收口——close 后延迟重试）；CUA 检查 CDP 超时孤立核验（[71](71-signal-webview-details.md)）；xhs「展开更多评论」低优先附带
 - [ ] preview-choice computer-use 真机鼠标点击验收（[46](46-target-preview.md)：两轮 "window is not a usable app window" 失败如实保留）
 
 <!-- 2026-10-05 收口移出：录制值读回 #4 双轨收口（rec-ma-12 证据二进制轮，[80](80-record-acceptance.md)）；健壮性基建 009 轮 10 步 155s 全链通过（[81 §9](81-word-style-flow.md)）；网易云收起方向识图证实（pack 同步，Table 树滞留非未收起）——见 CHANGELOG Unreleased。 -->
+<!-- 2026-10-08 收口移出：Word 流程 evidence 二进制补跑（note-typo-012 干净轮 10 步全链 completed，fnv128=19f4b6a8，五层修复合力验证通过，[81 §10](81-word-style-flow.md)）——见 CHANGELOG Unreleased。 -->
 
 ## 长期观察项
 
 - [ ] UIA 观察长阻塞的**根因定位**（防护已落地：进程级看门狗 + UIA 区段看门狗双保险；根因——60s NOT_FOUND 未复现、故障提供程序未确认，见 [41](41-logging-metadata.md)、[65](65-observation-blocking-diagnosis.md)）
 - [ ] UWP 挂起恢复（类配对后疑似绕开，更长放置待证）
 - [ ] 前台交接 v9 人工接管/嵌套/多窗口真机矩阵（[62](62-foreground-handoff.md)）
-- [ ] **尾段挂起族（根因已定位,主修复已落地 2026-10-06）**：根因 = UIElement 的 Drop（跨进程 Release）与读取同族无界,而析构路径无任何看门狗覆盖。修复两轮:① main.rs 成功路径硬退出（与错误路径对称,析构链跳过）;② `into_info`/显式 drop 家族全收编（read/verify/click/set_value/select/toggle/pointer×4/type/press/cache_store——**Located 出域审计完成,残余项清零**）。**内核态残余已定性(2026-10-06 doctor 线程态探查)**:幽灵 = 每进程仅剩 1 线程卡 Wait/UserRequest(用户态同步原语等待,对端已死)——envelope 送达与主体清退均成功,仅进程终结被最后一根线卡住;MiniDump 无法附加(dump 失败本身佐证楔死),精确线程归属待 dump 工具(转储级定位降级为可选——doctor + 自动 ghost 规避 + 重启清退已工程化)。
+- [ ] **尾段挂起族（根因已定位,主修复已落地 2026-10-06）**：根因 = UIElement 的 Drop（跨进程 Release）与读取同族无界,而析构路径无任何看门狗覆盖。修复两轮:① main.rs 成功路径硬退出（与错误路径对称,析构链跳过）;② `into_info`/显式 drop 家族全收编（read/verify/click/set_value/select/toggle/pointer×4/type/press/cache_store——**Located 出域审计完成,残余项清零**）。**内核态残余已定性(2026-10-06 doctor 线程态探查)**:幽灵 = 每进程仅剩 1 线程卡 Wait/UserRequest(用户态同步原语等待,对端已死)——envelope 送达与主体清退均成功,仅进程终结被最后一根线卡住;MiniDump 无法附加(dump 失败本身佐证楔死),精确线程归属待 dump 工具(转储级定位降级为可选——doctor + 自动 ghost 规避 + 重启清退已工程化)。**新签名(2026-10-08,note-typo-012)**:flow-resume 成功路径 envelope 落盘后楔死——成功路径硬退出未覆盖 flow 命令的收尾路径(推测 flow 引擎持有的 Word 元素在 close 步后 Release 对已死 provider),待按类修根因。
 
 - [ ] **树级缓存（「第二次观察免费」）——设计再评估后挂起（2026-10-06）**：原设想以窗口 RuntimeId 键控缓存已观察树 + 失效判定。设计推演结论:① 节点级缓存无 COM 代理 → 无法做 locate 缓存式的元素级 RuntimeId 复核,失效判定只剩 WinEvent 钩子(需消息泵线程,工程量大)或有界 TTL(陈旧风险违背 fail-closed);② 主要重复观察方（探索引擎/flow verify）**语义上就需要新鲜帧**（差分/断言）,缓存反而破坏语义;真实重复收益集中在 batch 的连续 find/snapshot——频次低。**结论:价值窄于最初评估,等真实重复消费方出现再立项**;轻量替代（定位缓存/属性预取/provider 快路径）已覆盖主要痛点。
 - [ ] **极端规模重树 A/B（收窄至 Word 级非虚拟化大树）**：provider 支持度与虚拟化交互均已消除（2026-10-07:资源管理器 6866 文件目录实测——列表虚拟化是 provider 侧行为,双模式各见 294 元素/find total=17 一致/输出逐字节一致;虚拟化应用观察树天然保持小,极端规模只能来自 Word 类非虚拟化大树——与 Word 物化验证并轮做）。⚠ 资源管理器关闭纪律:close-window --pid 对 explorer.exe 危险（shell 进程持任务栏/桌面,本轮拒绝属安全巧合）——一律按唯一标题或精确 hwnd 关,勿按 pid。
@@ -106,3 +106,7 @@
 - **五层修复全部落地并独立实证**（note-typo-010 驱动发现的每一层都修了）：① 模板 compatibilityMode 12→15；② null 身份 spec（Word 交互元素无 rid 不炸观察）；③ 门禁停靠面板降噪（导航窗格不误拦）；④ P0 看门狗 reset() 恒等式 bug（>120s 流程不再被误杀）；⑤ 消费分轨+物化回落（Word MSAA 桥缓存损坏自动降级）。
 - **010 本身未完成（如实记录）**：fill-1/fill-2 completed 但文档经多轮 Word 重启+手动操作+测试污染后，fill-3 的 verify 断言持续 "normalized text differs"（文档当前内容≠模板预期——现场已被污染，不是代码缺陷）。**正确收口方式：干净起 note-typo-011 全链轮**（等桌面空闲，一次跑完 10 步，验证五层修复的合力）。
 - **本轮元收获**：一个受阻的验收轮驱动出五个独立的基础设施修复——这正是「受阻不记通过，如实入档」纪律的价值；每个修复都是真机实证的独立贡献，010 的完成只是它们的合力验证。
+
+## 2026-10-08 012 干净轮收口（010 攻坚链合力验证通过）
+- **note-typo-012 全链 completed（证据二进制 fnv128=19f4b6a8）**：环境清零（进程/产物锁/显示端 0.2.1 匹配）后 10 步一次通过——fill-2/fill-3 干净复现坐实 010/011 卡点=环境污染而非代码缺陷；**默认行走模式**（物化观察+live 动作链）focus 步无 NOT_ACTIONABLE——10-06 实录「Word 轮走 ACTL_WALK_LEGACY=1 是当前稳妥形态」更新为：五层修复后默认模式已过全链（legacy 降为逃生舱非必选）；冷启动 UIA 区段杀当日复现一次（exit 125），既有 knob `ACTL_UIA_WATCHDOG_MS=60000` resume 续跑即收。详见 [81 §10](81-word-style-flow.md)。
+- **尾段挂起族新暴露点（如实）**：flow-resume 在 envelope 落盘后楔死（CPU 恒零、进程看门狗 120s 后仍存活——推测收尾期对已死 Word provider 的跨进程 Release，与 14944 同族）；已标记终止，残件归 doctor --clean。挂起族条目补此签名。
