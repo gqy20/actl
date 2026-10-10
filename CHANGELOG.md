@@ -21,6 +21,7 @@
 
 ### Fixed
 
+- **scroll UIA 分支方向反转（真机核验通过）**：`scroll_element` 的语义分支把 notches≥0（`--up`）映射到 `SmallIncrement`（UIA 语义=**向下**滚），与物理滚轮分支（正=向上）反向——`--up` 经 UIA 通道实际向下滚。修为 `--up`→SmallDecrement/`--down`→SmallIncrement。真机实证：资源管理器列表顶部 `scroll --down 5`（via uia-scroll）后物化窗口下移 4-5 条（旧实现会因向下无空间而原地不动）。物理分支方向本就正确，不受影响。
 - **handoff golden 契约脱环境依赖（主分支既有红项）**：`handoff::error` 的 execution 态读改**路径注入化**（新增 `error_at(paths, reason)`，生产路径 `error` 不变）；`handoff_yielded.json` 补 [72b2671](docs/47-execution-recovery.md)（基建②）给 handoff 证据加 `execution` 字段时欠下的同步——原测试直读 `%LOCALAPPDATA%` 真实代次，任何有执行状态的机器必红（golden 含确定性 `state:"unavailable"`），隔离目录读后与本机状态解耦。
 - **子树物化（2026-10-07 方案2——观察面 N→1 往返收口）**：树观察缓存请求 `TreeScope=Subtree`——`build_updated_cache` **单次调用**物化整棵子树（属性+父子链接入本地缓存），遍历走 `get_cached_children()`（纯本地零往返）——N 次 children RPC 变 1 次。collect 循环不动（上限/顺序/refs 编号**逐字节保留**，真机 diff 实证两模式输出一致）；物化是单次长调用，UIA 区段 20s 限即其界；`ACTL_WALK_LEGACY=1` 回落逐节点遍历（provider 兼容逃生舱 + 重树 A/B 对照组）。真机：记事本 find --name **615ms**（逐节点 776ms / 预取版 2.4s / 原始 5.7s——对原始 **~10×**）；计算器 XAML 同过；**子串搜索 0 命中探测同趟免费**（方案3 被吸收）。重树（网易云级）受控 A/B 用 `ACTL_WALK_LEGACY` 同窗交错，记 ROADMAP。
 - **lint-packs 选择器形态建议（知识层杠杆,advisory 不计失败）**：⑤ 号检查对 `name:` 步骤给提示——元素有稳定 AutomationId 优先 `id:`（find --id 走 provider 单调用快路径）,`name:` 子串语义保留给无 id 元素（Electron/CEF 系普遍无 automation id）。现状点名 7 pack 共 20 处（微信 7/腾讯会议 4/Zotero 4 等——多为无 id 应用,属合理保留）;选择器优先级约定入 [PACKS.md](skills/actl/PACKS.md)。**不做无证据的 name:→id: 批量改写**（真实观察确认 id 存在才改,先探测再写死纪律）。

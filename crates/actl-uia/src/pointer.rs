@@ -755,10 +755,14 @@ pub fn scroll_element(
     let _watchdog = crate::watchdog::enter();
     let mut uia_ok = false;
     if let Ok(scroll) = loc.element.get_pattern::<UIScrollPattern>() {
+        // notches 语义与物理滚轮对齐(正=向上/朝列表头):UIA 分支按
+        // Increment/Decrement 的"朝末尾/朝开头"语义映射——原实现
+        // notches>=0→SmallIncrement 把 --up 滚成了向下,与物理分支反向
+        // (2026-10-08 修;真机核验见 collect 验收轮)。
         let amount = if notches >= 0 {
-            ScrollAmount::SmallIncrement
-        } else {
             ScrollAmount::SmallDecrement
+        } else {
+            ScrollAmount::SmallIncrement
         };
         // pattern 宣称支持但调用失败(实测记事本 Document)→ 物理滚轮兜底
         let mut feedback = actl_core::signal_session::ActionGuard::begin(
