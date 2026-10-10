@@ -240,8 +240,16 @@ pub fn owner(
         }
         lineage
     };
+    // hwnd_anchor:即绑即用的窗口锚字符串(2026-10-11,flow 锚点标题插值
+    // 登记项的降格收口):HWND 不随标题变(SPA/脏标记改标题正是引入 hwnd
+    // 锚的原因),outputs.pointer 指到 /hwnd_anchor 即可把动态标题窗口
+    // 锚进后续任意 --app 参数槽——静态计划无须标题插值。
+    let hwnd_anchor = window
+        .hwnd
+        .map(|h| format!("hwnd:{h}"))
+        .map(serde_json::Value::String);
     Ok(
-        json!({"verified":true,"hwnd":window.hwnd,"pid":window.pid,"process_start":data["start"],"via_parent":via_parent}),
+        json!({"verified":true,"hwnd":window.hwnd,"hwnd_anchor":hwnd_anchor,"pid":window.pid,"process_start":data["start"],"via_parent":via_parent}),
     )
 }
 

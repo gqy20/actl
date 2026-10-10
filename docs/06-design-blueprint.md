@@ -1021,7 +1021,7 @@ expected: 预期完整文本
 
 - `verify-file --path <path> --kind text|json|docx|docx-styles|meta|xlsx (--expected <JSON> | --expected-file <utf8文件>) [--subset]`：文本按 CRLF→LF 读取；JSON 按类型比较；docx 返回正文 text 与显式加粗 bold；docx-styles 返回逐段 `{"paragraphs":[{text,style,bold}]}`（style 为 w:pStyle 的 OOXML styleId，无显式样式为空串即 Normal；bold 为段内"有文本 run 且全部显式加粗"，与 docx 同款不推断样式继承）；**meta 返回 `{"size","mtime_unix_ms"}`（元数据读取不受 Office 排他锁影响，是文档打开期间"保存确实落盘"的唯一断言通道），expected 支持关系键 `size_min`/`mtime_min`（unix 毫秒，单调下界断言；关系键不参与通用比较，剔除后空对象+subset=纯关系形态）**；xlsx 返回 sheet1 单元格的 value/formula。**--expected-file 从 UTF-8 文件读期望（与 --expected 互斥，二选一必填）——长/中文 JSON 经 shell 传参的引号/编码坑类消灭（docs/81 §8）**。subset 仅忽略未声明的对象键，数组长度及顺序仍须一致。流程中的路径必须为绝对路径。docx 的 bold 指每个含文本 run 均显式声明加粗，不推断样式继承。
 - `verify-rows --app ... --prefix <parent-id>-row- --expected <JSON string array>`：完整快照中必须有唯一父树，比较 TreeItem 行名集合（排序后保留重复项），截断或父树缺失拒绝。
-- `verify-owner --app ... --program <absolute exe> --token <absolute task path> [--instance ... --hwnd ... --pid ...]`：核对唯一可见原生窗口、进程可执行路径、命令行中的完整任务路径参数，并返回 HWND、PID、进程创建时间。可选身份字段必须全部匹配；不把标题匹配单独当归属证据。
+- `verify-owner --app ... --program <absolute exe> --token <absolute task path> [--instance ... --hwnd ... --pid ...]`：核对唯一可见原生窗口、进程可执行路径、命令行中的完整任务路径参数，并返回 HWND、PID、进程创建时间。可选身份字段必须全部匹配；不把标题匹配单独当归属证据。返回含 `hwnd_anchor`（`hwnd:<n>` 就绪字符串,2026-10-11）——outputs/bind 直填后续任意 `--app` 参数槽,动态标题窗口（标题随曲目/脏标记变）静态计划锚定无须标题插值：**归属步产锚 → 后续步绑锚**的惯用法取代"锚点标题插值"扩展项。
 - `verify-closed --hwnd ... --pid ... --instance ...`：观察原窗口和原进程实例；窗口消失但进程仍在不算通过，PID 复用也不对新进程执行操作，状态矛盾/查询失败保留未知。
 - `verify-clipboard --expected ... [--normalize-lines]`：精确比较剪贴板文本；显式规范化转换 CRLF 并去除尾部 LF。
 - `verify --value ... --property text --normalize-lines`：全文比较前转换 CRLF/CR 为 LF、去除尾部 LF，与 contains 互斥；供 Word TextPattern 行结束符差异使用。

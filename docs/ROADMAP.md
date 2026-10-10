@@ -20,7 +20,6 @@
 ### 流程与集成
 
 - [ ] 流程扩展（余项）：循环、嵌套分支
-- [ ] flow 锚点标题插值：动态标题窗口（如音乐窗口标题随曲目变）静态计划无法锚定，v1 无插值（[43](43-release-review-draft.md) 待 M3 契约扩展）
 - [ ] 浏览器通道余量：flow 级 uncertain 持久化、pipe 传输 spike（`--remote-debugging-pipe`）、`--user-agent` 覆盖（headless UA 壁垒站点）、选择器索引消歧、batch 组合验收
 - [ ] **browser-read 列表枚举形态（协议面变更，spec 三件套同 PR）**：CDP 轨多匹配读动词——现状唯一匹配纪律（0→NOT_FOUND、>1→AMBIGUOUS），枚举靠位置谓词绕行（[73 round7](73-browser-twitter-scenario.md)）；批量通道的并行语义契约已预留（[06 P3 修正](06-design-blueprint.md)——CDP 读是唯一预留并行方向）
 - [ ] WebView2 专项验收（键盘跨原生/网页、屏幕阅读器、多屏 DPI、缺失运行时回退）
@@ -50,6 +49,7 @@
 
 <!-- 2026-10-05 收口移出：录制值读回 #4 双轨收口（rec-ma-12 证据二进制轮，[80](80-record-acceptance.md)）；健壮性基建 009 轮 10 步 155s 全链通过（[81 §9](81-word-style-flow.md)）；网易云收起方向识图证实（pack 同步，Table 树滞留非未收起）——见 CHANGELOG Unreleased。 -->
 <!-- 2026-10-08 收口移出：Word 流程 evidence 二进制补跑（note-typo-012 干净轮 10 步全链 completed，fnv128=19f4b6a8，五层修复合力验证通过，[81 §10](81-word-style-flow.md)）；虚拟化列表全量收集动词（`collect` spec 落地+资源管理器 600 文件 fixture 真机验收通过，[06 §3.4](06-design-blueprint.md)）；flow 歧义候选串联（`--pick` 运行时候选纠正 spec 落地，[06 AMBIGUOUS 目标串联](06-design-blueprint.md)/[63 收口](63-simple-workflow-conditions.md)；自动缩小查询裁定不做入册）；选区读取原语（`get-selection` spec 落地+记事本真机验收通过：Text/Selection 双通道、caret 退化范围诚实 no_selection，[06 系统组](06-design-blueprint.md)）——见 CHANGELOG Unreleased。 -->
+<!-- 2026-10-11 收口移出：执行器错误原文保留（metadata 证据附有界 message，[68 待办](68-combined-batch-first-round.md)勾销）；flow 锚点标题插值（**降格收口**为 verify-owner `hwnd_anchor` 就绪字符串+bind 惯用法——HWND 不随标题变，不做插值 spec，[06 verify-owner](06-design-blueprint.md)；真机部分验收：改名失配后 hwnd 锚仍寻址同窗，完整链待桌面空闲轮）——见 CHANGELOG Unreleased。 -->
 
 
 ## 长期观察项
