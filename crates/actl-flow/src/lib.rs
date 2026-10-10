@@ -333,6 +333,40 @@ pub enum Failure {
     SkipSection,
 }
 
+/// AMBIGUOUS 目标串联记录(运行时候选纠正,docs/63):run 相定位多命中时
+/// 引擎锚定一份骨架快照并全量保留候选,run 进 needs_review
+/// (`ambiguous_target:<step>`);调用方 `flow-resume --pick @eN` 应答后,
+/// 引擎以 ref+snapshot 重写派发参数——身份核验走既有 ReplayGuard
+/// (窗口重建/元素漂移即拒,冻结计划四不变式全保留,pick 不改 plan_version)。
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct AmbiguousTarget {
+    /// 被拦步骤的 run 命令名(追溯面)。
+    pub command: String,
+    /// 原目标串(args[0],语义选择器)。
+    pub target: String,
+    /// 步骤 --app 锚(快照与重放共用)。
+    pub app: Option<String>,
+    /// 引擎锚定的骨架快照(候选 ref 的身份来源)。
+    pub snapshot_id: String,
+    /// 候选证据全量(locate 的 AMBIGUOUS evidence.candidates,不被
+    /// 默认证据 redaction 吞掉)。
+    pub candidates: Vec<serde_json::Value>,
+    /// `--pick` 已选 ref("@eN");None = 待应答。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub picked: Option<String>,
+}
+
+impl AmbiguousTarget {
+    /// 候选可重放 ref 集(@eN 形态;非 ref 候选不参与 pick)。
+    pub fn candidate_refs(&self) -> Vec<String> {
+        self.candidates
+            .iter()
+            .filter_map(|c| c["ref"].as_str().map(str::to_owned))
+            .collect()
+    }
+}
+
 /// Route-defect classification: the same non-read-only step failing with the same
 /// error code on its last three recorded attempts is a broken route, not a transient.
 pub fn route_defect(record: &engine::StepRecord) -> bool {

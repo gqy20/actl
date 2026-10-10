@@ -81,19 +81,19 @@ fn persist_resume_and_do_not_replay_completed_write() {
     let p = plan();
     let (root, store, mut run) = setup(&p);
     let mut h = host();
-    execute(&p, &mut run, &store, &mut h, None).unwrap();
+    execute(&p, &mut run, &store, &mut h, None, None).unwrap();
     assert_eq!(run.status, Status::Paused);
     let (saved, mut run) = store.load().unwrap();
     assert_eq!(run.steps[0].outputs, json_map());
     h.value = json!({"text":"changed", "count":9});
-    execute(&saved, &mut run, &store, &mut h, None).unwrap();
+    execute(&saved, &mut run, &store, &mut h, None, None).unwrap();
     assert_eq!(run.status, Status::Completed);
     assert_eq!(h.calls.iter().filter(|c| c.command == "read").count(), 1);
     assert_eq!(
         h.calls.iter().find(|c| c.command == "write").unwrap().args,
         ["hello 中文"]
     );
-    execute(&saved, &mut run, &store, &mut h, None).unwrap();
+    execute(&saved, &mut run, &store, &mut h, None, None).unwrap();
     assert_eq!(h.calls.iter().filter(|c| c.command == "write").count(), 1);
     let mut actual = serde_json::to_value(&run).unwrap();
     actual["updated_ms"] = json!(0);
@@ -125,7 +125,7 @@ fn missing_or_wrong_type_output_blocks_consumer() {
         let (root, store, mut run) = setup(&p);
         let mut h = host();
         h.value = value;
-        execute(&p, &mut run, &store, &mut h, None).unwrap();
+        execute(&p, &mut run, &store, &mut h, None, None).unwrap();
         assert_eq!(run.status, Status::Paused);
         assert!(run.steps[0].outputs.is_empty());
         assert_eq!(run.steps[0].error_code, Some(ErrorCode::Protocol));
@@ -176,7 +176,7 @@ fn invalid_resolved_value_or_host_preflight_never_writes() {
         let mut h = host();
         h.value = json!({"text":text,"count":1});
         h.valid = valid;
-        execute(&p, &mut run, &store, &mut h, None).unwrap();
+        execute(&p, &mut run, &store, &mut h, None, None).unwrap();
         assert_eq!(run.reason.as_deref(), Some("binding_validation_failed"));
         assert_eq!(h.calls.len(), 1);
         std::fs::remove_dir_all(root).unwrap();
@@ -194,7 +194,7 @@ fn interrupted_read_without_outputs_is_read_again_even_if_verify_passes() {
     run.steps[0].status = StepStatus::Verifying;
     store.save(&run).unwrap();
     let mut h = host();
-    execute(&p, &mut run, &store, &mut h, None).unwrap();
+    execute(&p, &mut run, &store, &mut h, None, None).unwrap();
     assert_eq!(run.steps[0].status, StepStatus::Completed);
     assert_eq!(run.steps[0].outputs, json_map());
     assert_eq!(h.calls.iter().filter(|c| c.command == "read").count(), 1);
@@ -206,7 +206,7 @@ fn failed_output_persistence_prevents_next_action() {
     let (root, store, mut run) = setup(&p);
     let mut h = host();
     h.fail_save = Some(store.dir.join("state.tmp"));
-    assert!(execute(&p, &mut run, &store, &mut h, None).is_err());
+    assert!(execute(&p, &mut run, &store, &mut h, None, None).is_err());
     assert_eq!(h.calls.len(), 1);
     let (_, saved) = store.load().unwrap();
     assert_eq!(saved.steps[0].status, StepStatus::Running);
@@ -281,7 +281,7 @@ fn interrupted_read_with_saved_outputs_only_verifies() {
     run.steps[0].outputs = json_map();
     store.save(&run).unwrap();
     let mut h = host();
-    execute(&p, &mut run, &store, &mut h, None).unwrap();
+    execute(&p, &mut run, &store, &mut h, None, None).unwrap();
     assert_eq!(run.steps[0].status, StepStatus::Completed);
     assert_eq!(h.calls.iter().filter(|c| c.command == "read").count(), 0);
     std::fs::remove_dir_all(root).unwrap();

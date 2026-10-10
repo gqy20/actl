@@ -20,7 +20,6 @@
 ### 流程与集成
 
 - [ ] 流程扩展（余项）：循环、嵌套分支
-- [ ] flow 歧义候选串联与自动缩小查询（[63](63-simple-workflow-conditions.md) 明言待办归 ROADMAP 而未登记，2026-10-07 差集补录）：候选纠正接 flow 需独立身份与冻结计划协议（[64](64-bounded-observation-recovery.md)）；preview `--candidate` 原语已落地（[46](46-target-preview.md) 第三批）但未与 flow 接线；AMBIGUOUS 证据已附 context 上下文行（2026-10-08，重复标签带所在容器文本——串联的候选输入面已备，[08 §13](08-agent-cli-jev-design-proposal.md)）
 - [ ] flow 锚点标题插值：动态标题窗口（如音乐窗口标题随曲目变）静态计划无法锚定，v1 无插值（[43](43-release-review-draft.md) 待 M3 契约扩展）
 - [ ] 执行器保留子命令错误原文：verify-file 的 NOT_ACTIONABLE 在 step 证据仅留 code、丢 message 原文（[68 待办](68-combined-batch-first-round.md)——错误契约自带恢复路径，证据应完整携带）
 - [ ] **选区读取原语（2026-10-07 登记，实施前 spec + PRD §1.3 授权）**：Quicker 类动作的核心上下文通道（[10 §6](10-quicker-demand-research.md) 点名「对 AI 接口最有价值」）——读当前窗口用户选中内容（文本/文件/表格区域），UIA Text/Selection 优先，取不到如实 unavailable 不猜测；与 get-clipboard、`focused:` 合成显式上下文面。若选区只能经 Ctrl+C 获取须显式物理授权并申报焦点/剪贴板影响，不伪装成纯读取
@@ -52,7 +51,7 @@
 - [ ] preview-choice computer-use 真机鼠标点击验收（[46](46-target-preview.md)：两轮 "window is not a usable app window" 失败如实保留）
 
 <!-- 2026-10-05 收口移出：录制值读回 #4 双轨收口（rec-ma-12 证据二进制轮，[80](80-record-acceptance.md)）；健壮性基建 009 轮 10 步 155s 全链通过（[81 §9](81-word-style-flow.md)）；网易云收起方向识图证实（pack 同步，Table 树滞留非未收起）——见 CHANGELOG Unreleased。 -->
-<!-- 2026-10-08 收口移出：Word 流程 evidence 二进制补跑（note-typo-012 干净轮 10 步全链 completed，fnv128=19f4b6a8，五层修复合力验证通过，[81 §10](81-word-style-flow.md)）；虚拟化列表全量收集动词（`collect` spec 落地+资源管理器 600 文件 fixture 真机验收通过，[06 §3.4](06-design-blueprint.md)）——见 CHANGELOG Unreleased。 -->
+<!-- 2026-10-08 收口移出：Word 流程 evidence 二进制补跑（note-typo-012 干净轮 10 步全链 completed，fnv128=19f4b6a8，五层修复合力验证通过，[81 §10](81-word-style-flow.md)）；虚拟化列表全量收集动词（`collect` spec 落地+资源管理器 600 文件 fixture 真机验收通过，[06 §3.4](06-design-blueprint.md)）；flow 歧义候选串联（`--pick` 运行时候选纠正 spec 落地，[06 AMBIGUOUS 目标串联](06-design-blueprint.md)/[63 收口](63-simple-workflow-conditions.md)；自动缩小查询裁定不做入册）——见 CHANGELOG Unreleased。 -->
 
 
 ## 长期观察项

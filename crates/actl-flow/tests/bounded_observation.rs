@@ -63,7 +63,7 @@ fn transient_errors_recover_but_ambiguity_and_truncation_do_not_retry() {
         ),
     ] {
         let (p, store, mut run, mut host) = matrix(error, 1000, false);
-        execute(&p, &mut run, &store, &mut host, None).unwrap();
+        execute(&p, &mut run, &store, &mut host, None, None).unwrap();
         assert_eq!(run.steps[0].recovery.as_ref().unwrap().retries, retries);
         assert_eq!(
             host.calls.iter().filter(|c| *c == "write").count(),
@@ -75,14 +75,14 @@ fn transient_errors_recover_but_ambiguity_and_truncation_do_not_retry() {
 fn stop_prevents_retry_and_timeout_prevents_another_attempt() {
     let (p, store, mut run, mut host) =
         matrix(CtlError::new(ErrorCode::StaleRef, "temporary"), 1000, true);
-    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(run.status, Status::Stopped);
     assert_eq!(host.calls, vec!["check"]);
     let (p, store, mut run, mut host) =
         matrix(CtlError::new(ErrorCode::StaleRef, "temporary"), 50, false);
     host.errors
         .push_back(CtlError::new(ErrorCode::StaleRef, "again"));
-    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(host.calls, vec!["check", "check"]);
     assert_eq!(run.status, Status::Paused);
     assert_eq!(
@@ -104,7 +104,7 @@ fn policy_and_progress_contract_is_stable() {
         1000,
         false,
     );
-    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
     let progress = serde_json::to_value(run.steps[0].recovery.as_ref().unwrap()).unwrap();
     let golden: serde_json::Value =
         serde_json::from_str(include_str!("golden/recovery_progress_v1.json")).unwrap();
@@ -148,15 +148,15 @@ fn retries_are_durable_and_continue_does_not_refill_budget() {
         writes: 0,
         fail: true,
     };
-    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(host.reads, 3);
     assert_eq!(host.writes, 0);
     let (p, mut run) = store.load().unwrap();
-    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(host.reads, 4);
     assert_eq!(host.writes, 0);
     host.fail = false;
-    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(run.status, Status::Completed);
     assert_eq!(host.writes, 1);
 }

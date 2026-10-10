@@ -53,7 +53,7 @@ fn ensure_check_pass_short_circuits_without_dispatch() {
         satisfied: vec!["probe".into()],
         ..Default::default()
     };
-    execute(&plan, &mut run, &store, &mut host, None).unwrap();
+    execute(&plan, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(run.status, Status::Completed);
     assert_eq!(run.steps[0].status, StepStatus::Completed);
     assert!(run.steps[0].verified);
@@ -71,7 +71,7 @@ fn ensure_check_fail_falls_through_to_run() {
     .unwrap();
     let (root, store, mut run) = setup(&plan);
     let mut host = Fake::default(); // probe 不在 satisfied → 不满足
-    execute(&plan, &mut run, &store, &mut host, None).unwrap();
+    execute(&plan, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(run.status, Status::Completed);
     assert_eq!(
         host.calls,
@@ -89,7 +89,7 @@ fn ensure_check_must_be_read_only() {
     .unwrap();
     let (root, store, mut run) = setup(&plan);
     let mut host = Fake::default();
-    let error = execute(&plan, &mut run, &store, &mut host, None).unwrap_err();
+    let error = execute(&plan, &mut run, &store, &mut host, None, None).unwrap_err();
     assert_eq!(error.code, ErrorCode::Protocol);
     assert!(error.message.contains("read-only"));
     std::fs::remove_dir_all(root).unwrap();
@@ -123,6 +123,7 @@ fn record(id: &str, status: StepStatus, verified: bool) -> StepRecord {
         plan_version: Some(1),
         started_ms: None,
         finished_ms: None,
+        ambiguous: None,
     }
 }
 

@@ -813,6 +813,27 @@ fn state(store: &Store) -> Result<Value, CtlError> {
             "resume": format!("actl flow-resume --id {}", run.id),
         });
     }
+    // AMBIGUOUS 目标串联(docs/63):候选即应答面——暂停记录里直接给
+    // 候选清单与可复制的 --pick 命令,不强迫调用方再去读 state 文件。
+    if let Some(ambiguous) = run
+        .steps
+        .iter()
+        .find(|s| {
+            s.status == actl_flow::engine::StepStatus::Pending
+                && s.ambiguous.as_ref().is_some_and(|a| a.picked.is_none())
+        })
+        .and_then(|s| s.ambiguous.as_ref())
+    {
+        value["ambiguous_hint"] = json!({
+            "step_target": ambiguous.target,
+            "snapshot_id": ambiguous.snapshot_id,
+            "candidates": ambiguous.candidates,
+            "answer": format!(
+                "actl flow-resume --id {} --pick <@eN>",
+                run.id
+            ),
+        });
+    }
     // 版本谱系(flow-revise,运行时治理第二轮):有修订史的 run 展示
     // 只追加的版本事件链(版本/指纹/理由/diff)——修订是显式操作,不是
     // "模板漂移告警"要防的作弊路径。
@@ -1080,7 +1101,7 @@ pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
             } else if let Some(spec) = &plan.explore {
                 actl_flow::explore::execute(spec, &mut run, &store, &mut host, None, None)?;
             } else {
-                engine::execute(&plan, &mut run, &store, &mut host, None)?;
+                engine::execute(&plan, &mut run, &store, &mut host, None, None)?;
             }
             drop(active);
             outcome(&store, &run)
@@ -1090,11 +1111,12 @@ pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
             retry_step,
             decision,
             confidence,
+            pick,
         } => {
             let source = actl_core::control_log::source();
             actl_core::signal_session::flow_event(
                 "flow_resume_requested",
-                json!({"run_id":id,"request_id":actl_core::control_log::request_id(),"source":source,"source_verified":false,"retry_step":retry_step,"decision":decision}),
+                json!({"run_id":id,"request_id":actl_core::control_log::request_id(),"source":source,"source_verified":false,"retry_step":retry_step,"decision":decision,"pick":pick}),
             );
             let store = Store::at(&root, id)?;
             let _global = store.lock(true)?;
@@ -1108,6 +1130,11 @@ pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
                 if retry_step.is_some() {
                     return Err(CtlError::protocol(
                         "exploration runs do not support --retry-step",
+                    ));
+                }
+                if pick.is_some() {
+                    return Err(CtlError::protocol(
+                        "exploration runs do not support --pick; use --decision",
                     ));
                 }
                 let active = store.lock(false)?;
@@ -1144,6 +1171,7 @@ pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
                     store: &store,
                 },
                 retry_step.as_deref(),
+                pick.as_deref(),
             )?;
             drop(active);
             outcome(&store, &run)
@@ -1230,6 +1258,7 @@ pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
                         plan: &plan,
                         store: &store,
                     },
+                    None,
                     None,
                 )?;
                 drop(active);
@@ -1390,6 +1419,7 @@ mod failure_evidence_tests {
             plan_version: None,
             started_ms: None,
             finished_ms: None,
+            ambiguous: None,
         }
     }
 

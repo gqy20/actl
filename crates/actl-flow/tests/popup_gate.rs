@@ -110,7 +110,7 @@ fn unknown_popup_blocks_write_step_as_popup_pending() {
         popups: RefCell::new(Vec::new()),
         captures: RefCell::new(Vec::new()),
     };
-    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(run.status, Status::NeedsReview);
     assert_eq!(run.reason.as_deref(), Some("popup_pending:w1"));
     // 步保持 Pending(未执行,无副作用),write 从未派发
@@ -138,7 +138,7 @@ fn read_only_step_is_not_gated() {
         popups: RefCell::new(Vec::new()),
         captures: RefCell::new(Vec::new()),
     };
-    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(run.status, Status::Completed);
     assert_eq!(host.calls, vec!["peek:--app".to_string()]);
     std::fs::remove_dir_all(root).unwrap();
@@ -167,7 +167,7 @@ fn declared_handler_dismisses_popup_then_step_runs() {
         popups: RefCell::new(Vec::new()),
         captures: RefCell::new(Vec::new()),
     };
-    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(run.status, Status::Completed);
     // 处置 click + 业务 write 都派发,处置先于业务
     assert_eq!(
@@ -196,7 +196,7 @@ fn handler_that_fails_to_clear_escalates_to_popup_pending() {
         popups: RefCell::new(Vec::new()),
         captures: RefCell::new(Vec::new()),
     };
-    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(run.status, Status::NeedsReview);
     assert_eq!(run.reason.as_deref(), Some("popup_pending:w1"));
     assert_eq!(run.steps[0].status, StepStatus::Pending);
@@ -221,7 +221,7 @@ fn classification_mismatch_is_not_handled() {
         popups: RefCell::new(Vec::new()),
         captures: RefCell::new(Vec::new()),
     };
-    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(run.status, Status::NeedsReview);
     assert!(host.calls.is_empty());
     std::fs::remove_dir_all(root).unwrap();
@@ -241,7 +241,7 @@ fn write_step_without_app_anchor_is_not_gated() {
         popups: RefCell::new(Vec::new()),
         captures: RefCell::new(Vec::new()),
     };
-    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(run.status, Status::Completed);
     assert_eq!(host.calls, vec!["write:".to_string()]);
     std::fs::remove_dir_all(root).unwrap();
@@ -286,7 +286,7 @@ fn sequence_run_app_anchor_is_extracted_for_gating() {
         popups: RefCell::new(Vec::new()),
         captures: RefCell::new(Vec::new()),
     };
-    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(run.status, Status::NeedsReview);
     assert_eq!(run.reason.as_deref(), Some("popup_pending:w1"));
     std::fs::remove_dir_all(root).unwrap();
@@ -323,7 +323,7 @@ fn buttonless_unknown_shell_is_noise_and_does_not_block() {
         popups: RefCell::new(Vec::new()),
         captures: RefCell::new(Vec::new()),
     };
-    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(run.status, Status::Completed);
     assert_eq!(host.calls, vec!["write:--app".to_string()]);
     std::fs::remove_dir_all(root).unwrap();
@@ -350,7 +350,7 @@ fn unknown_surface_with_buttons_still_blocks() {
         popups: RefCell::new(Vec::new()),
         captures: RefCell::new(Vec::new()),
     };
-    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(run.status, Status::NeedsReview);
     assert_eq!(run.reason.as_deref(), Some("popup_pending:w1"));
     std::fs::remove_dir_all(root).unwrap();

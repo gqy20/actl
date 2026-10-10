@@ -59,7 +59,7 @@ fn setup() -> (Plan, Store, Run, Fake) {
 #[test]
 fn section_failure_isolates_and_later_sections_still_run() {
     let (plan, store, mut run, mut host) = setup();
-    execute(&plan, &mut run, &store, &mut host, None).unwrap();
+    execute(&plan, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(run.steps[0].status, StepStatus::Uncertain);
     assert_eq!(run.steps[1].status, StepStatus::Skipped);
     assert_eq!(run.steps[2].status, StepStatus::Completed);
@@ -77,9 +77,9 @@ fn section_failure_isolates_and_later_sections_still_run() {
 #[test]
 fn authorized_retry_restores_the_skipped_section() {
     let (plan, store, mut run, mut host) = setup();
-    execute(&plan, &mut run, &store, &mut host, None).unwrap();
+    execute(&plan, &mut run, &store, &mut host, None, None).unwrap();
     host.check_failures = 0;
-    execute(&plan, &mut run, &store, &mut host, Some("a1")).unwrap();
+    execute(&plan, &mut run, &store, &mut host, Some("a1"), None).unwrap();
     assert_eq!(run.steps[0].status, StepStatus::Completed);
     assert_eq!(run.steps[1].status, StepStatus::Completed);
     assert_eq!(run.steps[2].status, StepStatus::Completed);
@@ -102,7 +102,7 @@ fn repeated_identical_failures_are_classified_as_route_defects() {
     };
     for round in 1..=3 {
         let retry = (round > 1).then_some("s");
-        execute(&plan, &mut run, &store, &mut host, retry).unwrap();
+        execute(&plan, &mut run, &store, &mut host, retry, None).unwrap();
         assert_eq!(run.steps[0].attempt_errors.len(), round);
         assert_eq!(run.steps[0].status, StepStatus::Uncertain);
         assert_eq!(
@@ -121,7 +121,7 @@ fn repeated_identical_failures_are_classified_as_route_defects() {
 #[test]
 fn failures_without_source_evidence_get_structured_synthesis() {
     let (plan, store, mut run, mut host) = setup();
-    execute(&plan, &mut run, &store, &mut host, None).unwrap();
+    execute(&plan, &mut run, &store, &mut host, None, None).unwrap();
     let evidence = run.steps[0].error_evidence.as_ref().unwrap();
     assert_eq!(evidence["phase"], "verify");
     assert_eq!(evidence["command"], "check");

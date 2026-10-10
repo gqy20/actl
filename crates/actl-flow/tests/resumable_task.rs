@@ -58,7 +58,7 @@ fn continue_reobserves_and_never_replays_an_uncertain_write() {
             calls: vec![],
             observation_failed: false,
         };
-        execute(&plan, &mut run, &store, &mut host, None).unwrap();
+        execute(&plan, &mut run, &store, &mut host, None, None).unwrap();
         assert_eq!(run.status, Status::Paused);
         assert_eq!(
             run.steps[0].status,
@@ -70,13 +70,13 @@ fn continue_reobserves_and_never_replays_an_uncertain_write() {
         );
         let (saved, mut resumed) = store.load().unwrap();
         host.calls.clear();
-        execute(&saved, &mut resumed, &store, &mut host, None).unwrap();
+        execute(&saved, &mut resumed, &store, &mut host, None, None).unwrap();
         assert_eq!(host.calls[0], "scene");
         if effect == "hel" {
             assert_eq!(resumed.status, Status::NeedsReview);
             assert_eq!(host.calls, ["scene", "result"]);
             host.calls.clear();
-            execute(&saved, &mut resumed, &store, &mut host, None).unwrap();
+            execute(&saved, &mut resumed, &store, &mut host, None, None).unwrap();
             assert_eq!(host.calls, ["scene", "result"]);
             assert_eq!(host.text, "hel");
         } else {
@@ -106,7 +106,7 @@ fn unknown_scene_blocks_even_a_previously_completed_effect() {
         calls: vec![],
         observation_failed: true,
     };
-    execute(&plan, &mut run, &store, &mut host, None).unwrap();
+    execute(&plan, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(run.status, Status::Paused);
     assert_eq!(run.reason.as_deref(), Some("resume_check_failed"));
     assert_eq!(host.calls, ["scene"]);

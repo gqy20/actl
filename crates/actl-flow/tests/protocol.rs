@@ -230,7 +230,7 @@ fn pause_in_checks_preserves_stage_without_false_assertion_failure() {
         let (root, store, mut run) = setup(&p);
         let mut host = fake();
         host.interrupt_check = Some(store.clone());
-        execute(&p, &mut run, &store, &mut host, None).unwrap();
+        execute(&p, &mut run, &store, &mut host, None, None).unwrap();
         assert_eq!(run.status, Status::Paused);
         assert_eq!(run.reason.as_deref(), Some("pause_requested"));
         assert_eq!(
@@ -243,7 +243,7 @@ fn pause_in_checks_preserves_stage_without_false_assertion_failure() {
         );
         assert!(run.steps[0].error_code.is_none());
         store.clear_pause().unwrap();
-        execute(&p, &mut run, &store, &mut host, None).unwrap();
+        execute(&p, &mut run, &store, &mut host, None, None).unwrap();
         assert_eq!(run.status, Status::Completed);
         assert_eq!(host.calls.iter().filter(|c| *c == "write").count(), 1);
         std::fs::remove_dir_all(root).unwrap();
@@ -256,7 +256,7 @@ fn stop_during_verification_is_stopped_not_needs_review() {
     let (root, store, mut run) = setup(&p);
     let mut host = fake();
     host.stop_on_check = true;
-    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(run.status, Status::Stopped);
     assert_eq!(run.steps[0].status, StepStatus::Uncertain);
     assert_eq!(run.steps[1].attempts, 0);
@@ -284,12 +284,12 @@ fn pause_waits_for_action_then_resume_verifies_without_repeating_write() {
     let (root, store, mut run) = setup(&p);
     let mut h = fake();
     h.pause = Some(store.clone());
-    execute(&p, &mut run, &store, &mut h, None).unwrap();
+    execute(&p, &mut run, &store, &mut h, None, None).unwrap();
     assert_eq!(run.status, Status::Paused);
     assert_eq!(run.steps[0].status, StepStatus::Verifying);
     assert_eq!(h.calls, vec!["write"]);
     store.clear_pause().unwrap();
-    execute(&p, &mut run, &store, &mut h, None).unwrap();
+    execute(&p, &mut run, &store, &mut h, None, None).unwrap();
     assert_eq!(run.status, Status::Completed);
     assert_eq!(h.calls, vec!["write", "check", "read"]);
     std::fs::remove_dir_all(root).unwrap();
@@ -303,15 +303,15 @@ fn uncertain_result_requires_verification_or_explicit_retry() {
     run.steps[0].status = StepStatus::Running;
     run.steps[0].attempts = 1;
     store.save(&run).unwrap();
-    execute(&p, &mut run, &store, &mut h, None).unwrap();
+    execute(&p, &mut run, &store, &mut h, None, None).unwrap();
     assert_eq!(run.status, Status::NeedsReview);
     assert_eq!(h.calls, vec!["check"]);
     assert_eq!(run.steps[0].error_code, Some(ErrorCode::AssertionFailed));
-    execute(&p, &mut run, &store, &mut h, Some("write")).unwrap();
+    execute(&p, &mut run, &store, &mut h, Some("write"), None).unwrap();
     assert_eq!(h.calls, vec!["check", "check", "write", "check"]);
     assert_eq!(run.status, Status::NeedsReview);
     h.verified = true;
-    execute(&p, &mut run, &store, &mut h, None).unwrap();
+    execute(&p, &mut run, &store, &mut h, None, None).unwrap();
     assert_eq!(run.status, Status::Completed);
     assert_eq!(h.calls.iter().filter(|c| c.as_str() == "write").count(), 1);
     std::fs::remove_dir_all(root).unwrap();
@@ -323,15 +323,15 @@ fn checkpoints_stop_and_retries_preserve_progress() {
     p.steps[1].retry = Retry::ReadOnly;
     let (root, store, mut run) = setup(&p);
     let mut h = fake();
-    execute(&p, &mut run, &store, &mut h, None).unwrap();
+    execute(&p, &mut run, &store, &mut h, None, None).unwrap();
     assert_eq!(run.status, Status::Paused);
     assert!(h.calls.is_empty());
     h.stop = true;
-    execute(&p, &mut run, &store, &mut h, None).unwrap();
+    execute(&p, &mut run, &store, &mut h, None, None).unwrap();
     assert_eq!(run.status, Status::Stopped);
     h.stop = false;
     h.failures = 2;
-    execute(&p, &mut run, &store, &mut h, None).unwrap();
+    execute(&p, &mut run, &store, &mut h, None, None).unwrap();
     assert_eq!(run.status, Status::Completed);
     assert_eq!(run.steps[1].attempts, 3);
     assert_eq!(run.steps[0].attempts, 1);
@@ -349,7 +349,7 @@ fn locks_release_and_write_failure_prevents_action() {
     std::fs::remove_file(store.dir.join("state.json")).unwrap();
     std::fs::create_dir(store.dir.join("state.json")).unwrap();
     let mut h = fake();
-    assert!(execute(&p, &mut run, &store, &mut h, None).is_err());
+    assert!(execute(&p, &mut run, &store, &mut h, None, None).is_err());
     assert!(h.calls.is_empty());
     std::fs::remove_dir_all(root).unwrap();
 }
@@ -372,7 +372,7 @@ fn handoff_pauses_and_does_not_replay_uncertain_action() {
     let (root, store, mut run) = setup(&p);
     let mut host = fake();
     host.handoff = true;
-    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(run.status, Status::Paused);
     assert_eq!(
         run.reason.as_deref(),
@@ -381,7 +381,7 @@ fn handoff_pauses_and_does_not_replay_uncertain_action() {
     assert_eq!(run.steps[0].status, StepStatus::Uncertain);
     host.handoff = false;
     host.verified = false;
-    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(host.calls.iter().filter(|x| *x == "write").count(), 1);
     std::fs::remove_dir_all(root).unwrap();
 }
@@ -393,11 +393,11 @@ fn consent_refusal_before_any_action_can_resume_without_replay_override() {
     let mut host = fake();
     host.handoff = true;
     host.before_start = true;
-    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(run.status, Status::Paused);
     assert_eq!(run.steps[0].status, StepStatus::Pending);
     host.handoff = false;
-    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(run.status, Status::Completed);
     std::fs::remove_dir_all(root).unwrap();
 }

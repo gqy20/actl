@@ -60,7 +60,7 @@ fn true_false_and_skip_have_distinct_durable_results() {
         if !matched {
             host.condition = Err(ErrorCode::AssertionFailed);
         }
-        execute(&plan, &mut run, &store, &mut host, None).unwrap();
+        execute(&plan, &mut run, &store, &mut host, None, None).unwrap();
         assert_eq!(run.status, Status::Completed);
         let state = serde_json::to_value(&run.steps[0]).unwrap();
         assert_eq!(state["branch"], expected);
@@ -95,7 +95,7 @@ fn observation_errors_never_select_the_negative_branch() {
         let plan = plan(true);
         let (store, mut run, mut host) = setup(&plan);
         host.condition = Err(code);
-        execute(&plan, &mut run, &store, &mut host, None).unwrap();
+        execute(&plan, &mut run, &store, &mut host, None, None).unwrap();
         assert_eq!(run.status, Status::Paused);
         assert_eq!(host.calls, vec!["condition"]);
         assert_eq!(run.steps[0].attempts, 0);
@@ -107,17 +107,17 @@ fn uncertain_write_keeps_original_branch_after_condition_changes() {
     let plan = plan(true);
     let (store, mut run, mut host) = setup(&plan);
     host.uncertain = true;
-    execute(&plan, &mut run, &store, &mut host, None).unwrap();
+    execute(&plan, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(run.steps[0].status, StepStatus::Uncertain);
     host.calls.clear();
     host.condition = Err(ErrorCode::AssertionFailed);
     host.verified = false;
-    execute(&plan, &mut run, &store, &mut host, None).unwrap();
+    execute(&plan, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(host.calls, vec!["verify"]);
     assert_eq!(run.status, Status::NeedsReview);
     host.calls.clear();
     host.verified = true;
-    execute(&plan, &mut run, &store, &mut host, None).unwrap();
+    execute(&plan, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(host.calls, vec!["verify"]);
     assert_eq!(run.status, Status::Completed);
 }
@@ -126,11 +126,11 @@ fn pending_before_dispatch_rechecks_condition_on_resume() {
     let mut plan = plan(true);
     plan.steps[0].pause_before = true;
     let (store, mut run, mut host) = setup(&plan);
-    execute(&plan, &mut run, &store, &mut host, None).unwrap();
+    execute(&plan, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(run.status, Status::Paused);
     host.calls.clear();
     host.condition = Err(ErrorCode::AssertionFailed);
-    execute(&plan, &mut run, &store, &mut host, None).unwrap();
+    execute(&plan, &mut run, &store, &mut host, None, None).unwrap();
     assert!(host.calls.contains(&"alternate".into()));
     assert!(!host.calls.contains(&"write".into()));
 }
@@ -140,14 +140,14 @@ fn unless_skips_completed_state_and_preserves_unknown_errors() {
     let mut plan = plan(false);
     plan.steps[0].unless = plan.steps[0].when.take();
     let (store, mut run, mut host) = setup(&plan);
-    execute(&plan, &mut run, &store, &mut host, None).unwrap();
+    execute(&plan, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(host.calls, vec!["condition"]);
     let expected: serde_json::Value =
         serde_json::from_str(include_str!("golden/branch_skip_v1.json")).unwrap();
     assert_eq!(serde_json::to_value(&run.steps[0]).unwrap(), expected);
     let (store, mut run, mut host) = setup(&plan);
     host.condition = Err(ErrorCode::Internal);
-    execute(&plan, &mut run, &store, &mut host, None).unwrap();
+    execute(&plan, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(run.status, Status::Paused);
     assert_eq!(host.calls, vec!["condition"]);
 }
@@ -160,7 +160,7 @@ fn invalid_branch_state_and_conflicting_predicates_are_rejected() {
     plan.steps[0].unless = None;
     let (store, mut run, mut host) = setup(&plan);
     run.steps[0].status = StepStatus::Uncertain;
-    assert!(execute(&plan, &mut run, &store, &mut host, None).is_err());
+    assert!(execute(&plan, &mut run, &store, &mut host, None, None).is_err());
     assert!(host.calls.is_empty());
 }
 
@@ -170,12 +170,12 @@ fn uncertain_alternate_survives_reload_without_replaying_either_route() {
     let (store, mut run, mut host) = setup(&plan);
     host.condition = Err(ErrorCode::AssertionFailed);
     host.uncertain = true;
-    execute(&plan, &mut run, &store, &mut host, None).unwrap();
+    execute(&plan, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(run.steps[0].branch, Some(branch::Branch::Otherwise));
     let (saved, mut run) = store.load().unwrap();
     host.condition = Ok(());
     host.calls.clear();
-    execute(&saved, &mut run, &store, &mut host, None).unwrap();
+    execute(&saved, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(host.calls, vec!["verify"]);
     assert_eq!(run.status, Status::Completed);
     assert_eq!(run.steps[0].branch, Some(branch::Branch::Otherwise));
@@ -218,7 +218,7 @@ fn pause_or_stop_during_condition_prevents_dispatch() {
             stop,
             observed: false,
         };
-        execute(&plan, &mut run, &store, &mut host, None).unwrap();
+        execute(&plan, &mut run, &store, &mut host, None, None).unwrap();
         assert_eq!(
             run.status,
             if stop {

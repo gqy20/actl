@@ -72,11 +72,11 @@ fn setup(p: &Plan) -> (std::path::PathBuf, Store, Run, Fake) {
 fn persisted_age_blocks_resume_without_replaying_source_or_write() {
     let p = plan();
     let (root, store, mut run, mut host) = setup(&p);
-    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
     let (p, mut run) = store.load().unwrap();
     assert_eq!(run.steps[0].outputs_captured_ms, Some(1000));
     host.now = 1101;
-    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(host.calls, ["read"]);
     assert_eq!(run.steps[1].attempts, 0);
     assert_eq!(run.reason.as_deref(), Some("output_freshness_failed"));
@@ -125,9 +125,9 @@ fn precondition_delay_rechecks_before_write_and_honors_fail_policy() {
     });
     p.steps[1].on_failure = Failure::Fail;
     let (root, store, mut run, mut host) = setup(&p);
-    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
     host.delay = 101;
-    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(host.calls, ["read", "before"]);
     assert_eq!(run.status, Status::Failed);
     assert_eq!(run.steps[1].attempts, 0);
@@ -138,12 +138,12 @@ fn precondition_delay_rechecks_before_write_and_honors_fail_policy() {
 fn fresh_resume_completes_and_completed_write_is_not_replayed_after_expiry() {
     let p = plan();
     let (root, store, mut run, mut host) = setup(&p);
-    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
     host.now = 1100;
-    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(run.status, Status::Completed);
     host.now = 9999;
-    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(host.calls, ["read", "write", "verify"]);
     std::fs::remove_dir_all(root).unwrap();
 }

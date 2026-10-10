@@ -59,6 +59,10 @@ pub struct StepRecord {
     pub started_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub finished_ms: Option<u64>,
+    /// AMBIGUOUS 目标串联(docs/63):run 相多命中时的候选暂停记录;
+    /// `--pick` 应答后 picked 置位,派发参数以 ref+snapshot 重写。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ambiguous: Option<crate::AmbiguousTarget>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -105,6 +109,7 @@ impl Run {
                     plan_version: None,
                     started_ms: None,
                     finished_ms: None,
+                    ambiguous: None,
                 })
                 .collect(),
         }
@@ -367,12 +372,15 @@ fn failure_reason(base: &str, run: &Run, index: usize) -> String {
     }
 }
 /// Host must hold both execution locks; resumption never changes the saved plan.
+/// `pick` = `flow-resume --pick @eN`(运行时候选纠正,docs/63):校验 ref 属于
+/// 该步骤 AMBIGUOUS 记录的候选集后置位,派发参数以 ref+snapshot 重写。
 pub fn execute(
     plan: &Plan,
     run: &mut Run,
     store: &Store,
     host: &mut impl Host,
     retry_step: Option<&str>,
+    pick: Option<&str>,
 ) -> Result<(), CtlError> {
     crate::data::validate(plan)?;
     crate::data::check_saved(plan, run)?;
@@ -421,6 +429,41 @@ pub fn execute(
         return Err(CtlError::protocol(
             "--retry-step must name an uncertain step",
         ));
+    }
+    if let Some(reference) = pick {
+        // --pick 校验(运行时候选纠正):必须命中唯一待应答的 AMBIGUOUS
+        // 暂停步骤,ref 必须属于候选集——PROTOCOL 先于任何派发。
+        let pending: Vec<usize> = run
+            .steps
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| {
+                s.status == StepStatus::Pending
+                    && s.ambiguous.as_ref().is_some_and(|a| a.picked.is_none())
+            })
+            .map(|(i, _)| i)
+            .collect();
+        let [index] = pending[..] else {
+            return Err(CtlError::protocol(
+                "--pick requires exactly one step awaiting candidate selection",
+            ));
+        };
+        let refs = run.steps[index]
+            .ambiguous
+            .as_ref()
+            .expect("filtered above")
+            .candidate_refs();
+        if !refs.iter().any(|r| r == reference) {
+            return Err(CtlError::protocol(format!(
+                "--pick {reference:?} is not one of the offered candidates: {}",
+                refs.join(", ")
+            )));
+        }
+        run.steps[index]
+            .ambiguous
+            .as_mut()
+            .expect("filtered above")
+            .picked = Some(reference.to_owned());
     }
     let resuming = run.status != Status::Ready;
     let mut section_reason: Option<String> = None;
@@ -617,6 +660,25 @@ pub fn execute(
                 crate::branch::Selection::Execute => {}
             }
         }
+        // --pick 应答后的参数重写(docs/63 运行时候选纠正):args[0] 换成
+        // 选中 ref 并追加 --snapshot——身份核验交给既有 ReplayGuard(窗口
+        // 重建/元素漂移即 STALE_REF 拒绝派发,不消费重写)。计划目标已变
+        // (修订后的陈旧 pick)→ PROTOCOL,引导重新判读或走 flow-revise。
+        if run.steps[i].status == StepStatus::Pending
+            && let Some(ambiguous) = run.steps[i].ambiguous.clone()
+            && let Some(reference) = ambiguous.picked
+        {
+            if step.run.args.first().is_none_or(|a| a != &ambiguous.target) {
+                return Err(CtlError::protocol(
+                    "step target changed since the ambiguous pause; re-answer with --pick or use flow-revise",
+                ));
+            }
+            step.run.args[0] = reference;
+            if !step.run.args.iter().any(|a| a == "--snapshot") {
+                step.run.args.push("--snapshot".into());
+                step.run.args.push(ambiguous.snapshot_id);
+            }
+        }
         if boundary(run, store, host)? {
             return Ok(());
         }
@@ -712,6 +774,52 @@ pub fn execute(
                     run.reason = evidence["reason"].as_str().map(str::to_owned);
                     run.save(store, host)?;
                     return Ok(());
+                }
+                // AMBIGUOUS 目标拦截(运行时候选纠正,docs/63):locate 多命中
+                // =零派发(无"可能已生效"语义),引擎锚定一份骨架快照作候选
+                // ref 的身份来源,候选证据**全量保留**(不走默认 redaction——
+                // 候选是应答面,截断即失能),run 进 needs_review 等待
+                // `flow-resume --pick`。步骤保持 Pending。仅在可识别形态下
+                // 拦截:目标在 args[0]、有 --app 锚、证据含候选——其余形态
+                // 走既有通用失败语义,不吞边界。
+                if error.code == ErrorCode::Ambiguous
+                    && step.run.args.first().is_some_and(|a| !a.starts_with('-'))
+                    && let Some(app) = invocation_app(&step.run)
+                    && let Some(candidates) = error
+                        .evidence
+                        .as_ref()
+                        .and_then(|e| e["candidates"].as_array())
+                    && !candidates.is_empty()
+                {
+                    let snapshot = host.execute_snapshot(vec![
+                        "--app".into(),
+                        app.clone(),
+                        "--skeleton".into(),
+                    ]);
+                    let (snapshot_id, target) = match snapshot {
+                        Ok((id, _)) if !id.is_empty() => (id, step.run.args[0].clone()),
+                        // 快照失败:候选无法锚定身份,pick 通道不可用——
+                        // 落回通用失败语义(uncertain/paused),不降级猜测。
+                        _ => (String::new(), step.run.args[0].clone()),
+                    };
+                    record_attempt_error(run, i, error.code);
+                    run.steps[i].error_code = Some(error.code);
+                    if !snapshot_id.is_empty() {
+                        run.steps[i].status = StepStatus::Pending;
+                        run.steps[i].ambiguous = Some(crate::AmbiguousTarget {
+                            command: step.run.command.clone(),
+                            target,
+                            app: Some(app),
+                            snapshot_id,
+                            candidates: candidates.clone(),
+                            picked: None,
+                        });
+                        run.status = Status::NeedsReview;
+                        run.reason = Some(format!("ambiguous_target:{}", step.id));
+                        run.save(store, host)?;
+                        host.publish(run);
+                        return Ok(());
+                    }
                 }
                 run.steps[i].error_evidence =
                     crate::step_failure_evidence(&step, &error, "run", &step.run.command);

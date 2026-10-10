@@ -50,7 +50,7 @@ fn resumed_pending_step_reuses_only_an_identical_immediate_scene_check() {
         let (root, store, mut run) = setup(&p);
         run.status = Status::Paused;
         let mut host = Fake::default();
-        execute(&p, &mut run, &store, &mut host, None).unwrap();
+        execute(&p, &mut run, &store, &mut host, None, None).unwrap();
         assert_eq!(run.status, Status::Completed);
         let golden: serde_json::Value =
             serde_json::from_str(include_str!("golden/check_reuse_v1.json")).unwrap();
@@ -78,7 +78,7 @@ fn uncertain_step_keeps_before_after_result_verification() {
         errors: vec![ErrorCode::AssertionFailed],
         ..Default::default()
     };
-    execute(&p, &mut run, &store, &mut host, Some("a")).unwrap();
+    execute(&p, &mut run, &store, &mut host, Some("a"), None).unwrap();
     assert_eq!(host.calls, ["scene", "check", "scene", "write", "check"]);
     std::fs::remove_dir_all(root).unwrap();
 }
@@ -93,7 +93,7 @@ fn explicit_retry_does_not_replay_when_result_observation_is_unknown() {
         errors: vec![ErrorCode::StaleRef],
         ..Default::default()
     };
-    execute(&p, &mut run, &store, &mut host, Some("a")).unwrap();
+    execute(&p, &mut run, &store, &mut host, Some("a"), None).unwrap();
     assert_eq!(host.calls, ["check"]);
     assert_eq!(run.status, Status::NeedsReview);
     assert_eq!(run.reason.as_deref(), Some("result_observation_failed"));
@@ -109,7 +109,7 @@ fn stale_observation_recovers_without_replaying_write_and_keeps_audit() {
         errors: vec![ErrorCode::StaleRef],
         ..Default::default()
     };
-    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(host.calls, ["write", "check", "check"]);
     assert_eq!(run.status, Status::Completed);
     assert_eq!(run.steps[0].attempts, 1);
@@ -140,7 +140,7 @@ fn exhaustion_and_nontransient_errors_stop_without_replay() {
             errors: vec![error; 4],
             ..Default::default()
         };
-        execute(&p, &mut run, &store, &mut host, None).unwrap();
+        execute(&p, &mut run, &store, &mut host, None, None).unwrap();
         assert_eq!(
             host.calls.len(),
             if error == ErrorCode::StaleRef { 3 } else { 1 }
@@ -162,12 +162,12 @@ fn resume_check_precedes_result_verification_and_can_block_it() {
         errors: vec![ErrorCode::AssertionFailed],
         ..Default::default()
     };
-    execute(&p, &mut run, &store, &mut host, Some("a")).unwrap();
+    execute(&p, &mut run, &store, &mut host, Some("a"), None).unwrap();
     assert_eq!(host.calls, ["check"]);
     assert_eq!(run.reason.as_deref(), Some("resume_check_failed"));
     assert_eq!(run.steps[0].status, StepStatus::Uncertain);
     host.calls.clear();
-    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(host.calls, ["check", "check"]);
     assert_eq!(run.status, Status::Completed);
     assert_eq!(run.steps[0].attempts, 1);
@@ -185,7 +185,7 @@ fn pause_or_stop_prevents_another_observation() {
             pause_on_error: (!stop).then(|| store.dir.join("pause-requested")),
             ..Default::default()
         };
-        execute(&p, &mut run, &store, &mut host, None).unwrap();
+        execute(&p, &mut run, &store, &mut host, None, None).unwrap();
         assert_eq!(host.calls, ["write", "check"]);
         assert_eq!(
             run.status,
@@ -210,7 +210,7 @@ fn read_run_retries_count_each_actual_call_and_budget_survives_resume() {
         errors: vec![ErrorCode::StaleRef; 3],
         ..Default::default()
     };
-    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(run.steps[0].attempts, 3);
     assert_eq!(run.steps[0].observation_retries.len(), 2);
     while run.steps[0].observation_retries.len() < 32 {
@@ -226,7 +226,7 @@ fn read_run_retries_count_each_actual_call_and_budget_survives_resume() {
     let (_, mut run) = store.load().unwrap();
     host.calls.clear();
     host.errors = vec![ErrorCode::StaleRef];
-    execute(&p, &mut run, &store, &mut host, None).unwrap();
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
     assert_eq!(host.calls, ["check"]);
     assert_eq!(run.steps[0].observation_retries.len(), 32);
     std::fs::remove_dir_all(root).unwrap();
