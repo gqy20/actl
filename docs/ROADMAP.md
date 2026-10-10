@@ -21,7 +21,7 @@
 
 - [ ] 流程扩展（嵌套分支——**缓办**，无真实场景，出现再立项；循环已落地 for_each 形态，2026-10-11）
 - [ ] 浏览器通道余量：flow 级 uncertain 持久化、pipe 传输 spike（`--remote-debugging-pipe`）、`--user-agent` 覆盖（headless UA 壁垒站点）、选择器索引消歧、batch 组合验收
-- [ ] **browser-read 列表枚举形态（协议面变更，spec 三件套同 PR）**：CDP 轨多匹配读动词——现状唯一匹配纪律（0→NOT_FOUND、>1→AMBIGUOUS），枚举靠位置谓词绕行（[73 round7](73-browser-twitter-scenario.md)）；批量通道的并行语义契约已预留（[06 P3 修正](06-design-blueprint.md)——CDP 读是唯一预留并行方向）
+- [ ] **browser-read 列表枚举形态（协议面变更，spec 三件套同 PR）**：~~CDP 轨多匹配读动词——现状唯一匹配纪律（0→NOT_FOUND、>1→AMBIGUOUS），枚举靠位置谓词绕行（[73 round7](73-browser-twitter-scenario.md)）；批量通道的并行语义契约已预留（[06 P3 修正](06-design-blueprint.md)——CDP 读是唯一预留并行方向）~~（2026-10-11 `--all [--limit N]` 落地：列表语义+诚实截断+位置谓词绕行废止；真机复验并入浏览器聚合轮）
 - [ ] WebView2 专项验收（键盘跨原生/网页、屏幕阅读器、多屏 DPI、缺失运行时回退）
 - [ ] 中央任务提示专项验收：真实失败/停止/接管暂停、显示端重启后旧流程恢复、跨屏 DPI 与减少动态设置（[75](75-action-start-notification.md)）；并轨补入：急停真实按钮 + 跨进程解除完整交互（[35](35-stop-lifecycle.md)/[39](39-flow-observation-recovery.md) 尾自 2026-09-28 悬置——真实按钮路径待验收，与真实停止项同轮收口）
 - [ ] agent 自驱授权白名单通道（仅真实需求时立项，[32](32-desktop-handoff.md)）

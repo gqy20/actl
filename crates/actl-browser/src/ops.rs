@@ -182,6 +182,35 @@ fn locate_script(kind: SelectorKind, value: &str, property: Option<&str>) -> Str
     }
 }
 
+/// 枚举脚本(--all,docs/73 round7 痛点收口):返回**全部**匹配,不在 JS
+/// 侧判唯一。结构 {total, elements:[…]}——elements 每项带 text/property/
+/// tag/id,截断与去重不在 JS 做(诚实枚举,Rust 侧按 limit 截断上报);
+/// 零匹配 total:0(枚举语义,空集合法——不是 NOT_FOUND)。
+fn locate_all_script(kind: SelectorKind, value: &str, property: Option<&str>) -> String {
+    let embedded = serde_json::to_string(value).unwrap_or_default();
+    let prop_field = match property {
+        Some(p) => format!(",property:{}", property_expr(p)),
+        None => String::new(),
+    };
+    match kind {
+        SelectorKind::Css => format!(
+            "(function(){{var els=document.querySelectorAll({embedded});\
+             var out=[];for(var i=0;i<els.length;i++){{var e=els[i];\
+             out.push({{text:e.textContent==null?'':String(e.textContent),\
+             tag:e.tagName,id:e.id||null,name:e.getAttribute('name')||null{prop_field}}});}}\
+             return JSON.stringify({{matches:els.length,elements:out}});}})()"
+        ),
+        SelectorKind::Xpath => format!(
+            "(function(){{var it=document.evaluate({embedded},document,null,\
+             XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,null);\
+             var out=[];for(var i=0;i<it.snapshotLength;i++){{var e=it.snapshotItem(i);\
+             out.push({{text:e.textContent==null?'':String(e.textContent),\
+             tag:e.tagName||null,name:e.getAttribute('name')||null{prop_field}}});}}\
+             return JSON.stringify({{matches:it.snapshotLength,elements:out}});}})()"
+        ),
+    }
+}
+
 /// Runtime.evaluate;脚本约定返回 JSON 字符串(内部脚本,非用户表达式)。
 fn eval_json(
     conn: &Connection,
@@ -736,15 +765,29 @@ pub fn navigate(
 // read
 // ---------------------------------------------------------------------------
 
-pub fn read(
-    paths: &Paths,
-    session_id: &str,
-    kind: SelectorKind,
-    value: &str,
-    property: Option<&str>,
-    iframe: bool,
-    timeout_ms: Option<u64>,
-) -> Result<Value, CtlError> {
+/// read 的参数束(同 LaunchSpec 惯例——clippy 参数上限)。
+pub struct ReadSpec<'a> {
+    pub session_id: &'a str,
+    pub kind: SelectorKind,
+    pub value: &'a str,
+    pub property: Option<&'a str>,
+    pub iframe: bool,
+    pub timeout_ms: Option<u64>,
+    pub all: bool,
+    pub limit: Option<usize>,
+}
+
+pub fn read(paths: &Paths, spec: ReadSpec<'_>) -> Result<Value, CtlError> {
+    let ReadSpec {
+        session_id,
+        kind,
+        value,
+        property,
+        iframe,
+        timeout_ms,
+        all,
+        limit,
+    } = spec;
     validate_selector(kind, value)?;
     let property = property.unwrap_or("text");
     validate_property(property)?;
@@ -758,6 +801,64 @@ pub fn read(
     } else {
         None
     };
+    if all {
+        // --all 枚举形态(2026-10-11 spec,docs/73 round7):零命中如实
+        // 空集(不是 NOT_FOUND——枚举语义与 find 一致),limit 只裁返回
+        // 面,total 保真;逐元素文本截断与唯一读同规。
+        const ALL_LIMIT: usize = 50;
+        const ALL_LIMIT_MAX: usize = 500;
+        let limit = limit.unwrap_or(ALL_LIMIT);
+        if !(1..=ALL_LIMIT_MAX).contains(&limit) {
+            return Err(protocol(format!(
+                "browser-read --limit must be 1..={ALL_LIMIT_MAX}, got {limit}"
+            )));
+        }
+        let located = eval_json(
+            &conn,
+            &cdp_session,
+            &locate_all_script(kind, value, Some(property)),
+            context_id,
+            timeout,
+        )?;
+        let total = located
+            .get("matches")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| CtlError::internal("enumeration script returned no total"))?;
+        let elements = located
+            .get("elements")
+            .and_then(Value::as_array)
+            .ok_or_else(|| CtlError::internal("enumeration script returned no elements"))?;
+        let mut out = Vec::with_capacity(elements.len().min(limit));
+        for element in elements.iter().take(limit) {
+            let (text, truncated) = truncate_text(
+                element
+                    .get("text")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default(),
+            );
+            let mut item = json!({ "text": text, "truncated": truncated });
+            if let Some(tag) = element.get("tag").and_then(Value::as_str) {
+                item["tag"] = Value::String(tag.to_string());
+            }
+            if let Some(id) = element.get("id").and_then(Value::as_str) {
+                item["id"] = Value::String(id.to_string());
+            }
+            if property != "text" {
+                item["property"] = Value::String(property.to_string());
+                item["value"] = element.get("property").cloned().unwrap_or(Value::Null);
+            }
+            out.push(item);
+        }
+        return Ok(json!({
+            "total": total,
+            "returned": out.len(),
+            "truncated_by_limit": total > out.len() as u64,
+            "selector_kind": kind.as_str(),
+            "elements": out,
+            "session_id": session_id,
+            "frame": if iframe { "iframe" } else { "main" },
+        }));
+    }
     let located = eval_json(
         &conn,
         &cdp_session,

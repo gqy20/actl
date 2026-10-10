@@ -55,16 +55,33 @@ pub(crate) fn navigate_cmd(
     ops::navigate(&paths(), session, url, timeout).map(Into::into)
 }
 
+// clap 变体字段直转的薄适配层——参数即命令面,不拆束(与 dispatch 对齐)
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn read_cmd(
     session: &str,
     css: Option<&str>,
     xpath: Option<&str>,
     property: Option<&str>,
     iframe: bool,
+    all: bool,
+    limit: Option<usize>,
     timeout: Option<u64>,
 ) -> Result<CommandOutput, CtlError> {
     let (kind, value) = selector_of(css, xpath)?;
-    ops::read(&paths(), session, kind, value, property, iframe, timeout).map(Into::into)
+    ops::read(
+        &paths(),
+        ops::ReadSpec {
+            session_id: session,
+            kind,
+            value,
+            property,
+            iframe,
+            timeout_ms: timeout,
+            all,
+            limit,
+        },
+    )
+    .map(Into::into)
 }
 
 pub(crate) fn type_cmd(

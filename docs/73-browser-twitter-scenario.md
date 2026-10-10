@@ -51,7 +51,9 @@ href 枚举)、唯一匹配纪律(含漂移拒绝)、位置谓词消歧、真实
 - **headless 模式 UA 覆盖**(`--user-agent` 级选项):不牺牲无头形态过 UA 壁垒;
 - **epub 临时 profile 删除竞争**:7 轮中 2 次 `ephemeral_profile_removed:false`
   (浏览器句柄延迟释放)→close 后延迟重试;
-- 选择器索引消歧助手(UIA 轨 `role:#N` 的等价物):本轮靠位置谓词 xpath 手工达成。
+- ~~选择器索引消歧助手(UIA 轨 `role:#N` 的等价物):本轮靠位置谓词 xpath 手工达成。~~
+  (2026-10-11 更强收口:`browser-read --all [--limit N]` 枚举形态落地——列表语义
+  零命中=空集非 NOT_FOUND,位置谓词绕行不再需要;[06 浏览器节](06-design-blueprint.md))
 
 ## 纪律记录
 

@@ -670,6 +670,8 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             xpath,
             property,
             iframe,
+            all,
+            limit,
             timeout,
         } => browser::read_cmd(
             session,
@@ -677,6 +679,8 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             xpath.as_deref(),
             property.as_deref(),
             *iframe,
+            *all,
+            *limit,
             *timeout,
         ),
         Command::BrowserType {

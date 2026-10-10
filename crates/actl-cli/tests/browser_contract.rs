@@ -327,3 +327,33 @@ fn snapshot_keywords_arg_contract() {
     // handler 层校验发生在窗口捕获前?——keywords 解析在 capture 之后、finish 之前,
     // 但空/超限词表在校验首步,无桌面依赖路径不可离线断言;此处只锁互斥面
 }
+
+#[test]
+fn all_flag_documents_list_semantics_in_help() {
+    // --all 枚举形态(2026-10-11 spec,docs/73 round7 痛点收口):零命中=
+    // 诚实空集(非 NOT_FOUND)、--limit 裁返回面保真 total——进 help 四要素。
+    let (code, stdout) = actl(&["browser-read", "--help"]);
+    assert_eq!(code, 0);
+    assert!(stdout.contains("--all"), "{stdout}");
+    assert!(stdout.contains("empty set, not NOT_FOUND"), "{stdout}");
+    assert!(stdout.contains("--limit"), "{stdout}");
+    assert!(stdout.contains("Errors:"), "{stdout}");
+}
+
+#[test]
+fn limit_requires_all_is_clap_rejected() {
+    // --limit 是 --all 的从属参数:单独出现走 clap usage error(exit 2)
+    assert_eq!(
+        actl(&[
+            "browser-read",
+            "--session",
+            "x",
+            "--css",
+            "div",
+            "--limit",
+            "10"
+        ])
+        .0,
+        2
+    );
+}
