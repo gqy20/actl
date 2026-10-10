@@ -1,8 +1,12 @@
 //! CLI adapter: preflight every invocation, then execute through the existing dispatcher.
-use crate::cli::{Cli, Command, DesktopCommand, FlowCommand};
+mod validate;
+
+pub use validate::validate;
+
+use crate::cli::{Cli, Command, FlowCommand};
 use actl_core::{CtlError, ErrorCode};
 use actl_flow::{
-    Invocation, Plan, Retry,
+    Invocation, Plan,
     engine::{self, Host, Run, Status},
     store::Store,
 };
@@ -56,7 +60,7 @@ fn read_only(cmd: &Command) -> bool {
     )
 }
 
-fn validate_assertion(command: &Command) -> Result<(), CtlError> {
+pub(super) fn validate_assertion(command: &Command) -> Result<(), CtlError> {
     match command {
         Command::VerifyWindow { app, state } => actl_uia::window_check::validate(app, state)?,
         Command::VerifyOwner {
@@ -180,197 +184,6 @@ fn validate_assertion(command: &Command) -> Result<(), CtlError> {
             }
         }
         _ => {}
-    }
-    Ok(())
-}
-pub fn validate(plan: &Plan) -> Result<(), CtlError> {
-    // 探索计划(docs/42 S2):无静态步骤;校验目标是只读断言族命令。
-    if let Some(explore) = &plan.explore {
-        let command = parse(&explore.goal).map_err(|e| {
-            CtlError::with_evidence(
-                e.code,
-                format!("explore.goal: {}", e.message),
-                json!({"field": "explore.goal"}),
-            )
-        })?;
-        if !read_only(&command) {
-            return Err(CtlError::with_evidence(
-                ErrorCode::Protocol,
-                "explore goal must be a read-only assertion (verify family)",
-                json!({"field": "explore.goal"}),
-            ));
-        }
-        if !matches!(
-            command,
-            Command::Verify { .. }
-                | Command::Wait { .. }
-                | Command::VerifyFile { .. }
-                | Command::VerifyRows { .. }
-                | Command::VerifyOwner { .. }
-                | Command::VerifyClosed { .. }
-                | Command::VerifyWindow { .. }
-                | Command::VerifyClipboard { .. }
-                | Command::BrowserVerify { .. }
-        ) {
-            return Err(CtlError::with_evidence(
-                ErrorCode::Protocol,
-                "explore goal must be an assertion command (verify/wait family)",
-                json!({"field": "explore.goal"}),
-            ));
-        }
-        crate::selector_input::validate(&command)?;
-        validate_assertion(&command)?;
-        return Ok(());
-    }
-    for (index, step) in plan.steps.iter().enumerate() {
-        actl_flow::branch::validate(step)?;
-        if let Some(otherwise) = &step.otherwise {
-            let mut child = step.clone();
-            child.run = otherwise.clone();
-            child.otherwise = None;
-            validate(&Plan {
-                version: plan.version,
-                name: plan.name.clone(),
-                handoff: plan.handoff,
-                auto_resume: None,
-                explore: None,
-                popup_handlers: Vec::new(),
-                steps: vec![child],
-            })?;
-        }
-        if let Some(calls) = actl_flow::sequence::decode(&step.run)? {
-            if step.verify.is_none() || !step.outputs.is_empty() || step.retry == Retry::ReadOnly {
-                return Err(CtlError::protocol(
-                    "sequence requires result verification, no outputs or read-only retry",
-                ));
-            }
-            for call in calls {
-                let mut child = step.clone();
-                child.run = call;
-                child.otherwise = None;
-                validate(&Plan {
-                    version: plan.version,
-                    name: plan.name.clone(),
-                    handoff: plan.handoff,
-                    auto_resume: None,
-                    explore: None,
-                    popup_handlers: Vec::new(),
-                    steps: vec![child],
-                })?;
-            }
-            continue;
-        }
-        let context = |field: &str, e: CtlError| {
-            CtlError::with_evidence(
-                e.code,
-                format!("step {} / {field}: {}", step.id, e.message),
-                json!({"step_id":step.id,"step_index":index,"field":format!("steps[{index}].{field}")}),
-            )
-        };
-        for (field, call) in [
-            ("run", Some(&step.run)),
-            ("when", step.when.as_ref()),
-            ("unless", step.unless.as_ref()),
-            ("before", step.before.as_ref()),
-            ("verify", step.verify.as_ref()),
-            ("resume_check", step.resume_check.as_ref()),
-        ] {
-            let Some(call) = call else {
-                continue;
-            };
-            let command = parse(call).map_err(|e| context(&format!("{field}.args"), e))?;
-            if field == "run" && !step.outputs.is_empty() && !read_only(&command) {
-                return Err(context(
-                    "outputs",
-                    CtlError::protocol("outputs require a read-only producer"),
-                ));
-            }
-            crate::selector_input::validate(&command)
-                .map_err(|e| context(&format!("{field}.args"), e))?;
-            validate_assertion(&command).map_err(|e| context(&format!("{field}.args"), e))?;
-            if field != "run"
-                && !matches!(
-                    command,
-                    Command::Verify { .. }
-                        | Command::Wait { .. }
-                        | Command::VerifyFile { .. }
-                        | Command::VerifyRows { .. }
-                        | Command::VerifyOwner { .. }
-                        | Command::VerifyClosed { .. }
-                        | Command::VerifyWindow { .. }
-                        | Command::VerifyClipboard { .. }
-                        | Command::BrowserVerify { .. }
-                )
-            {
-                return Err(context(
-                    field,
-                    CtlError::protocol("checks require verify or wait"),
-                ));
-            }
-            if matches!(field, "when" | "unless") && matches!(command, Command::Wait { .. }) {
-                return Err(context(
-                    field,
-                    CtlError::protocol("conditions require immediate assertions, not wait"),
-                ));
-            }
-            if matches!(field, "when" | "unless")
-                && let Command::Verify {
-                    exists: Some(target),
-                    app,
-                    ..
-                } = &command
-                && (app.as_ref().is_none_or(|app| app.trim().is_empty())
-                    || !matches!(actl_core::parse_target(target)?, actl_core::Target::Uia(_)))
-            {
-                return Err(context(
-                    field,
-                    CtlError::protocol(
-                        "element existence conditions require explicit --app and a strict uia: selector",
-                    ),
-                ));
-            }
-            if matches!(
-                command,
-                Command::Batch { .. }
-                    | Command::Preview { .. }
-                    | Command::Desktop(
-                        DesktopCommand::ExecutionStatus | DesktopCommand::ExecutionRecover
-                    )
-                    | Command::Flow(_)
-                    | Command::Desktop(_)
-                    | Command::Commands
-                    | Command::KeyDown { .. }
-                    | Command::KeyUp { .. }
-            ) {
-                return Err(context(
-                    field,
-                    CtlError::protocol(
-                        "nested flows and management/held-key commands are not allowed",
-                    ),
-                ));
-            }
-            if field == "run"
-                && !read_only(&command)
-                && (step.verify.is_none() || step.retry == Retry::ReadOnly)
-            {
-                return Err(context(
-                    "verify",
-                    CtlError::protocol(
-                        "side effects require verify; retry=read_only cannot replay writes",
-                    ),
-                ));
-            }
-            if call.args.iter().any(|a| {
-                a == "--snapshot"
-                    || a.strip_prefix("@e")
-                        .is_some_and(|n| !n.is_empty() && n.bytes().all(|c| c.is_ascii_digit()))
-            }) {
-                return Err(context(
-                    &format!("{field}.args"),
-                    CtlError::protocol("persisted flows require semantic selectors"),
-                ));
-            }
-        }
     }
     Ok(())
 }
@@ -613,6 +426,57 @@ impl Host for Adapter<'_> {
         })
     }
     fn execute_output(&mut self, call: &Invocation) -> Result<Value, CtlError> {
+        if let Some(each) = actl_flow::for_each::decode(call)? {
+            // 列表来自前置步骤保存输出;超 max = PROTOCOL(不静默截断)
+            let items = actl_flow::data::for_each_list(
+                &self.store.load()?.1,
+                &each.spec.from,
+                each.spec.max,
+            )?;
+            for (item_index, item) in items.iter().enumerate() {
+                actl_core::watchdog::reset();
+                let text = actl_flow::for_each::item_text(item, each.spec.field.as_deref())?;
+                for (child_index, child) in each.body.iter().enumerate() {
+                    actl_core::stop::check_current()?;
+                    if self.store.pause_requested() {
+                        return Err(CtlError::with_evidence(
+                            ErrorCode::NotActionable,
+                            "for_each paused",
+                            json!({
+                                "stage":"handoff","reason":"user_paused","action_started":false,
+                                "for_each_item":item_index,"for_each_child":child_index
+                            }),
+                        ));
+                    }
+                    let injected = actl_flow::data::for_each_inject(child, &text)?;
+                    let result = self.execute_output(&injected);
+                    actl_core::signal_session::flow_event(
+                        "workflow_for_each",
+                        json!({
+                            "item": item_index,
+                            "items": items.len(),
+                            "index": child_index,
+                            "command": child.command,
+                            "ok": result.is_ok(),
+                            "error_code": result.as_ref().err().map(|error| error.code),
+                        }),
+                    );
+                    if let Err(error) = result {
+                        // 项内失败:位置随错误携带(迭代粒度幂等——已完成项
+                        // 不重放,--retry-step 自失败步整体续跑由引擎既有
+                        // 语义接管;此处位置证据支撑人工判读)
+                        let started = !self.read_only(child);
+                        return Err(actl_flow::for_each::failure(
+                            error,
+                            item_index,
+                            child_index,
+                            started,
+                        ));
+                    }
+                }
+            }
+            return Ok(json!({"executed": items.len()}));
+        }
         if let Some(calls) = actl_flow::sequence::decode(call)? {
             let mut started = false;
             for (index, child) in calls.iter().enumerate() {

@@ -80,6 +80,39 @@ pub fn validate(plan: &Plan) -> Result<(), CtlError> {
             ("resume_check", step.resume_check.as_ref()),
         ] {
             let Some(call) = call else { continue };
+            // for_each 伪调用:`from` 必须引用**前置**步骤的 array 型输出
+            // (known 按步序构建,天然只含前驱);运行期按保存列表迭代。
+            if let Some(each) = crate::for_each::decode(call)? {
+                let (producer, name) = each.spec.from.split_once('.').ok_or_else(|| {
+                    error(
+                        &step.id,
+                        &format!("steps[{i}].{phase}"),
+                        "for_each.from must be \"stepid.output\"",
+                    )
+                })?;
+                if !matches!(known.get(&each.spec.from), Some(Kind::Array)) {
+                    return Err(error(
+                        &step.id,
+                        &format!("steps[{i}].{phase}.from"),
+                        "for_each.from must reference a preceding step's array output",
+                    ));
+                }
+                let _ = (producer, name);
+                if !step.outputs.is_empty() {
+                    return Err(error(
+                        &step.id,
+                        "outputs",
+                        "for_each steps cannot declare outputs",
+                    ));
+                }
+                if step.retry == crate::Retry::ReadOnly {
+                    return Err(error(
+                        &step.id,
+                        "retry",
+                        "for_each cannot use read-only retry",
+                    ));
+                }
+            }
             for (index, reference) in &call.bind {
                 let field = format!("steps[{i}].{phase}.bind.{index}");
                 let index: usize = index
@@ -248,4 +281,58 @@ pub fn check_saved(plan: &Plan, run: &Run) -> Result<(), CtlError> {
         return Err(CtlError::protocol("flow outputs exceed 64 KiB"));
     }
     Ok(())
+}
+
+/// for_each 的迭代列表:从 run 记录读取 `from` 指向的 array 输出。
+/// 超过 spec.max → PROTOCOL(fail-closed,不静默截断)。
+pub fn for_each_list(run: &Run, from: &str, max: usize) -> Result<Vec<Value>, CtlError> {
+    let (producer, name) = from
+        .split_once('.')
+        .ok_or_else(|| CtlError::protocol("for_each.from must be \"stepid.output\""))?;
+    let record = run
+        .steps
+        .iter()
+        .find(|s| s.id == producer && s.status == StepStatus::Completed)
+        .ok_or_else(|| CtlError::protocol("for_each producer is not completed"))?;
+    let list = record
+        .outputs
+        .get(name)
+        .ok_or_else(|| CtlError::protocol("for_each saved output missing"))?;
+    let items = list
+        .as_array()
+        .ok_or_else(|| CtlError::protocol("for_each output is not an array"))?;
+    if items.len() > max {
+        return Err(CtlError::protocol(format!(
+            "for_each list {} items exceeds max {max}",
+            items.len()
+        )));
+    }
+    Ok(items.clone())
+}
+
+/// 注入项值到子调用占位符(@each 子串替换——`name:@each` → `name:<item>`,
+/// 贴合 collect 条目拼接选择器的真实形态)。值校验与 bind 同规:非选项/
+/// 非 ref/无 NUL/≤16KiB。
+pub fn for_each_inject(
+    call: &crate::Invocation,
+    text: &str,
+) -> Result<crate::Invocation, CtlError> {
+    if text.len() > 16384
+        || text.contains('\0')
+        || text.starts_with('-')
+        || text
+            .strip_prefix("@e")
+            .is_some_and(|s| !s.is_empty() && s.bytes().all(|c| c.is_ascii_digit()))
+    {
+        return Err(CtlError::protocol(
+            "for_each item is too large, an option, a transient ref or contains NUL",
+        ));
+    }
+    let mut injected = call.clone();
+    for arg in &mut injected.args {
+        if arg.contains(crate::for_each::ITEM_TOKEN) {
+            *arg = arg.replace(crate::for_each::ITEM_TOKEN, text);
+        }
+    }
+    Ok(injected)
 }

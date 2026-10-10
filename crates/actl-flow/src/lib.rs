@@ -4,6 +4,7 @@ pub mod branch;
 pub mod data;
 pub mod engine;
 pub mod explore;
+pub mod for_each;
 pub mod freshness;
 pub mod inputs;
 pub mod record;

@@ -937,3 +937,35 @@ fn ensure_steps_short_circuit_when_satisfied() {
     assert_eq!(result["data"]["run"]["steps"][0]["status"], "completed");
     assert_eq!(result["data"]["run"]["steps"][0]["verified"], true);
 }
+
+#[test]
+fn for_each_plan_validates_and_bad_shapes_are_rejected() {
+    // for_each 数据驱动迭代(2026-10-11 spec):合法计划过 validate;
+    // 坏形态(无占位/前向引用/步内 outputs)在 validate 即拒,离线可测。
+    let s = Sandbox::new();
+    let good = "version: 1\nname: EachPlan\nsteps:\n  - id: collect-steps\n    title: C\n    run: {command: find, args: [--role, listitem, --app, X]}\n    outputs:\n      items: {pointer: /elements, type: array}\n  - id: act-on-each\n    title: L\n    run:\n      for_each: {from: collect-steps.items, field: name, max: 8}\n      body:\n        - {command: click, args: [\"name:@each\", --app, X]}\n    verify: {command: verify-window, args: [--app, X, --state, exists]}\n"
+        .to_string();
+    let file = s.file(&good);
+    let (code, result) = s.invoke(&["flow-validate", "--file", &file]);
+    assert_eq!(code, 0, "{result}");
+    assert_eq!(result["data"]["valid"], true);
+    for (bad, needle) in [
+        (good.replace("\"name:@each\"", "\"name:static\""), "@each"),
+        (good.replace("max: 8", "max: 0"), "max"),
+        (
+            good + "    outputs:\n      total: {pointer: /executed, type: number}\n",
+            "outputs",
+        ),
+    ] {
+        let file = s.file(&bad);
+        let (code, result) = s.invoke(&["flow-validate", "--file", &file]);
+        assert_eq!(code, 2, "{result}");
+        assert!(
+            result["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains(needle),
+            "{result}"
+        );
+    }
+}

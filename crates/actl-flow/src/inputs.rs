@@ -75,6 +75,7 @@ pub fn resolve(text: &str, inputs: Option<&str>) -> Result<super::Plan, CtlError
     // 替换后仍残留绑定形态的 args 字符串 = 几乎必然是引号/转义错误 → 拒绝。
     reject_unresolved_bindings(&raw)?;
     crate::sequence::expand(&mut raw)?;
+    crate::for_each::expand(&mut raw)?;
     super::parse(&serde_json::to_string(&raw).map_err(|e| CtlError::internal(e.to_string()))?)
 }
 
