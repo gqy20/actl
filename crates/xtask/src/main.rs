@@ -720,8 +720,9 @@ fn doctor() -> ExitCode {
         ])
         .output();
     match census {
-        Ok(out) if out.status.success() => {
+        Ok(out) => {
             let text = String::from_utf8_lossy(&out.stdout);
+            // Get-Process 无匹配时 exit=1(非错误)——空输出即"无进程"。
             if text.trim().is_empty() {
                 eprintln!("  (无 actl/actl-signal 进程)");
             } else {
@@ -730,7 +731,6 @@ fn doctor() -> ExitCode {
                 }
             }
         }
-        Ok(out) => eprintln!("  普查失败: exit={}", out.status),
         Err(error) => eprintln!("  普查失败: {error}"),
     }
     eprintln!("== 构建产物锁探针(write-open 被拒 = 有进程映射) ==");
