@@ -36,7 +36,7 @@
 - [ ] Excel 写入闭环（当前：UIA 树空属 Office 慢启动，需 MSAA 路线或等待）
 - [ ] Zotero 导入导出
 - [ ] 腾讯会议 draft-date 键盘路线（ctrl+a+paste+tab，QDateEdit set-value 无效）
-- [ ] 资源管理器档案与保存框路径交接（快选快切类高频需求，[10 §4.2](10-quicker-demand-research.md)）：搜索/过滤→结果清单收集（L4 fallback-3 原型场景）；当前路径读取（地址栏 view_1012）→ 另存/打开对话框路径交接。零件已齐（地址栏可读、对话框 Edit 可填），缺应用档案与打包原语。⚠ explorer 关闭纪律见长期观察项「极端规模重树」条（勿按 pid 关）
+- [ ] 资源管理器保存框路径交接余项（2026-10-11 档案已建 [explorer.yml](../skills/actl/apps/explorer.yml)：虚拟化全量收集/按名查找双路线 verified，[10 §4.2](10-quicker-demand-research.md)；**剩 = 地址栏具体 automation_id 现场探测 + 保存框路径交接真机轮**，探测后回填路线）。⚠ explorer 关闭纪律见长期观察项「极端规模重树」条（勿按 pid 关）
 - [ ] 浏览器扩展操作面余量（UIA 轨三批已沉淀 [16 §5.5](16-browser-scenarios.md) / browser.yml `extension_surfaces`）：①右键菜单扩展项复验（机制在，两次被用户桌面并发占用护栏正确拒绝，待空闲）；②CDP 自有会话扩展操作实测（persistent profile 保留扩展策略已定 [72](72-browser-cdp-integration.md)，chrome 层归 UIA 的路径无实测证据，chrome 层 Invoke E_FAIL 同款风险预期）；③扩展弹层内写动作成链（现存证据只覆盖「读」）
 - [ ] 应用 pack 长尾维护
 
