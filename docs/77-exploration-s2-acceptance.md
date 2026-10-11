@@ -188,3 +188,7 @@ S3 真机闭环验收通过:回写(证据收集)、人工复核迁移(用户裁�
 **环境退化记录（诚实）**：本批尾段挂起族扩散——flow-run/flow-resume/get value/launch 均出现"工作完成、进程不退出"（envelope 后滞尾或不出），僵尸堆积（exited=True 幽灵记录 20+）。引擎侧工作与状态落盘不受影响（state.json 均如实），但每轮真机调用产 1-2 个滞尾进程。**路线 #4/#5 与轮 C 挂起待环境恢复**（僵尸自退或重启后），不在退化环境上继续堆真机轮。
 
 **新代码发现（登记待办）**：① `get --property value` 读路径无看门狗区段（实测超 300s 进程级看门狗仍未收——与 493d163 修的 click pattern 同族，watchdog 裸区段又一例）；② `launch` 的 `--wait-window` 参数疑似被透传给被启程序（记事本弹「找不到 --wait-window Notepad --timeout 20000.txt」，launch 的 option 双重处理待复现立案）；③ `actl launch notepad.exe` 解析不到 HKCU App Paths 注册（解析面只查 HKLM）。
+
+## 轮 C 落地：RuntimeBroker pid 放宽（2026-10-11，离线半）
+
+判据①放宽：锚点转移与 goal 跨窗探测的候选窗过滤从「同 pid」放宽为「同 pid **或** owner 挂宿主锚窗」（`list-windows` 的 `owner_title` 归属链——RuntimeBroker 承载的 Store 应用文件对话框 pid 不同但 owned by 宿主窗）。归属链比进程名白名单更本质（归属事实,不猜进程名）；判据③关键词自校验照旧把关（owner 匹配不豁免相关性——broker+空帧不转移有用例钉住）。MockHost 补 broker 形态（跨 pid+owner_title）,+2 用例。**真机复现轮（Store 记事本另存为对话框）待跑——放宽生效的端到端证据。**

@@ -122,8 +122,10 @@ struct MockHost {
     types: Vec<(String, String)>,
     verify_calls: u32,
     snapshot_keywords: Vec<String>,
-    /// 同进程弹窗:(标题, 元素, 是否已出现)。
-    dialog: Option<(String, Vec<ElementOut>, bool)>,
+    /// 弹窗:(标题, 元素, 是否已出现, 是否跨进程 broker 形态)。
+    /// broker=true 模拟 RuntimeBroker 承载的对话框:list-windows 枚举时
+    /// pid 与宿主不同且带 owner_title=宿主标题(轮 C 放宽的验证形态)。
+    dialog: Option<(String, Vec<ElementOut>, bool, bool)>,
     /// 点击后打开弹窗的 selector。
     dialog_openers: BTreeSet<String>,
     stopped_flag: bool,
@@ -163,7 +165,15 @@ impl MockHost {
 
     /// 配置同进程弹窗与打开它的 selector(跨窗探测测试)。
     fn with_dialog(mut self, title: &str, elements: Vec<ElementOut>, opener: &str) -> Self {
-        self.dialog = Some((title.into(), elements, false));
+        self.dialog = Some((title.into(), elements, false, false));
+        self.dialog_openers.insert(opener.into());
+        self
+    }
+
+    /// 配置跨进程 broker 弹窗(RuntimeBroker 形态,轮 C 放宽的验证):
+    /// list-windows 枚举时 pid 与宿主不同且带 owner_title=宿主标题。
+    fn with_broker_dialog(mut self, title: &str, elements: Vec<ElementOut>, opener: &str) -> Self {
+        self.dialog = Some((title.into(), elements, false, true));
         self.dialog_openers.insert(opener.into());
         self
     }
@@ -178,7 +188,7 @@ impl MockHost {
     /// verify/list-windows 按 --app 值路由:弹窗已出现且标题匹配 → 弹窗帧。
     fn frame_for_app(&self, app: Option<&str>) -> &[ElementOut] {
         if let Some(app) = app
-            && let Some((title, elements, present)) = &self.dialog
+            && let Some((title, elements, present, _)) = &self.dialog
             && *present
             && (title == app || app.contains(title.as_str()))
         {
@@ -324,7 +334,7 @@ impl Host for MockHost {
                 }
                 // 跨窗模拟:打开弹窗(同 pid,后续 list-windows 可枚举)。
                 if self.dialog_openers.contains(&selector)
-                    && let Some((_, _, present)) = self.dialog.as_mut()
+                    && let Some((_, _, present, _)) = self.dialog.as_mut()
                 {
                     *present = true;
                 }
@@ -431,12 +441,22 @@ impl Host for MockHost {
             let mut windows = vec![json!({
                 "title": "测试应用", "class": "Mock", "pid": MOCK_PID
             })];
-            if let Some((title, _, present)) = &self.dialog
+            if let Some((title, _, present, broker)) = &self.dialog
                 && *present
             {
-                windows.push(json!({
-                    "title": title, "class": "MockDialog", "pid": MOCK_PID
-                }));
+                // broker 形态:跨进程 pid + owner_title 指宿主(RuntimeBroker
+                // 承载的 Store 应用对话框,轮 C 放宽判据的验证形态)。
+                if *broker {
+                    windows.push(json!({
+                        "title": title, "class": "MockDialog",
+                        "pid": MOCK_PID + 1000,
+                        "owner_title": "测试应用"
+                    }));
+                } else {
+                    windows.push(json!({
+                        "title": title, "class": "MockDialog", "pid": MOCK_PID
+                    }));
+                }
             }
             return Ok(json!({"count": windows.len(), "windows": windows}));
         }
@@ -452,14 +472,14 @@ impl Host for MockHost {
         // 未出现或标题不匹配 → 主窗帧。窗元数据随路由如实(标题/pid)。
         let app = Self::app_of_call(call);
         let routed_to_dialog = app.is_some_and(|app| {
-            self.dialog.as_ref().is_some_and(|(title, _, present)| {
+            self.dialog.as_ref().is_some_and(|(title, _, present, _)| {
                 *present && (title == app || app.contains(title.as_str()))
             })
         });
         let window_title = if routed_to_dialog {
             self.dialog
                 .as_ref()
-                .map(|(title, _, _)| title.clone())
+                .map(|(title, _, _, _)| title.clone())
                 .unwrap_or_else(|| "测试应用".into())
         } else {
             "测试应用".to_string()
@@ -467,7 +487,7 @@ impl Host for MockHost {
         let frame: Vec<ElementOut> = if routed_to_dialog {
             self.dialog
                 .as_ref()
-                .map(|(_, elements, _)| elements.clone())
+                .map(|(_, elements, _, _)| elements.clone())
                 .unwrap_or_default()
         } else {
             self.frame().to_vec()

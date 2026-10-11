@@ -14,7 +14,7 @@
 
 ### 高优先（用户标记）
 
-- [ ] **探索模式（用户标记关键）**：S1–S3、L2 原语与先验飞轮已全部真机通过（[77](77-exploration-s2-acceptance.md)；观察锚点弹窗转移/type --paste 通道/L0 命中重放 skill 流程化三项已落地收口）。待办：①RuntimeBroker pid 放宽待复现（[77 锚点转移增补](77-exploration-s2-acceptance.md)）；②路线积累（§7 目标 5 条已 **3** 条——#3 记事本中文输入 2026-10-05 全链+重放 verified 待人工复核;#4/#5 挂起待环境恢复（僵尸堆积,[77 末节](77-exploration-s2-acceptance.md)））；③UCB 统计剪枝（待 quirks 样本量）
+- [ ] **探索模式（用户标记关键）**：S1–S3、L2 原语与先验飞轮已全部真机通过（[77](77-exploration-s2-acceptance.md)；观察锚点弹窗转移/type --paste 通道/L0 命中重放 skill 流程化三项已落地收口）。待办：①RuntimeBroker pid 放宽——判据已落地（同 pid 或 owner 归属,[77 轮 C](77-exploration-s2-acceptance.md)），**剩 Store 记事本复现轮**；②路线积累（§7 目标 5 条已 **3** 条——#3 记事本中文输入 2026-10-05 全链+重放 verified 待人工复核;#4/#5 挂起待环境恢复（僵尸堆积,[77 末节](77-exploration-s2-acceptance.md)））；③UCB 统计剪枝（待 quirks 样本量）
 - [ ] release-review-draft 写段联测（待用户授权，[43](43-release-review-draft.md)）
 
 ### 流程与集成

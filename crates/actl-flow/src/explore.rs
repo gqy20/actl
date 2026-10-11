@@ -735,7 +735,20 @@ fn maybe_transfer_anchor(
             .and_then(|t| t.as_str())
             .unwrap_or_default();
         let same_pid = window.get("pid").and_then(|p| p.as_u64()) == Some(u64::from(pid));
-        if !same_pid
+        // 判据①放宽(轮 C,2026-10-11):同 pid **或** owner 挂宿主锚——
+        // Store 应用的文件对话框由 RuntimeBroker 跨进程承载(pid 不同),
+        // 归属链靠 list-windows 的 owner_title(owned dialog 的宿主标题);
+        // 判据③关键词自校验继续把关,owner 匹配不豁免相关性。
+        let owned_by_anchor = window
+            .get("owner_title")
+            .and_then(|t| t.as_str())
+            .is_some_and(|owner| {
+                !owner.is_empty()
+                    && (owner == anchor
+                        || anchor.contains(owner)
+                        || owner.contains(anchor.as_str()))
+            });
+        if !(same_pid || owned_by_anchor)
             || title.is_empty()
             || !seen_titles.insert(title.to_owned())
             || excluded
@@ -816,8 +829,22 @@ fn probe_same_pid_goal(
             .and_then(|t| t.as_str())
             .unwrap_or_default();
         let same_pid = window.get("pid").and_then(|p| p.as_u64()) == Some(u64::from(pid));
-        // 过滤:同进程、有标题、非当前观察窗;标题去重(UWP 同题多窗)。
-        if !same_pid || title.is_empty() || !seen_titles.insert(title.to_owned()) {
+        // 判据放宽同锚点转移(轮 C):owner 挂宿主观察窗的跨进程窗
+        // (RuntimeBroker 承载形态)也是候选——goal 自身断言把关相关性。
+        let owned_by_window = window
+            .get("owner_title")
+            .and_then(|t| t.as_str())
+            .is_some_and(|owner| {
+                !owner.is_empty()
+                    && (owner == current_title
+                        || current_title.contains(owner)
+                        || owner.contains(current_title.as_str()))
+            });
+        // 过滤:同进程(或 owner 归属)、有标题、非当前观察窗;标题去重。
+        if !(same_pid || owned_by_window)
+            || title.is_empty()
+            || !seen_titles.insert(title.to_owned())
+        {
             continue;
         }
         if title == current_title || current_title.contains(title) || title.contains(&current_title)

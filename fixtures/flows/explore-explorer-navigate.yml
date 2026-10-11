@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=../../schemas/flow-v1.schema.json
+# 探索路线积累 #4(资源管理器形态,2026-10-11):飞轮首次跑非记事本应用——
+# pack(explorer.yml)与 explore 双轨验证:探索引擎在已知应用上自主寻址。
+# 任务:在资源管理器窗口的地址栏输入目标路径并确认导航。
+# 前置:explorer.yml 路线已 verified(collect/按名查找);app 锚用窗口标题
+# 稳定子串(explore 专用隔离目录见 run 轮现场值——探针轮先 list-windows)。
+# 预期:status=completed,goal_met=true(地址栏=目标路径);
+# 副证据:窗口标题变为目标目录名(导航生效)。
+# 真机轮现场约定:目标目录用临时探针目录(路径 ASCII,地址栏键盘通道安全)。
+version: 1
+name: explore-route4-explorer-navigate
+explore:
+  task: 在资源管理器地址栏输入探针目录路径完成导航
+  app: 文件资源管理器
+  keywords: [地址, 路径]
+  texts: {'name:地址栏': 'E:\\explore\\computer_cli\\target\\tmp\\explore-probe-dir'}
+  goal: {command: verify, args: [--exists, 'name:explore-probe-dir', --app, 文件资源管理器]}
+  budgets: {actions: 4, decisions: 3}

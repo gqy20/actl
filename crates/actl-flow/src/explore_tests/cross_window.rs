@@ -167,3 +167,51 @@ fn anchor_transfer_resets_diff_baseline() {
     );
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// 轮 C(2026-10-11):RuntimeBroker 承载形态——对话框跨进程(pid 不同)
+/// 但 owner_title 挂宿主锚窗,判据①放宽(同 pid **或** owner 归属)后转移。
+/// Store 应用的文件选择器正是这个形态(同 pid 过滤曾如实错失)。
+#[test]
+fn anchor_transfer_follows_actions_into_broker_dialog() {
+    let spec = spec(&["打开", "保存"], "name:保存");
+    let (root, store, mut run) = setup(&spec);
+    let host = MockHost::new(vec![vec![el("Button", "打开", Some("openBtn"))]]).with_broker_dialog(
+        "另存为",
+        vec![el("Button", "保存", Some("saveBtn"))],
+        "id:openBtn",
+    );
+    let mut host = host;
+    execute(&spec, &mut run, &store, &mut host, None, None).expect("completes in broker dialog");
+    assert_eq!(run.status, Status::Completed);
+    let state = load(&store).unwrap().expect("state");
+    assert_eq!(
+        state.anchor_app.as_deref(),
+        Some("另存为"),
+        "owner-linked cross-pid dialog must receive the anchor"
+    );
+    assert_eq!(state.anchor_stack, vec!["测试应用".to_string()]);
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// owner 归属不豁免判据③:broker 对话框关键词帧为空(toast 形态)→
+/// 即便 owner 挂宿主也不转移——放宽只放宽进程判据,相关性自校验照旧。
+#[test]
+fn broker_dialog_still_requires_keyword_frame() {
+    let spec = spec(&["保存"], "name:永不出现");
+    let (root, store, mut run) = setup(&spec);
+    let host = MockHost::new(vec![vec![el("Button", "关闭", Some("closeBtn"))]])
+        .with_broker_dialog(
+            "通知",
+            vec![], // 关键词帧空 → 判据③出局
+            "id:closeBtn",
+        );
+    let mut host = host;
+    execute(&spec, &mut run, &store, &mut host, None, None).ok();
+    let state = load(&store).unwrap().expect("state");
+    assert_eq!(
+        state.anchor_app, None,
+        "owner match must not bypass the keyword-frame self-check"
+    );
+    assert!(state.anchor_stack.is_empty());
+    let _ = std::fs::remove_dir_all(&root);
+}
