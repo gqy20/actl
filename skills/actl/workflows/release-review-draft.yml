@@ -1,41 +1,77 @@
 # yaml-language-server: $schema=../../schemas/flow-v1.schema.json
-# 业务流程:读取已打开的 actl Releases 页(Chrome),在 Word 新文档生成核对草稿并落盘。
+# 业务流程:CDP 自有 headless 会话读公开仓库 Releases 页,在 Word 新文档
+# 生成核对草稿并落盘。
+# 改造史(2026-10-11,用户授权+两轮实证修正):
+#   v1=UIA 读用户已开 Chrome 页(私有仓库前置:用户登录态窗口);
+#   v2=持久 profile+登录暂停点——被两实证否决:actl 仓库私有(无登录态
+#   404)+Edge 新 profile 首启向导弹窗链(同步数据/翻译询问)污染现场;
+#   v3(本版)=公开仓库(gqy20/zotero_cli)+ephemeral+headless——零窗口
+#   零弹窗零登录,桌面只出现 Word;读源不依赖用户浏览器状态。
 # 前置条件:
-#   1. Chrome 已打开发布页,且它是 Chrome 的当前标签页(窗口标题含 Releases · gqy20/actl);
-#      出现多个标题含 Google Chrome 的窗口时会 AMBIGUOUS 拒绝,须先收窄
-#   2. 本机未打开其他 Word 窗口(launch 的窗口核验按标题子串匹配)
+#   1. 本机未打开其他 Word 窗口(launch 的窗口核验按标题子串匹配)
+#   2. 网络可达 github.com
 # 副作用与边界:
 #   - type --paste 使用系统剪贴板,会覆盖当前剪贴板内容
 #   - 草稿保存为 Word 默认文档目录下的 actl-release-draft.docx,同名覆盖:
 #     它是"当前核对状态",不是历史留痕,需要留痕请自行改名归档
-#   - 读段(前两步)只读;写段从 open_word 检查点开始,需要 actl 显示端的人工开始授权
+#   - 读段(前四步)只读且 headless 无窗口;写段从 open_word 检查点开始,
+#     需要 actl 显示端的人工开始授权
+#   - 私有仓库形态需要持久 profile+登录(v2 教训在案,真实需求出现再立)
 version: 1
-name: 生成 actl 发布页核对草稿
+name: 生成 zotero_cli 发布页核对草稿
+inputs:
+  browser_executable:
+    default: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'
+  # 目标发布页是环境相关参数:default 为占位形态,运行时 --inputs 覆盖
+  # (打包纪律:skill 不焊死外域 URL)
+  releases_url:
+    default: 'https://<owner>/<repo>/releases'
 steps:
-  - id: locate_page
-    title: 读取发布页窗口标题
-    retry: stale_read
+  - id: launch_browser
+    title: headless 自有会话打开发布页
     run:
-      command: get
-      args: ['uia:{"match":{"role":"Window"}}', '--property', 'name', '--app', 'Google Chrome']
+      command: browser-launch
+      args: ['--browser-executable', {input: browser_executable}, '--url', {input: releases_url}, '--headless', '--timeout', '25000']
+    verify:
+      command: browser-verify
+      args: ['--newest-alive']
+  - id: observe_session
+    title: 只读发现会话句柄
+    run:
+      command: browser-list
     outputs:
-      page_title: {pointer: /properties/name, type: string, max_age_ms: 1800000}
-  - id: page_contract
-    title: 页面内容契约
-    retry: stale_read
+      session_id:
+        type: string
+        pointer: /sessions/0/session_id
+  - id: page_title
+    title: 读取最新 release 标题(CDP 文档通道;--wait-for 2 沉降谓词覆盖 hpc 异步渲染)
     run:
-      command: verify
-      args: ['--value', 'id:RootWebArea', 'actl', '--property', 'text', '--contains', '--app', 'Google Chrome']
+      command: browser-read
+      args: ['--session', placeholder, '--css', 'div[data-hpc] h2', '--all', '--wait-for', '2', '--timeout', '20000']
+      bind: {'1': observe_session.session_id}
+    outputs:
+      page_title:
+        type: string
+        pointer: /elements/1/text
+        max_age_ms: 1800000
+  - id: close_browser
+    title: 会话治理:读完即关(headless 无窗口,注销即清)
+    run:
+      command: browser-close
+      args: ['--session', placeholder]
+      bind: {'1': observe_session.session_id}
+    verify:
+      command: browser-verify
+      args: ['--session', placeholder, '--gone']
+      bind: {'1': observe_session.session_id}
   - id: open_word
-    title: 打开 Word 并停在写前检查点
+    title: 打开 Word 并停在写前检查点(人工开始授权;无 resume_check——
+      首跑 Word 未开,缺席类前置无法用 verify 表达,launch 步自身的
+      窗口核验即护栏)
     pause_before: true
-    resume_check:
-      command: verify
-      args: ['--value', 'uia:{"match":{"role":"Window"}}', 'placeholder', '--property', 'name', '--app', 'Google Chrome']
-      bind: {'2': locate_page.page_title}
     run:
       command: launch
-      args: ['WINWORD']
+      args: ['WINWORD', '/n']
     verify:
       command: wait
       args: ['--window', 'Word', '--timeout', '20000']
@@ -51,12 +87,12 @@ steps:
     title: 写入来源标题行
     run:
       command: type
-      args: ['role:Document', 'placeholder', '--paste', '--app', 'Word']
-      bind: {'1': locate_page.page_title}
+      args: ['role:Document', placeholder, '--paste', '--app', 'Word']
+      bind: {'1': page_title.page_title}
     verify:
       command: verify
-      args: ['--value', 'role:Document', 'placeholder', '--property', 'text', '--contains', '--app', 'Word']
-      bind: {'2': locate_page.page_title}
+      args: ['--value', 'role:Document', placeholder, '--property', 'text', '--contains', '--app', 'Word']
+      bind: {'2': page_title.page_title}
   - id: open_save_as
     title: 打开另存为页
     run:
@@ -86,5 +122,5 @@ steps:
     retry: stale_read
     run:
       command: verify
-      args: ['--value', 'role:Document', 'placeholder', '--property', 'text', '--contains', '--app', 'Word']
-      bind: {'2': locate_page.page_title}
+      args: ['--value', 'role:Document', placeholder, '--property', 'text', '--contains', '--app', 'Word']
+      bind: {'2': page_title.page_title}

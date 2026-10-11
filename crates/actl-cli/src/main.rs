@@ -679,6 +679,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             all,
             deep,
             limit,
+            wait_for,
             timeout,
         } => browser::read_cmd(
             session,
@@ -689,6 +690,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             *all,
             *deep,
             *limit,
+            *wait_for,
             *timeout,
         ),
         Command::BrowserType {

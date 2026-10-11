@@ -705,6 +705,48 @@ pub struct ReadSpec<'a> {
     pub all: bool,
     pub limit: Option<usize>,
     pub deep: bool,
+    /// 沉降谓词(2026-10-11 spec):命中数 ≥ N 才返回——异步渲染页面
+    /// (GitHub hpc 列表 CSR 等)的读段自稳,内建 500ms 轮询,超时 TIMEOUT
+    /// 带实测命中数;与 --all/唯一读通用。
+    pub wait_for: Option<u64>,
+}
+
+/// 沉降谓词(2026-10-11 spec,--wait-for N):命中数 < N 时 500ms 轮询
+/// 重读直到达标或超时——异步渲染(CSR 列表)的读段自稳;超时 TIMEOUT 带
+/// 实测命中数与期望下界(诚实证据:差多少、等多久)。轮询共用药洞超时
+/// 预算(与单次读同界,不另开)。
+fn wait_for_matches(
+    conn: &Connection,
+    cdp_session: &str,
+    script: &str,
+    context_id: Option<u64>,
+    timeout: Duration,
+    min: u64,
+    first: Value,
+) -> Result<Value, CtlError> {
+    let matches_of = |v: &Value| v.get("matches").and_then(Value::as_u64).unwrap_or(0);
+    if matches_of(&first) >= min {
+        return Ok(first);
+    }
+    let deadline = std::time::Instant::now() + timeout;
+    let mut current = first;
+    loop {
+        if std::time::Instant::now() >= deadline {
+            return Err(CtlError::with_evidence(
+                ErrorCode::Timeout,
+                format!(
+                    "browser-read --wait-for {min}: only {} matches within the timeout (async content may not have settled)",
+                    matches_of(&current)
+                ),
+                json!({ "matches": matches_of(&current), "wait_for": min }),
+            ));
+        }
+        std::thread::sleep(Duration::from_millis(500));
+        current = eval_json(conn, cdp_session, script, context_id, timeout)?;
+        if matches_of(&current) >= min {
+            return Ok(current);
+        }
+    }
 }
 
 pub fn read(paths: &Paths, spec: ReadSpec<'_>) -> Result<Value, CtlError> {
@@ -718,6 +760,7 @@ pub fn read(paths: &Paths, spec: ReadSpec<'_>) -> Result<Value, CtlError> {
         all,
         limit,
         deep,
+        wait_for,
     } = spec;
     validate_selector(kind, value)?;
     let property = property.unwrap_or("text");
@@ -749,7 +792,18 @@ pub fn read(paths: &Paths, spec: ReadSpec<'_>) -> Result<Value, CtlError> {
         } else {
             locate_all_script(kind, value, Some(property))
         };
-        let located = eval_json(&conn, &cdp_session, &script, context_id, timeout)?;
+        let mut located = eval_json(&conn, &cdp_session, &script, context_id, timeout)?;
+        if let Some(min) = wait_for {
+            located = wait_for_matches(
+                &conn,
+                &cdp_session,
+                &script,
+                context_id,
+                timeout,
+                min,
+                located,
+            )?;
+        }
         let total = located
             .get("matches")
             .and_then(Value::as_u64)
@@ -802,7 +856,18 @@ pub fn read(paths: &Paths, spec: ReadSpec<'_>) -> Result<Value, CtlError> {
     } else {
         locate_script(kind, value, Some(property))
     };
-    let located = eval_json(&conn, &cdp_session, &script, context_id, timeout)?;
+    let mut located = eval_json(&conn, &cdp_session, &script, context_id, timeout)?;
+    if let Some(min) = wait_for {
+        located = wait_for_matches(
+            &conn,
+            &cdp_session,
+            &script,
+            context_id,
+            timeout,
+            min,
+            located,
+        )?;
+    }
     require_unique_match(&located, kind, value)?;
     // --deep 脚本恒返回枚举形态:唯一命中取 elements[0] 作载荷
     let unique = if deep {

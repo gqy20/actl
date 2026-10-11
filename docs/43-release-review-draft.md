@@ -71,3 +71,11 @@ word pack(另存为路线)。此前不将本流程记为业务验收通过。
 - 检查点后 30 分钟内未授权续跑则时效拒绝,须整跑重开;
 - Chrome 当前标签切走后,恢复时 resume_check 的标题精确比对会失败并暂停
   (源稳定性核验按设计工作,不是误报)。
+
+## 6. CDP 轨改造（2026-10-11，用户授权"改造"——写段联测的前置消除）
+
+**改造决策链（三轮实证收敛）**：v1 前置"用户 Chrome 已开发布页"在 v3 消除——读段改 `browser-launch` 自有会话。v2 持久 profile+登录暂停点被两实证否决：actl 仓库**私有**（无登录态 404）+Edge 新 profile **首启向导弹窗链**（同步数据/翻译询问）污染现场；用户改判读源换公开仓库（gqy20/zotero_cli）。**v3 终态**：公开仓库+ephemeral+**headless**——零窗口零弹窗零登录，读源不依赖用户浏览器。
+
+**读段联测通过（run release-review-07/08 前四步）**：launch(headless)→browser-list 产出会话句柄→`browser-read --css 'div[data-hpc] h2' --all --wait-for 2` 读最新 release 标题（elements[1]，探针实证：hpc 列表 CSR 异步渲染约 3s，索引 0=列表头 1=首个版本）→browser-close 会话治理。**两处模板修正入册**：GitHub 新版布局无 h1（标题=section 内 h1/h2 分层，latest 卡 h2）；open_word 的 launch 补 `/n`（无参数启动=开始屏幕，Document 不存在实证）；resume_check 反语义修正（缺席类前置不可用 verify 表达，删除）。
+
+**写段联测受阻（慢 provider 日，如实）**：write_header 注入未落地+验证断言失败——Word MSAA 桥物化拒答回落+14.8s 慢扫（docs/81 已知同族）。写段在 v1 时代即未跑通（§4 悬置），非改造点；模板已全修正，正常速度日重跑。探针教训入册：读源探测应先一次会话收齐时序与选择器再改模板（用户指正"先探索再改"——本轮前四轮 run 即违反此序，逐轮失败）。

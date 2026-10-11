@@ -404,3 +404,15 @@ fn no_popups_unknown_session_is_not_found() {
     let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
     assert_eq!(v["error"]["code"], "NOT_FOUND", "{v}");
 }
+
+#[test]
+fn wait_for_flag_documents_settle_predicate() {
+    // --wait-for N 沉降谓词(2026-10-11 spec):命中数≥N 才返回,内建 500ms
+    // 轮询,超时 TIMEOUT 带实测命中数——异步渲染页面的读段自稳原语。
+    // 与 --all/唯一读通用(无 requires 约束)。
+    let (code, stdout) = actl(&["browser-read", "--help"]);
+    assert_eq!(code, 0);
+    assert!(stdout.contains("--wait-for"), "{stdout}");
+    assert!(stdout.contains("N matches"), "{stdout}");
+    assert!(stdout.contains("settle"), "{stdout}");
+}

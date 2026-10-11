@@ -66,6 +66,7 @@ pub(crate) fn read_cmd(
     all: bool,
     deep: bool,
     limit: Option<usize>,
+    wait_for: Option<u64>,
     timeout: Option<u64>,
 ) -> Result<CommandOutput, CtlError> {
     let (kind, value) = selector_of(css, xpath)?;
@@ -81,6 +82,7 @@ pub(crate) fn read_cmd(
             all,
             limit,
             deep,
+            wait_for,
         },
     )
     .map(Into::into)

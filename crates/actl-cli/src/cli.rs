@@ -879,6 +879,10 @@ pub(crate) enum Command {
         /// Max elements returned with --all (default 50, max 500; total stays honest)
         #[arg(long, requires = "all")]
         limit: Option<usize>,
+        /// Settle predicate: poll until at least N matches before returning (async-rendered
+        /// pages settle on their own; timeout carries the observed count in evidence)
+        #[arg(long)]
+        wait_for: Option<u64>,
         /// Timeout in milliseconds (default 10000)
         #[arg(long)]
         timeout: Option<u64>,

@@ -14,6 +14,8 @@
 
 ### Added
 
+- **browser-read --wait-for N 沉降谓词（spec，[06 浏览器节](docs/06-design-blueprint.md)——CDP 轨缺沉降原语补面,43 联测暴露）**：命中数 ≥ N 才返回,内建 500ms 轮询共用药洞超时,超时 TIMEOUT 附实测命中数（异步渲染差多少一目了然）；与 --all/唯一读通用。背景:browser 轨无 wait 谓词（wait 是 UIA 轨）,异步渲染页（GitHub hpc 列表 CSR ~3s）读到半成品,04/06 轮 output field missing 根因;外挂 ps1 轮询循环（用户两度指正:为何不用 yml/actl——基建缺口实为根因,修基建让场景塌缩,探测降为单命令）。真机实证:zotero_cli releases 页 --wait-for 2 等 3s 沉降后返回 19 元素。测试:契约 help 四要素。
+
 - **popup_ignores 弹层门禁降噪第二轮（spec，[06 运行时治理](docs/06-design-blueprint.md)——两个独立应用同根因升级为类问题后的声明式收口）**：门禁观察面分不清「常驻部件」与「真弹窗」——Word 停靠导航窗格（fill-3 误拦）+ VS Code Find/Replace 面板（常驻 UIA 表面，关闭仅视觉折叠、带按钮挡一切写步=结构性死锁）两实例实证。**词表启发退役**（is_docked_pane 面板词白名单不泛化，第二实例即滑过）；**provider 可见性路线探针否证**（VS Code 折叠面板仍报 offscreen=false——Electron 对视觉折叠不说实话，如实入档）。正解=声明认领：popup_ignores: [{app, name_contains}]，门禁三处同口径跳过（步前判定/pending 过滤/处置后复查）；name_contains 必填（最窄形态，禁止掏空门禁的宽声明）；同表面 handler+ignore 双声明 PROTOCOL（处置与放行互斥）；与 handler 双层共存合法。Word 模板按 010 实证补认领（.docx+导航）。测试：popup_gate +4（认领放行/词不符仍拦/双层共存处置+认领两不相扰/schema 互斥拒绝）；uia 词表测试随退役删除。真机验收通过（2026-10-11，VS Code 主轮 v4 修订同现场 A/B）：v3 同现场被常驻面板死锁挡住的 find-replace/quick-open×2，认领声明后全部 completed+verified——同一现场的对照铁证；run 收于 25/26（close 步 precondition 阻断于操作者中途清窗导致的 bind 陈旧，非机制缺陷，手动等价收尾+进程零残留）。
 - **`browser-verify --no-popups` 页内弹层断言原语（spec，[06 浏览器节](docs/06-design-blueprint.md)——浏览器页内弹层空档的 v1 检测面；引擎级自动门禁留 ROADMAP 候选）**：原生弹层门禁结构性不覆盖页内 DOM 弹层（browser-* 走 `--session` 非 `--app` 锚；front-report 只收 role:Window 表面）——本谓词补检测面：枚举**可见**弹层表面（默认选择器 `dialog[open],[role=dialog],[role=alertdialog],[aria-modal=true]`，零布局盒=隐藏模板不计；站点自绘浮层走 `--popup-selector` 显式声明），0=通过、>0=`ASSERTION_FAILED` 带 total+样本证据（≤5 条、text≤200 字符折叠空白）。**flow 组合语义**：ASSERTION_FAILED→condition false 是既有映射——when/unless 弹层分支（检测→browser-click 处置）零新协议即可组合。如实边界：无标注自绘横幅不在默认面；在流内静态 role=dialog 段落会过检（过度检测由 samples 证据暴露，收窄靠调用方）；选择器真语法错误 PROTOCOL（浏览器 tokenizer 对未闭合 `[` 按 EOF 闭合是如实语义，`dialog[open`≡`dialog[open]` 实证）。测试：browser 契约 2（help 四要素/--popup-selector 从属 clap 拒绝/未知会话 NOT_FOUND）+ **headless 真机验证六假设全落定**（可见 dialog 命中带样本/隐藏模板不计/自定义横幅默认不中显式中/垃圾选择器 `>>>` PROTOCOL/干净页通过/会话清零——不占交互桌面）。
 
@@ -78,6 +80,8 @@
 
 ### Added
 
+- **browser-read --wait-for N 沉降谓词（spec，[06 浏览器节](docs/06-design-blueprint.md)——CDP 轨缺沉降原语补面,43 联测暴露）**：命中数 ≥ N 才返回,内建 500ms 轮询共用药洞超时,超时 TIMEOUT 附实测命中数（异步渲染差多少一目了然）；与 --all/唯一读通用。背景:browser 轨无 wait 谓词（wait 是 UIA 轨）,异步渲染页（GitHub hpc 列表 CSR ~3s）读到半成品,04/06 轮 output field missing 根因;外挂 ps1 轮询循环（用户两度指正:为何不用 yml/actl——基建缺口实为根因,修基建让场景塌缩,探测降为单命令）。真机实证:zotero_cli releases 页 --wait-for 2 等 3s 沉降后返回 19 元素。测试:契约 help 四要素。
+
 - **popup_ignores 弹层门禁降噪第二轮（spec，[06 运行时治理](docs/06-design-blueprint.md)——两个独立应用同根因升级为类问题后的声明式收口）**：门禁观察面分不清「常驻部件」与「真弹窗」——Word 停靠导航窗格（fill-3 误拦）+ VS Code Find/Replace 面板（常驻 UIA 表面，关闭仅视觉折叠、带按钮挡一切写步=结构性死锁）两实例实证。**词表启发退役**（is_docked_pane 面板词白名单不泛化，第二实例即滑过）；**provider 可见性路线探针否证**（VS Code 折叠面板仍报 offscreen=false——Electron 对视觉折叠不说实话，如实入档）。正解=声明认领：popup_ignores: [{app, name_contains}]，门禁三处同口径跳过（步前判定/pending 过滤/处置后复查）；name_contains 必填（最窄形态，禁止掏空门禁的宽声明）；同表面 handler+ignore 双声明 PROTOCOL（处置与放行互斥）；与 handler 双层共存合法。Word 模板按 010 实证补认领（.docx+导航）。测试：popup_gate +4（认领放行/词不符仍拦/双层共存处置+认领两不相扰/schema 互斥拒绝）；uia 词表测试随退役删除。真机验收通过（2026-10-11，VS Code 主轮 v4 修订同现场 A/B）：v3 同现场被常驻面板死锁挡住的 find-replace/quick-open×2，认领声明后全部 completed+verified——同一现场的对照铁证；run 收于 25/26（close 步 precondition 阻断于操作者中途清窗导致的 bind 陈旧，非机制缺陷，手动等价收尾+进程零残留）。
 - **GUI 操作录制：人演示一遍，得到可复放的 YAML（spec，[76](docs/76-gui-recording.md) 设计 / [79](docs/79-quicker-recording-research.md) 调研 / [06 录制节](docs/06-design-blueprint.md) 协议）**：`record-start/record-worker/record-stop/record-status` 四命令——低级键鼠钩子捕获（回调极简入队 + 工作线程点击瞬间 UIA 反查 + 焦点身份），trace JSONL 证据文件（密码框键 VK 永不落盘、注入事件如实标注不编译、自家窗口过滤）。**信号条/托盘右键「开始/停止录制」**（动态菜单项，label 前缀「录制中」满足反后台录制提示）。机械编译器：换窗延迟分析→`wait` 步骤；键入 burst 末**值读回**（提交文本覆盖 VK 推导——IME 候选/自动纠正的真值；中文自动 `--paste`）；`--app` 字面标题泛化为 flow inputs。agent 改写轮指引落 skills（[record-rewrite.md](skills/actl/references/record-rewrite.md)：TODO 分类修复/选择器稳健化/噪音清除/参数化/**修订优先迭代**）。真机验收：注入轨四发现全修（DPI 口径/LLKHF 位/Value→Text 回退/读回竞态），人工演示轨 47 事件 43 真人输入全捕获 + IME 旗舰断言成立，改写重放 v1→v7 六轮收敛至单命令零前置全链通过——[80](docs/80-record-acceptance.md) 全记录。
 - **焦点元素寻址 `focused:`（spec，[06 §3 命名规则](docs/06-design-blueprint.md)）**：`focused:`（裸）/ `focused:<Type>`（角色校验）解析到 OS 键盘焦点元素——树对语义选择器不可见但焦点可达的应用（Electron 懒树，uTools/网易云实证）的唯一元素寻址通道。属主判据用物理焦点根（GUITHREADINFO，UIA focused 视图在 WinUI 会谎报），角色/属主不符 fail-closed NOT_FOUND 带证据。**与 type 组合即单次注入打字**：`type focused: <词> --app <win>` 走既有逐字键盘通道一次注入全词——uTools 实测 5 字符 916ms（逐键 press 五调用 ≈8.5s），识图实证搜索筛选被驱动；网易云中文 3 字符同验证。
@@ -117,6 +121,8 @@
 
 ### Added
 
+- **browser-read --wait-for N 沉降谓词（spec，[06 浏览器节](docs/06-design-blueprint.md)——CDP 轨缺沉降原语补面,43 联测暴露）**：命中数 ≥ N 才返回,内建 500ms 轮询共用药洞超时,超时 TIMEOUT 附实测命中数（异步渲染差多少一目了然）；与 --all/唯一读通用。背景:browser 轨无 wait 谓词（wait 是 UIA 轨）,异步渲染页（GitHub hpc 列表 CSR ~3s）读到半成品,04/06 轮 output field missing 根因;外挂 ps1 轮询循环（用户两度指正:为何不用 yml/actl——基建缺口实为根因,修基建让场景塌缩,探测降为单命令）。真机实证:zotero_cli releases 页 --wait-for 2 等 3s 沉降后返回 19 元素。测试:契约 help 四要素。
+
 - **popup_ignores 弹层门禁降噪第二轮（spec，[06 运行时治理](docs/06-design-blueprint.md)——两个独立应用同根因升级为类问题后的声明式收口）**：门禁观察面分不清「常驻部件」与「真弹窗」——Word 停靠导航窗格（fill-3 误拦）+ VS Code Find/Replace 面板（常驻 UIA 表面，关闭仅视觉折叠、带按钮挡一切写步=结构性死锁）两实例实证。**词表启发退役**（is_docked_pane 面板词白名单不泛化，第二实例即滑过）；**provider 可见性路线探针否证**（VS Code 折叠面板仍报 offscreen=false——Electron 对视觉折叠不说实话，如实入档）。正解=声明认领：popup_ignores: [{app, name_contains}]，门禁三处同口径跳过（步前判定/pending 过滤/处置后复查）；name_contains 必填（最窄形态，禁止掏空门禁的宽声明）；同表面 handler+ignore 双声明 PROTOCOL（处置与放行互斥）；与 handler 双层共存合法。Word 模板按 010 实证补认领（.docx+导航）。测试：popup_gate +4（认领放行/词不符仍拦/双层共存处置+认领两不相扰/schema 互斥拒绝）；uia 词表测试随退役删除。真机验收通过（2026-10-11，VS Code 主轮 v4 修订同现场 A/B）：v3 同现场被常驻面板死锁挡住的 find-replace/quick-open×2，认领声明后全部 completed+verified——同一现场的对照铁证；run 收于 25/26（close 步 precondition 阻断于操作者中途清窗导致的 bind 陈旧，非机制缺陷，手动等价收尾+进程零残留）。
 - **浏览器 CDP 通道 v1（`browser-*` 命令族，spec）**：actl 自有浏览器会话的最小同步 CDP 客户端（新 crate `actl-browser`，tungstenite 为唯一新增直接依赖）。**8 命令**：`browser-launch`（默认有头、`--headless` 后台选项、`--proxy` 显式代理、`--profile` 持久登录复用、`--browser-executable` 接受 app-registry 别名）、`browser-navigate`（网络级失败显式报错不静默）、`browser-read`（`--property` 白名单属性读 + `--iframe` 跨源子 frame）、`browser-type`（守卫输入写，native setter + 读回核验，内容不回显）、`browser-click`（守卫写 + `--expect-text` 断言）、`browser-close`（CDP 优雅关闭 + 幂等注销）、`browser-list`（只读枚举）、`browser-verify`（断言族 + 登录态谓词 `--css/--xpath [--contains]`）。**持久 profile 四件套**：登录暂停点（`pause_before`+`resume_check`）、`resources.browser_profiles` 声明治理（未声明即拒）、同名再启=复用+陈旧接管、扩展策略（ephemeral 恒禁/持久默认保留）。**YAML 流程接入**：治理三件套（outputs 只读生产者/副作用必带 verify/持久 profile 声明）全部就位，探针六步+登录暂停+复用真机全通。安全边界：Target/Runtime/Page/Browser 白名单域——cookie 构造性不可达，永不附着用户默认 profile。设计 [72](docs/72-browser-cdp-integration.md)；x.com 八轮真机 [73](docs/73-browser-twitter-scenario.md)。
 - **本地应用注册表（`app-register`/`app-list`/`app-remove`）**：`%LOCALAPPDATA%/actl/apps.json` 存储名字→路径映射，`launch <别名>` 和 `browser-launch --browser-executable <别名>` 走注册表解析；Store 应用支持 `--pattern` 通配（版本号变化自动重解析 glob）。skills 文档含查找指南 [app-locations.md](skills/actl/references/app-locations.md)。
@@ -153,6 +159,8 @@
 本版是可靠性、验收与安全加固的版本：金任务跨日双百达标，全部原生夹具和四场景真机复验通过，输入护栏与显示协议健壮化（前台沉降/租约重读/换行折叠/悬浮卡不抢前台），前台弹层优先体系落地（front-report + 判定树 + 清理白名单），授权通道定案（agent 不可自授、急停压过预授权）。
 
 ### Added
+
+- **browser-read --wait-for N 沉降谓词（spec，[06 浏览器节](docs/06-design-blueprint.md)——CDP 轨缺沉降原语补面,43 联测暴露）**：命中数 ≥ N 才返回,内建 500ms 轮询共用药洞超时,超时 TIMEOUT 附实测命中数（异步渲染差多少一目了然）；与 --all/唯一读通用。背景:browser 轨无 wait 谓词（wait 是 UIA 轨）,异步渲染页（GitHub hpc 列表 CSR ~3s）读到半成品,04/06 轮 output field missing 根因;外挂 ps1 轮询循环（用户两度指正:为何不用 yml/actl——基建缺口实为根因,修基建让场景塌缩,探测降为单命令）。真机实证:zotero_cli releases 页 --wait-for 2 等 3s 沉降后返回 19 元素。测试:契约 help 四要素。
 
 - **popup_ignores 弹层门禁降噪第二轮（spec，[06 运行时治理](docs/06-design-blueprint.md)——两个独立应用同根因升级为类问题后的声明式收口）**：门禁观察面分不清「常驻部件」与「真弹窗」——Word 停靠导航窗格（fill-3 误拦）+ VS Code Find/Replace 面板（常驻 UIA 表面，关闭仅视觉折叠、带按钮挡一切写步=结构性死锁）两实例实证。**词表启发退役**（is_docked_pane 面板词白名单不泛化，第二实例即滑过）；**provider 可见性路线探针否证**（VS Code 折叠面板仍报 offscreen=false——Electron 对视觉折叠不说实话，如实入档）。正解=声明认领：popup_ignores: [{app, name_contains}]，门禁三处同口径跳过（步前判定/pending 过滤/处置后复查）；name_contains 必填（最窄形态，禁止掏空门禁的宽声明）；同表面 handler+ignore 双声明 PROTOCOL（处置与放行互斥）；与 handler 双层共存合法。Word 模板按 010 实证补认领（.docx+导航）。测试：popup_gate +4（认领放行/词不符仍拦/双层共存处置+认领两不相扰/schema 互斥拒绝）；uia 词表测试随退役删除。真机验收通过（2026-10-11，VS Code 主轮 v4 修订同现场 A/B）：v3 同现场被常驻面板死锁挡住的 find-replace/quick-open×2，认领声明后全部 completed+verified——同一现场的对照铁证；run 收于 25/26（close 步 precondition 阻断于操作者中途清窗导致的 bind 陈旧，非机制缺陷，手动等价收尾+进程零残留）。
 - **始终信任此流程（指纹持久信任）**：授权三部曲收官——全局托盘开关 → 会话级 standing → **指纹持久信任**（跨会话免点击）。声明 `approval: standing` 的流程运行时，执行器计算冻结计划的 FNV-1a 双通道 128 位指纹并附在交接请求中；显示端查 `trusted-flows.json` 信任集——匹配即刻 Standing 授予，不匹配正常出卡。**模板变更 → 指纹变 → 信任自动失效**。设计见 [32](docs/32-desktop-handoff.md)。
@@ -245,6 +253,8 @@
 
 ### Added
 
+- **browser-read --wait-for N 沉降谓词（spec，[06 浏览器节](docs/06-design-blueprint.md)——CDP 轨缺沉降原语补面,43 联测暴露）**：命中数 ≥ N 才返回,内建 500ms 轮询共用药洞超时,超时 TIMEOUT 附实测命中数（异步渲染差多少一目了然）；与 --all/唯一读通用。背景:browser 轨无 wait 谓词（wait 是 UIA 轨）,异步渲染页（GitHub hpc 列表 CSR ~3s）读到半成品,04/06 轮 output field missing 根因;外挂 ps1 轮询循环（用户两度指正:为何不用 yml/actl——基建缺口实为根因,修基建让场景塌缩,探测降为单命令）。真机实证:zotero_cli releases 页 --wait-for 2 等 3s 沉降后返回 19 元素。测试:契约 help 四要素。
+
 - **popup_ignores 弹层门禁降噪第二轮（spec，[06 运行时治理](docs/06-design-blueprint.md)——两个独立应用同根因升级为类问题后的声明式收口）**：门禁观察面分不清「常驻部件」与「真弹窗」——Word 停靠导航窗格（fill-3 误拦）+ VS Code Find/Replace 面板（常驻 UIA 表面，关闭仅视觉折叠、带按钮挡一切写步=结构性死锁）两实例实证。**词表启发退役**（is_docked_pane 面板词白名单不泛化，第二实例即滑过）；**provider 可见性路线探针否证**（VS Code 折叠面板仍报 offscreen=false——Electron 对视觉折叠不说实话，如实入档）。正解=声明认领：popup_ignores: [{app, name_contains}]，门禁三处同口径跳过（步前判定/pending 过滤/处置后复查）；name_contains 必填（最窄形态，禁止掏空门禁的宽声明）；同表面 handler+ignore 双声明 PROTOCOL（处置与放行互斥）；与 handler 双层共存合法。Word 模板按 010 实证补认领（.docx+导航）。测试：popup_gate +4（认领放行/词不符仍拦/双层共存处置+认领两不相扰/schema 互斥拒绝）；uia 词表测试随退役删除。真机验收通过（2026-10-11，VS Code 主轮 v4 修订同现场 A/B）：v3 同现场被常驻面板死锁挡住的 find-replace/quick-open×2，认领声明后全部 completed+verified——同一现场的对照铁证；run 收于 25/26（close 步 precondition 阻断于操作者中途清窗导致的 bind 陈旧，非机制缺陷，手动等价收尾+进程零残留）。
 - **流程协议扩展**：简单条件 `when/unless/otherwise`（条件观察失败不走否定分支，附参数化模板）；步骤级 `recovery` 有界观察恢复预算（持久化、继续不补满、暂停摘要含失败原因与重查日志）；`section` + `on_failure: skip_section` 失败隔离——一段失败保留证据、同段其余步骤跳过、后续段继续，整轮以 needs_review 收束，显式重试成功后还原；声明式 `inputs`/`--inputs` 与运行上下文资源（预检不创建、失败保留不覆盖、恢复不重初始化）；可恢复操作组（1–16 调用、以 verify 收尾）与文件/行集合/剪贴板/进程归属/关闭断言族；`${run.dir_native}` 反斜杠占位符（Windows 原生对话框拒收正斜杠路径）。[20](docs/20-yaml-workflow-protocol.md) · [63](docs/63-simple-workflow-conditions.md) · [64](docs/64-bounded-observation-recovery.md) · [55](docs/55-resumable-desktop-tasks.md) · [60](docs/60-workflow-resources.md)
 - **失败分级与三路留证**：步骤记录 `attempt_errors`（最近 8 次错误码），同写步骤同错三连标记 `route_defect_suspected` 提示勿盲目重试；步骤失败瞬间向 flow-resources 落三件套——整屏 PNG、原生窗口清单 JSON、定向 UIA 快照 JSON（吞错不碍流程、同名覆盖不堆积）；无源失败合成带错误原文（截断 200 字）的最小结构化证据。
@@ -284,6 +294,8 @@
 
 ### Added
 
+- **browser-read --wait-for N 沉降谓词（spec，[06 浏览器节](docs/06-design-blueprint.md)——CDP 轨缺沉降原语补面,43 联测暴露）**：命中数 ≥ N 才返回,内建 500ms 轮询共用药洞超时,超时 TIMEOUT 附实测命中数（异步渲染差多少一目了然）；与 --all/唯一读通用。背景:browser 轨无 wait 谓词（wait 是 UIA 轨）,异步渲染页（GitHub hpc 列表 CSR ~3s）读到半成品,04/06 轮 output field missing 根因;外挂 ps1 轮询循环（用户两度指正:为何不用 yml/actl——基建缺口实为根因,修基建让场景塌缩,探测降为单命令）。真机实证:zotero_cli releases 页 --wait-for 2 等 3s 沉降后返回 19 元素。测试:契约 help 四要素。
+
 - **popup_ignores 弹层门禁降噪第二轮（spec，[06 运行时治理](docs/06-design-blueprint.md)——两个独立应用同根因升级为类问题后的声明式收口）**：门禁观察面分不清「常驻部件」与「真弹窗」——Word 停靠导航窗格（fill-3 误拦）+ VS Code Find/Replace 面板（常驻 UIA 表面，关闭仅视觉折叠、带按钮挡一切写步=结构性死锁）两实例实证。**词表启发退役**（is_docked_pane 面板词白名单不泛化，第二实例即滑过）；**provider 可见性路线探针否证**（VS Code 折叠面板仍报 offscreen=false——Electron 对视觉折叠不说实话，如实入档）。正解=声明认领：popup_ignores: [{app, name_contains}]，门禁三处同口径跳过（步前判定/pending 过滤/处置后复查）；name_contains 必填（最窄形态，禁止掏空门禁的宽声明）；同表面 handler+ignore 双声明 PROTOCOL（处置与放行互斥）；与 handler 双层共存合法。Word 模板按 010 实证补认领（.docx+导航）。测试：popup_gate +4（认领放行/词不符仍拦/双层共存处置+认领两不相扰/schema 互斥拒绝）；uia 词表测试随退役删除。真机验收通过（2026-10-11，VS Code 主轮 v4 修订同现场 A/B）：v3 同现场被常驻面板死锁挡住的 find-replace/quick-open×2，认领声明后全部 completed+verified——同一现场的对照铁证；run 收于 25/26（close 步 precondition 阻断于操作者中途清窗导致的 bind 陈旧，非机制缺陷，手动等价收尾+进程零残留）。
 - **YAML 流程 v1**：新增 `actl-flow` 与 `flow-validate/run/status/pause/resume`，提供 Schema、字段级错误、全步骤预检、参数数组、不可覆盖计划、写前记录、命令边界暂停和恢复前验证。写操作不自动重试，结果不确定时先核对；托盘支持当前流程暂停/继续。[流程协议](docs/20-yaml-workflow-protocol.md)
 - **流程数据与恢复**：步骤输出可通过 JSON Pointer 导出显式类型的数据，并通过 `bind` 绑定后续参数；`max_age_ms` 拒绝过期或时间未知的数据。新增 `retry: stale_read` 和 `resume_check`，支持只读陈旧引用的有界重新定位与恢复上下文检查；写入后的观察失败即使指定 `--retry-step` 也不重放写步骤。[输出绑定](docs/38-flow-output-bindings.md) · [恢复说明](docs/39-flow-observation-recovery.md)
@@ -313,6 +325,8 @@
 踩坑细节见 docs/16 与 git 日志,此处只记变更本体。
 
 ### Added
+
+- **browser-read --wait-for N 沉降谓词（spec，[06 浏览器节](docs/06-design-blueprint.md)——CDP 轨缺沉降原语补面,43 联测暴露）**：命中数 ≥ N 才返回,内建 500ms 轮询共用药洞超时,超时 TIMEOUT 附实测命中数（异步渲染差多少一目了然）；与 --all/唯一读通用。背景:browser 轨无 wait 谓词（wait 是 UIA 轨）,异步渲染页（GitHub hpc 列表 CSR ~3s）读到半成品,04/06 轮 output field missing 根因;外挂 ps1 轮询循环（用户两度指正:为何不用 yml/actl——基建缺口实为根因,修基建让场景塌缩,探测降为单命令）。真机实证:zotero_cli releases 页 --wait-for 2 等 3s 沉降后返回 19 元素。测试:契约 help 四要素。
 - **浏览器内容通道**:`snapshot --view content` 内容域投影(应用工具栏等
   chrome 整枝丢弃,与 `--skeleton` 组合对浏览器页面的 token 削减达 70-80%);
   `wait --stable` settle 谓词(观测样本连续两次不变即就绪,滚动/导航后的
@@ -344,6 +358,8 @@ M2 收官批:命令面 27/31 + 窗口治理与可观测性 + 信号条重设计 
 + 应用档案 pack 体系。
 
 ### Added
+
+- **browser-read --wait-for N 沉降谓词（spec，[06 浏览器节](docs/06-design-blueprint.md)——CDP 轨缺沉降原语补面,43 联测暴露）**：命中数 ≥ N 才返回,内建 500ms 轮询共用药洞超时,超时 TIMEOUT 附实测命中数（异步渲染差多少一目了然）；与 --all/唯一读通用。背景:browser 轨无 wait 谓词（wait 是 UIA 轨）,异步渲染页（GitHub hpc 列表 CSR ~3s）读到半成品,04/06 轮 output field missing 根因;外挂 ps1 轮询循环（用户两度指正:为何不用 yml/actl——基建缺口实为根因,修基建让场景塌缩,探测降为单命令）。真机实证:zotero_cli releases 页 --wait-for 2 等 3s 沉降后返回 19 元素。测试:契约 help 四要素。
 - **命令**:`wait --property` 谓词等待(value/name/checked,--contains 子串);
   `select`/`toggle`(SelectionItem/Toggle 直调);`paste`(ctrl+v 到当前选中——
   无元素落点的粘贴原语,刻意不做元素聚焦)。
@@ -399,6 +415,8 @@ M2 收官批:命令面 27/31 + 窗口治理与可观测性 + 信号条重设计 
 M2 第三批:观察层强化 + 定位性能结构优化 + 可观测性 + 信号条交互 + 版本口径修订。
 
 ### Added
+
+- **browser-read --wait-for N 沉降谓词（spec，[06 浏览器节](docs/06-design-blueprint.md)——CDP 轨缺沉降原语补面,43 联测暴露）**：命中数 ≥ N 才返回,内建 500ms 轮询共用药洞超时,超时 TIMEOUT 附实测命中数（异步渲染差多少一目了然）；与 --all/唯一读通用。背景:browser 轨无 wait 谓词（wait 是 UIA 轨）,异步渲染页（GitHub hpc 列表 CSR ~3s）读到半成品,04/06 轮 output field missing 根因;外挂 ps1 轮询循环（用户两度指正:为何不用 yml/actl——基建缺口实为根因,修基建让场景塌缩,探测降为单命令）。真机实证:zotero_cli releases 页 --wait-for 2 等 3s 沉降后返回 19 元素。测试:契约 help 四要素。
 - **L4 虚拟化容器定位(spec)**:定位链第四级——已物化树空手时走
   ItemContainerPattern 精确查询(Explorer 文件列表实证:树内 0 命中 → 命中未物化
   条目;US1 条目级确认收口);`find` 自动走 L4 并上报 resolved_by。
@@ -420,6 +438,8 @@ M2 第三批:观察层强化 + 定位性能结构优化 + 可观测性 + 信号�
 M2 收尾:分发三渠道 + crates.io 自动化发布 + 信号条交互打磨 + 时序评估闭环。
 
 ### Added
+
+- **browser-read --wait-for N 沉降谓词（spec，[06 浏览器节](docs/06-design-blueprint.md)——CDP 轨缺沉降原语补面,43 联测暴露）**：命中数 ≥ N 才返回,内建 500ms 轮询共用药洞超时,超时 TIMEOUT 附实测命中数（异步渲染差多少一目了然）；与 --all/唯一读通用。背景:browser 轨无 wait 谓词（wait 是 UIA 轨）,异步渲染页（GitHub hpc 列表 CSR ~3s）读到半成品,04/06 轮 output field missing 根因;外挂 ps1 轮询循环（用户两度指正:为何不用 yml/actl——基建缺口实为根因,修基建让场景塌缩,探测降为单命令）。真机实证:zotero_cli releases 页 --wait-for 2 等 3s 沉降后返回 19 元素。测试:契约 help 四要素。
 - README 示例化(安装三渠道/快速上手/信号条/安全设计/命令面);
 - scoop manifest(scoop/actl.json,哈希与官方 checksums 交叉验证,autoupdate);
 - Agent Skill(skills/actl:SKILL.md + references/error-codes.md 恢复手册,自包含无仓库链接);
@@ -444,6 +464,8 @@ M2 前两批:输入可靠性硬化 + 命令面 24 + fallback 定位链 + US1 跨
 显示信号层(actl-signal 状态条与紧急停止)。
 
 ### Added
+
+- **browser-read --wait-for N 沉降谓词（spec，[06 浏览器节](docs/06-design-blueprint.md)——CDP 轨缺沉降原语补面,43 联测暴露）**：命中数 ≥ N 才返回,内建 500ms 轮询共用药洞超时,超时 TIMEOUT 附实测命中数（异步渲染差多少一目了然）；与 --all/唯一读通用。背景:browser 轨无 wait 谓词（wait 是 UIA 轨）,异步渲染页（GitHub hpc 列表 CSR ~3s）读到半成品,04/06 轮 output field missing 根因;外挂 ps1 轮询循环（用户两度指正:为何不用 yml/actl——基建缺口实为根因,修基建让场景塌缩,探测降为单命令）。真机实证:zotero_cli releases 页 --wait-for 2 等 3s 沉降后返回 19 元素。测试:契约 help 四要素。
 - **M2 第一批·输入可靠性硬化**:
   1. **输入占用协调**(doc 09 §6.2):多 actl 实例互斥的会话级命名互斥体 `actl-input-lock`(RAII 释放,ABANDONED 接管,忙 → TIMEOUT 附恢复建议),press/type 注入动作段全程持锁;type 键盘通道**分批注入**(32 字符/批)批间复核物理前台,焦点被抢即停在批边界并如实上报(`delivered`/`stopped_early`);envelope 新增 `input_effects`(keyboard/clipboard/pointer,部分送达 = ok:true + keyboard:"partial")。单测 4 项:跨线程锁互斥、分批发完、边界停止、注入错误传播。
   2. **激活感知目标解析**:WM_NULL 探针(SendMessageTimeoutW,60ms,不阻塞调用方)测目标是否在泵消息;挂起 → ShowWindowAsync 唤醒 + 有界等待(≤1.6s),把挂起 UWP 应用每个跨进程 UIA 调用 ~2s 的隐形 stall 变成一次有界、可上报的等待;snapshot/find 上报 `wake_ms`。
@@ -483,6 +505,8 @@ M1 激进 MVP:纵向跑通"snapshot → 定位 → 操作 → 反馈"全链路;1
 双金任务 10/10,冷启动 P95 53.9ms(实测)。首个可安装版本。
 
 ### Added
+
+- **browser-read --wait-for N 沉降谓词（spec，[06 浏览器节](docs/06-design-blueprint.md)——CDP 轨缺沉降原语补面,43 联测暴露）**：命中数 ≥ N 才返回,内建 500ms 轮询共用药洞超时,超时 TIMEOUT 附实测命中数（异步渲染差多少一目了然）；与 --all/唯一读通用。背景:browser 轨无 wait 谓词（wait 是 UIA 轨）,异步渲染页（GitHub hpc 列表 CSR ~3s）读到半成品,04/06 轮 output field missing 根因;外挂 ps1 轮询循环（用户两度指正:为何不用 yml/actl——基建缺口实为根因,修基建让场景塌缩,探测降为单命令）。真机实证:zotero_cli releases 页 --wait-for 2 等 3s 沉降后返回 19 元素。测试:契约 help 四要素。
 
 - **popup_ignores 弹层门禁降噪第二轮（spec，[06 运行时治理](docs/06-design-blueprint.md)——两个独立应用同根因升级为类问题后的声明式收口）**：门禁观察面分不清「常驻部件」与「真弹窗」——Word 停靠导航窗格（fill-3 误拦）+ VS Code Find/Replace 面板（常驻 UIA 表面，关闭仅视觉折叠、带按钮挡一切写步=结构性死锁）两实例实证。**词表启发退役**（is_docked_pane 面板词白名单不泛化，第二实例即滑过）；**provider 可见性路线探针否证**（VS Code 折叠面板仍报 offscreen=false——Electron 对视觉折叠不说实话，如实入档）。正解=声明认领：popup_ignores: [{app, name_contains}]，门禁三处同口径跳过（步前判定/pending 过滤/处置后复查）；name_contains 必填（最窄形态，禁止掏空门禁的宽声明）；同表面 handler+ignore 双声明 PROTOCOL（处置与放行互斥）；与 handler 双层共存合法。Word 模板按 010 实证补认领（.docx+导航）。测试：popup_gate +4（认领放行/词不符仍拦/双层共存处置+认领两不相扰/schema 互斥拒绝）；uia 词表测试随退役删除。真机验收通过（2026-10-11，VS Code 主轮 v4 修订同现场 A/B）：v3 同现场被常驻面板死锁挡住的 find-replace/quick-open×2，认领声明后全部 completed+verified——同一现场的对照铁证；run 收于 25/26（close 步 precondition 阻断于操作者中途清窗导致的 bind 陈旧，非机制缺陷，手动等价收尾+进程零残留）。
 **命令面(17,按认知模型分组)**

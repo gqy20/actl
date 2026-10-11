@@ -371,7 +371,7 @@ browser-read ... [--all [--limit N]]
                                      # 与 find 枚举口径一致);--limit 裁返回面(默认 50,上限 500),
                                      # total 保真 + truncated_by_limit 如实标记;逐元素文本截断同
                                      # 唯一读;唯一模式的硬判定只作用于非 --all 调用,两形态共存
-browser-read ... [--deep]
+browser-read ... [--deep] [--wait-for N]
                                      # shadow DOM 穿透(2026-10-11 spec,B 站 <bili-comments> 实证):
                                      # 在 document 与每个开放 shadowRoot(open 模式)内递归执行
                                      # 选择器,收集全部命中——Web Component 内部内容从结构性
