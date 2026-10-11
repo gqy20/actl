@@ -150,6 +150,19 @@ quirks:
       (协议缺口在案);导航类目标不受影响——搜索页 --all 枚举卡片
       href 后 browser-navigate 直达视频页,绕开整页跳转锚漂移
       (docs/16 §5.2 增补)
+  - id: bilibili_comments_mount_latency
+    note: >-
+      B 站评论挂载是异步时序(2026-10-11 实证:视频页就绪后 #commentapp
+      元素出现,但内部评论渲染滞后)——到达页面 ≠ 评论可读;判定用
+      wait --element 等挂载锚点就绪,0 命中先怀疑"未挂载"而非
+      "没有评论"(空集语义见 browser-read --all:0=空集非 NOT_FOUND)
+  - id: multi_tab_target_drift
+    note: >-
+      浏览器窗口 ≠ 单一页面容器(2026-10-11 实证:B 站新窗口带双 tab,
+      标题"和另外 1 个页面"形态;UIA 滚动落在非目标 tab 上,目标页
+      纹丝不动)。多 tab 疑点:title 带"另外 N 个页面"、browser-list
+      文档数与预期不符、对目标 tab 操作"生效"但页面无变化——操作前
+      browser-list 核对 tab 实况,ctrl+w 关多余 tab 收敛到单 tab 再操作
 routes:
   - id: window_title_read
     description: 读浏览器窗口标题(=当前标签页页面名+浏览器后缀;标签切换标题随变)
