@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=../../schemas/flow-v1.schema.json
+# 探索模式轮 C 复现(2026-10-11):Store 记事本「另存为」对话框的锚点转移
+# 端到端——判据放宽(同 pid 或 owner 归属)后,RuntimeBroker 跨进程承载的
+# 文件对话框(若该形态成立)不再被同 pid 过滤错失。
+# 前置:Store 记事本已开(launch notepad.exe 走 HKCU App Paths 解析)。
+# texts:①编辑器输入内容 ②对话框文件名输入(name 首猜,决策卡兜底)。
+# goal:落盘断言(文件存在且内容含探针串)。
+# 预期:status=completed,goal_met=true;关键观察=anchor_transfers>0 且
+# 转移目标是对话框窗(轮 B 同 pid 形态或轮 C 跨进程形态,数据见 action_log)。
+# 决策卡预案:对话框内「保存/新建文件夹」平局是已知形态(轮 B 实证),
+# 应答选「保存」。
+version: 1
+name: explore-roundc-notepad-saveas
+explore:
+  task: 在记事本输入文本并通过另存为保存到指定文件
+  app: Notepad
+  keywords: [文件, 另存为, 保存]
+  texts: {'name:文本编辑器': 'roundC probe', 'name:文件名': 'E:\\explore\\computer_cli\\target\\tmp\\round-c-save.txt'}
+  goal: {command: verify-file, args: [--path, 'E:\explore\computer_cli\target\tmp\round-c-save.txt', --kind, text, --expected, '{"text":"roundC probe"}', --subset]}
+  budgets: {actions: 10, decisions: 5}

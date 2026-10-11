@@ -192,3 +192,14 @@ S3 真机闭环验收通过:回写(证据收集)、人工复核迁移(用户裁�
 ## 轮 C 落地：RuntimeBroker pid 放宽（2026-10-11，离线半）
 
 判据①放宽：锚点转移与 goal 跨窗探测的候选窗过滤从「同 pid」放宽为「同 pid **或** owner 挂宿主锚窗」（`list-windows` 的 `owner_title` 归属链——RuntimeBroker 承载的 Store 应用文件对话框 pid 不同但 owned by 宿主窗）。归属链比进程名白名单更本质（归属事实,不猜进程名）；判据③关键词自校验照旧把关（owner 匹配不豁免相关性——broker+空帧不转移有用例钉住）。MockHost 补 broker 形态（跨 pid+owner_title）,+2 用例。**真机复现轮（Store 记事本另存为对话框）待跑——放宽生效的端到端证据。**
+
+## 路线 #3 复核迁移（2026-10-11 用户授权）
+
+`apps/notepad.yml` explore_explore_l2_notepad_input_zh 路线 unverified→**verified**——复核依据：探索轮 goal_met 三重物理证据（值断言/标题 `*探索验收中文 - Notepad` 送达/剪贴板残留）+重放 replay-notepad-input-01 `completed/verified/attempts=1`（state.json 实证读回）。§7 目标 5 条达成 **4** 条（剩 #4/#5 fixture 已备）。
+
+## 轮 C 复现轮实录（2026-10-11，run roundc-01~04——主验证点收获，保存链挫折如实）
+
+- **锚点转移端到端 ✓**：决策应答「文件 MenuItem→另存为」后对话框打开，`anchor_transfers=1`、anchor_app=[另存为]——轮 B 同款链路在新判据下健康。
+- **对话框形态判定（关键否定性数据）**：另存为对话框 `pid=45236（与主窗同 pid）`、class `#32770`、owner=主窗——**传统同进程对话框，非 RuntimeBroker 跨进程承载**。docs/97「还可能由 RuntimeBroker 承载」的猜想在 Store 记事本另存为场景**不成立**；放宽判据无害在位（同 pid 命中第一判据，owner 归属是第二判据）。跨进程 picker 形态（FileOpenPicker 类）待其他 Store 应用场景。
+- **保存链未通（挫折+根因）**：引擎在对话框内换 4 候选全效果空、预算耗尽。手动诊断：文件名 Edit（id:1001）与地址栏**共用 automation_id → AMBIGUOUS**，注入被拒（texts 的 name:文件名 亦歧义）——engine texts 对话框内寻址是独立问题，非轮 C 判因。附带发现：①引擎对前台失配类 NOT_ACTIONABLE 重试浪费预算（roundc-01/02 十连空）；②覆盖确认框「确认另存为」对 front-report 不可见（find Button/Text 可读——观察面又一形态限制）；③会话复活链再现（launch 带出 anchor-smoke-3/分建验证脏标签）。
+- **现场清理**：对话框 esc→脏标签「不保存」清一轮→close-window 一发带走进程（pid 45236 退出零残留）；脏标签可能残留 TabState（quirk 已知），下次记事本轮首查。

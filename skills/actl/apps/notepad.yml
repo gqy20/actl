@@ -20,8 +20,8 @@ quirks:
 routes:
   - id: explore_explore_l2_notepad_input_zh
     description: 在记事本输入中文验收文本——探索回写(run explore-l2-notepad-input-zh)
-    status: unverified
-    verify: "目标断言:verify --value name:文本编辑器 探索验收中文 --property value --contains --app {window};待人工复核(重放证据 replay 轮,fixtures/flows/replay-notepad-input.yml)"
+    status: verified
+    verify: "目标断言:verify --value name:文本编辑器 探索验收中文 --property value --contains --app {window};人工复核通过(2026-10-11 用户授权):探索轮 goal_met 三重物理证据(值断言/标题送达/剪贴板残留)+重放 replay-notepad-input-01 全步 verified attempts=1"
     steps:
       - ["type", "name:文本编辑器", "探索验收中文", "--paste", "--app", "{window}"]
       - ["verify", "--value", "name:文本编辑器", "探索验收中文", "--property", "value", "--contains", "--app", "{window}"]
