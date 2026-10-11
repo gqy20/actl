@@ -2041,19 +2041,6 @@
             ]
           },
           {
-            "command": "wait",
-            "args": [
-              "--gone",
-              "uia:{\"match\":{\"name\":\"Find / Replace\",\"role\":\"Window\"}}",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000"
-            ]
-          },
-          {
             "args": [
               "uia:{\"match\":{\"name\":\"File\",\"role\":\"MenuItem\"}}",
               "--app",

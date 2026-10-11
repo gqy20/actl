@@ -42,29 +42,51 @@ quirks:
     note: >-
       VS Code 1.141 隔离 profile + --disable-extensions 启动时弹 INFO 通知
       "All installed extensions are temporarily disabled."（1.139 时代无此
-      通知，2026-10-11 模板轮实证）。分类 unknown → 弹层门禁如实拦截
-      popup_pending。**处置通道已落地（2026-10-11 notice 分类 spec，最窄
-      形态，docs/06 运行时治理③）**：popup_handlers 声明 classification:
-      notice + name_contains（必填，按名认领）+ click 处置选择器。模板
-      声明待真机轮探测实际通知文本与关闭按钮 name 后回填 vscode-edit.yml
-      （先探测再写死；候选 click 目标 "Clear Notification (Del)"）。
-      词表更宽分类等真实滞留事故再扩。
-  - id: find_widget_uia_stale_surface
+      通知，2026-10-11 模板轮实证；**reopen 后第二次实证——每次 launch 必
+      现，不是首次行为**）。**notice handler 自动处置已真机验收（2026-10-11
+      探针轮 vscode-notice-probe-01）**：声明 classification:notice +
+      name_contains "All installed extensions are temporarily disabled" +
+      click 'uia:{"match":{"role":"Button","name":"Clear Notification (Del)"}}'
+      ——门禁匹配→自动点击→复查清层→写步执行，全链 completed+verified。
+      实测处置面板按钮：Reload and Enable Extensions、Clear Notification
+      (Del)。**模板级声明受静态锚局限**：popup_handlers.app
+      是静态子串而模板 app 锚=${run.id}（每轮不同）——派生计划内声明需
+      run id 含约定前缀（探针用 vscode-notice），模板直挂待 spec（handler
+      支持输入引用，ROADMAP 在案）。
+  - id: find_widget_permanent_uia_surface
     note: >-
-      Find/Replace 面板的可达性面对 Electron UIA 呈滞后/禁用态：Close
-      按钮报 target_disabled（enabled:false），set-value 对 Find 输入框
-      同拒；点 Close 后面板仍出现在 front-report（UIA 滞留），但键通道
-      可用——ctrl+f（聚焦 find 输入框）后 esc 关闭，面板 UIA 文本随状态
-      变化（"No results"→"1 of 1"）说明表面活着但语义通道半瘫。
-      vscode-edit.yml find-replace 步已在 Close 后加 wait --gone 断言
-      （2026-10-11）：面板 UIA 滞留则该步诚实失败，不再毒化下一步门禁。
+      Find/Replace 面板是**常驻 UIA 表面**（2026-10-11 真机否证修正：
+      早先以为是暂时滞留——Close 点击后数分钟表面仍在树；ctrl+f 开关
+      周期后表面 text 从 "No results" 变 "1 of 1"——表面活着且永驻，
+      关闭只是视觉折叠）。三个后果：① `wait --gone` 对该表面必败
+      （曾被误加进 vscode-edit.yml find-replace 步，真机否证后撤销）；
+      ② 表面带 5 按钮 → front-report 报 unknown actionable 弹层 →
+      **弹层门禁挡住后续一切写步**（结构性死锁——与 Word 停靠导航窗格
+      误判同族，门禁降噪缺口第二实例，ROADMAP 升级在案）；③ 面板
+      关闭态下 Close 按钮报 target_disabled、set-value 同拒——但面板
+      active 时（ctrl+f 刚打开）控件可用。键盘通道（ctrl+f→esc）是
+      面板操作的正道；残面挡门禁的现场解法只有窗口重建（close→
+      reopen 刷新整窗表面）或门禁降噪落地。
+  - id: companion_slowday_lease_expiration
+    note: >-
+      慢 UIA 日（每步调用 2-5.5s）放大一个模式：单次 flow-resume 的
+      累计执行时长超过 handoff companion lease 窗口 → companion_unresponsive
+      fail-closed 瞬断（2026-10-11 一轮 4 次，均在连续执行多步后发生，
+      非每步必断；每次显示端自恢复 responsive）。恢复路径稳定：核验
+      uncertain 现场（读磁盘/编辑器值）→ 幂等步直接 --retry-step 推进。
+      根因（lease 窗口 vs 慢日步长的适配）留专项，登记 ROADMAP。
   - id: keyboard_escape_channel
     note: >-
       press 的键名是 esc 不是 escape（PROTOCOL 会给别名提示）；全局键盘
       通道（press esc --app，不带 --target）走系统焦点不校验元素，VS Code
       编辑器聚焦时 esc 关 find 面板可靠；带 --target 的 press 严格断言
       焦点元素——焦点在编辑器时对 find 输入框的定向 press 会被如实拒绝
-      （expected/current 证据），先用点击/键盘建立焦点再用。
+      （expected/current 证据），先用点击/键盘建立焦点再用。**focus 原语
+      真机验收（2026-10-11 探针轮）**：ctrl+f→esc（面板绕行）后
+      `focus <editor> --app`（UIA SetFocus+读回核验）建立编辑器焦点，
+      随后 `press ctrl+end --target <editor>` 断言式通过 + verify
+      focused:Edit ✓——建立（focus）与断言（press --target/focused:）
+      的分工链真机走通，正是 Find 面板滞留场景的补面。
 routes:
   - id: navigate_by_controls
     description: 状态栏内部按钮打开行号框；快速访问按钮打开文件框；ValuePattern 写值并激活容器内唯一结果
