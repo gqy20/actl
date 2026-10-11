@@ -35,7 +35,7 @@
 - [ ] VS Code 关闭重开完整链（当前：命令面板可定位、type 受护栏保护）
 - [ ] Excel 写入闭环（当前：UIA 树空属 Office 慢启动，需 MSAA 路线或等待）
 - [ ] Zotero 导入导出
-- [ ] 腾讯会议 draft-date 键盘路线（ctrl+a+paste+tab，QDateEdit set-value 无效）
+- [ ] 腾讯会议 draft-date 键盘路线（ctrl+a+paste+tab，QDateEdit set-value 无效）——2026-10-11 排期尝试，**本机未安装 wemeet（注册表 App Paths/常见 Program Files/本地 Programs 均无）如实记录不可验收**，待有环境机器轮
 - [ ] 资源管理器保存框路径交接余项（2026-10-11 档案已建 [explorer.yml](../skills/actl/apps/explorer.yml)：虚拟化全量收集/按名查找双路线 verified，[10 §4.2](10-quicker-demand-research.md)；**剩 = 地址栏具体 automation_id 现场探测 + 保存框路径交接真机轮**，探测后回填路线）。⚠ explorer 关闭纪律见长期观察项「极端规模重树」条（勿按 pid 关）
 - [ ] 浏览器扩展操作面余量（UIA 轨三批已沉淀 [16 §5.5](16-browser-scenarios.md) / browser.yml `extension_surfaces`）：①右键菜单扩展项复验（机制在，两次被用户桌面并发占用护栏正确拒绝，待空闲）；②CDP 自有会话扩展操作实测（persistent profile 保留扩展策略已定 [72](72-browser-cdp-integration.md)，chrome 层归 UIA 的路径无实测证据，chrome 层 Invoke E_FAIL 同款风险预期）；③扩展弹层内写动作成链（现存证据只覆盖「读」）
 - [ ] 应用 pack 长尾维护
@@ -44,7 +44,10 @@
 
 - [ ] 非开发机 US3 复现（用户裁定 2026-10-02 搁置——作为已知限制已记录于 0.2.0 CHANGELOG；机器到位后补验）
 - [ ] Phase 2 人工/专用环境验收子集（[44](44-phase2-acceptance.md) 表格聚合）：观察故障注入五类（空值/截断/控件重建/虚拟化/provider 故障——[50](50-deep-container-query.md) 的 provider 重建待验收同族）、监听冗余 hook 失效现场验收（[39](39-flow-observation-recovery.md)）、外部对照 Blender/Photoshop/Minecraft 可用环境
-- [ ] 浏览器场景实测余项聚合：B 站登录态真视频页评论读取复验（`bili-deep5.sh`，[16 §7](16-browser-scenarios.md)）；持久 profile 真实站点登录验收待用户选站（[72](72-browser-cdp-integration.md)）；settle 噪声鲁棒（16 登记 M3 候选未动）；epub 临时 profile 删除竞争（[73](73-browser-twitter-scenario.md) v1 缺口五条中唯一未收口——close 后延迟重试）；CUA 检查 CDP 超时孤立核验（[71](71-signal-webview-details.md)）；xhs「展开更多评论」低优先附带
+- [ ] 浏览器场景实测余项聚合：**B 站选卡/锚点层已收口（2026-10-11 搜索页 --all 枚举+href navigate 直达，绕开锚漂移；[16 §5.2 增补](16-browser-scenarios.md)）——剩评论读取被 shadow DOM 阻断（独立新协议项，见下）**；持久 profile 真实站点登录验收待用户选站（[72](72-browser-cdp-integration.md)）；settle 噪声鲁棒（16 登记 M3 候选未动）；epub 临时 profile 删除竞争（[73](73-browser-twitter-scenario.md) v1 缺口五条中唯一未收口——close 后延迟重试）；CUA 检查 CDP 超时孤立核验（[71](71-signal-webview-details.md)）；xhs「展开更多评论」低优先附带
+- [ ] **browser shadow DOM 穿透读取原语（2026-10-11 实证登记，实施前 spec）**：B 站评论区 `<bili-comments>` Web Component——评论内容在 shadow DOM 内，`browser-read` 普通 CSS 结构性穿不透（滚动注入后仍 0 命中，非懒加载）。形态候选：`browser-read` shadow-piercing 模式或受限 eval 原语；与 `--all` 组合覆盖评论区类场景
+- [ ] **VS Code 关闭重开完整链（2026-10-11 三轮尝试未完成，如实记录）**：-1 轮 launch 无隔离附着用户默认实例（**教训入册：关闭该窗口连带用户工作区会话退出——验收计划必须从 vscode-edit.yml 模板派生，其 --user-data-dir 隔离 profile 是硬前提，不能手写简化计划**）；-2/-3 修正后（隔离 profile+严格 name_contains 选择器），-3 严格选择器 TIMEOUT 后用户自身 Code 会话占用桌面 → 让行。隔离子进程已按 cmdline 归属核实清理（窗口无主时按 pid，用户会话零触碰）。链未收口，下轮从模板派生
+- [ ] Zotero 导入导出（2026-10-11 轮让行未跑——用户桌面活跃，GUI 启动让行）
 - [ ] preview-choice computer-use 真机鼠标点击验收（[46](46-target-preview.md)：两轮 "window is not a usable app window" 失败如实保留）
 
 <!-- 2026-10-05 收口移出：录制值读回 #4 双轨收口（rec-ma-12 证据二进制轮，[80](80-record-acceptance.md)）；健壮性基建 009 轮 10 步 155s 全链通过（[81 §9](81-word-style-flow.md)）；网易云收起方向识图证实（pack 同步，Table 树滞留非未收起）——见 CHANGELOG Unreleased。 -->

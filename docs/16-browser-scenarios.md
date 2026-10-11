@@ -110,6 +110,26 @@ B 站是**整页跳转**形态(同窗新标签),与 xhs 弹层互补,五轮实�
 B 站评论读取(真视频页)未完成,根因全部在**选卡与锚点层**,通道层
 (click/settle/text)已被 xhs 闭环证明;复验走 `fixtures/bili-deep5.sh`。
 
+**2026-10-11 复验轮增补:选卡与锚点层收口,新阻塞=shadow DOM(如实)**。
+
+- **选卡层收口**:确定性选卡走搜索结果页(`browser-navigate` 直达
+  `search.bilibili.com/all?keyword=<ascii>`)——`browser-read --all` 枚举
+  42 张结果卡(title 全读),`--property href --all` 直接取卡片链接,**无需
+  点击翻车面**(§5.2 第 3 条活动卡陷阱的更强解:枚举链接后 navigate 直达,
+  绕开整页跳转锚漂移问题本身——§5.2 第 1/4 条锚点层痛点同此消失,会话
+  绑定 tab 不随跳转失效);视频页标题经唯一读通道确认
+  (「【JAVA解说】…TOP100!」)。
+- **评论区新阻塞**:`#commentapp` 枚举只出一个 `<bili-comments>`
+  **Web Component——评论在 shadow DOM 内,普通 CSS 选择器结构性穿不透**
+  (滚动已注入 12 档确认非懒加载问题)。这是**协议缺口非路线缺陷**:需要
+  shadow 穿透读取原语(browser-read 的 shadow-piercing 模式或受限 eval),
+  登记 ROADMAP 新协议项,不在场景轮硬绕。
+- `--all` 真机四假设全过(7 元素全枚举/--limit 3 诚实截断 total:7/空集
+  ok:true+total:0/唯一模式同选择器仍 AMBIGUOUS 两形态共存+--property
+  枚举 input 值);两轮会话均 browser-close 优雅关闭、ephemeral profile
+  干净删除。登记的 `fixtures/bili-deep5.sh` 实际不存在(如实,场景知识
+  已在本节)。
+
 ### 5.3 未登录 xhs(第一批遗留的澄清)
 
 未登录态 feed **不物化**(树里只有导航+页脚+占位链接,截图确认无卡片)

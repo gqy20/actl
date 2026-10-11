@@ -142,6 +142,14 @@ quirks:
       role:Document,但 id:RootWebArea 唯一且 name=页面名,可直接精确定位;
       与 xhs 的 2×RootWebArea AMBIGUOUS 相反)。页面级文本契约先 find
       枚举确认结构,再决定用 id:RootWebArea 还是序数
+  - id: bilibili_comments_shadow_dom
+    note: >-
+      B 站评论区是 <bili-comments> Web Component(shadow DOM,2026-10-11
+      实证:#commentapp 枚举只出该元素,评论内容普通 CSS 结构性穿不透,
+      与懒加载无关——滚动注入后仍 0 命中)。评论读取需 shadow 穿透原语
+      (协议缺口在案);导航类目标不受影响——搜索页 --all 枚举卡片
+      href 后 browser-navigate 直达视频页,绕开整页跳转锚漂移
+      (docs/16 §5.2 增补)
 routes:
   - id: window_title_read
     description: 读浏览器窗口标题(=当前标签页页面名+浏览器后缀;标签切换标题随变)
