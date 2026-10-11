@@ -369,6 +369,15 @@ browser-read ... [--all [--limit N]]
                                      # 与 find 枚举口径一致);--limit 裁返回面(默认 50,上限 500),
                                      # total 保真 + truncated_by_limit 如实标记;逐元素文本截断同
                                      # 唯一读;唯一模式的硬判定只作用于非 --all 调用,两形态共存
+browser-read ... [--deep]
+                                     # shadow DOM 穿透(2026-10-11 spec,B 站 <bili-comments> 实证):
+                                     # 在 document 与每个开放 shadowRoot(open 模式)内递归执行
+                                     # 选择器,收集全部命中——Web Component 内部内容从结构性
+                                     # 不可见变可读;closed shadow 对页面 JS 不可见,是如实边界
+                                     # (不伪装穿透);与唯一读和 --all 均可组合(唯一模式取
+                                     # elements[0]);遍历预算有界:节点≤50000/收集≤5000,
+                                     # 触顶 traversal_capped=true 如实上报(matches 变下界,
+                                     # 不谎称全量);payload 附 deep:true 标记穿透形态
 browser-type --session <id> (--css S | --xpath X) --text T [--iframe]
                                      # 守卫输入写:input/textarea 唯一匹配→native setter 赋值
                                      # +input/change 事件(React 兼容)→读回 value 必须与请求一致

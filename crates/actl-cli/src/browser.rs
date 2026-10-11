@@ -64,6 +64,7 @@ pub(crate) fn read_cmd(
     property: Option<&str>,
     iframe: bool,
     all: bool,
+    deep: bool,
     limit: Option<usize>,
     timeout: Option<u64>,
 ) -> Result<CommandOutput, CtlError> {
@@ -79,6 +80,7 @@ pub(crate) fn read_cmd(
             timeout_ms: timeout,
             all,
             limit,
+            deep,
         },
     )
     .map(Into::into)

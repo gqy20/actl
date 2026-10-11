@@ -357,3 +357,19 @@ fn limit_requires_all_is_clap_rejected() {
         2
     );
 }
+
+#[test]
+fn deep_flag_documents_shadow_piercing_semantics() {
+    // --deep 穿透开放 shadow DOM(2026-10-11 spec,B 站 <bili-comments> 实证
+    // 驱动):开 shadow 递归、闭 shadow 如实边界、预算触顶 traversal_capped
+    // ——进 help 四要素;--limit 不从属于 --deep(可与唯一读组合)。
+    let (code, stdout) = actl(&["browser-read", "--help"]);
+    assert_eq!(code, 0);
+    assert!(stdout.contains("--deep"), "{stdout}");
+    assert!(stdout.contains("OPEN shadow roots"), "{stdout}");
+    assert!(stdout.contains("traversal_capped"), "{stdout}");
+    assert!(stdout.contains("closed shadow roots"), "{stdout}");
+    // --deep 单独合法(唯一读穿透),不要求 --all
+    let (code, _) = actl(&["browser-read", "--session", "x", "--css", "div", "--deep"]);
+    assert_eq!(code, 1, "unknown session is NOT_FOUND(1), not clap error");
+}
