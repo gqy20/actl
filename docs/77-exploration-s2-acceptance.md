@@ -212,3 +212,7 @@ S3 真机闭环验收通过:回写(证据收集)、人工复核迁移(用户裁�
 ## 路线 #4 三步闭环（2026-10-11,run explorer-route4-02 + replay-explorer-back-01）
 
 **任务形态二次校正**：地址栏输入任务不可行（Edit 双歧义+引擎无快捷键原语）→改「后退导航」（click 有增量+goal 可断言）；goal 断言收紧（首版子串命中父目录秒过——子目录标题含父串,改后缀形态 'tmp - 文件资源管理器' 区分）。**探索**：goal_met:true、actions=1、decisions=0——词表[后退]唯一命中 `id:backButton`,一发点击真实导航（标题变更确认）。**回写**：explorer.yml `explore_navigate_back` 路线（unverified）。**重放**：completed/verified/attempts=1（前置=ctrl+l 键盘通道手动导航回子目录——该通道组件验证通过 52 字符送达）。复核材料齐备待用户授权迁移 verified（§7 第 5 条——S1/S2/#3 已 verified+#4 待复核=目标 5 条在望,#5 计算器以形态边界实证计入贡献不计入 verified 数）。现场清理：探针窗按精确 hwnd 优雅关闭。
+
+## 路线 #4 复核迁移——§7 目标 5 条全部达成（2026-10-11 用户授权）
+
+explorer.yml explore_navigate_back unverified→**verified**（探索 goal_met actions=1 + 重放 verified attempts=1 双证）。**docs/42 §7 S3 验收目标「5 条 unverified 经人工复核转 verified」达成**：S1/S2 + #3 记事本中文 + #4 资源管理器后退导航；#5 计算器以形态边界实证计入贡献（差分前沿×无增量应用+texts 无 focused 形态,两改进候选在案）不占 verified 数。飞轮（探索→回写→重放→复核）在三种应用形态（Win32 记事本/混合资源管理器/XAML 计算器边界）完成验证。

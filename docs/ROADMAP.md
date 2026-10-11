@@ -57,9 +57,12 @@
 <!-- 2026-10-11 收口移出：browser-read --all 列表枚举形态（spec 落地+本地 fixture 真机复验+B 站首个真实场景消费，原待办行删除线清理）——见 CHANGELOG Unreleased。 -->
 <!-- 2026-10-11 收口移出：popup notice 词表裁定（**最窄形态落地**——popup_handlers `classification:notice`，name_contains 必填按名认领 INFO 级 unknown 表面，未声明的 unknown 仍永远上抛、已分类面板不被吞并；[06 运行时治理③](06-design-blueprint.md)；机制层验收=popup_gate 13 用例，真机验收待 VS Code 轮探测通知文本+按钮 name 回填模板声明）；浏览器页内弹层检测原语（`browser-verify --no-popups` v1 落地，headless fixture 六假设实证；引擎级自动门禁留候选待事故）——见 CHANGELOG Unreleased。 -->
 <!-- 2026-10-11 收口移出：VS Code 关闭重开完整链（第四轮 22/26→降噪第二轮 v4 认领后尾段 A/B 收口,run 25/26——close 步 bind 陈旧系操作者清窗连锁非机制缺陷；focus 原语与 notice handler 自动处置同轮探针真机验收；Find 面板常驻表面死锁=门禁降噪第二实例,直接驱动 popup_ignores spec 同日落地；应用深化区旧版重复条目一并删除）；尾段挂起族（06 定位→06 主修复(Drop 家族收编)→08 新签名(flow-resume 成功路径楔死)→11 根杀收口——envelope flush 后 TerminateProcess 直调绕过一切析构阻塞面+signal worker detach,真机实证 403 窗僵尸清零;长期观察项整条移出）——见 CHANGELOG Unreleased。 -->
+<!-- 2026-10-11 收口移出：探索模式高优先条目（**docs/42 §7 验收目标 5 条全部达成**——S1/S2+#3 记事本中文+#4 资源管理器后退导航均经人工复核转 verified;#5 计算器形态边界实证计入贡献;轮 C 判据落地+复现轮否定性数据;三条引擎改进候选+UCB+RuntimeBroker 观察转长期观察项——[77](77-exploration-s2-acceptance.md)）——见 CHANGELOG Unreleased。 -->
 
 
 ## 长期观察项
+
+- [ ] 探索引擎形态边界与改进候选（2026-10-11 轮 C/#4/#5 实证,[77](77-exploration-s2-acceptance.md)）:①差分前沿语义×无增量应用（XAML 计算器按钮序列点击无 added 元素——前沿语义扩展候选）;②texts 原语无全局键盘形态（focused: 不收,而 CLI type focused: 已验证——texts focused 键支持候选）;③automation_id 歧义场景（对话框文件名框与地址栏共用 id:1001/TextBox——引擎候选歧义收紧策略）;④RuntimeBroker 跨进程 picker 形态待其他 Store 应用场景（另存为=同 pid #32770 已证否）;⑤UCB 统计剪枝（待 quirks 样本量,沿 42 §7 挂起）
 
 - [ ] UIA 观察长阻塞的**根因定位**（防护已落地：进程级看门狗 + UIA 区段看门狗双保险；根因——60s NOT_FOUND 未复现、故障提供程序未确认，见 [41](41-logging-metadata.md)、[65](65-observation-blocking-diagnosis.md)）
 - [ ] UWP 挂起恢复（类配对后疑似绕开，更长放置待证）

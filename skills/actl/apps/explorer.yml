@@ -38,8 +38,8 @@ routes:
       - ["find", "--name", "{file_name}", "--role", "listitem", "--app", "{window}"]
   - id: explore_navigate_back
     description: 点击导航栏后退按钮返回上一目录——探索回写(run explorer-route4-02,2026-10-11)
-    status: unverified
-    verify: "目标断言:wait --window 'tmp - 文件资源管理器' --timeout 8000(标题回到父目录);探索轮 goal_met:true actions=1(词表[后退]唯一命中 id:backButton);重放证据 fixtures/flows/replay-explorer-back.yml"
+    status: verified
+    verify: "目标断言:wait --window 'tmp - 文件资源管理器' --timeout 8000(标题回到父目录);人工复核通过(2026-10-11 用户授权):探索轮 goal_met actions=1 一发命中 id:backButton 真实导航+重放 replay-explorer-back-01 全步 verified attempts=1"
     steps:
       - ["click", "id:backButton", "--app", "{window}"]
       - ["wait", "--window", "tmp - 文件资源管理器", "--timeout", "8000"]
