@@ -1119,8 +1119,8 @@ pub enum VerifyMode {
         value: String,
         contains: Option<String>,
     },
-    /// 页内弹层清零断言(2026-10-11 v1):枚举可见弹层表面,0=通过,
-    /// >0=ASSERTION_FAILED 带样本——flow condition 位映射 false
+    /// 页内弹层清零断言(2026-10-11 v1):枚举可见弹层表面,零命中=通过,
+    /// 非零=ASSERTION_FAILED 带样本——flow condition 位映射 false
     /// (ASSERTION_FAILED→false 是既有语义),when/unless 分支可组合。
     /// 原生弹层门禁结构性不覆盖页内 DOM 弹层(browser-* 走 --session,
     /// front-report 只收 role:Window),本断言是那个空档的检测原语。
