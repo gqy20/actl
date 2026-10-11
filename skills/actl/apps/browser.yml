@@ -144,12 +144,23 @@ quirks:
       枚举确认结构,再决定用 id:RootWebArea 还是序数
   - id: bilibili_comments_shadow_dom
     note: >-
-      B 站评论区是 <bili-comments> Web Component(shadow DOM,2026-10-11
-      实证:#commentapp 枚举只出该元素,评论内容普通 CSS 结构性穿不透,
-      与懒加载无关——滚动注入后仍 0 命中)。评论读取需 shadow 穿透原语
-      (协议缺口在案);导航类目标不受影响——搜索页 --all 枚举卡片
-      href 后 browser-navigate 直达视频页,绕开整页跳转锚漂移
-      (docs/16 §5.2 增补)
+      B 站评论区是 <bili-comments> Web Component(嵌套 shadow:thread→
+      comment 渲染器多层,2026-10-12 实证)。读取须 browser-read/collect
+      --deep——**shadow host 元素的 textContent 只含 light DOM(恒空或
+      内联 CSS),正文在嵌套 shadow 内**;协议层 deepText 已递归穿透并
+      过滤 STYLE/SCRIPT 文本(本轮两修复)。收集走 browser-collect
+      --css "bili-comment-thread-renderer" --deep(2026-10-12 真机:
+      匿名会话评论文本全通——用户名/内容/时间戳/回复数完整)。
+      导航类目标不受影响——搜索页 --all 枚举卡片 href 后
+      browser-navigate 直达视频页,绕开整页跳转锚漂移(docs/16 §5.2)
+  - id: bilibili_anonymous_comment_wall
+    note: >-
+      B 站对**匿名(未登录)会话**只渲染 2 条评论且页面截断(2026-10-12
+      两视频同签名实证:页面总高仅 ~2.8 视口,评论区固定 2 条,推荐区
+      不加载,scrollY 到底也无增量——非懒加载问题,是登录墙)。全量
+      评论收集需持久 profile 人工登录(browser-login-session 流程,
+      resources.browser_profiles 声明)后复跑 browser-collect;匿名
+      形态下 collect 收到 2 条即收敛是**如实结果**不是缺陷。
   - id: bilibili_comments_mount_latency
     note: >-
       B 站评论挂载是异步时序(2026-10-11 实证:视频页就绪后 #commentapp

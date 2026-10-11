@@ -130,6 +130,27 @@ B 站评论读取(真视频页)未完成,根因全部在**选卡与锚点层**,�
   干净删除。登记的 `fixtures/bili-deep5.sh` 实际不存在(如实,场景知识
   已在本节)。
 
+**2026-10-12 browser-collect 应用轮:协议全链消费+三修复+登录墙判决**。
+
+- **全链形态**(搜索页枚举 50 卡→href 直达视频页→暂停自动播放→
+  `browser-collect --css "bili-comment-thread-renderer" --deep`→优雅关闭):
+  匿名会话评论文本全通——用户名/内容/时间戳/回复数完整读取。
+- **真场景抓出两个协议层缺陷并当日修复**:① shadow host 元素的
+  `textContent` 只含 light DOM——嵌套 shadow(thread→comment 渲染器)
+  的正文读不到(恒空);② 修复①后的全文被 shadow 内 `<style>` 的
+  CSS 文本污染(8.8KB 里全是 `:host {...}`)。修法:deepText 递归
+  穿透嵌套 shadow + TreeWalker 过滤 STYLE/SCRIPT/TEMPLATE 文本。
+- **防御性收敛门**:纯空连两轮会在懒加载分段页**提前收敛**(页面
+  未到底,更下方还有未加载分段)——收敛条件加"已到当前页底"
+  (at_bottom 是继续滚的门而非完成判据;fixture 回归 180/180 不破)。
+  payload 新增 `last_scroll` 诊断(scrollY/innerHeight/scrollHeight/
+  at_bottom)。
+- **登录墙判决(两视频同签名实证)**:匿名会话 B 站只渲染 **2 条评论**
+  且页面截断(总高 ~2.8 视口,推荐区不加载,滚到底无增量)——非懒加载
+  问题,是产品层墙。匿名形态下 collect 收 2 条收敛是**如实结果**;
+  全量评论需持久 profile 人工登录(browser-login-session)后复跑。
+  入 pack quirk `bilibili_anonymous_comment_wall`。
+
 ### 5.3 未登录 xhs(第一批遗留的澄清)
 
 未登录态 feed **不物化**(树里只有导航+页脚+占位链接,截图确认无卡片)

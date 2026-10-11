@@ -117,9 +117,20 @@ pub(crate) fn locate_deep_script(
          if(sr)collect(sr);}}}}catch(e){{}}\
          }}\
          collect(document);\
+         function deepText(e){{\
+         var s=(e.textContent==null?'':String(e.textContent));\
+         if(e.shadowRoot){{\
+         var w=document.createTreeWalker(e.shadowRoot,NodeFilter.SHOW_TEXT,{{\
+         acceptNode:function(n){{var p=n.parentElement;\
+         if(p&&(p.tagName==='STYLE'||p.tagName==='SCRIPT'||p.tagName==='TEMPLATE'))\
+         return NodeFilter.FILTER_REJECT;return NodeFilter.FILTER_ACCEPT;}}}},false);\
+         var node;while((node=w.nextNode()))s+=node.nodeValue;\
+         var all=e.shadowRoot.querySelectorAll('*');\
+         for(var i=0;i<all.length;i++){{if(all[i].shadowRoot)s+=deepText(all[i]);}}}}\
+         return s;}}\
          var payload=[];\
          for(var k=0;k<out.length;k++){{var e=out[k];\
-         payload.push({{text:e.textContent==null?'':String(e.textContent),\
+         payload.push({{text:deepText(e),\
          tag:e.tagName,id:e.id||null,name:e.getAttribute('name')||null{prop_field}}});}}\
          return JSON.stringify({{matches:out.length,elements:payload,\
          traversal_capped:capped}});}})()"
@@ -150,17 +161,21 @@ pub(crate) fn popup_scan_script(selector: &str) -> String {
 }
 
 /// 页级滚动脚本(browser-collect,2026-10-12 spec):滚动一屏(约 0.9 视口高,
-/// 与 UIA collect 的页级滚动同语义)并返回滚动事实。**at_bottom 只是事实
-/// 上报,不是完成判据**——懒加载页的 scrollHeight 会随后续加载增长,触底
-/// 信号会说谎(UIA collect 滚动位置信号否证的同款教训);完成权威只有
-/// Rust 侧的空连两轮差分收敛。
+/// 与 UIA collect 的页级滚动同语义)并返回滚动事实。**at_bottom 是"继续滚
+/// 的门"而非完成判据**:没到底时不允许空连收敛(懒加载分段可能在更下方,
+/// B 站视频页评论区分页实证——播放器占 2-3 屏,纯空连两轮会在抵达评论
+/// 区前提前收敛);到了底完成权威仍是空连两轮差分(scrollHeight 会随
+/// 加载增长,触底后新内容出现会再滚——UIA collect 位置信号否证同款教训)。
 pub(crate) fn scroll_page_script() -> String {
     "(function(){\
      var h=Math.max(document.documentElement.clientHeight,window.innerHeight||0);\
      window.scrollBy(0,Math.floor(h*0.9));\
+     var d=document.documentElement;\
+     var at_bottom=(window.scrollY||0)+h>=(d.scrollHeight||0)-2;\
      return JSON.stringify({\
      scrollY:Math.round(window.scrollY||0),\
      innerHeight:Math.round(h),\
-     scrollHeight:Math.round(document.documentElement.scrollHeight||0)});})()"
+     scrollHeight:Math.round(d.scrollHeight||0),\
+     at_bottom:at_bottom});})()"
         .into()
 }

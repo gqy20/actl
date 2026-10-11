@@ -88,6 +88,7 @@ pub fn collect(paths: &Paths, spec: CollectSpec<'_>) -> Result<Value, CtlError> 
     let mut empty_streak = 0u32;
     let mut complete = false;
     let mut truncation_reason: Option<&str> = None;
+    let mut last_scroll: Option<Value> = None;
     for round in 1..=max_rounds {
         actl_core::stop::check_current()?;
         actl_core::watchdog::reset();
@@ -114,20 +115,30 @@ pub fn collect(paths: &Paths, spec: CollectSpec<'_>) -> Result<Value, CtlError> 
         }
         if fresh == 0 {
             empty_streak += 1;
-            if empty_streak >= 2 && round >= 2 {
-                complete = true;
-                break;
-            }
         } else {
             empty_streak = 0;
         }
         // 页滚一屏 + 沉降再读;滚动 evaluate 失败=软截断(如实上报已收部分)。
-        match eval_json(&conn, &cdp_session, &scroll_page_script(), None, timeout) {
-            Ok(_) => {}
+        // at_bottom 是"继续滚的门":没到当前页底时空连**不许**收敛——懒加载
+        // 分段可能在更下方(B 站视频页评论区分页实证:播放器占 2-3 屏,纯
+        // 空连两轮会在抵达评论区前提前收敛);到底后完成权威仍是空连两轮
+        // 差分(scrollHeight 随加载增长,触底后新内容出现继续滚)。
+        let at_bottom = match eval_json(&conn, &cdp_session, &scroll_page_script(), None, timeout) {
+            Ok(scrolled) => {
+                last_scroll = Some(scrolled.clone());
+                scrolled
+                    .get("at_bottom")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+            }
             Err(_) => {
                 truncation_reason = Some("scroll_failed");
                 break;
             }
+        };
+        if empty_streak >= 2 && round >= 2 && at_bottom {
+            complete = true;
+            break;
         }
         std::thread::sleep(Duration::from_millis(interval));
     }
@@ -151,6 +162,9 @@ pub fn collect(paths: &Paths, spec: CollectSpec<'_>) -> Result<Value, CtlError> 
     }
     if let Some(reason) = truncation_reason {
         payload["truncation_reason"] = Value::String(reason.into());
+    }
+    if let Some(scroll) = last_scroll {
+        payload["last_scroll"] = scroll;
     }
     payload["items"] = Value::Array(items);
     Ok(payload)

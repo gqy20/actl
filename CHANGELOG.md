@@ -7,15 +7,17 @@
 
 ## [Unreleased]
 
-### Added
-
-- **`browser-collect` 懒加载列表全量收集（spec，[06 §3.4 浏览器组](docs/06-design-blueprint.md)——浏览器轨对齐 UIA collect 语义；B 站评论/搜索结果流场景的原语补面）**：读全部匹配（复用 --all 枚举+可选 --deep shadow 穿透）→ 指纹差分去重累积 → 页滚一屏（CDP 写,声明动作卡 kind browser-collect,显示层协同同 navigate）→ 沉降（--interval-ms 默认 500）→ 再读,循环至**空连两轮零新增**收敛（`converged_by:"empty-streak"`,与 UIA collect 同判据；**触底信号不作完成判据**——懒加载页 scrollHeight 会增长,UIA 侧位置信号否证的同款教训）。预算 --max-rounds（默认 100 上限 200）/--max-items（默认 2000 上限 5000）,触顶 `complete:false + truncation_reason`（max_items/max_rounds/scroll_failed 软截断）;读失败原样上抛（导航离开是调用方现场）;items 逐条 64KiB 截断同 read,`new_items_per_round` 逐轮留痕。测试：digest 稳定性/预算校验单测 + 契约（help 四要素/PROTOCOL 预算/NOT_FOUND 未知会话/clap 互斥）+ **headless 真机全链**（懒加载 fixture 页 180 条滚动追加：180/180 全收 complete=true 首尾完整有序/max-items 50 诚实截断/读后核验 180/优雅关闭）。
-
-- **`cargo xtask install`——本机安装链接布局（devtools 工具）**：把发布布局（exe×3+README/LICENSE+skills/）装进 `~/.local/share/actl/<label>/`,建立免管理员链接全套——`current` junction（升级只重指）+ `~/.local/bin` 三个 exe 硬链接 + `bin/skills` junction（pack 注入 exe 旁回退的落点）+ `~/.agents/skills/actl` junction（agent 知识面）。源支持 `--zip <发布 zip>` 或 `--release`（仓库 target/release+仓库文件本地组装）。安全约束：只替换经 reparse 校验的 junction 与既有硬链接文件,**拒绝删除任何真实目录**（如用户自建的 ~/.agents/skills/actl 会明确报错让人工处理）;版本目录就位后建链接,不留半链接状态。测试：roundtrip（安装/链接可读/版本切换 current 重指/真实目录拒绝）×2。手段说明：文件符号链接需管理员（实测拒绝）,junction 与同卷硬链接免特权。
-
 ### Fixed
 
+- **`--deep` shadow 文本提取两缺陷（B 站评论应用轮实证,2026-10-12）**：① shadow host 元素的 `textContent` 只含 light DOM——嵌套 shadow（B 站评论 thread→comment 渲染器多层）的正文结构性读不到（恒空）；② 修复①后全文被 shadow 内 `<style>` 的 CSS 文本污染。修法：deepText 递归穿透嵌套 open shadowRoot + TreeWalker 过滤 STYLE/SCRIPT/TEMPLATE 文本节点——`browser-read --deep` 与 `browser-collect --deep` 同源受益。真机：匿名 B 站评论文本全通（用户名/内容/时间戳/回复数完整）。
+- **browser-collect 提前收敛防御 + 滚动诊断**：纯空连两轮会在懒加载分段页提前收敛（页面未到底,更下方还有未加载分段）——收敛条件加"已到当前页底"（at_bottom 是继续滚的门而非完成判据;fixture 回归 180/180 不破）;payload 新增 `last_scroll`（scrollY/innerHeight/scrollHeight/at_bottom）诚实诊断。
 - **pack 注入 exe 旁 skills 回退（[06 运行时治理④](docs/06-design-blueprint.md) 文档已声明/代码未做的收口）**：`inject_pack_popup_ignores` 此前只认 CWD 相对 `skills/actl/apps`——安装态（exe 链接进 bin,CWD 任意）pack 级 popup_ignores 注入会**静默失效**,而 Word 模板降噪是 pack 单一来源,失效=导航窗格挡写步回归。现 CWD 优先、exe 同目录 skills 回退（发布 zip 的 exe 旁打包布局）,首个存在的候选生效避免重复注入。测试：候选序纯函数 +1。
+
+### Added
+
+- **`browser-collect` 懒加载列表全量收集（spec，[06 §3.4 浏览器组](docs/06-design-blueprint.md)——浏览器轨对齐 UIA collect 语义；B 站评论/搜索结果流场景的原语补面）**：读全部匹配（复用 --all 枚举+可选 --deep shadow 穿透）→ 指纹差分去重累积 → 页滚一屏（CDP 写,声明动作卡 kind browser-collect,显示层协同同 navigate）→ 沉降（--interval-ms 默认 500）→ 再读,循环至**空连两轮零新增且已到页底**收敛（`converged_by:"empty-streak"`;触底信号不作完成判据——懒加载页 scrollHeight 会增长,UIA 侧位置信号否证的同款教训）。预算 --max-rounds（默认 100 上限 200）/--max-items（默认 2000 上限 5000）,触顶 `complete:false + truncation_reason`（max_items/max_rounds/scroll_failed 软截断）;读失败原样上抛;items 逐条 64KiB 截断同 read,`new_items_per_round` 逐轮留痕。测试：digest 稳定性/预算校验单测 + 契约（help 四要素/PROTOCOL 预算/NOT_FOUND/clap 互斥）+ **headless 真机全链**（懒加载 fixture 180 条滚动追加：180/180 全收 complete=true 首尾完整有序/max-items 诚实截断/读后核验/优雅关闭）+ **B 站真机应用轮**（搜索枚举→href 直达→deep 收集全链;抓出上述两协议缺陷;匿名评论墙判决入 pack quirk `bilibili_anonymous_comment_wall`——匿名只渲染 2 条评论+页面截断,全量需登录 profile,详见 [16 §5.2](docs/16-browser-scenarios.md)）。
+
+- **`cargo xtask install`——本机安装链接布局（devtools 工具）**：把发布布局（exe×3+README/LICENSE+skills/）装进 `~/.local/share/actl/<label>/`,建立免管理员链接全套——`current` junction（升级只重指）+ `~/.local/bin` 三个 exe 硬链接 + `bin/skills` junction（pack 注入 exe 旁回退的落点）+ `~/.agents/skills/actl` junction（agent 知识面）。源支持 `--zip <发布 zip>` 或 `--release`（仓库 target/release+仓库文件本地组装）。安全约束：只替换经 reparse 校验的 junction 与既有硬链接文件,**拒绝删除任何真实目录**（如用户自建的 ~/.agents/skills/actl 会明确报错让人工处理）;版本目录就位后建链接,不留半链接状态。测试：roundtrip（安装/链接可读/版本切换 current 重指/真实目录拒绝）×2。手段说明：文件符号链接需管理员（实测拒绝）,junction 与同卷硬链接免特权。
 
 ## [0.2.2] - 2026-10-11
 
