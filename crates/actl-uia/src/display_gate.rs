@@ -29,6 +29,61 @@ pub fn recover_execution() -> Result<serde_json::Value, CtlError> {
     paths.recover_execution()
 }
 
+/// display-stop:显式生命周期动词——优雅关闭本工具显示端。通用窗口命令对
+/// 显示窗口的自排除(§7.5 规则 8:监督端不得成为被监督自动化的通用目标)
+/// 不变;本动词是关闭监督者的**唯一 sanctioned 通道**(AGENTS 显示端占用
+/// 构建文件的常设授权由此获得可执行实体),只接受经租约 pid 双核验的自家
+/// 显示窗,不构成通用关闭旁路。关闭走 WM_CLOSE=普通关闭路径(撤销交接
+/// 授权并发布 closed 租约,不写急停、不动停止代次);显示端关闭期间写
+/// 路径照常 fail-closed(副作用动作要求 ready 租约)。幂等:显示端不在场
+/// =already_stopped。reason 随 envelope 上报(审计面)。
+pub fn stop(reason: &str) -> Result<serde_json::Value, CtlError> {
+    use windows::Win32::{
+        Foundation::{LPARAM, WPARAM},
+        UI::WindowsAndMessaging::{PostMessageW, WM_CLOSE},
+    };
+    let paths = SignalPaths::default();
+    let lease = paths.display_lease();
+    let Ok(hwnd) = (unsafe { FindWindowW(w!("actl_signal_window"), None) }) else {
+        return Ok(serde_json::json!({
+            "stopped": false, "already_stopped": true, "reason": reason,
+            "stop_requested": paths.stop_requested(),
+        }));
+    };
+    // 身份双核验:窗口归属进程必须与租约 pid 一致——不一致(含无租约)时
+    // 拒绝,不关身份不明的窗口。
+    let mut pid = 0u32;
+    unsafe {
+        GetWindowThreadProcessId(hwnd, Some(&mut pid));
+    }
+    if lease.as_ref().is_none_or(|l| l.pid != pid) {
+        return Err(unavailable(&format!(
+            "display window pid {pid} does not match the lease; refusing to close an unverified window"
+        )));
+    }
+    unsafe {
+        let _ = PostMessageW(Some(hwnd), WM_CLOSE, WPARAM(0), LPARAM(0));
+    }
+    // 有界等待优雅退出(≤4s/100ms 轮询):主窗消失且进程退出才算关成;
+    // 超时如实报 false,调用方读 waited_ms 决定下一步(不循环强杀)。
+    let started = Instant::now();
+    let closed = loop {
+        let window_gone = unsafe { FindWindowW(w!("actl_signal_window"), None) }.is_err();
+        if window_gone && !process_alive(pid) {
+            break true;
+        }
+        if started.elapsed() >= Duration::from_secs(4) {
+            break false;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    };
+    Ok(serde_json::json!({
+        "stopped": closed, "already_stopped": false, "reason": reason,
+        "pid": pid, "waited_ms": started.elapsed().as_millis() as u64,
+        "stop_requested": paths.stop_requested(),
+    }))
+}
+
 pub fn prepare_action(kind: &str, target: &str) -> Result<crate::feedback::ActionGuard, CtlError> {
     crate::feedback::prepare(
         kind,

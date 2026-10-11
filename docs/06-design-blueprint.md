@@ -656,6 +656,7 @@ stdout 保持原有单个 JSON envelope。显示通道是旁路、拉取式；�
    状态条不做持续动画；减少动态效果时空间反馈为短暂静态标记。
 8. **自排除**：显示窗口不进入一般目标枚举，显式 HWND 自动化也拒绝。屏幕截图通过
    同步隐藏确认和 DWM flush 排除本工具显示；不能确认时拒绝捕获，不静默污染截图。
+   **唯一例外是 `display-stop` 生命周期动词**：优雅关闭本工具显示端（WM_CLOSE=普通关闭路径——撤销交接授权、发布 closed 租约、不写急停、不动停止代次），只接受经租约 pid 双核验的自家显示窗（不构成通用关闭旁路），幂等（不在场=already_stopped），有界等待 ≤4s 如实报 stopped:false。它是 AGENTS"显示端占用构建文件"常设授权的执行实体；显示端关闭期间写路径照常 fail-closed（副作用动作要求 ready 租约）。远端排除（MCP 排除表）：显示端生命周期归本地人。
 
 附带修正：`key-up` 将 release 方向传递到输入执行体；带修饰键的物理 click 在
 stdout `input_effects.keyboard` 如实返回 `injected`。
@@ -680,6 +681,7 @@ Windows 锁屏可能保留可见窗口属性，因此另用屏幕命中检查拒
 | display-status | 无 | ready, lease（可空）, stop_requested |
 | focus-report | 无 | uia_focused（可空）, physical_focus_root（可空）, foreground（可空）, focus_root_processes_agree |
 | display-start | 无 | ready, lease, stop_requested |
+| display-stop | --reason <≤200字符> | stopped, already_stopped, reason, pid, waited_ms, stop_requested |
 | minimize-window / restore-window | 标题、--pid、--hwnd 三选一 | hwnd, window, minimized, input_effects |
 | desktop-prepare | --all 或重复 --hwnd | session, results[] |
 | desktop-restore | --session ID | session, results[] |

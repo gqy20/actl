@@ -4,6 +4,8 @@
 
 use clap::{CommandFactory, Parser, Subcommand};
 
+use crate::help_text::after_help_for;
+
 #[derive(Parser)]
 #[command(
     name = "actl",
@@ -74,6 +76,12 @@ pub(crate) enum DesktopCommand {
     DisplayStatus,
     /// Start the matching companion if missing and wait for its visible rendered frame
     DisplayStart,
+    /// Gracefully close the companion (lifecycle verb; identity-verified, stop state untouched)
+    DisplayStop {
+        /// Why the display is being stopped (recorded in the envelope, <=200 chars)
+        #[arg(long, default_value = "")]
+        reason: String,
+    },
     /// Minimize one ordinary application window
     MinimizeWindow {
         #[arg(conflicts_with_all = ["pid", "hwnd"])]
@@ -1137,6 +1145,7 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
         Command::Record(RecordCommand::Status { .. }) => "record-status",
         Command::Desktop(DesktopCommand::History { .. }) => "history",
         Command::Desktop(DesktopCommand::DisplayStart) => "display-start",
+        Command::Desktop(DesktopCommand::DisplayStop { .. }) => "display-stop",
         Command::Desktop(DesktopCommand::MinimizeWindow { .. }) => "minimize-window",
         Command::Desktop(DesktopCommand::RestoreWindow { .. }) => "restore-window",
         Command::Desktop(DesktopCommand::DesktopPrepare { .. }) => "desktop-prepare",
@@ -1192,270 +1201,6 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
         Command::Wait { .. } => "wait",
         Command::Batch { .. } => "batch",
     }
-}
-
-/// 每命令的 after_help(06 §3.5 四要素的 Example/Errors 两要素;clap derive
-/// 的 variant 级 after_help 不传播,故表驱动 + builder 注入,见 build_cli)。
-/// 与 doc comment 同为 help 单一事实来源的一部分(改这里 = 改 -h)。
-fn after_help_for(name: &str) -> Option<&'static str> {
-    Some(match name {
-        "browser-launch" => {
-            "Example:\n  actl browser-launch --browser-executable \"C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe\" --url about:blank --proxy 127.0.0.1:7890\nLaunches an OWNED isolated browser (never the user's default profile — Chrome/Edge 136+ disables the debug port there; the daily browser's extensions/settings/cookies are untouched, separate data worlds) and binds one tab as the session. Default is a VISIBLE window (normal UA, user-visible automation, manual-login ready); --headless opts into a hidden session for background tasks (HeadlessChrome UA — many sites serve 403 to it, and no UIA fallback surface exists). --profile <name> keeps a persistent profile for one-time manual logins; same-profile relaunch REUSES the live session (reused:true). Extensions: ephemeral sessions always run extension-free; persistent profiles keep extensions (legitimate automation assets, e.g. media sniffers) unless --disable-extensions. --proxy HOST:PORT routes via an explicit local proxy (browser DoH can bypass system TUN fake-ip routing — the fix for silently unreachable sites). Startup succeeds only when the devtools endpoint answers; otherwise the owned process is reclaimed.\nErrors: PROTOCOL bad executable/url/profile/proxy | INTERNAL endpoint never appeared (reclaimed)"
-        }
-        "browser-navigate" => {
-            "Example:\n  actl browser-navigate --session s1a2b3 --url https://example.com\nConnects to the session's browser, re-verifies the bound tab still exists, navigates and waits for the main-frame Page.frameNavigated event. Reports url/title/frame_id. Network-level load failures (chrome-error pages) fail explicitly with the net error in evidence — never silently reported as success.\nErrors: PROTOCOL bad url | NOT_FOUND unknown session / endpoint unreachable / target lost | TIMEOUT navigation event missing | INTERNAL network-level load failure"
-        }
-        "browser-read" => {
-            "Example:\n  actl browser-read --session s1a2b3 --css \"#result span\"\n  actl browser-read --session s1a2b3 --css \"#username\" --property value\n  actl browser-read --session s1a2b3 --css \".item\" --all --limit 100\n  actl browser-read --session s1a2b3 --css \".reply\" --all --deep\nReads the text (or a whitelisted property via --property: value/href/name/id/checked/tag) of exactly one element (hard uniqueness; value covers input fields — textContent is empty for them). --all enumerates every match instead (list semantics: 0 matches = an honest empty set, not NOT_FOUND; --limit caps returned elements, default 50 max 500, total stays honest). --deep pierces OPEN shadow roots recursively (Web Components like <bili-comments>; works with unique reads and --all) — closed shadow roots are invisible to page JS and reported as an honest boundary; traversal is budget-bounded and reports traversal_capped when the budget stops it early. --iframe addresses the cross-origin child iframe via its execution context. Text is capped at 64 KiB with a truncated flag.\nErrors: PROTOCOL selector 1-4096 chars / unknown --property / --limit without --all | NOT_FOUND no match / no iframe | AMBIGUOUS multiple matches (unique mode only) | INTERNAL CDP layer"
-        }
-        "browser-type" => {
-            "Example:\n  actl browser-type --session s1a2b3 --css \"input[name='text']\" --text \"hello world\"\nGuarded input write targeting a unique input/textarea: stop check, target re-verify, unique match, native-setter assignment + input/change events (React-compatible), then value read-back must equal the request (controlled-input rewrites fail as ASSERTION_FAILED). The typed text is never echoed in output or evidence; verify with browser-read --property value.\nErrors: PROTOCOL selector/text invalid | ABORTED stop active | NOT_FOUND no match/target lost | AMBIGUOUS multiple matches | NOT_ACTIONABLE not an input / dispatch failed | ASSERTION_FAILED value mismatch | INTERNAL CDP layer"
-        }
-        "browser-click" => {
-            "Example:\n  actl browser-click --session s1a2b3 --css \"#submit\" --expect-text \"Saved\"\nGuarded write: stop-generation check, bound-target re-verify, unique-match locate, dispatch, then read-back. --expect-text turns the read-back into an assertion. A failed click is never replayed blindly — re-read to adjudicate first.\nErrors: PROTOCOL selector/expect-text invalid | ABORTED stop active | NOT_FOUND no match/target lost | AMBIGUOUS multiple matches | NOT_ACTIONABLE dispatch failed | ASSERTION_FAILED expectation unmet | INTERNAL CDP layer"
-        }
-        "browser-close" => {
-            "Example:\n  actl browser-close --session s1a2b3\nCloses the OWNED browser via CDP Browser.close (graceful; never taskkill), removes the session file, and deletes ephemeral profiles. Persistent profiles are kept for reuse. If the endpoint is already unreachable the close is idempotent and reported as such.\nErrors: NOT_FOUND unknown session | INTERNAL endpoint still answers after close (session kept)"
-        }
-        "browser-list" => {
-            "Example:\n  actl browser-list\nRead-only enumeration of active sessions (newest first): session_id/target_id/url/pid/port/mode. In YAML flows browser-launch cannot carry outputs (lifecycle command, not a read-only producer) — bind the session handle from this command instead (e.g. pointer /sessions/0/session_id).\nErrors: INTERNAL sessions dir unreadable"
-        }
-        "app-register" => {
-            "Example:\n  actl app-register edge 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'\n  actl app-register paint 'C:/Program Files/WindowsApps/Microsoft.Paint_*/PaintApp/mspaint.exe' --pattern\nRegisters a local application in %LOCALAPPDATA%/actl/apps.json so `launch <name>` and `browser-launch --browser-executable <name>` resolve via alias. Stable paths for regular apps; --pattern for Store apps whose version directory changes on update (glob re-resolves automatically when the cached path goes stale).\nErrors: PROTOCOL invalid name/path/pattern | INTERNAL storage failure"
-        }
-        "app-list" => {
-            "Example:\n  actl app-list\nLists all registered apps with name, path/pattern, resolved cache, and discovery source. Read-only.\nErrors: INTERNAL apps.json unreadable"
-        }
-        "app-remove" => {
-            "Example:\n  actl app-remove my-tool\nRemoves a registration by name. The underlying application is untouched.\nErrors: NOT_FOUND unknown name | INTERNAL storage failure"
-        }
-        "browser-verify" => {
-            "Example:\n  actl browser-verify --newest-alive\n  actl browser-verify --session s1a2b3 --css '[data-testid=\"app-bar-user\"]'\n  actl browser-verify --session s1a2b3 --css '#avatar' --contains work\n  actl browser-verify --session s1a2b3 --no-popups\n  actl browser-verify --none\nRead-only assertion family for flow verify steps: --newest-alive (post-launch), --none (post-close in a flow-owned lifecycle), --session+--alive/--gone (target responds / record deregistered), the login-state predicate --session+--css/--xpath [--contains] (unique resolution + optional text substring; the resume_check for login pause points), and the popup-surface predicate --session+--no-popups [--popup-selector S] (asserts ZERO visible in-page popup surfaces; default selector dialog[open],[role=dialog],[role=alertdialog],[aria-modal=true]; hidden zero-layout nodes never count; ASSERTION_FAILED carries total + up to 5 text samples; maps to a FALSE condition in flow when/unless, so dismiss branches compose; unannotated self-drawn banners need --popup-selector). Value assertions on writes live on browser-click --expect-text.\nErrors: PROTOCOL mode/args/invalid popup selector | ASSERTION_FAILED assertion unmet (incl. non-unique login selector / popups present) | NOT_FOUND unknown session"
-        }
-        "flow-validate" => {
-            "Example:\n  actl flow-validate --file task.yml\nOptional --inputs values.yml resolves declared whole-argument inputs before validating every step. Resources are checked without creating files; data.resources uses the validation-preview context. --emit-plan includes the concrete preview plan and input values, not initialized resources. when/unless select run or otherwise using immediate assertions; unknown observations stop. Both routes are prevalidated. run/otherwise.sequence groups up to 16 calls with one result check. outputs select typed read-only data via JSON Pointer; bind replaces a whole args entry by index. Resolved CLI arguments are revalidated before execution.\nErrors: PROTOCOL invalid YAML/command/policy/resource | INTERNAL file error"
-        }
-        "verify-file" => {
-            "Example:\n  actl verify-file --path note.docx --kind meta --expected-file meta.json --subset\nReads text/JSON or OOXML via a fixed read-only native inspector (zip + Windows.Data.Xml.Dom; process facts via Win32/WMI). Text normalizes CRLF to LF; docx returns text and bold; docx-styles returns per-paragraph {text,style,bold} where style is the OOXML styleId (empty = no explicit style); meta returns {size,mtime_unix_ms} (metadata reads survive Office exclusive locks) with optional relational keys size_min/mtime_min; xlsx returns cell values/formulas from sheet1. --expected-file reads the expectation from a UTF-8 file (mutually exclusive with --expected; long/Chinese JSON via shells mangles quotes/encoding). Maximum input/output 4 MiB. No user scripts, no shell-out, no Office automation. Known mismatches are re-read in a 5-second settle window; unknown read errors stop immediately.\nErrors: PROTOCOL invalid expectation | ASSERTION_FAILED content differs | NOT_ACTIONABLE unreadable/unsupported document | INTERNAL inspector failure"
-        }
-        "verify-rows" => {
-            "Example:\n  actl verify-rows --app Task --prefix item-row- --expected '[]'\nCompares sorted names of TreeItem rows with an automation-ID prefix; rejects truncated snapshots and a missing parent tree.\nErrors: PROTOCOL invalid expected string array or prefix | ASSERTION_FAILED rows differ | NOT_ACTIONABLE incomplete observation"
-        }
-        "verify-owner" => {
-            "Example:\n  actl verify-owner --app TaskMarker --program C:/Apps/editor.exe --token C:/Tasks/unique-profile\nRequires a unique visible native window, matching process executable and an absolute task path in its command line. Reports process creation time; optional --instance/--hwnd/--pid must all match. hwnd_anchor is a ready-to-bind window anchor string (hwnd:<n> survives title changes; bind it into later --app slots via flow outputs). Read-only; does not close windows or prove process exit.\nErrors: PROTOCOL invalid task path | AMBIGUOUS windows | NOT_ACTIONABLE ownership unconfirmed"
-        }
-        "verify-closed" => {
-            "Example:\n  actl verify-closed --hwnd 123 --pid 456 --instance 2026-09-29T00:00:00Z\nReads native windows and process creation time. Window disappearance alone never proves closure. Known running state is re-read for up to a 5-second settle window.\nErrors: PROTOCOL invalid HWND | ASSERTION_FAILED original instance remains | NOT_ACTIONABLE process observation failed"
-        }
-        "verify-window" => {
-            "Example:\n  actl verify-window --app Chrome --state foreground\nReads native window state without activating it. Zero matches is false for exists/foreground/minimized/visible, true for absent. Multiple matches are ambiguous. State mismatches re-read for up to a 15-second settle window (loaded Office teardown trails the close action).\nErrors: PROTOCOL invalid app/state | ASSERTION_FAILED known state mismatch | AMBIGUOUS multiple windows | INTERNAL/NOT_ACTIONABLE observation failed"
-        }
-        "verify-clipboard" => {
-            "Example:\n  actl verify-clipboard --expected 'Exact text' --normalize-lines\nRead-only exact text assertion. Optional normalization converts CRLF to LF and trims trailing LF.\nErrors: ASSERTION_FAILED text differs | NOT_ACTIONABLE unavailable clipboard | INTERNAL read failure"
-        }
-        "flow-run" => {
-            "Example:\n  actl flow-run --file skills/actl/workflows/vscode-edit.yml --id vscode-01\n  actl flow-run --file explore-task.yml --id explore-01\nOptional --inputs values.yml overrides declared defaults; --paused explicitly registers without executing steps. After full preflight, resources create isolated directories/text files or copy bundled assets once. Saves resolved immutable plan and durable state. Resume never rereads inputs or initializes resources. Physical actions retain explicit authorization. Exploration plans (explore: task/app/keywords/goal) run the bounded exploration engine instead of static steps: observe→diff→score→gate→probe→act with local goal assertion; semantic deadlocks surface as decision_pending cards answered via flow-resume --decision.\nErrors: PROTOCOL invalid/reused ID/resource | NOT_ACTIONABLE executor busy | ABORTED stop | INTERNAL storage"
-        }
-        "flow-status" => {
-            "Example:\n  actl flow-status --id report-01\n  actl flow-status --id explore-01\nReports run state, declared saved outputs, pause request and runner_active. template carries the stale-plan hint: when the source template's byte fingerprint differs from the frozen record, changed=true warns that retries still run the old frozen plan (verify new fixes in a new task); null when the run predates source recording or the template is unreadable. retry_hint names the uncertain write step with a copyable flow-resume --retry-step command (plain resume never replays it); popup_hint appears when the front-layer gate blocked a step (popup_pending). Exploration runs add an explore block (action/decision/observation counts, budgets, tried selectors, goal_met, token audit) and, when a run waits on a decision, the self-contained decision card (≤4 KiB, candidates c1..cK) to answer with flow-resume --decision.\nErrors: PROTOCOL invalid ID/state | INTERNAL storage"
-        }
-        "flow-evidence" => {
-            "Example:\n  actl flow-evidence --id report-01\n  actl flow-evidence --id report-01 --step s6\nRead-only index of a run's failure bundles (runtime governance round 1): each uncertain/blocked step-phase lists what was captured at the failure instant — full screenshot (what a human sees), native window inventory (what Windows sees), targeted UIA snapshot and the app's front guidance layer with classification (what automation sees; docs/68 attribution + popup incidents). Artifacts live under flow-resources/<id>/evidence/; a bundle only lists artifacts that actually exist, missing ones are never fabricated. Returns step, phase, capture time and artifact files with sizes; read a file directly for its content.\nErrors: PROTOCOL unknown id | INTERNAL storage read"
-        }
-        "flow-pause" => {
-            "Example:\n  actl flow-pause --id report-01\nRequests a boundary pause; workflow waits also check each poll. Only status=paused confirms it. In-flight COM calls and other CLI calls are not interrupted.\nErrors: PROTOCOL invalid ID/state | INTERNAL storage"
-        }
-        "flow-resume" => {
-            "Example:\n  actl flow-resume --id report-01\n  actl flow-resume --id explore-01 --decision c2 --confidence 0.8\n  actl flow-resume --id report-01 --pick @e3\nUses the saved plan; never clears emergency stop. Optional resume_check verifies current context before uncertain-result checks. retry=stale_read retries only read-only STALE_REF, at most three calls. --retry-step requires an explicit failed assertion; observation errors never authorize write replay. Exploration runs answer pending decision cards with --decision <choice_id> (must be a card candidate id); the engine then walks the chosen candidate first and falls back to the card's remaining non-dangerous candidates without a new card; --confidence is recorded in the report only. --pick <@eN> answers a static-flow ambiguous_target pause (flow-status shows candidates): the chosen ref replaces the step target with snapshot-bound identity — window/element drift rejects as STALE_REF, the frozen plan itself is not modified.\nErrors: PROTOCOL invalid state/step/decision/pick or decision on a static flow | NOT_ACTIONABLE executor busy | ABORTED stop | INTERNAL storage"
-        }
-        "flow-revise" => {
-            "Example:\n  actl flow-revise --id report-01 --file fixed.yml --message \"s6: assert Notepad window class instead of session-dependent title\"\n  actl flow-revise --id report-01 --file template.yml --inputs values.yml --accept-rerun s7 --resume\nVersioned plan revision (runtime governance round 2): the new YAML is validated like flow-run — full template form is accepted (resources blocks are prepared; {\"input\":...} references resolve via declared defaults or the --inputs values file), so a workflow template can be revised directly without emit-plan concretization. The plan is diffed against the frozen step-by-step (by position+id: unchanged/modified/added/removed). Completed steps with unchanged specs keep their results (each record carries the plan_version it ran under); modified completed READ steps reset to pending, modified completed WRITE steps require --accept-rerun naming them; an uncertain step whose spec changed resets to pending — the revision itself is its retry authorization. Old plan bytes are archived to revisions/vN.plan.json (never overwritten) and revisions/index.json appends the lineage event; flow-status shows the lineage. Nothing auto-resumes: pass --resume to continue immediately (same checks as flow-resume), or run flow-resume later. Revising resets the reason; freshness/resume_check re-establish preconditions on continue.\nErrors: PROTOCOL unknown id / explore run / write step needs accept-rerun / invalid new plan | NOT_ACTIONABLE executor busy | INTERNAL storage"
-        }
-        "flow-clean" => {
-            "Example:\n  actl flow-clean --older-than-minutes 120\n  actl flow-clean --dry-run\nBatch-archives historical non-completed flow states (paused/needs_review/interrupted) whose last update is older than the threshold; default 60 minutes. Archives like task-archive: state moves to archive, all evidence preserved, nothing deleted. Completed flows are untouched; running flows are skipped (executor alive). --dry-run lists candidates without moving.\nErrors: PROTOCOL invalid arguments | INTERNAL storage"
-        }
-        "explore-writeback" => {
-            "Example:\n  actl explore-writeback --id explore-s1-calc-auto\n  actl explore-writeback --id explore-s2-calc-tie --out route-fragment.yml\nRead-only evidence collection (docs/42 S3): extracts a pack-format route fragment (status ALWAYS unverified — verification migration is human review, PACKS.md discipline) from a completed exploration run (goal_met=true). Steps are the acted click sequence plus the goal assertion, with the app anchor emitted as {window}; dead/no-effect selectors become quirk candidates and suggested_priors (dead=-4, no_effect=-2) for the next run's explore.priors. The yaml fragment (envelope data or --out file) is pasted into apps/<slug>.yml by the caller; actl never writes pack files. Runs without goal_met or with a capped action log are rejected — incomplete routes are never exported.\nErrors: PROTOCOL not an exploration run / goal not met / truncated action log | INTERNAL storage or fragment write"
-        }
-        "record-start" => {
-            "Example:\n  actl record-start\n  actl record-start --id demo-save --max-seconds 300\nGUI recording session (docs/06 R1 / docs/76 / docs/79): spawns a detached bounded worker that captures semantic events via low-level hooks + point-in-time UIA reverse lookup. Trace (records/<id>/trace.jsonl) is the evidence file; record-stop compiles the mechanical draft (records/<id>/draft.yml, flow-validate clean, TODO items as comments with trace line evidence). One active session at a time; password-field keys are never stored; injected events are traced but not compiled.\nErrors: PROTOCOL session already active / id already used | INTERNAL worker spawn or startup confirm"
-        }
-        "record-worker" => {
-            "Example:\n  actl record-worker --id rec-1760 --max-seconds 600\nInternal session process spawned by record-start (CREATE_NO_WINDOW, stdio null). Runs the capture loop until stop-requested or the duration cap, then compiles and writes the draft itself; envelope printed at exit (useful for direct invocation/testing). ACTL_RECORD_DISABLE_HOOKS=1 is the offline test seam.\nErrors: PROTOCOL id already used / invalid id | INTERNAL hook install / trace write"
-        }
-        "record-stop" => {
-            "Example:\n  actl record-stop\n  actl record-stop --id demo-save\nWrites the stop marker, waits for the worker to finalize (<=15s), and returns the terminal summary including the full draft yaml. A dead worker (abandoned session) gets data salvage: the existing trace is compiled, the process is never revived. Already-completed sessions return the summary idempotently.\nErrors: PROTOCOL unknown id / no active session / ambiguous active sessions | INTERNAL stop marker write / finalize timeout"
-        }
-        "record-status" => {
-            "Example:\n  actl record-status --id demo-save\n  actl record-status\nRead-only: with --id reports session state (recording/abandoned when the pid is dead/finalizing/completed/failed), draft/trace paths, and trace statistics (clicks/keys/masked/injected); without --id lists active sessions and the total count.\nErrors: PROTOCOL unknown id / invalid id"
-        }
-        "task-archive" => {
-            "Example:\n  actl task-archive --file report.json\nImmutable caller report, retained 30 days; never implies verified task success.\nErrors: PROTOCOL invalid report | INTERNAL file/storage failure"
-        }
-        "history" => {
-            "Example:\n  actl history --task report-01 --step submit --reports --limit 20\n  actl history --task report-01 --timeline --limit 500\nContent-minimal events, newest calls first. integrity validates sequence, identity and boundaries; unfinished may be running or interrupted. logging_health reports recorded journal/state failures, never guarantees complete logging. Control request IDs correlate pause/resume requests without changing desktop feedback. --timeline merges every recorded event of the task into one time-ordered stream (oldest first, newest kept when truncated), for reconstructing pauses, handoffs and step failures without joining journal files by hand.\nErrors: PROTOCOL invalid task/limit | INTERNAL storage failure (health evidence included)"
-        }
-        "display-status" => {
-            "Example:\n  actl display-status\nReports native readiness, reason, lease, popup diagnostics, and sticky stop state; never starts the companion.\nErrors: INTERNAL unavailable state storage"
-        }
-        "focus-report" => {
-            "Example:\n  actl focus-report\nRead-only diagnostic: reports the UIA focused element, the physical focus root window (GetGUIThreadInfo) and the foreground window in one envelope, plus a process-agreement fact signal; use to arbitrate element-selection and focus disputes (UIA focus can misreport on WinUI; the physical layer is authoritative).\nErrors: INTERNAL UIA unavailable"
-        }
-        "get-selection" => {
-            "Example:\n  actl get-selection --app 记事本\n  actl get-selection focused:Edit --app 应用 --max-chars 2000\nRead-only: reads the current user selection of the target element (default focused: — the user's keyboard-focus control). Channels: TextPattern ranges (kind=text, per-range text) first, then SelectionPattern containers (kind=items, per-item role/name/automation_id). available=false + reason (no_selection | no_selection_support) is honest absence — never guessed, never falls back to clipboard injection; apps that only expose selection via Ctrl+C need an explicit physical combination instead.\nErrors: PROTOCOL bad target | NOT_FOUND/AMBIGUOUS target or focus owner mismatch | INTERNAL observation failure"
-        }
-        "front-report" => {
-            "Example:\n  actl front-report --app 记事本\n  actl front-report --app hwnd:12345\nRead-only: reports the app's front guidance layer — owned native popups (title/visible/foreground) and in-tree dialog surfaces with full text and button labels, plus a naive classification hint (error/save/confirm/update/unknown; judgement stays with the caller). Apps guide the user through front popups: read this BEFORE acting; front_clear=true means no guidance layer. Never clicks anything.\nErrors: NOT_FOUND no window | INTERNAL observation failure"
-        }
-        "display-start" => {
-            "Example:\n  actl display-start\nStarts sibling actl-signal.exe if missing; restores a hidden/offscreen matching display; waits up to 4s for a matching visible frame. Does not clear stop.\nErrors: NOT_ACTIONABLE missing/hidden/incompatible display | INTERNAL launch failure"
-        }
-        "minimize-window" => {
-            "Example:\n  actl minimize-window --hwnd 12345\nExactly one title, --pid or --hwnd. Only ordinary unowned windows.\nErrors: PROTOCOL missing selector | NOT_FOUND | AMBIGUOUS | NOT_ACTIONABLE | ABORTED"
-        }
-        "restore-window" => {
-            "Example:\n  actl restore-window --hwnd 12345\nExactly one title, --pid or --hwnd. Restores the selected window.\nErrors: PROTOCOL missing selector | NOT_FOUND | AMBIGUOUS | NOT_ACTIONABLE | ABORTED"
-        }
-        "desktop-prepare" => {
-            "Example:\n  actl desktop-prepare --all\nExplicit opt-in. Returns session id for restoration. Failures retain partial evidence and session.\nErrors: PROTOCOL missing --all | NOT_ACTIONABLE | ABORTED | INTERNAL journal failure"
-        }
-        "desktop-restore" => {
-            "Example:\n  actl desktop-restore --session <session-id>\nRestores unchanged minimized window instances; reports skips. Never clears stop.\nErrors: PROTOCOL invalid record/id | NOT_FOUND session | NOT_ACTIONABLE | ABORTED"
-        }
-        "commands" => {
-            "Example:\n  actl commands\nOutput: envelope with every command + arg schema (machine self-description)"
-        }
-        "status" => "Example:\n  actl status\nOutput: version, protocol version, platform",
-        "snapshot" => {
-            "Example:\n  actl snapshot --app Notepad --skeleton\n  actl snapshot --app Edge --view content --skeleton\n  actl snapshot --app MyApp --keywords 'save,导出' --skeleton\n--skeleton keeps interactive elements + collapsed ancestors (token saver).\n--view content keeps only Document (web/document body) subtrees, drops app chrome;\ncombines with --skeleton (folding inside the document) — the browser/editor token saver.\n--keywords K1,K2 keeps interactive elements whose name/automation_id contains any keyword (case-insensitive) plus ancestors; the task-projection primitive of exploration mode (docs/42). Zero hits return an EMPTY result (no silent fallback). 1-16 keywords, each ≤64 chars.\nExample local scope:\n  actl snapshot --app MyApp --within 'uia:{\"match\":{\"id\":\"panel\"}}' --depth 3 --limit 100\n--within requires --app/--hwnd and one strict UIA container. Root depth is 0.\nLocal refs require the returned snapshot_id on replay; never mix with full-window refs.\nOutput: scope, ref_scope=container, observed_nodes; truncated + truncation_reasons report actual node/depth cuts.\nErrors: PROTOCOL invalid scope/budgets/keywords | AMBIGUOUS container | NOT_FOUND no window/Document | INTERNAL/PERM_DENIED/STALE_REF observation failed | NOT_ACTIONABLE incomplete content scope"
-        }
-        "click" => {
-            "Example:\n  actl click @e3 --app Notepad --snapshot s1a2b\n  actl click name:item --app Explorer --physical --with ctrl\n(multi-select)\n  actl click id:session_item_x --app 微信 --physical --no-activate\n  actl click id:session_item_x --app 微信 --expect element:id:chat_message_list\n--expect window:<substr> = NEW window appears; element:<target> = postcondition resolves (implicit wait, 2s default).\nErrors: NOT_FOUND | AMBIGUOUS (candidates) | STALE_REF (re-snapshot) | NOT_ACTIONABLE occluded/xy: outside | PERM_DENIED guard | ASSERTION_FAILED --expect unmet | PROTOCOL bad args"
-        }
-        "focus" => {
-            "Example:\n  actl focus name:搜索框 --app 应用\n  actl focus @e7 --snapshot s1a2b --app 应用\nEstablishes UIA keyboard focus on the target element (SetFocus + readback verification: the focused element's RuntimeId must match the target, bounded 3×120ms). No keys injected. Fills the assert-vs-establish gap: press --target only ASSERTS focus. On mismatch returns NOT_ACTIONABLE with expected/actual evidence and hints --physical.\nErrors: NOT_FOUND | AMBIGUOUS (candidates) | STALE_REF (re-snapshot) | NOT_ACTIONABLE refuses focus / readback mismatch (Electron stale widgets, WinUI focus lies) | PROTOCOL bad args"
-        }
-        "execution-status" => {
-            "Usage: actl execution-status\nArguments: none\nExample:\n  actl execution-status\nReports ready/stopped/repair_required; never grants permission.\nErrors: PROTOCOL invalid arguments"
-        }
-        "execution-recover" => {
-            "Usage: actl execution-recover\nArguments: none (invocation explicitly requests recovery)\nExample:\n  actl execution-recover\nArchives raw state and invalidates old calls. No task resumes and no permission is granted.\nErrors: NOT_ACTIONABLE incompatible companion or unreadable state; PROTOCOL invalid arguments"
-        }
-        "preview" => {
-            "Example:\n  actl preview id:saveButton --app MyApp --message 'Save this draft' --duration 5000\n  actl preview @e3 --app MyApp --snapshot s123\n  actl preview @e3 --candidate @e7 --app MyApp --snapshot s123 --duration 30000\nPreview only: no click, typing, clipboard change or desktop consent. The box is the automation operating rectangle (UIA provider view; --physical clicks land at its center) — deviation from the visual border is a risk signal, not a rendering defect; verify with screenshot --rect (window mode cannot capture the topmost overlay). Repeated --candidate enables explicit selection among 2..20 distinct refs from one snapshot. Select returns a target and identity; revalidate before executing. Close or expiry returns no selection. Target movement or identity changes stop the preview. Not allowed in persisted flows.\nErrors: PROTOCOL invalid duration/message/candidates, coordinate or unbound ref | NOT_FOUND | AMBIGUOUS | STALE_REF target changed | NOT_ACTIONABLE invisible/invalid bounds or unavailable preview | ABORTED stop | INTERNAL observation/render failure"
-        }
-        "get" => {
-            "Example:\n  actl get name:状态 --app 设置 --property value\nProperties: name role automation_id offscreen value text (text = TextPattern body; Chromium Document value is the URL).\nEmpty strings are values. Value falls back to Text only when ValuePattern is unsupported. Default reads list unsupported channels; explicit unsupported reads fail.\nErrors: PROTOCOL unknown property | NOT_FOUND no match | AMBIGUOUS multi-match | NOT_ACTIONABLE unsupported channel | STALE_REF stale provider | PERM_DENIED access denied | INTERNAL observation failed"
-        }
-        "launch" => {
-            "Example:\n  actl launch notepad\nOptional: actl launch --wait-window Notepad --timeout 5000 notepad\nOptions precede the program; tokens after the program are forwarded to the child verbatim (--wait-window there is rejected with guidance, not silently swallowed). Default returns window_ready:false (process started only). --wait-window matches an explicit title, reports matched PID/HWND, and verifies foreground; no automatic relaunch. For an existing instance use focus-window.\nErrors: PROTOCOL options after program | NOT_FOUND program | TIMEOUT no window | AMBIGUOUS multiple windows | NOT_ACTIONABLE handoff/activation | ABORTED stop"
-        }
-        "type" => {
-            "Example:\n  actl type id:Edit 'hello world' --app Notepad --paste\n--verify-value <expected>: poll the same element for an exact complete value for up to 2s after input; no write retries; line endings fold to \\n before comparison (\\r, \\r\\n, \\n are the same line break across clipboard/UIA providers).\n--paste: clipboard+ctrl+v, the only reliable channel under a Chinese-mode IME (uses the shared clipboard, reported in output).\nErrors: PROTOCOL --app required (injection is fail-closed) | NOT_ACTIONABLE foreground guard aborted | NOT_FOUND / AMBIGUOUS target | NOT_ACTIONABLE cannot take or verify exact focus | STALE_REF identity changed | ASSERTION_FAILED --verify-value readback failed (input may already be delivered)"
-        }
-        "screenshot" => {
-            "Example:
-  actl screenshot --app Notepad
-  actl screenshot --element id:CalculatorResults --app 计算器
-  actl screenshot --rect 100,100,400,300
-Explicit pixel fallback for UIA-blind content (canvases, self-drawn menus, image
-messages) and visual verification. Pixels go to a PNG file; the envelope carries
-only path+metadata (vision consumption is the caller's decision). Region mode
-captures what is ON SCREEN (occluders included); window mode renders the window
-itself even when occluded.
-Errors: PROTOCOL bad args | NOT_FOUND no window | NOT_ACTIONABLE minimized/oversize/empty bounds"
-        }
-        "paste" => {
-            "Example:
-  actl paste --app Excel
-Ctrl+v into the CURRENT selection (no element needed): the Excel cell route,
-file-manager rename, selected items. Deliberately does NOT focus an element
-(focusing would move the selection); window foreground + guard + lock only.
-Errors: PROTOCOL --app required | PERM_DENIED foreground guard | NOT_FOUND window"
-        }
-        "press" => {
-            "Example:\n  actl press ctrl+s --app Notepad --expect window:另存为\n--target <selector>: assert this element already has keyboard focus, without refocusing. --snapshot binds a target ref to its captured identity.\n--expect window:<substr> = a NEW window must appear (pre-existing same-title does not count);\nelement:<target> = postcondition: the element must resolve afterwards (implicit wait, default 2s).\nErrors: PROTOCOL --app required or bad key expr/--expect | NOT_ACTIONABLE foreground guard aborted | ASSERTION_FAILED --expect never met | NOT_ACTIONABLE target focus mismatch | STALE_REF snapshot identity changed"
-        }
-        "set-value" => {
-            "Example:\n  actl set-value id:1001 'report.txt' --app 另存为\nUIValue direct write, no keyboard (vs type).\nErrors: NOT_FOUND / AMBIGUOUS target | NOT_ACTIONABLE no Value pattern (try type)"
-        }
-        "select" => {
-            "Example:\n  actl select role:ComboBox 'CSV (逗号分隔)' --app 导出\nSelects a discrete option via SelectionItem (vs set-value for text values).\nErrors: NOT_FOUND option not under container | AMBIGUOUS multiple options match | NOT_ACTIONABLE no SelectionItem"
-        }
-        "toggle" => {
-            "Example:\n  actl toggle name:自动保存 --app 设置\nReturns the resulting state (On/Off). vs click: no click side effects.\nErrors: NOT_FOUND / AMBIGUOUS target | NOT_ACTIONABLE no Toggle pattern"
-        }
-        "right-click" => {
-            "Example:\n  actl right-click name:file.txt --app 项目\nPhysical action (naming = authorization): opens context menus.\n--no-activate: click without foregrounding the window.\nErrors: NOT_FOUND / AMBIGUOUS | NOT_ACTIONABLE no clickable point or occluded | PERM_DENIED elevated window"
-        }
-        "double-click" => {
-            "Example:\n  actl double-click name:file.txt --app 项目\nErrors: NOT_FOUND / AMBIGUOUS | NOT_ACTIONABLE no clickable point or occluded"
-        }
-        "middle-click" => {
-            "Example:
-  actl middle-click name:link --app Browser
-Browser: open link in new tab; taskbar: new app instance.
-Errors: NOT_FOUND / AMBIGUOUS | NOT_ACTIONABLE no clickable point or occluded"
-        }
-        "triple-click" => {
-            "Example:
-  actl triple-click role:Document --app Notepad
-Editors: paragraph-level selection (double=word, triple=paragraph).
-Errors: NOT_FOUND / AMBIGUOUS | NOT_ACTIONABLE no clickable point or occluded"
-        }
-        "hover" => {
-            "Example:\n  actl hover name:菜单 --app 应用\nMoves the real pointer onto the element (tooltips, hover menus).\nErrors: NOT_FOUND / AMBIGUOUS | NOT_ACTIONABLE no clickable point or occluded"
-        }
-        "drag" => {
-            "Example:\n  actl drag name:slider --to name:max --app 设置\n  actl drag xy:120,340 --to xy:540,360 --app 画图 --path 300,300 --path 420,420\n--path X,Y (repeatable, ≤64, absolute physical px) traverses start → waypoints → destination with 8px linear interpolation (canvas/signature trajectories). xy:→xy: drags are marquee/coordinate drags: BOTH endpoints are guarded against the --app window bounds and occlusion (--app required).\nErrors: PROTOCOL bad waypoint / xy pair without --app | NOT_FOUND / AMBIGUOUS element end | NOT_ACTIONABLE outside bounds / occluded / no clickable point / window moved"
-        }
-        "scroll" => {
-            "Example:\n  actl scroll role:Document --down 3 --app Notepad\nUIA Scroll pattern first, physical wheel fallback (via reported).\nErrors: NOT_FOUND / AMBIGUOUS | NOT_ACTIONABLE neither channel works"
-        }
-        "key-down" => {
-            "Example:\n  actl key-down shift --app Notepad\n  actl key-down space --app MyApp --duration 800\nHOLD semantics: must pair with key-up; abnormal exit leaves the key held. --duration Ms (50-60000) turns it into a long press: down → hold → automatic up; a stop request interrupts the hold and releases immediately (ABORTED, the key IS released).\nErrors: PROTOCOL --app required / bad duration | PERM_DENIED foreground guard | ABORTED interrupted hold (released)"
-        }
-        "key-up" => {
-            "Example:\n  actl key-up shift --app Notepad\nMust be the same expression as the paired key-down.\nErrors: PROTOCOL --app required | PERM_DENIED foreground guard"
-        }
-        "resize-window" => {
-            "Example:\n  actl resize-window 记事本 --width 800 --height 600\nErrors: NOT_FOUND / AMBIGUOUS window | NOT_ACTIONABLE no native handle"
-        }
-        "verify" => {
-            "Example:\n  actl verify --value id:CalculatorResults '56,877' --property name --contains --app 计算器\nImmediate assertion (vs wait): fails now, not later; failure carries expected/actual/target/channel. --normalize-lines compares complete text after CRLF/CR normalization and trimming trailing LF. --url-query KEY compares exactly one percent-decoded query value (literal plus, UTF-8, duplicate keys rejected); conflicts with --property/--contains/--normalize-lines. --property name|value|text selects an explicit channel; omitted uses Value then Text fallback.\nErrors: ASSERTION_FAILED | NOT_FOUND / AMBIGUOUS | PROTOCOL bad flags"
-        }
-        "extract" => {
-            "Example:\n  actl extract role:List --app 系统信息\nGrid rows first; tree fallback only when GridPattern is unsupported (fallback_reason: grid_pattern_unsupported). Empty cells and empty grids are preserved.\nErrors: NOT_FOUND / AMBIGUOUS | NOT_ACTIONABLE no rows, budget exceeded or table changed | INTERNAL/PERM_DENIED/STALE_REF observation failed"
-        }
-        "focus-window" => {
-            "Example:\n  actl focus-window 记事本\nKeyboard commands act on global focus — focus the window first in multi-window scenes.\nErrors: NOT_FOUND / AMBIGUOUS window"
-        }
-        "close-window" => {
-            "Example:\n  actl close-window 记事本\nGraceful WM_CLOSE (unsaved work may prompt).\nErrors: NOT_FOUND / AMBIGUOUS window | NOT_ACTIONABLE no native handle"
-        }
-        "list-windows" => {
-            "Example:\n  actl list-windows\n  actl list-windows --native\n  actl list-windows --native --hwnd 123\nEach entry: title/class/pid + stacking facts (foreground, topmost, minimized, visible, z_order 0=top, rect, owner_title).\n--native reads Win32 top-level HWNDs without UIA, including hidden/untitled windows; not a list of task-owned resources. --hwnd requires --native and directly queries one handle, including child windows.\nErrors: INTERNAL native observation failed; never substituted with an empty list | PROTOCOL invalid HWND"
-        }
-        "find" => {
-            "Example:\n  actl find --name 保存 --role button --app 记事本\n  actl find --capable type --role edit --app 记事本\nRefs interchangeable with snapshot @eN. Zero realized hits + exact name/id falls through to virtualized containers (resolved_by: item-container). --capable click|type is a role-derived advisory filter (type = Edit/Document text holders; actual capability still judged at action time, NOT_ACTIONABLE).\nErrors: PROTOCOL needs >=1 filter | PROTOCOL unknown --capable | NOT_FOUND nothing matches"
-        }
-        "collect" => {
-            "Example:\n  actl collect role:List --role listitem --app 资源管理器\n  actl collect id:1001 --role listitem --max-items 2000 --app 应用\nBounded full collection from a (virtualized) container — collection semantics = the whole table, independent of the user's leftover scroll position (semantic reset-to-top first). Each round: 1 LargeIncrement page scroll (semantic ScrollPattern only, zero input injection — compose scroll --physical manually if needed) → settle → fresh observe → diff-accumulate. complete is judged empirically (two consecutive zero-new rounds; provider position signals misfire early and are not trusted). Items carry no @eN refs — re-target via find. complete=false + truncation_reason = honest truncation (max_items / max_rounds / scroll_reset_failed / scroll_pattern_missing / scroll_call_failed / container_rebuilt).\nErrors: PROTOCOL bad args/target | NOT_FOUND/AMBIGUOUS container | observation errors propagate"
-        }
-        "get-clipboard" => {
-            "Example:\n  actl get-clipboard\nErrors: NOT_ACTIONABLE clipboard held by another process"
-        }
-        "set-clipboard" => {
-            "Example:\n  actl set-clipboard 'text to place'\nReplaces current clipboard content (that is the semantics).\nErrors: NOT_ACTIONABLE clipboard held by another process"
-        }
-        "wait" => {
-            "Example:\n  actl wait --element name:完成 --property value=OK --timeout 8000 --app 应用\n  actl wait --element role:Document --stable --app Edge\n  actl wait --idle 8000 --timeout 120000\nPredicates: value=<expected> | name=<substr> | text=<expected> | checked=on|off; --contains for substring; existence implied.\n--stable waits until the element's observed sample (text > value > name) stops changing\nacross consecutive polls — settle detection after scroll/navigation.\n--idle waits until no keyboard/mouse input system-wide for N ms — the \"console is free\"\ngate before long batches; observes physical input only (UIA-injected input stays invisible).\nErrors: TIMEOUT predicate unmet, element absent, content still changing, or user still active | PROTOCOL bad predicate/flags | ASSERTION_FAILED (--window)"
-        }
-        "batch" => {
-            "Example:\n  actl batch --json '[\"focus-window Notepad\",\"press ctrl+s --app Notepad\"]'\nStops on first error; steps[] carries per-step ok/duration. windows_created is the native HWND difference, not proof of task ownership. A final inventory failure preserves steps and reports window_observation_error instead of windows_created. steps may carry blocked_by for an unexpected foreground window.\nErrors: PROTOCOL bad JSON/nesting | INTERNAL initial native enumeration failed (no steps run) | the first failing step's code is propagated"
-        }
-        _ => return None,
-    })
 }
 
 /// 带注入的 clap 树:-h/--help 渲染 after_help(Example/Errors);与

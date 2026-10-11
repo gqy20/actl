@@ -10,6 +10,7 @@ mod cli;
 mod condition;
 mod file_check;
 mod flow;
+mod help_text;
 mod interact;
 mod query;
 mod record;
@@ -295,6 +296,14 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
         Command::Desktop(DesktopCommand::DisplayStart) => {
             let lease = actl_uia::display_gate::ensure()?;
             Ok(serde_json::json!({"ready":true,"lease":lease,"stop_requested":actl_core::state::SignalPaths::default().stop_requested()}).into())
+        }
+        Command::Desktop(DesktopCommand::DisplayStop { reason }) => {
+            if reason.len() > 200 {
+                return Err(CtlError::protocol(
+                    "display-stop --reason exceeds 200 chars",
+                ));
+            }
+            actl_uia::display_gate::stop(reason).map(Into::into)
         }
         Command::Desktop(DesktopCommand::MinimizeWindow { pattern, pid, hwnd })
         | Command::Desktop(DesktopCommand::RestoreWindow { pattern, pid, hwnd }) => {

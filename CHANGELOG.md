@@ -17,6 +17,8 @@
 
 ### Added
 
+- **`display-stop` 显示端生命周期动词（spec，[06 §7.5 规则 8 例外](docs/06-design-blueprint.md)——"显示端占用构建文件"常设授权获得可执行实体）**：优雅关闭本工具显示端的**唯一 sanctioned 通道**——通用窗口命令对显示窗口的自排除（监督端不得成为被监督自动化的通用目标,2026-10-01 合成授予实证的防护基础）保持不变;display-stop 走 WM_CLOSE=普通关闭路径（撤销交接授权、发布 closed 租约、不写急停、不动停止代次）,只接受经**租约 pid 双核验**的自家显示窗（不构成通用关闭旁路）,幂等（不在场=already_stopped）,有界等待 ≤4s 超时如实报 stopped:false。显示端关闭期间写路径照常 fail-closed（副作用动作要求 ready 租约）——"自动化关掉监督者"是自断双手而非提权,与 taskkill 无新增攻击面,差别只是走审计留痕的正规通道。MCP 排除表同步（显示端生命周期归本地人）。测试：契约（help 四要素/reason 超长 PROTOCOL/缺席幂等;显示端在场时跳过行为断言——契约测试不得顺手关掉操作者的显示端）。配套 AGENTS"显示端占用构建文件"条款改指 display-stop。
+
 - **popup 声明锚输入引用（spec 增补，[06 运行时治理③④](docs/06-design-blueprint.md)——flow 工具链缺口②收口）**：`popup_handlers[].app` 与 `popup_ignores[].app` 支持 `{input: name}`——模板锚为运行输入（如 `${run.id}` 前缀形态）时可静态声明 handler/ignore,不再靠 run id 前缀约定绕过（VS Code notice handler 探针实证的缺口）。在 load_plan 输入解析期展开为具体字符串,flow-run/validate/revise 三路同口径;引擎 `app.contains` 匹配语义不变;字面锚原样保留,未声明引用 PROTOCOL。测试：锚引用解析/未声明拒绝 ×2。
 
 - **flow-revise 收完整模板形态（spec 增补，[06 运行时治理④](docs/06-design-blueprint.md)——工具链缺口①收口,模板迭代不再全程重跑）**：--file 直接吃 workflow 模板——resources 块经 prepare 剥离（幂等,不建新 run）、{"input":...} 引用经 declared defaults 或新增 --inputs 值文件解析、pack 级 popup_ignores 注入与 load_plan 同口径（否则修订计划与冻结计划 diff 误报 ignores 变化）。此前直接 schema parse,引用/资源形态必报 PROTOCOL——VS Code 轮被迫 emit-plan 具体化+带外 plan.json 手术（v2 报废事故）的根源。真机实证：vscode-edit.yml 模板原文件直接 revise 成功（diff 正常,find-replace 重置 pending）。配套：Word 新文档物化拒答边界入长期观察项（release-review-08 实证,五层修复只治兼容模式文档）。

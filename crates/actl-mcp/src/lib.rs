@@ -22,6 +22,7 @@ pub const EXCLUDED_COMMANDS: &[&str] = &[
     "execution-recover",
     // 显示端生命周期归本地人(显示端死了本地人重启)。
     "display-start",
+    "display-stop",
     // 桌面窗口布局恢复(初版保守排除;有恢复记录护栏兜底,实现轮可重议)。
     "desktop-restore",
     // record-start 派生的内部进程缝,非用户动词——远端录制走 start/stop。

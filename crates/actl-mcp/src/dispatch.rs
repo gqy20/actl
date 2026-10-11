@@ -244,6 +244,7 @@ mod tests {
         for verb in [
             "execution-recover",
             "display-start",
+            "display-stop",
             "desktop-restore",
             "record-worker",
         ] {

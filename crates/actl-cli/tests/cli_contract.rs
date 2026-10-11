@@ -98,6 +98,36 @@ fn display_and_desktop_commands_contract() {
     );
 }
 
+#[test]
+fn display_stop_contract() {
+    // display-stop:关闭监督显示端的唯一 sanctioned 通道(docs/06 §7.5.1)。
+    // help 四要素恒测;行为测试只在显示端**缺席**时执行幂等断言——在场时
+    // 跳过(契约测试不得顺手关掉操作者的显示端)。
+    let (code, text) = actl(&["display-stop", "--help"]);
+    assert_eq!(code, 0);
+    for element in ["Usage", "Example", "Errors", "--reason"] {
+        assert!(text.contains(element), "help missing {element}");
+    }
+    let (_, text) = actl(&["display-stop", "--reason", "x".repeat(201).as_str()]);
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&text).unwrap()["error"]["code"],
+        "PROTOCOL"
+    );
+    let (_, status) = actl(&["display-status"]);
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    let present = !status["data"]["hwnd"].is_null();
+    if present {
+        eprintln!("display present; skipping live display-stop behavior assertion");
+        return;
+    }
+    let (code, text) = actl(&["display-stop", "--reason", "contract"]);
+    assert_eq!(code, 0, "{text}");
+    let result: serde_json::Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(result["data"]["already_stopped"], true);
+    assert_eq!(result["data"]["stopped"], false);
+    assert_eq!(result["data"]["reason"], "contract");
+}
+
 fn actl(args: &[&str]) -> (i32, String) {
     let out = support::IsolatedCommand::new()
         .command
