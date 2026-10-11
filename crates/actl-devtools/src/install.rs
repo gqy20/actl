@@ -245,13 +245,13 @@ fn fs_rename(from: &Path, to: &Path) -> Result<()> {
     if to.parent().is_some_and(|p| fs_create_all(p).is_err()) {
         return Err(CtlError::internal("cannot create install parent"));
     }
-    std::fs::rename(from, to).map_err(|e| {
-        CtlError::internal(format!(
-            "rename {} -> {}: {e}",
-            from.display(),
-            to.display()
-        ))
-    })
+    // 跨卷(仓库在 E:、家在 C:)rename 报 os error 17——回退复制+删源。
+    if std::fs::rename(from, to).is_ok() {
+        return Ok(());
+    }
+    copy_recursive(from, to)?;
+    std::fs::remove_dir_all(from)
+        .map_err(|e| CtlError::internal(format!("install stage cleanup: {e}")))
 }
 fn io(error: std::io::Error) -> CtlError {
     CtlError::internal(format!("install io: {error}"))
