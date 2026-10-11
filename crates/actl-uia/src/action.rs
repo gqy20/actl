@@ -172,6 +172,9 @@ pub fn type_text(
     near: Option<&str>,
     verify_value: Option<&str>,
 ) -> Result<TypeOutcome, CtlError> {
+    // 前台快拒绝(2026-10-11):锚窗非后台懒激活慢墙前先核对/激活/让行,
+    // 守卫语义同既有 set_focus+settle,只是拒绝点提前到昂贵 locate 之前。
+    crate::foreground_gate::ensure_input_foreground(app)?;
     let loc = locate(app, target, near)?;
     // SetFocus/值读回等 COM 调用与 Release 在区内(inner 引用 loc,早退 Err
     // 也经 wrapper 的 into_info 覆盖——析构纪律)。
@@ -302,6 +305,9 @@ pub fn press_keys_targeted(
     app: Option<&str>,
     target: Option<&Target>,
 ) -> Result<Option<String>, CtlError> {
+    // 前台快拒绝(同 type,2026-10-11):锚窗非前台时 provider 懒激活节流,
+    // 昂贵 locate 前先廉价核对+两级激活,仍非前台让行。
+    crate::foreground_gate::ensure_input_foreground(app)?;
     let _lock = input::InputLock::acquire(timing().lock_wait_ms)?;
     let loc = target.map(|t| locate(app, t, None)).transpose()?;
     // 目标核验(FocusGuard/元素读)与 Release 在区内;注入为键盘通道无 COM。

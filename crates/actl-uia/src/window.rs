@@ -1196,9 +1196,40 @@ fn classify_front_text(text: &str) -> &'static str {
 /// 证据:原生 owned 弹窗(标题/可见/前台)与树内子窗(文本全文+按钮清单),
 /// 附朴素分类提示;front_clear 表示当前无前台引导层。本命令不点击任何东西。
 pub fn front_report(app: &str) -> Result<serde_json::Value, CtlError> {
+    // 前台快门(2026-10-11,release-review-11 根因同源):锚窗非前台时其
+    // 树内面板用户不可见,不构成 docs/31"最前方的弹窗引导"语义,而全树
+    // capture walk 在后台懒激活态撞 14-22s 慢墙(UIA 看门狗击杀点)。
+    // 此时 in_tree 置空并留 skip 原因,owned 原生弹窗层照报(廉价枚举,
+    // 不经 provider,不受节流影响);前台态恢复后自动回全量路径。虚拟窗
+    // (无原生句柄)不命中快门,保留原路径。
+    let all_native = crate::native_windows::native_windows()?;
+    let anchored: Vec<&crate::window::WindowEntry> = all_native
+        .iter()
+        .filter(|w| w.visible && w.title.contains(app))
+        .collect();
+    let anchor_backgrounded = !anchored.is_empty() && !anchored.iter().any(|w| w.foreground);
+    if anchor_backgrounded {
+        let anchor_title = anchored[0].title.clone();
+        let owned: Vec<serde_json::Value> = all_native
+            .iter()
+            .filter(|w| w.owner_title.as_deref() == Some(anchor_title.as_str()) && w.visible)
+            .map(|w| {
+                serde_json::json!({"hwnd": w.hwnd, "title": w.title, "class": w.class,
+                       "visible": w.visible, "foreground": w.foreground})
+            })
+            .collect();
+        return Ok(serde_json::json!({
+            "anchor_foreground": false,
+            "in_tree_skipped": "anchor_not_foreground",
+            "front_clear": owned.is_empty(),
+            "window": {"title": anchor_title},
+            "in_tree": [],
+            "owned": owned,
+        }));
+    }
     let cap = capture(Some(app))?;
     let title = cap.window.title.clone();
-    let all = crate::native_windows::native_windows()?;
+    let all = all_native; // 快门路径与全量路径共用一次原生枚举
     let main = all.iter().find(|w| w.title == title);
     let owned: Vec<serde_json::Value> = all
         .iter()
@@ -1255,6 +1286,7 @@ pub fn front_report(app: &str) -> Result<serde_json::Value, CtlError> {
     }
     let front_clear = owned.is_empty() && surfaces.is_empty();
     Ok(serde_json::json!({
+        "anchor_foreground": true,
         "window": {"title": title, "class": cap.window.class, "pid": cap.window.pid,
                    "hwnd": main.and_then(|w| w.hwnd), "foreground": main.map(|w| w.foreground)},
         "owned": owned,

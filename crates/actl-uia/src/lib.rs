@@ -23,6 +23,9 @@ pub mod diagnostic;
 pub mod display_gate;
 pub mod display_support;
 mod feedback;
+/// 输入动作前台快拒绝(2026-10-11):锚窗非前台时 provider 懒激活节流,
+/// 昂贵 locate 前先廉价原生核对+两级激活,仍非前台让行。
+mod foreground_gate;
 mod handoff;
 /// 流程执行器注入计划指纹的窄通道(始终信任此流程)。
 pub fn set_plan_hash(hash: Option<String>) {
