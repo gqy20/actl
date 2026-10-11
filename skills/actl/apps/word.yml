@@ -34,6 +34,10 @@ quirks:
     note: 2026-10-04 实证：粘贴"N. 文本"到上一编号条目后的新段会触发 Word 自动编号列表——显示成"N. N. 文本"（自动编号+粘贴文本自带编号叠加）；流程文本改用 ①②③④/• 等非 ASCII 数字编号规避。
   - id: n_drive_startup_dialog
     note: 2026-10-04 起本机 Word 每次开文档弹「目录名无效。(N:\)」错误框（某项配置指向未连接的 N: 盘）；错误框 OK 按钮 automation_id=2，popup_handlers 声明(app 锚为步骤 --app 子串/classification error/name_contains 目录名无效/click id:2)可由引擎弹层治理处置（word-note-typography 流程真机通过）。
+  - id: start_screen_overrides_n_switch
+    note: 2026-10-11 实证（release-review-09）：本机 Word「启动时显示开始屏幕」选项优先于命令行 /n——裸 `WINWORD /n` 停在开始屏幕（窗口标题裸 "Word"，深色主题下界面整体深灰易误判为许可/激活问题；UIA 无 Document、按钮全禁用），写步必然 NOT_FOUND；文档只有用户在开始屏幕交互后才物化。对策=launch /n 带文件参数结构性绕过（resources 复制种子 docx，word-note/release-review 模板同模式），并把关卡在 wait --element role:Document 物化门而非仅窗口存在。
+  - id: owned_dialog_anchor_for_input
+    note: 2026-10-11 实证（release-review-10）：owned 32770 类模态对话框（F12 另存为）是独立标题的顶层前台窗口——type/press 的前台守卫以步骤锚定的顶层窗口为 expected，锚 Word 主窗时 expected(主窗标题)/actual(对话框标题)永不匹配（NOT_ACTIONABLE 死路）；对话框内的输入/按键必须 `--app` 对话框自身标题（如 另存为），弹层门禁同步需要 app:另存为 的 popup_ignores 认领（Word 锚的 ignore 匹配不到对话框锚步）。另：另存为对话框默认目录=被打开文档所在目录，非 Word 默认文档目录；对话框含 20+ 个 Edit（元数据/搜索等），文件名框须用 uia 严格复合形态（role:Edit+name:文件名:）。
 # 常驻面板声明(降噪第二轮 pack 来源,2026-10-11):flow 引擎解析计划时自动
 # 并入 popup_ignores(与模板级声明并集去重)——Word 家族锚形态两种
 # (标题 <文件名> - Word 含 Word;文件名锚 .docx),各声明一条。

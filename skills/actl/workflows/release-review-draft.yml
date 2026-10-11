@@ -7,18 +7,41 @@
 #   404)+Edge 新 profile 首启向导弹窗链(同步数据/翻译询问)污染现场;
 #   v3(本版)=公开仓库(gqy20/zotero_cli)+ephemeral+headless——零窗口
 #   零弹窗零登录,桌面只出现 Word;读源不依赖用户浏览器状态。
+#   v4(2026-10-11,release-review-09 实证):本机 Word「启动时显示开始屏幕」
+#   优先于命令行 /n——裸 /n 停在开始屏幕(深色主题下呈灰色,UIA 无
+#   Document),写步必然 NOT_FOUND。修复:resources 复制 seed.docx,launch
+#   /n 带文件参数结构性绕过开始屏幕,verify 收紧为 wait Document 物化门;
+#   文档已带路径,ctrl+s 变原地保存,另存为改 F12。
 # 前置条件:
 #   1. 本机未打开其他 Word 窗口(launch 的窗口核验按标题子串匹配)
 #   2. 网络可达 github.com
 # 副作用与边界:
 #   - type --paste 使用系统剪贴板,会覆盖当前剪贴板内容
-#   - 草稿保存为 Word 默认文档目录下的 actl-release-draft.docx,同名覆盖:
-#     它是"当前核对状态",不是历史留痕,需要留痕请自行改名归档
+#   - 草稿保存为 actl-release-draft.docx:另存为对话框默认目录跟随被打开
+#     文档(即任务资源目录 ${run.dir}),同名覆盖——它是"当前核对状态",
+#     不是历史留痕,需要留痕请自行改名归档(release-review-10 实证)
 #   - 读段(前四步)只读且 headless 无窗口;写段从 open_word 检查点开始,
 #     需要 actl 显示端的人工开始授权
 #   - 私有仓库形态需要持久 profile+登录(v2 教训在案,真实需求出现再立)
 version: 1
 name: 生成 zotero_cli 发布页核对草稿
+popup_handlers:
+  # 本机 Word 每开文档必弹「目录名无效 (N:\)」(word.yml quirk 实证)
+  # ——error 分类声明处置,引擎自动点 OK (id:2)
+  - app: Word
+    classification: error
+    name_contains: 目录名无效
+    click: id:2
+popup_ignores:
+  # F12 另存为对话框是 open_save_as 的产物、type_filename/confirm_save 的
+  # 输入目标——声明已认领表面,弹层门禁跳过(handlers 必须带 click 处置,
+  # 自产目标表面走 ignores 放行;release-review-10 popup_pending 实证)。
+  # 对话框锚步(--app 另存为)的门禁定位也用本声明认领(owned #32770 对话
+  # 框是独立标题窗口,Word 锚的 ignore 匹配不到它)
+  - app: Word
+    name_contains: 另存为
+  - app: 另存为
+    name_contains: 另存为
 inputs:
   browser_executable:
     default: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'
@@ -26,6 +49,13 @@ inputs:
   # (打包纪律:skill 不焊死外域 URL)
   releases_url:
     default: 'https://<owner>/<repo>/releases'
+  # launch 文件参数指向 resources 复制出的任务目录种子副本(绕过开始屏幕)
+  word_file:
+    default: '${run.dir}/${run.id}.docx'
+resources:
+  files:
+    - copy: assets/seed.docx
+      path: '${run.id}.docx'
 steps:
   - id: launch_browser
     title: headless 自有会话打开发布页
@@ -65,16 +95,16 @@ steps:
       args: ['--session', placeholder, '--gone']
       bind: {'1': observe_session.session_id}
   - id: open_word
-    title: 打开 Word 并停在写前检查点(人工开始授权;无 resume_check——
-      首跑 Word 未开,缺席类前置无法用 verify 表达,launch 步自身的
-      窗口核验即护栏)
+    title: 打开 Word 种子副本并停在写前检查点(文件参数绕过开始屏幕;
+      人工开始授权;无 resume_check——首跑 Word 未开,缺席类前置无法用
+      verify 表达,launch 步自身的窗口核验即护栏)
     pause_before: true
     run:
       command: launch
-      args: ['WINWORD', '/n']
+      args: ['WINWORD', '/n', {input: word_file}]
     verify:
       command: wait
-      args: ['--window', 'Word', '--timeout', '20000']
+      args: ['--element', 'role:Document', '--app', 'Word', '--timeout', '20000']
   - id: write_header
     title: 写入草稿首行
     run:
@@ -94,26 +124,28 @@ steps:
       args: ['--value', 'role:Document', placeholder, '--property', 'text', '--contains', '--app', 'Word']
       bind: {'2': page_title.page_title}
   - id: open_save_as
-    title: 打开另存为页
+    title: 打开另存为对话框(文档已带任务目录路径,ctrl+s 会原地保存,用 F12;
+      锚定对话框自身标题——owned 32770 类对话框是独立前台窗口,Word 主窗锚的
+      type 前台守卫结构上无法对齐,release-review-10 实证)
     run:
       command: press
-      args: ['ctrl+s', '--app', 'Word']
+      args: ['f12', '--app', 'Word']
     verify:
       command: wait
-      args: ['--element', 'role:Edit', '--app', 'Word', '--timeout', '8000']
+      args: ['--element', 'uia:{"match":{"role":"Edit","name":"文件名:"}}', '--app', '另存为', '--timeout', '8000']
   - id: type_filename
     title: 输入草稿文件名
     run:
       command: type
-      args: ['role:Edit', 'actl-release-draft.docx', '--paste', '--verify-value', 'actl-release-draft.docx', '--app', 'Word']
+      args: ['uia:{"match":{"role":"Edit","name":"文件名:"}}', 'actl-release-draft.docx', '--paste', '--verify-value', 'actl-release-draft.docx', '--app', '另存为']
     verify:
       command: verify
-      args: ['--value', 'role:Edit', 'actl-release-draft.docx', '--property', 'value', '--app', 'Word']
+      args: ['--value', 'uia:{"match":{"role":"Edit","name":"文件名:"}}', 'actl-release-draft.docx', '--property', 'value', '--app', '另存为']
   - id: confirm_save
     title: 在文件名框回车保存
     run:
       command: press
-      args: ['enter', '--app', 'Word']
+      args: ['enter', '--app', '另存为']
     verify:
       command: wait
       args: ['--window', 'actl-release-draft', '--timeout', '15000']
