@@ -65,8 +65,11 @@ quirks:
       误判同族，门禁降噪缺口第二实例，ROADMAP 升级在案）；③ 面板
       关闭态下 Close 按钮报 target_disabled、set-value 同拒——但面板
       active 时（ctrl+f 刚打开）控件可用。键盘通道（ctrl+f→esc）是
-      面板操作的正道；残面挡门禁的现场解法只有窗口重建（close→
-      reopen 刷新整窗表面）或门禁降噪落地。
+      面板操作的正道；残面挡门禁的**声明通道已落地（2026-10-11 降噪
+      第二轮 popup_ignores，VS Code 主轮 v4 同现场 A/B 验收）**：flow
+      计划声明 popup_ignores [{app, name_contains:"Find / Replace"}]
+      即认领放行——词不符的其他弹层不受豁免。窗口重建仅在无声明通道
+      的旧二进制场景需要。
   - id: companion_slowday_lease_expiration
     note: >-
       慢 UIA 日（每步调用 2-5.5s）放大一个模式：单次 flow-resume 的

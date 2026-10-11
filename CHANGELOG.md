@@ -9,6 +9,7 @@
 
 ### Fixed
 
+- **尾段挂起族根杀（fix，[70 §4](docs/70-debug-playbook.md)——06 定位/06 主修复/08 新签名暴露的类级终局）**：13112 签名实证 process::exit 走 CRT 清理可能到不了 OS（flow-resume envelope 落盘后 CPU 恒零赖活数小时）——析构链上的 UIElement 跨进程 Release/thread_local 定位缓存/signal worker join 全是无界阻塞面。inish 两分支改 envelope flush 后 hard_exit_after_envelope（watchdog 新增：直接 TerminateProcess，绕过一切运行时清理——envelope 已 flush、状态已显式落盘，不依赖析构面）；SignalSession::stop_worker 改 detach（join 曾把 finish 卡在 envelope 打印之前=「空输出」形态）。真机实证：list-windows 403 窗僵尸进程清零。配套 docs/70 §4 两条纪律（envelope 先落盘再解析/二次楔死即换通道）。
 - **step 失败证据保留错误原文（[68 待办](docs/68-combined-batch-first-round.md) 收口）**：`failure_evidence` 的 metadata 分支统一附带有界 `message`（200 字符截断）——修复前只有**无** evidence 的 synthetic 兜底带原文，**带** evidence 的失败（如 verify-file NOT_ACTIONABLE 的共享冲突详情）反而只剩 code 丢原文，恢复路径必须重放才能看到原因。message 是错误契约自身字段（envelope 已公开），不属于载荷 redaction 保护面。golden×4 同步（evidence_metadata_v1/observation_metadata/observation_query_metadata/semantic_rejection_v1）+ docs/68 待办勾销 + 新增回归用例（原文随真实证据共存/超长截断）。
 
 ### Added
@@ -46,6 +47,7 @@
 
 ### Fixed
 
+- **尾段挂起族根杀（fix，[70 §4](docs/70-debug-playbook.md)——06 定位/06 主修复/08 新签名暴露的类级终局）**：13112 签名实证 process::exit 走 CRT 清理可能到不了 OS（flow-resume envelope 落盘后 CPU 恒零赖活数小时）——析构链上的 UIElement 跨进程 Release/thread_local 定位缓存/signal worker join 全是无界阻塞面。inish 两分支改 envelope flush 后 hard_exit_after_envelope（watchdog 新增：直接 TerminateProcess，绕过一切运行时清理——envelope 已 flush、状态已显式落盘，不依赖析构面）；SignalSession::stop_worker 改 detach（join 曾把 finish 卡在 envelope 打印之前=「空输出」形态）。真机实证：list-windows 403 窗僵尸进程清零。配套 docs/70 §4 两条纪律（envelope 先落盘再解析/二次楔死即换通道）。
 - **测试线程栈上限（clap 命令树深度，[.cargo/config.toml](.cargo/config.toml)）**：debug 构建 clap derive 构建整棵命令树的调用链随子命令数增长——第 50 个子命令（collect）使 selector_input 全量解析测试越过 libtest 线程默认 2MB 栈（STATUS_STACK_OVERFLOW；真机二进制主线程栈充裕不受影响，契约测试 spawn 真二进制一直通过）。`[env] RUST_MIN_STACK=8388608` 仓库级统一（dev 内环/gate/CI 全覆盖），对齐主线程水位、覆盖命令面继续增长。
 - **scroll UIA 分支方向反转（真机核验通过）**：`scroll_element` 的语义分支把 notches≥0（`--up`）映射到 `SmallIncrement`（UIA 语义=**向下**滚），与物理滚轮分支（正=向上）反向——`--up` 经 UIA 通道实际向下滚。修为 `--up`→SmallDecrement/`--down`→SmallIncrement。真机实证：资源管理器列表顶部 `scroll --down 5`（via uia-scroll）后物化窗口下移 4-5 条（旧实现会因向下无空间而原地不动）。物理分支方向本就正确，不受影响。
 - **handoff golden 契约脱环境依赖（主分支既有红项）**：`handoff::error` 的 execution 态读改**路径注入化**（新增 `error_at(paths, reason)`，生产路径 `error` 不变）；`handoff_yielded.json` 补 [72b2671](docs/47-execution-recovery.md)（基建②）给 handoff 证据加 `execution` 字段时欠下的同步——原测试直读 `%LOCALAPPDATA%` 真实代次，任何有执行状态的机器必红（golden 含确定性 `state:"unavailable"`），隔离目录读后与本机状态解耦。
@@ -87,6 +89,7 @@
 
 ### Fixed
 
+- **尾段挂起族根杀（fix，[70 §4](docs/70-debug-playbook.md)——06 定位/06 主修复/08 新签名暴露的类级终局）**：13112 签名实证 process::exit 走 CRT 清理可能到不了 OS（flow-resume envelope 落盘后 CPU 恒零赖活数小时）——析构链上的 UIElement 跨进程 Release/thread_local 定位缓存/signal worker join 全是无界阻塞面。inish 两分支改 envelope flush 后 hard_exit_after_envelope（watchdog 新增：直接 TerminateProcess，绕过一切运行时清理——envelope 已 flush、状态已显式落盘，不依赖析构面）；SignalSession::stop_worker 改 detach（join 曾把 finish 卡在 envelope 打印之前=「空输出」形态）。真机实证：list-windows 403 窗僵尸进程清零。配套 docs/70 §4 两条纪律（envelope 先落盘再解析/二次楔死即换通道）。
 - **录制值读回护栏按 HWND 比对（[80 发现 #11](docs/80-record-acceptance.md)）**：护栏曾按焦点窗**标题**精确比对——编辑改标题（脏星号）即必然失配，值事件系统性缺失；改用焦点根 HWND（稳定身份）。#4 原始形态（即时停止）正式轮复验通过。
 - **input 绑定渲染与残留守卫（[80 发现 #6/#6b](docs/80-record-acceptance.md)）**：渲染层把 `{input: name}` 绑定加引号成字符串致替换不发生，run/verify 拿同一字面量会**自洽假通过**；双层修复（`arg_scalar` 原样发射 + 引擎 PROTOCOL 拒绝残留绑定）。
 - **YAML 数字/布尔/null 标量加引号（[80 发现 #5](docs/80-record-acceptance.md)）**：`--timeout 8022` 裸渲染被解析为整数而 flow schema 拒绝；数字形态纯量强制引号。
@@ -170,6 +173,7 @@
 
 ### Fixed
 
+- **尾段挂起族根杀（fix，[70 §4](docs/70-debug-playbook.md)——06 定位/06 主修复/08 新签名暴露的类级终局）**：13112 签名实证 process::exit 走 CRT 清理可能到不了 OS（flow-resume envelope 落盘后 CPU 恒零赖活数小时）——析构链上的 UIElement 跨进程 Release/thread_local 定位缓存/signal worker join 全是无界阻塞面。inish 两分支改 envelope flush 后 hard_exit_after_envelope（watchdog 新增：直接 TerminateProcess，绕过一切运行时清理——envelope 已 flush、状态已显式落盘，不依赖析构面）；SignalSession::stop_worker 改 detach（join 曾把 finish 卡在 envelope 打印之前=「空输出」形态）。真机实证：list-windows 403 窗僵尸进程清零。配套 docs/70 §4 两条纪律（envelope 先落盘再解析/二次楔死即换通道）。
 - **前台护栏激活过渡误拒**：type/press/paste 物理前台闸门改为有界沉降轮询（新旋钮 `foreground_settle_ms` 600ms）——激活过渡期空标题窗不再误判为抢焦。
 - **显示租约有界重读**：check_active 改为 1500ms 预算内重读——租约新鲜度窗与渲染 tick 贴近导致截图捕获/DWM 打嗝时误报"显示不可用"。
 - **`type --verify-value` 换行表示误判**：回读比较前 `\n`/`\r`/`\r\n` 统一折叠为 `\n`——Store 记事本 ValuePattern 实测报孤立 `\r`，严格字节比较必误报。
@@ -212,6 +216,7 @@
 
 ### Fixed
 
+- **尾段挂起族根杀（fix，[70 §4](docs/70-debug-playbook.md)——06 定位/06 主修复/08 新签名暴露的类级终局）**：13112 签名实证 process::exit 走 CRT 清理可能到不了 OS（flow-resume envelope 落盘后 CPU 恒零赖活数小时）——析构链上的 UIElement 跨进程 Release/thread_local 定位缓存/signal worker join 全是无界阻塞面。inish 两分支改 envelope flush 后 hard_exit_after_envelope（watchdog 新增：直接 TerminateProcess，绕过一切运行时清理——envelope 已 flush、状态已显式落盘，不依赖析构面）；SignalSession::stop_worker 改 detach（join 曾把 finish 卡在 envelope 打印之前=「空输出」形态）。真机实证：list-windows 403 窗僵尸进程清零。配套 docs/70 §4 两条纪律（envelope 先落盘再解析/二次楔死即换通道）。
 - **`--physical --with` 修饰键静默误配 Win 键（安全）**：白名单收紧为 ctrl/shift/alt/win，未知键名 PROTOCOL 拒绝（三条编译路径），"win"改为显式映射——此前 `--with ctrlx` 会注入 Win+点击。
 - **needs_review 不再永久钉住横条**：人工意图态（paused/stopped）持久保留继续入口；needs_review 30 分钟超时回空闲（状态文件与核对入口不变）。
 - **修复检测真机验收修正**：auto_resume 派发传真实停止代次（曾传标记串致子进程即败）、预算持久计数防目标切换重置、探测证据落 `flows/<id>/probe.jsonl`、孤儿化暂停流程回落到给予窗口内最新 action_failed 目标。
@@ -250,6 +255,7 @@
 
 ### Fixed
 
+- **尾段挂起族根杀（fix，[70 §4](docs/70-debug-playbook.md)——06 定位/06 主修复/08 新签名暴露的类级终局）**：13112 签名实证 process::exit 走 CRT 清理可能到不了 OS（flow-resume envelope 落盘后 CPU 恒零赖活数小时）——析构链上的 UIElement 跨进程 Release/thread_local 定位缓存/signal worker join 全是无界阻塞面。inish 两分支改 envelope flush 后 hard_exit_after_envelope（watchdog 新增：直接 TerminateProcess，绕过一切运行时清理——envelope 已 flush、状态已显式落盘，不依赖析构面）；SignalSession::stop_worker 改 detach（join 曾把 finish 卡在 envelope 打印之前=「空输出」形态）。真机实证：list-windows 403 窗僵尸进程清零。配套 docs/70 §4 两条纪律（envelope 先落盘再解析/二次楔死即换通道）。
 - **整屏留证 COM 线程污染**：失败留证的整屏 PNG 路径把执行器线程 CoInitializeEx(STA) 后从不释放，同线程后续一切 UIA 调用以 RPC_E_CHANGED_MODE 失败——combined-batch 恢复核验连续 INTERNAL 的根因；改 COINIT_MULTITHREADED + 配对释放 + CHANGED_MODE 容忍。修复后整批 69/69。
 - **桌面根枚举瞬态毒化**：标题定位的桌面根整批枚举被无关顶层窗口创建/销毁竞态毒化，所有应用报 STALE_REF、无匹配时误报；改仅对桌面根做有界瞬态重试（StaleRef、3 次/200ms），`uia:` 作用域枚举失败统一映射。净环境 8/8、扰动下直查 36/36。[38](docs/38-flow-output-bindings.md)
 - **四软件路线缺陷（docs/68 定案）**：Word 打开期间正文核验改 UIA `role:Document` text（排他句柄期不做磁盘读，重开后兼查）；Excel 复制改 `type --verify-value` 提交跳转 + 窗口级 ctrl+c（网格单元格无元素级焦点上报）；Zotero 导入前置集合树就绪检查、快速搜索改 click 聚焦+全选+替换（type 为追加语义、tab 会清空过滤）、导出对话框移除 verify-owner（子进程无任务令牌）、导出文件名用 `run.dir_native`。Zotero 9/9、Excel 13/13 真机通过。
@@ -290,6 +296,7 @@
 
 ### Fixed
 
+- **尾段挂起族根杀（fix，[70 §4](docs/70-debug-playbook.md)——06 定位/06 主修复/08 新签名暴露的类级终局）**：13112 签名实证 process::exit 走 CRT 清理可能到不了 OS（flow-resume envelope 落盘后 CPU 恒零赖活数小时）——析构链上的 UIElement 跨进程 Release/thread_local 定位缓存/signal worker join 全是无界阻塞面。inish 两分支改 envelope flush 后 hard_exit_after_envelope（watchdog 新增：直接 TerminateProcess，绕过一切运行时清理——envelope 已 flush、状态已显式落盘，不依赖析构面）；SignalSession::stop_worker 改 detach（join 曾把 finish 卡在 envelope 打印之前=「空输出」形态）。真机实证：list-windows 403 窗僵尸进程清零。配套 docs/70 §4 两条纪律（envelope 先落盘再解析/二次楔死即换通道）。
 - **交接与控制反馈**：授权后的 750ms 宽限窗吸收本次点击/按键余韵，之后恢复严格接管检测；快捷键不可用时提示点击按钮。控制窗口固定任务绑定，暂停/继续在后台执行并保留失败反馈；继续入口检查急停、可恢复状态及 800ms 暂停稳定时间，区分“已请求暂停”和“已暂停”，状态读取失败明确显示未知。
 - **目标身份与输入焦点**：带 `--snapshot` 的 ref 在实际命中时核验窗口与控件身份，缺失 RuntimeId 不放行；输入前及注入边界重验具体焦点。HWND 键盘绑定按句柄判断，不再把句柄误当标题匹配；`focus-window` 核验原生前台，只读观察不隐式激活窗口。
 - **执行与暂停**：流程预检提前拒绝无条件 wait/verify、错误选择器与等待谓词，避免前序动作生效后才发现配置错误。流程 wait 在轮询时响应暂停/停止，`wait --window` 使用原生窗口轮询，减少 UIA 阻塞；输入锁观测正确释放所获锁，等待后复查停止，key-up 与修饰点击如实记录影响。
