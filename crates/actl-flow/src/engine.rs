@@ -1,4 +1,4 @@
-use crate::{Failure, Invocation, Plan, Retry, store::Store};
+use crate::{Failure, Invocation, Plan, PopupHandler, Retry, store::Store};
 use actl_core::{CtlError, ErrorCode};
 use serde::{Deserialize, Serialize};
 
@@ -188,6 +188,18 @@ fn actionable(surface: &Surface) -> bool {
     surface.classification != "unknown" || !surface.buttons.is_empty()
 }
 
+/// notice 处理器匹配(2026-10-11 spec,最窄形态):流程自产的 INFO 级表面
+/// (如 VS Code「扩展已禁用」通知)在 naive 词表落 unknown——notice 声明
+/// 按 name_contains(schema 层强制必填)认领 unknown 面板;未声明的
+/// unknown 仍永远上抛,不存在「任意 unknown 一律放行」的宽形态。
+fn classification_matches(handler: &PopupHandler, surface: &Surface) -> bool {
+    if handler.classification == "notice" {
+        surface.classification == "unknown"
+    } else {
+        handler.classification == surface.classification
+    }
+}
+
 fn popup_gate(
     plan: &Plan,
     step: &crate::Step,
@@ -200,7 +212,7 @@ fn popup_gate(
     for surface in pending {
         let matched = plan.popup_handlers.iter().find(|handler| {
             app.contains(&handler.app)
-                && handler.classification == surface.classification
+                && classification_matches(handler, surface)
                 && handler.name_contains.as_deref().is_none_or(|needle| {
                     surface.name.contains(needle) || surface.text.contains(needle)
                 })
@@ -224,6 +236,9 @@ fn popup_gate(
             step.id.as_str(),
             serde_json::json!({
                 "classification": surface.classification,
+                // 认领声明的分类(notice 承接 unknown 时审计面区分
+                // 「面板本体分类」与「哪条白名单认领的」,2026-10-11)
+                "handler": handler.classification,
                 "surface": surface.name,
                 "click": handler.click,
                 "app": app,

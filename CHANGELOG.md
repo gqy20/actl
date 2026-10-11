@@ -13,6 +13,8 @@
 
 ### Added
 
+- **popup_handlers `notice` 分类（spec，[06 运行时治理③](docs/06-design-blueprint.md)——INFO 级弹层无法声明的裁定落地，最窄形态）**：naive 词表（error/save/confirm/update）覆盖不到流程自产的 INFO 级表面（VS Code 1.141「扩展已禁用」通知实证：滞留挡后续步、落 unknown 无法声明处置）。`notice` 处理器认领 unknown 面板：`name_contains` **必填**（按名认领，schema 层拒绝空/缺失——不存在「任意 unknown 一律处置」的宽形态）；已分类面板不被 notice 吞并（分类等值匹配语义不变）；未声明的 unknown 仍永远上抛。审计面 popup_event 双字段：`classification`（面板本体，如实 unknown）+ `handler`（认领声明）。词表演进纪律入册：更宽分类等真实滞留事故再扩。测试：popup_gate +3（schema 必填拒绝/按名认领处置放行 audit 双字段/名字不符与已分类面板均不认领）。真机验收待 VS Code 轮（notice 实际文本+关闭按钮选择器先探测再写死，探测结果回填 vscode-edit.yml 模板声明）。
+
 - **`focus` 焦点建立原语（spec，[06 控件身份节](docs/06-design-blueprint.md)——「焦点断言/建立空档」基建项落地；2026-10-11 VS Code Find 面板实证暴露：Close 点击后焦点滞留，`press --target` 只断言不建立）**：UIA `SetFocus` 建立键盘焦点 + GUITHREADINFO 物理焦点根读回核验（3×120ms 退避，RuntimeId 比对），失配 `NOT_ACTIONABLE` 附 expected/actual 证据（焦点去了别处先读证据，不盲目重放）。**零键注入**（input_effects.keyboard:"none"）——只建立焦点，后续注入由 press/type 既有护栏接管（verify-then-inject/前台复核），注入语义严格分离。目标歧义遵循 `AMBIGUOUS`；`--snapshot` 走 ref 身份校验链。flow 中定位为写步（verify 伴随与 click 同规）。测试：cli 契约 2（help 四要素——SetFocus/readback/No keys injected/Errors；坏目标 PROTOCOL）。
 
 - **`browser-read --deep` shadow DOM 穿透（spec，[06 浏览器节](docs/06-design-blueprint.md)——B 站 shadow 阻断新协议项同日收口）**：在 document 与每个**开放** shadowRoot（open 模式）内递归执行选择器，收集全部命中——Web Component（`<bili-comments>` 类）内部内容从结构性不可见变可读；closed shadow 对页面 JS 结构性不可见，是**如实边界**（不伪装穿透）。与唯一读和 `--all` 均可组合（唯一模式取 elements[0]）；遍历预算有界（节点 ≤50000/收集 ≤5000），触顶 `traversal_capped=true` 如实上报（matches 变下界，不谎称全量）；payload 附 `deep:true`。测试：browser 契约（help 四要素——OPEN shadow roots/closed 边界/traversal_capped；--deep 单独合法不要求 --all）。**真机实证（2026-10-11，B 站）**：评论区 `#commentapp` 普通 CSS 0 命中（非懒加载，滚动后仍 0），`--deep` 命中 shadow 内 `bili-comment-renderer`——协议项登记当日落地。

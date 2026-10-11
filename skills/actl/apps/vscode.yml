@@ -43,10 +43,12 @@ quirks:
       VS Code 1.141 隔离 profile + --disable-extensions 启动时弹 INFO 通知
       "All installed extensions are temporarily disabled."（1.139 时代无此
       通知，2026-10-11 模板轮实证）。分类 unknown → 弹层门禁如实拦截
-      popup_pending；模板无 popup_handlers 可声明（词表只收 error/save/
-      confirm/update）。当前处置：人工判读后点 "Clear Notification (Del)"
-      清理自产痕迹（通知本身是 --disable-extensions 触发的良性表面）。
-      长期解：popup_handlers 词表裁（ROADMAP 在案）。
+      popup_pending。**处置通道已落地（2026-10-11 notice 分类 spec，最窄
+      形态，docs/06 运行时治理③）**：popup_handlers 声明 classification:
+      notice + name_contains（必填，按名认领）+ click 处置选择器。模板
+      声明待真机轮探测实际通知文本与关闭按钮 name 后回填 vscode-edit.yml
+      （先探测再写死；候选 click 目标 "Clear Notification (Del)"）。
+      词表更宽分类等真实滞留事故再扩。
   - id: find_widget_uia_stale_surface
     note: >-
       Find/Replace 面板的可达性面对 Electron UIA 呈滞后/禁用态：Close

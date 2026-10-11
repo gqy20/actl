@@ -355,3 +355,97 @@ fn unknown_surface_with_buttons_still_blocks() {
     assert_eq!(run.reason.as_deref(), Some("popup_pending:w1"));
     std::fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn notice_handler_requires_name_contains_at_parse() {
+    // notice 最窄形态(2026-10-11 spec):name_contains 必填——
+    // 禁止「任意 unknown 一律处置」的宽形态在 schema 层就拒绝。
+    for handlers in [
+        "popup_handlers:\n  - app: a\n    classification: notice\n    click: c\n",
+        "popup_handlers:\n  - app: a\n    classification: notice\n    name_contains: ''\n    click: c\n",
+    ] {
+        let yaml = format!(
+            "version: 1\nname: P\n{handlers}steps:\n - id: w1\n   title: W\n   run: {{command: write}}\n"
+        );
+        let result = parse(&yaml);
+        assert!(result.is_err(), "{handlers:?} should be rejected at parse");
+        assert_eq!(result.unwrap_err().code, ErrorCode::Protocol);
+    }
+    let good = "popup_handlers:\n  - app: a\n    classification: notice\n    name_contains: 扩展已禁用\n    click: c\n";
+    let plan = plan_with_handlers(good, &write_call());
+    assert_eq!(plan.popup_handlers[0].classification, "notice");
+}
+
+#[test]
+fn notice_handler_dismisses_named_unknown_surface() {
+    // INFO 级表面落 unknown(带按钮=可处置面板):按名认领后自动处置放行
+    let handlers = "popup_handlers:\n  - app: myapp\n    classification: notice\n    name_contains: 扩展已禁用\n    click: 'name:关闭通知'\n";
+    let p = plan_with_handlers(handlers, &write_call());
+    let (root, store, mut run) = setup(&p);
+    let mut host = PopupHost {
+        calls: Vec::new(),
+        read_only: |c| c.command != "write",
+        layers: RefCell::new(vec![
+            FrontLayer {
+                clear: false,
+                surfaces: vec![surface("unknown", "扩展已禁用(3)")],
+            },
+            FrontLayer {
+                clear: true,
+                surfaces: Vec::new(),
+            },
+        ]),
+        popups: RefCell::new(Vec::new()),
+        captures: RefCell::new(Vec::new()),
+    };
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
+    assert_eq!(run.status, Status::Completed);
+    assert_eq!(
+        host.calls,
+        vec!["click:name:关闭通知".to_string(), "write:--app".to_string()]
+    );
+    // 审计面:面板本体分类如实记 unknown,认领声明记 handler=notice
+    assert_eq!(host.popups.borrow()[0]["classification"], "unknown");
+    assert_eq!(host.popups.borrow()[0]["handler"], "notice");
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn notice_handler_neither_overclaims_nor_underclaims() {
+    // 名字不符的 unknown 面板:notice 处理器不认领 → 仍上抛(不放宽)
+    let handlers = "popup_handlers:\n  - app: myapp\n    classification: notice\n    name_contains: 扩展已禁用\n    click: 'name:关闭通知'\n";
+    let p = plan_with_handlers(handlers, &write_call());
+    let (root, store, mut run) = setup(&p);
+    let mut host = PopupHost {
+        calls: Vec::new(),
+        read_only: |c| c.command != "write",
+        layers: RefCell::new(vec![FrontLayer {
+            clear: false,
+            surfaces: vec![surface("unknown", "许可证过期")],
+        }]),
+        popups: RefCell::new(Vec::new()),
+        captures: RefCell::new(Vec::new()),
+    };
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
+    assert_eq!(run.status, Status::NeedsReview);
+    assert_eq!(run.reason.as_deref(), Some("popup_pending:w1"));
+    assert!(host.calls.is_empty(), "no click before escalation");
+    std::fs::remove_dir_all(root).unwrap();
+
+    // 已分类面板(save)也不被 notice 认领——分类语义不被 notice 吞并
+    let p2 = plan_with_handlers(handlers, &write_call());
+    let (root2, store2, mut run2) = setup(&p2);
+    let mut host2 = PopupHost {
+        calls: Vec::new(),
+        read_only: |c| c.command != "write",
+        layers: RefCell::new(vec![FrontLayer {
+            clear: false,
+            surfaces: vec![surface("save", "扩展已禁用?是否保存")],
+        }]),
+        popups: RefCell::new(Vec::new()),
+        captures: RefCell::new(Vec::new()),
+    };
+    execute(&p2, &mut run2, &store2, &mut host2, None, None).unwrap();
+    assert_eq!(run2.status, Status::NeedsReview);
+    std::fs::remove_dir_all(root2).unwrap();
+}

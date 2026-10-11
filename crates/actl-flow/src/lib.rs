@@ -42,18 +42,20 @@ pub struct Plan {
     pub steps: Vec<Step>,
 }
 
-/// 单条弹层处理器:classification 必须显式(error/save/confirm/update——
-/// unknown 永远上抛);click 是作用于该应用窗口的选择器(如
-/// `uia:{"match":{"role":"Button","name":"不保存"}}`),处置走既有 click
-/// 护栏(前台守卫/预告/审计不变)。
+/// 单条弹层处理器:classification 必须显式(error/save/confirm/update/
+/// notice——未声明的 unknown 永远上抛);click 是作用于该应用窗口的选择器
+/// (如 `uia:{"match":{"role":"Button","name":"不保存"}}`),处置走既有
+/// click 护栏(前台守卫/预告/审计不变)。notice(2026-10-11 spec,最窄
+/// 形态):认领 naive 词表落 unknown 的 INFO 级流程自产表面(如 VS Code
+/// 「扩展已禁用」通知),name_contains **必填**(按名认领,禁止宽形态)。
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct PopupHandler {
     /// 目标应用锚(标题子串):仅当写步的 --app 包含此锚时生效。
     pub app: String,
-    /// 面板分类(error/save/confirm/update)。
+    /// 面板分类(error/save/confirm/update/notice;notice 匹配 unknown 表面)。
     pub classification: String,
-    /// 可选的面板名/文本包含词,进一步收窄匹配。
+    /// 面板名/文本包含词,收窄匹配;notice 分类必填,其余可选。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name_contains: Option<String>,
     /// 处置动作:click 选择器。

@@ -48,12 +48,23 @@ pub fn validate(plan: &Plan) -> Result<(), CtlError> {
         let field = format!("popup_handlers[{i}]");
         if !matches!(
             handler.classification.as_str(),
-            "error" | "save" | "confirm" | "update"
+            "error" | "save" | "confirm" | "update" | "notice"
         ) {
             return Err(error(
                 "",
                 &field,
-                "classification must be error/save/confirm/update; unknown popups always escalate",
+                "classification must be error/save/confirm/update/notice; unknown popups always escalate",
+            ));
+        }
+        // notice 最窄形态(2026-10-11 spec):INFO 级表面按名认领,
+        // name_contains 必填——禁止「任意 unknown 一律处置」的宽形态。
+        if handler.classification == "notice"
+            && handler.name_contains.as_deref().is_none_or(str::is_empty)
+        {
+            return Err(error(
+                "",
+                &field,
+                "notice handlers require a non-empty name_contains (narrow whitelist names the surface)",
             ));
         }
         if handler.app.is_empty() || handler.click.is_empty() {
