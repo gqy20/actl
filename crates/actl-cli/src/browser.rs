@@ -88,6 +88,37 @@ pub(crate) fn read_cmd(
     .map(Into::into)
 }
 
+/// clap 变体字段直转的薄适配层(参数即命令面,与 read_cmd 同豁免)
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn collect_cmd(
+    session: &str,
+    css: Option<&str>,
+    xpath: Option<&str>,
+    property: Option<&str>,
+    deep: bool,
+    interval_ms: Option<u64>,
+    max_rounds: Option<u64>,
+    max_items: Option<u64>,
+    timeout: Option<u64>,
+) -> Result<CommandOutput, CtlError> {
+    let (kind, value) = selector_of(css, xpath)?;
+    actl_browser::collect::collect(
+        &paths(),
+        actl_browser::collect::CollectSpec {
+            session_id: session,
+            kind,
+            value,
+            property,
+            deep,
+            interval_ms,
+            max_rounds,
+            max_items,
+            timeout_ms: timeout,
+        },
+    )
+    .map(Into::into)
+}
+
 pub(crate) fn type_cmd(
     session: &str,
     css: Option<&str>,

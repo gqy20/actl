@@ -13,12 +13,13 @@ use crate::session::{self, BrowserSession, Mode, Paths};
 use actl_core::state::unix_ms;
 use actl_core::{CtlError, ErrorCode};
 use serde_json::{Value, json};
+use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
 const LAUNCH_DEFAULT_TIMEOUT_MS: u64 = 15_000;
-const OP_DEFAULT_TIMEOUT_MS: u64 = 10_000;
+pub(crate) const OP_DEFAULT_TIMEOUT_MS: u64 = 10_000;
 const TEXT_LIMIT: usize = 65_536;
 
 pub struct LaunchSpec {
@@ -39,7 +40,10 @@ pub struct LaunchSpec {
 /// display_gate 不同——不经显示租约门(展示是透明性而非权限门,docs/72 §13 治理发现),
 /// InputEffects 全空(CDP 写无物理键鼠/焦点/剪贴板效应,如实申报);target 只带会话
 /// 标记,不含选择器/URL/文本(动作日志内容省略纪律)。
-fn declare_action(kind: &str, session_tag: &str) -> actl_core::signal_session::ActionGuard {
+pub(crate) fn declare_action(
+    kind: &str,
+    session_tag: &str,
+) -> actl_core::signal_session::ActionGuard {
     actl_core::signal_session::ActionGuard::begin(
         kind,
         actl_core::activity::InputEffects::default(),
@@ -50,7 +54,7 @@ fn declare_action(kind: &str, session_tag: &str) -> actl_core::signal_session::A
     )
 }
 
-fn protocol(message: impl Into<String>) -> CtlError {
+pub(crate) fn protocol(message: impl Into<String>) -> CtlError {
     CtlError::new(ErrorCode::Protocol, message)
 }
 
@@ -74,7 +78,7 @@ fn map_cdp(err: CdpError) -> CtlError {
     }
 }
 
-fn dur(timeout_ms: Option<u64>, default: u64) -> Duration {
+pub(crate) fn dur(timeout_ms: Option<u64>, default: u64) -> Duration {
     Duration::from_millis(timeout_ms.filter(|t| *t > 0).unwrap_or(default))
 }
 
@@ -92,7 +96,7 @@ fn validate_url(url: &str) -> Result<(), CtlError> {
     }
 }
 
-fn validate_selector(kind: SelectorKind, value: &str) -> Result<(), CtlError> {
+pub(crate) fn validate_selector(kind: SelectorKind, value: &str) -> Result<(), CtlError> {
     if value.is_empty() || value.len() > 4096 {
         return Err(protocol(format!(
             "{} selector requires 1-4096 characters",
@@ -129,7 +133,7 @@ fn validate_proxy(value: &str) -> Result<(), CtlError> {
 pub(crate) const READ_PROPERTIES: &[&str] =
     &["text", "value", "href", "name", "id", "checked", "tag"];
 
-fn validate_property(property: &str) -> Result<(), CtlError> {
+pub(crate) fn validate_property(property: &str) -> Result<(), CtlError> {
     if READ_PROPERTIES.contains(&property) {
         Ok(())
     } else {
@@ -141,7 +145,7 @@ fn validate_property(property: &str) -> Result<(), CtlError> {
 }
 
 /// Runtime.evaluate;脚本约定返回 JSON 字符串(内部脚本,非用户表达式)。
-fn eval_json(
+pub(crate) fn eval_json(
     conn: &Connection,
     cdp_session: &str,
     script: &str,
@@ -174,7 +178,7 @@ fn eval_json(
         .map_err(|_| CtlError::internal("page script returned non-JSON payload"))
 }
 
-fn connect_browser(session: &BrowserSession) -> Result<Connection, CtlError> {
+pub(crate) fn connect_browser(session: &BrowserSession) -> Result<Connection, CtlError> {
     let url = format!(
         "ws://127.0.0.1:{}{}",
         session.devtools_port, session.browser_ws_path
@@ -182,7 +186,7 @@ fn connect_browser(session: &BrowserSession) -> Result<Connection, CtlError> {
     Connection::connect(&url).map_err(map_cdp)
 }
 
-fn attach_target(
+pub(crate) fn attach_target(
     conn: &Connection,
     target_id: &str,
     timeout: Duration,
@@ -202,7 +206,7 @@ fn attach_target(
 }
 
 /// 绑定重核:target 必须仍存在(导航竞态防护的第一道闸,docs/72 §6)。
-fn verify_target_alive(
+pub(crate) fn verify_target_alive(
     conn: &Connection,
     target_id: &str,
     timeout: Duration,
@@ -301,7 +305,7 @@ fn require_unique_match(located: &Value, kind: SelectorKind, value: &str) -> Res
     }
 }
 
-fn truncate_text(text: &str) -> (String, bool) {
+pub(crate) fn truncate_text(text: &str) -> (String, bool) {
     if text.len() <= TEXT_LIMIT {
         return (text.to_string(), false);
     }
@@ -1425,5 +1429,3 @@ fn finish_close(paths: &Paths, record: &BrowserSession) -> Result<Value, CtlErro
         "browser_pid": record.pid,
     }))
 }
-
-use std::net::TcpStream;

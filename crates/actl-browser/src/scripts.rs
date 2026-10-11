@@ -148,3 +148,19 @@ pub(crate) fn popup_scan_script(selector: &str) -> String {
          }})()"
     )
 }
+
+/// 页级滚动脚本(browser-collect,2026-10-12 spec):滚动一屏(约 0.9 视口高,
+/// 与 UIA collect 的页级滚动同语义)并返回滚动事实。**at_bottom 只是事实
+/// 上报,不是完成判据**——懒加载页的 scrollHeight 会随后续加载增长,触底
+/// 信号会说谎(UIA collect 滚动位置信号否证的同款教训);完成权威只有
+/// Rust 侧的空连两轮差分收敛。
+pub(crate) fn scroll_page_script() -> String {
+    "(function(){\
+     var h=Math.max(document.documentElement.clientHeight,window.innerHeight||0);\
+     window.scrollBy(0,Math.floor(h*0.9));\
+     return JSON.stringify({\
+     scrollY:Math.round(window.scrollY||0),\
+     innerHeight:Math.round(h),\
+     scrollHeight:Math.round(document.documentElement.scrollHeight||0)});})()"
+        .into()
+}

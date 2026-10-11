@@ -799,6 +799,27 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             *timeout,
         ),
         Command::Batch { json } => batch_cmd(json),
+        Command::BrowserCollect {
+            session,
+            css,
+            xpath,
+            property,
+            deep,
+            interval_ms,
+            max_rounds,
+            max_items,
+            timeout,
+        } => browser::collect_cmd(
+            session,
+            css.as_deref(),
+            xpath.as_deref(),
+            property.as_deref(),
+            *deep,
+            *interval_ms,
+            *max_rounds,
+            *max_items,
+            *timeout,
+        ),
     }
 }
 

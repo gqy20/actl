@@ -357,8 +357,24 @@ browser-verify [--newest-alive | --none | --session <id> --alive|--gone | --sess
                                      # 本谓词是那个空档的检测原语);选择器真语法错误
                                      # PROTOCOL(浏览器 tokenizer 对未闭合 [ 按 EOF 闭合
                                      # 是如实语义)
+browser-collect --session <id> (--css S | --xpath X) [--property P] [--deep]
+                [--interval-ms N] [--max-rounds N] [--max-items N] [--timeout ms]
+                                     # 懒加载列表全量收集(浏览器轨对齐 UIA collect
+                                     # 语义):读全部匹配(复用 --all/--deep 枚举)→
+                                     # 指纹差分去重累积→页滚一屏(CDP 写,声明动作卡
+                                     # kind browser-collect)→沉降(--interval-ms 默认
+                                     # 500,100..=5000)→再读;**收敛=空连两轮零新增**
+                                     # (converged_by:"empty-streak")——触底信号不作
+                                     # 完成判据(懒加载页 scrollHeight 会增长,UIA collect
+                                     # 位置信号否证同款教训);预算 --max-rounds(默认
+                                     # 100,上限 200)/--max-items(默认 2000,上限
+                                     # 5000),触顶 complete:false + truncation_reason
+                                     # (max_items/max_rounds/scroll_failed——滚动
+                                     # evaluate 失败=软截断);读失败原样上抛(导航离开
+                                     # 是调用方现场);items 逐条 64KiB 截断同 read,
+                                     # new_items_per_round 逐轮留痕
 ```
-**显示层协同**:browser 的写与生命周期命令(launch/navigate/click/type/close)在信号流声明动作卡(kind/effects/target)——**不经显示租约门**(CDP 写非桌面物理输入,展示是透明性而非权限门;急停仍经停止代次核验压过一切写);`InputEffects` 全空如实申报;target 只带 `cdp:<session>` 标记,不含选择器/URL/文本(动作日志内容省略纪律)。观察命令(read/list/verify)不声明动作,与 UIA 轨观察同规。
+**显示层协同**:browser 的写与生命周期命令(launch/navigate/click/type/collect/close)在信号流声明动作卡(kind/effects/target)——**不经显示租约门**(CDP 写非桌面物理输入,展示是透明性而非权限门;急停仍经停止代次核验压过一切写);`InputEffects` 全空如实申报;target 只带 `cdp:<session>` 标记,不含选择器/URL/文本(动作日志内容省略纪律)。观察命令(read/list/verify)不声明动作,与 UIA 轨观察同规。
 **YAML 流程接入**:browser 命令进 flow 的治理模型走三件套——① `browser-launch` 是生命周期命令,不能带 outputs(outputs 只允许只读生产者);② 会话句柄经 `browser-list` 以观察者身份产出(outputs.pointer=/sessions/0/session_id),后续步骤 `bind` 注入 `--session` 值位(下标须指向值字面量,不能指到旗标上);③ 有副作用的步骤必须带 verify——`browser-verify` 族即为此而生(launch→--newest-alive,click→--session X --alive,close→--none)。
 **持久 profile 治理**:flow 中 `browser-launch --profile <name>` 必须在
 `resources.browser_profiles` 声明(未声明即 PROTOCOL 拒绝)——凭据资产显式归属;该资源创建幂等、永不随任务删除。**登录暂停点**:`pause_before: true` + `resume_check: browser-verify --session X --css <登录标记>`(用户在可见窗口完成登录后恢复;谓词不满足则保持 paused,`reason: resume_check_failed`)。示例流程 `skills/actl/workflows/browser-login-session.yml`。

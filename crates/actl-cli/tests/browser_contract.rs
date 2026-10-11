@@ -416,3 +416,42 @@ fn wait_for_flag_documents_settle_predicate() {
     assert!(stdout.contains("N matches"), "{stdout}");
     assert!(stdout.contains("settle"), "{stdout}");
 }
+
+#[test]
+fn browser_collect_arg_surface_contract() {
+    // browser-collect(2026-10-12 spec):help 四要素 + 离线参数面——
+    // 预算越界 PROTOCOL/未知会话 NOT_FOUND/选择器互斥 clap 拒绝。
+    let (code, text) = actl(&["browser-collect", "--help"]);
+    assert_eq!(code, 0);
+    for element in ["Usage", "Example", "Errors", "empty-streak", "--max-items"] {
+        assert!(text.contains(element), "help missing {element}");
+    }
+    let (code, text) = actl(&["browser-collect", "--session", "nope", "--css", ".x"]);
+    assert_eq!(code, 1);
+    let v: Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(v["error"]["code"], "NOT_FOUND");
+    let (code, text) = actl(&[
+        "browser-collect",
+        "--session",
+        "s",
+        "--css",
+        ".x",
+        "--interval-ms",
+        "50",
+    ]);
+    assert_eq!(code, 2, "protocol family exits 2");
+    let v: Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(v["error"]["code"], "PROTOCOL");
+    let (code, _) = actl(&[
+        "browser-collect",
+        "--session",
+        "s",
+        "--css",
+        ".x",
+        "--xpath",
+        "//x",
+    ]);
+    assert_eq!(code, 2, "mutually exclusive selectors rejected by clap");
+    let (code, _) = actl(&["browser-collect", "--session", "s"]);
+    assert_eq!(code, 2, "missing selector rejected by clap");
+}

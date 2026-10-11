@@ -8,6 +8,7 @@
 //!   否则启动即失败(docs/72 §11 不变量:自启实例必须总能经 CDP 优雅关闭)。
 
 pub mod cdp;
+pub mod collect;
 pub mod ops;
 mod scripts;
 pub mod session;

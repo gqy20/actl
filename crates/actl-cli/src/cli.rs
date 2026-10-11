@@ -899,6 +899,36 @@ pub(crate) enum Command {
         #[arg(long)]
         timeout: Option<u64>,
     },
+    /// Scroll-collect ALL items of a lazy-loading list into one set (empty-streak convergence)
+    BrowserCollect {
+        /// Session id from browser-launch
+        #[arg(long)]
+        session: String,
+        /// CSS selector (mutually exclusive with --xpath)
+        #[arg(long, conflicts_with = "c_x")]
+        css: Option<String>,
+        /// XPath expression (mutually exclusive with --css)
+        #[arg(long, id = "c_x", conflicts_with = "css")]
+        xpath: Option<String>,
+        /// Whitelisted property per item instead of text (value | href | ...)
+        #[arg(long)]
+        property: Option<String>,
+        /// Pierce OPEN shadow roots on every read round (Web Components lists)
+        #[arg(long)]
+        deep: bool,
+        /// Settle interval after each page scroll (100..=5000 ms, default 500)
+        #[arg(long)]
+        interval_ms: Option<u64>,
+        /// Round budget (1..=200, default 100); hitting it reports truncation
+        #[arg(long)]
+        max_rounds: Option<u64>,
+        /// Item budget (1..=5000, default 2000); hitting it reports truncation
+        #[arg(long)]
+        max_items: Option<u64>,
+        /// Timeout per operation in milliseconds (default 10000)
+        #[arg(long)]
+        timeout: Option<u64>,
+    },
     /// Type text into a unique input/textarea — guarded write with value read-back
     BrowserType {
         /// Session id from browser-launch
@@ -1188,6 +1218,7 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
         Command::BrowserLaunch { .. } => "browser-launch",
         Command::BrowserNavigate { .. } => "browser-navigate",
         Command::BrowserRead { .. } => "browser-read",
+        Command::BrowserCollect { .. } => "browser-collect",
         Command::BrowserType { .. } => "browser-type",
         Command::BrowserClick { .. } => "browser-click",
         Command::BrowserClose { .. } => "browser-close",

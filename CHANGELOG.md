@@ -9,6 +9,8 @@
 
 ### Added
 
+- **`browser-collect` 懒加载列表全量收集（spec，[06 §3.4 浏览器组](docs/06-design-blueprint.md)——浏览器轨对齐 UIA collect 语义；B 站评论/搜索结果流场景的原语补面）**：读全部匹配（复用 --all 枚举+可选 --deep shadow 穿透）→ 指纹差分去重累积 → 页滚一屏（CDP 写,声明动作卡 kind browser-collect,显示层协同同 navigate）→ 沉降（--interval-ms 默认 500）→ 再读,循环至**空连两轮零新增**收敛（`converged_by:"empty-streak"`,与 UIA collect 同判据；**触底信号不作完成判据**——懒加载页 scrollHeight 会增长,UIA 侧位置信号否证的同款教训）。预算 --max-rounds（默认 100 上限 200）/--max-items（默认 2000 上限 5000）,触顶 `complete:false + truncation_reason`（max_items/max_rounds/scroll_failed 软截断）;读失败原样上抛（导航离开是调用方现场）;items 逐条 64KiB 截断同 read,`new_items_per_round` 逐轮留痕。测试：digest 稳定性/预算校验单测 + 契约（help 四要素/PROTOCOL 预算/NOT_FOUND 未知会话/clap 互斥）+ **headless 真机全链**（懒加载 fixture 页 180 条滚动追加：180/180 全收 complete=true 首尾完整有序/max-items 50 诚实截断/读后核验 180/优雅关闭）。
+
 - **`cargo xtask install`——本机安装链接布局（devtools 工具）**：把发布布局（exe×3+README/LICENSE+skills/）装进 `~/.local/share/actl/<label>/`,建立免管理员链接全套——`current` junction（升级只重指）+ `~/.local/bin` 三个 exe 硬链接 + `bin/skills` junction（pack 注入 exe 旁回退的落点）+ `~/.agents/skills/actl` junction（agent 知识面）。源支持 `--zip <发布 zip>` 或 `--release`（仓库 target/release+仓库文件本地组装）。安全约束：只替换经 reparse 校验的 junction 与既有硬链接文件,**拒绝删除任何真实目录**（如用户自建的 ~/.agents/skills/actl 会明确报错让人工处理）;版本目录就位后建链接,不留半链接状态。测试：roundtrip（安装/链接可读/版本切换 current 重指/真实目录拒绝）×2。手段说明：文件符号链接需管理员（实测拒绝）,junction 与同卷硬链接免特权。
 
 ### Fixed
