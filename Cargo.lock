@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "actl-browser"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "actl-core",
  "actl-uia",
@@ -15,7 +15,7 @@ dependencies = [
 
 [[package]]
 name = "actl-cli"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "actl-browser",
  "actl-core",
@@ -27,7 +27,7 @@ dependencies = [
 
 [[package]]
 name = "actl-core"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -36,7 +36,7 @@ dependencies = [
 
 [[package]]
 name = "actl-devtools"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "actl-core",
  "actl-flow",
@@ -47,7 +47,7 @@ dependencies = [
 
 [[package]]
 name = "actl-flow"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "actl-core",
  "serde",
@@ -57,7 +57,7 @@ dependencies = [
 
 [[package]]
 name = "actl-mcp"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "axum",
  "clap",
@@ -72,11 +72,11 @@ dependencies = [
 
 [[package]]
 name = "actl-physical"
-version = "0.2.1"
+version = "0.2.2"
 
 [[package]]
 name = "actl-uia"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "actl-core",
  "serde",
@@ -2054,7 +2054,7 @@ checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
 
 [[package]]
 name = "xtask"
-version = "0.2.1"
+version = "0.2.2"
 
 [[package]]
 name = "yoke"
