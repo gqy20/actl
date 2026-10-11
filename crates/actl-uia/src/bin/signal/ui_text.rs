@@ -273,8 +273,18 @@ pub fn feedback(message: &str, status: Option<&str>) -> String {
         "正在请求暂停" | "已请求暂停，等待当前操作结束" => {
             "正在暂停，等待当前操作结束。".into()
         }
+        // 执行器错误形态"CODE：message":英文正文折叠为中文泛化句(英文屏蔽,
+        // 错误码进详情层);含中文的原文直通(如"INTERNAL：操作线程已退出"
+        // 本就是给用户看的话,折叠反而丢信息)。
         _ if message.contains('：') || message.contains('\n') => {
-            "操作未完成，请展开技术详情。".into()
+            if message
+                .chars()
+                .any(|c| ('\u{4E00}'..='\u{9FFF}').contains(&c))
+            {
+                message.into()
+            } else {
+                "操作未完成，请展开技术详情。".into()
+            }
         }
         _ => message.into(),
     }
@@ -338,6 +348,18 @@ mod tests {
         assert!(!feedback("正在继续流程", Some("paused")).is_empty());
         assert_eq!(feedback("已请求暂停，等待当前操作结束", Some("paused")), "");
         assert!(!feedback("INTERNAL：example", Some("paused")).is_empty());
+    }
+    #[test]
+    fn feedback_folds_english_but_passes_chinese_through() {
+        // 英文 envelope 正文折叠(英文屏蔽);中文原文直通不折叠。
+        assert_eq!(
+            feedback("ABORTED：stop requested", Some("paused")),
+            "操作未完成，请展开技术详情。"
+        );
+        assert_eq!(
+            feedback("INTERNAL：操作线程已退出", Some("paused")),
+            "INTERNAL：操作线程已退出"
+        );
     }
     #[test]
     fn compound_reasons_get_actionable_text_not_generic_fallback() {

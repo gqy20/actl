@@ -1,8 +1,7 @@
 # 43 · 首条业务流程:release-review-draft 交付与验证
 
-日期：2026-09-28。流程文件 [skills/actl/workflows/release-review-draft.yml](../skills/actl/workflows/release-review-draft.yml)，
-索引登记见 [流程索引](../skills/actl/workflows/README.md)。本记录只记已验证的事实；
-写段联测未执行前不宣称业务闭环。
+日期：2026-09-28 · 写段联测 2026-10-11 通过。流程文件 [skills/actl/workflows/release-review-draft.yml](../skills/actl/workflows/release-review-draft.yml)，
+索引登记见 [流程索引](../skills/actl/workflows/README.md)。本记录只记已验证的事实。
 
 ## 1. 业务目标与选型
 
@@ -47,20 +46,19 @@
 r1 运行保持 paused 于检查点(30 分钟时效届满后该 run 无法继续,属既定语义,
 重开新 run 即可);r2 为丢弃用本地副本,不入库。
 
-## 4. 写段联测(待执行,需用户在场)
+## 4. 写段联测（2026-10-11 通过——release-review-10/11 两轮真机）
 
-前置:显示端就绪、Chrome 发布页为当前标签、本机无其他 Word 窗口。用户在 actl
-卡片点一次"开始"后 flow-resume,预期一次跑完并核对:
+读段四步两轮全绿（v3 headless 轨）。写段经三轮结构修复后收口，最终形态 **release-review-11 全链 11 步零重试零阵亡 completed**，产物文件级核验通过（document.xml 含"发布核对记录："与 "v0.1.0" 两行）。
 
-- Word 新文档正文两行:"发布核对记录:" + 实测页面标题;
-- 另存为页文件名框唯一定位(role:Edit 是否唯一须现场核对,否则收紧为组合选择器);
-- 文件名框回车触发保存(若语义不符,改为点击 name:保存 按钮并处理潜在 AMBIGUOUS);
-- Word 窗口标题变为 actl-release-draft - Word;默认文档目录出现同名文件;
-- verify_draft 业务核验通过,流程 completed。
+写段实测发现与修复链（全部入册 word pack quirks 与模板 v4-v5）：
 
-联测同时演练:写步骤中途强杀 → resume 走 verify-first / needs_review 路径
-(已有引擎测试覆盖,真机路径此前未在业务流上走过)。联测结论回填本文件并同步
-word pack(另存为路线)。此前不将本流程记为业务验收通过。
+1. **开始屏幕压过 /n**（09 轮实证）：本机 Word「启动时显示开始屏幕」优先于命令行 /n——裸 `WINWORD /n` 停在开始屏幕（深色主题下界面深灰，UIA 无 Document），写步必然 NOT_FOUND。修复：resources 复制 seed.docx，launch /n **带文件参数**结构性绕过；open_word verify 收紧为 `wait --element role:Document` 物化门（该门在 10 轮真实拦下一次 20s 超时——兼容模式冷启的瞬态观察失败窗口）。
+2. **owned 对话框前台守卫死路**（10 轮实证）：F12 的另存为是独立标题的 32770 顶层窗，type/press 以步骤锚窗为 expected、对话框为 actual，永不匹配。修复：另存为链锚定**对话框自身标题**（`--app 另存为`），门禁补 `app:另存为` 的 popup_ignores 认领；文件名框用 uia 严格复合选择器（role:Edit 单独 23 个、name:文件名 跨 role 3 个，均 AMBIGUOUS）。
+3. **另存为默认目录**跟随被打开文档（即任务资源目录 `${run.dir}`），非 Word 默认文档目录——模板注释按实修正；ctrl+s 对已带路径文档是原地保存，另存为改 F12。
+
+产物：`${run.dir}/actl-release-draft.docx`（约 12KB，同名覆盖=当前核对状态）。10 轮另验证了 flow-revise 链（三次修订 lineage 留痕）与 re-verify 恢复路径（uncertain 步沉降后 plain resume 通过）；11 轮在前台快拒绝修复后零人工干预跑完（10 轮的两次 runner 看门狗击杀根因=Word 后台懒激活慢墙，收口记录见 CHANGELOG"前台快拒绝"条）。
+
+原始预检清单（09 前预期，供对照）：两行正文写入/文件名框唯一定位/回车保存/标题变更/verify_draft 通过——全部按预期成立，唯文件名框选择器形态与保存目录两点与预判不同（已按实修正）。
 
 ## 5. 限制与已知风险
 

@@ -15,7 +15,7 @@
 ### 高优先（用户标记）
 
 - [ ] **探索模式（用户标记关键）**：S1–S3、L2 原语与先验飞轮已全部真机通过（[77](77-exploration-s2-acceptance.md)；观察锚点弹窗转移/type --paste 通道/L0 命中重放 skill 流程化三项已落地收口）。待办：①RuntimeBroker pid 放宽——**已收口**（判据落地+复现轮跑毕：Store 记事本另存为=同 pid #32770 非跨进程,RuntimeBroker 猜想该场景不成立（否定性数据入档 [77](77-exploration-s2-acceptance.md)）；owner 归属判据无害在位,跨进程 picker 形态待其他场景——**降为观察项**）；②路线积累（§7 目标 5 条已 **4** 条——#3 记事本中文已复核迁移 verified（2026-10-11 用户授权,[77](77-exploration-s2-acceptance.md)）;#4 资源管理器**三步闭环完成**（后退导航:探索 goal_met actions=1 一发命中→回写→重放 verified attempts=1,材料待用户复核迁 verified=第 5 条;地址栏双歧义+goal 子串坑两发现入档 [77](77-exploration-s2-acceptance.md)）;#5 计算器=引擎形态边界实证（两改进候选,不计 verified 数））；③UCB 统计剪枝（待 quirks 样本量）
-- [ ] release-review-draft 写段联测（**CDP 轨改造完成**（读段全绿:[43 §6](43-release-review-draft.md)——公开仓库 headless 零依赖用户浏览器,--wait-for 沉降谓词落地）;剩 Word 写段在正常速度日跑——慢 provider 日受阻如实（物化拒答+慢扫,docs/81 同族）,模板已全修正（/n、无 resume_check、沉降谓词））
+- [x] release-review-draft 写段联测（**2026-10-11 通过**：release-review-11 全链 11 步零重试零阵亡,产物文件级核验通过;三轮结构修复（开始屏幕绕过/owned 对话框锚定/前台快拒绝）与实证记录见 [43 §4](43-release-review-draft.md),quirks 同步 word pack。CDP 轨改造与读段全绿见 [43 §6](43-release-review-draft.md)）
 
 ### 流程与集成
 
@@ -46,7 +46,7 @@
 - [ ] **browser-collect 滚动收集原语（2026-10-11 候选登记，实施前 spec）**：UIA 侧 `collect` 已落地（虚拟化列表差分去重收敛），浏览器长列表（评论区/搜索结果流）无对等动词——当前组合 scroll+browser-read --all 逐轮手动判定收敛，无差分去重与空连两轮收敛权威。形态候选：CDP 滚动注入+DOM 快照差分（复用 collect 状态机语义：复位→页滚→沉降→新鲜读→差分→空连两轮收敛），与已落地的 --deep 穿透组合覆盖 B 站评论全量收集场景
 - [ ] **浏览器页内弹层引擎门禁（2026-10-11 缺口登记，候选——真实阻塞事故出现再升级）**：原生弹层门禁结构性不覆盖页内 DOM 弹层（门禁只作用带 `--app` 锚写步；front-report 只收 role:Window 表面）。**v1 检测原语已落地**：`browser-verify --no-popups [--popup-selector]`（可见弹层枚举断言，ASSERTION_FAILED→condition false，when/unless 组合 browser-click 处置分支即弹层守卫；headless fixture 六假设实证，见 CHANGELOG）。候选余量=引擎级自动门禁（browser 写步前自动检测+声明式处置，与 popup_handlers 对称）——待第一起「页内弹层阻塞 flow」事故再立项，不为猜测建基建
 - [ ] **浏览器 CDP 工程余量（[72 §13](72-browser-cdp-integration.md) 聚合）**：`--remote-debugging-pipe` 实现形态 spike（当前 port+127.0.0.1，pipe 消除端口暴露面）；写入 uncertain 跨进程持久化（对齐 [47](47-execution-recovery.md) 恢复语义）；UIA 轨路线固化（browser.yml 10 条中 3 verified/5 manual/2 unverified——随应用轮渐进，pack 治理日常非协议项）
-- [ ] **flow 工具链缺口聚合（2026-10-11 VS Code 轮实证登记，实施前 spec）**：① ~~flow-revise 不解析 input 引用~~ **已收口**（2026-10-11 同日：--file 收完整模板形态——resources 剥离+input 解析+pack 注入,vscode-edit.yml 模板原文件直接 revise 实证）。② **popup_handlers.app 是静态子串**——模板 app 锚=`${run.id}`（每轮不同）时无法静态声明 handler（VS Code notice handler 探针靠 run id 前缀约定绕过）；正解=handler 支持输入引用（spec 候选）。③ **companion lease 窗口 vs 慢日步长失配**——慢 UIA 日（每步 2-5.5s）单次 resume 累计时长超 lease → companion_unresponsive fail-closed 瞬断（一轮 4 次，均自恢复；恢复路径稳定=幂等核验+--retry-step）；lease 窗口自适应或慢日容忍度待专项。。附带：word-note-typography 已挂 popup_ignores（导航）声明（降噪第二轮）——该模板最近全链验证（012 轮）在词表时代，声明路径的重验随下次 Word 轮顺带（不专跑）
+- [ ] **flow 工具链缺口聚合（2026-10-11 VS Code 轮实证登记，实施前 spec）**：① ~~flow-revise 不解析 input 引用~~ **已收口**（2026-10-11 同日：--file 收完整模板形态——resources 剥离+input 解析+pack 注入,vscode-edit.yml 模板原文件直接 revise 实证）。② ~~popup_handlers.app 是静态子串~~ **已收口**（2026-10-11：handlers/ignores 的 `app` 支持 `{input: name}` 引用——load_plan 输入解析期展开,run/validate/revise 三路同口径,引擎匹配语义不变,单测×2,docs/06 运行时治理③④同步）。③ **companion lease 窗口 vs 慢日步长失配**——慢 UIA 日（每步 2-5.5s）单次 resume 累计时长超 lease → companion_unresponsive fail-closed 瞬断（一轮 4 次，均自恢复；恢复路径稳定=幂等核验+--retry-step）；lease 窗口自适应或慢日容忍度待专项。附带：word-note-typography 已挂 popup_ignores（导航）声明（降噪第二轮）——该模板最近全链验证（012 轮）在词表时代，声明路径的重验随下次 Word 轮顺带（不专跑）
 - [ ] Zotero 导入导出（2026-10-11 轮让行未跑——用户桌面活跃，GUI 启动让行）
 - [ ] preview-choice computer-use 真机鼠标点击验收（[46](46-target-preview.md)：两轮 "window is not a usable app window" 失败如实保留）
 
@@ -61,6 +61,9 @@
 
 
 ## 长期观察项
+
+- [ ] **观察步后台慢墙（条件触发项,2026-10-11 登记/release-review-11 根因链副产物）**：wait/verify 等观察命令在后台锚窗的慢 provider 上单次定位 14-22s——前台快拒绝只覆盖输入命令与门禁捕获,读步不激活窗口是设计承诺（docs/06 §7.5.2/§7.7⑦）。触发条件=真机流程反复被观察步慢墙拖垮（超时风暴/分钟级停滞）。候选方案：wait_element 在锚窗非前台时先做原生窗口存在性+轻量探针预筛（不进树）,或 wait 增加锚窗前台前置可选项。不预置。
+- [ ] **门禁前台 Electron 慢窗暴露面（条件触发项,2026-10-11 登记）**：release-review-11 首次 runner 死亡走的是前台 ZCode（Electron）树的门禁捕获——前台快拒绝只盖"锚窗在后台"场景,锚窗前台但门禁顺路遍历到**别的前台 Electron 窗**仍可撞 UIA 看门狗。触发条件=第二次同签名死亡。候选方案：门禁捕获限定 app 锚窗口树（不遍历前台窗）或对非锚窗捕获加节点预算。
 
 - [ ] Word 新文档物化拒答边界（2026-10-11 release-review-08 实证）：五层修复治的是兼容模式文档（012 场景），**全新空白文档**上 MSAA 桥仍报 Malformed Cacheresponse→自动回落逐节点（不挂但慢，14.8s 慢扫）——回落兜底是设计的，根因（cache-only 元素边界）诊断轮待正常速度日
 

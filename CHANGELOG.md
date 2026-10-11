@@ -8,6 +8,7 @@
 ## [Unreleased]
 
 ### Fixed
+- **信号条文案打磨第二批（fix，[06 §7.5.5](docs/06-design-blueprint.md)——文案审计轮的次要项收口）**：feedback 英文屏蔽放宽为**中文直通**——"CODE：中文"形态（如"INTERNAL：操作线程已退出"）本就是给用户看的话,此前折叠成泛化句丢信息;仍折叠纯英文正文（英文屏蔽语义不变,测试 folding_english_but_passes_chinese_through）。status_name 的 "ready"→"待开始" 死映射清理（run 状态机无 ready,那是 execution-status 的态）。配套 docs/06 §7.7⑦ 观察步后台慢边界声明、ROADMAP 两个条件触发项登记（观察步后台慢墙/门禁前台 Electron 慢窗暴露面）、写段联测勾销与 [43 §4](docs/43-release-review-draft.md) 真机结果回填。
 - **信号条文案与状态一致性修复（fix，[06 §7.5.5](docs/06-design-blueprint.md)——reason 覆盖缺口与术语混用的收口；信号条文案审计轮落地）**：① reason 映射补 8 个枚举/前缀族——popup_pending:\<step\>/ambiguous_target:\<step\>/budget_exhausted:\<子类\>/decision_pending/output_freshness_failed/observation_failed/goal_check_failed/no_candidates 此前全落"需要处理"泛化兜底,其中 popup_pending 在横条显示"待核对结果·可操作"属语义错配(release-review-10 两次实证:正确动作是处理弹窗不是核对结果);model 横条给 popup_pending/ambiguous_target/decision_pending 专属短文案。② 术语分词:核验=机器(verifying→核验中,恢复核验未通过)/核对=人(needs_review→待核对),"正在检查"→"正在核验"。③ 停止族三处话术统一为标准句"旧调用不会自动恢复；可核对后继续此任务，或发起新任务";run 级 stopped→"流程已停止"与执行级"急停已启用"文案区分。④ 引擎 reason 值收敛为纯枚举:删除"result_unconfirmed; inspect before authorizing --retry-step"分号拼句形态(revise.rs 测试本就用短枚举,显示层全串匹配随之消除)。docs/06 新增 §7.5.5 信号条文案规范(分词/后缀约定/前缀族/停止族标准句/reason 纯枚举/继续按钮三元规则/英文屏蔽);新增 reason 必须同步 ui_text::reason 映射入交付清单。测试:compound_reasons/stop_family +2,恢复措辞断言同步。
 - **前台快拒绝（fix，[06 运行时治理](docs/06-design-blueprint.md)——后台懒激活慢墙根因收口，release-review-11 两轮 runner 看门狗击杀实证）**：Word 类 provider 在锚窗非前台时懒激活节流——同命令实测前台 ~2s/后台 14-22.6s，type/press 的昂贵全树 locate 跑在守卫之前，单次 COM 调用撞 20s UIA 看门狗即击杀进程、flow 滞留 running。两处收口：① type/press 在 locate 前经廉价原生枚举核对锚窗前台态——非前台先两级激活（原生 SetForegroundWindow[最小化先还原]→锚窗单元素 UIA SetFocus[单次 COM 调用不做树遍历]），仍非前台 NOT_ACTIONABLE 让行（守卫语义同既有 set_focus+settle，拒绝点提前；OS 拒绝恰说明用户在别处活跃）；锚窗不存在不抢答；click 不设此门（语义 Invoke 后台窗合法）。② front-report 锚窗非前台时走原生快门：in_tree 置空+`in_tree_skipped` 原因、owned 原生层照报（树内面板用户不可见不构成前台引导语义，全量 walk 却要付慢墙代价）。真机实证：ChatGPT 持前台时 front-report 20s+→1.2s、press 经 SetFocus 激活路径送达（9.4s 含激活，零阵亡）；release-review-11 修复后写段零重试全绿。测试：foreground_gate 纯逻辑 4（锚匹配可见性/hwnd 精确/沉降判定/前台标题）。
 
@@ -15,6 +16,8 @@
 - **step 失败证据保留错误原文（[68 待办](docs/68-combined-batch-first-round.md) 收口）**：`failure_evidence` 的 metadata 分支统一附带有界 `message`（200 字符截断）——修复前只有**无** evidence 的 synthetic 兜底带原文，**带** evidence 的失败（如 verify-file NOT_ACTIONABLE 的共享冲突详情）反而只剩 code 丢原文，恢复路径必须重放才能看到原因。message 是错误契约自身字段（envelope 已公开），不属于载荷 redaction 保护面。golden×4 同步（evidence_metadata_v1/observation_metadata/observation_query_metadata/semantic_rejection_v1）+ docs/68 待办勾销 + 新增回归用例（原文随真实证据共存/超长截断）。
 
 ### Added
+
+- **popup 声明锚输入引用（spec 增补，[06 运行时治理③④](docs/06-design-blueprint.md)——flow 工具链缺口②收口）**：`popup_handlers[].app` 与 `popup_ignores[].app` 支持 `{input: name}`——模板锚为运行输入（如 `${run.id}` 前缀形态）时可静态声明 handler/ignore,不再靠 run id 前缀约定绕过（VS Code notice handler 探针实证的缺口）。在 load_plan 输入解析期展开为具体字符串,flow-run/validate/revise 三路同口径;引擎 `app.contains` 匹配语义不变;字面锚原样保留,未声明引用 PROTOCOL。测试：锚引用解析/未声明拒绝 ×2。
 
 - **flow-revise 收完整模板形态（spec 增补，[06 运行时治理④](docs/06-design-blueprint.md)——工具链缺口①收口,模板迭代不再全程重跑）**：--file 直接吃 workflow 模板——resources 块经 prepare 剥离（幂等,不建新 run）、{"input":...} 引用经 declared defaults 或新增 --inputs 值文件解析、pack 级 popup_ignores 注入与 load_plan 同口径（否则修订计划与冻结计划 diff 误报 ignores 变化）。此前直接 schema parse,引用/资源形态必报 PROTOCOL——VS Code 轮被迫 emit-plan 具体化+带外 plan.json 手术（v2 报废事故）的根源。真机实证：vscode-edit.yml 模板原文件直接 revise 成功（diff 正常,find-replace 重置 pending）。配套：Word 新文档物化拒答边界入长期观察项（release-review-08 实证,五层修复只治兼容模式文档）。
 
@@ -86,7 +89,6 @@
 
 ### Added
 
-- **flow-revise 收完整模板形态（spec 增补，[06 运行时治理④](docs/06-design-blueprint.md)——工具链缺口①收口,模板迭代不再全程重跑）**：--file 直接吃 workflow 模板——resources 块经 prepare 剥离（幂等,不建新 run）、{"input":...} 引用经 declared defaults 或新增 --inputs 值文件解析、pack 级 popup_ignores 注入与 load_plan 同口径（否则修订计划与冻结计划 diff 误报 ignores 变化）。此前直接 schema parse,引用/资源形态必报 PROTOCOL——VS Code 轮被迫 emit-plan 具体化+带外 plan.json 手术（v2 报废事故）的根源。真机实证：vscode-edit.yml 模板原文件直接 revise 成功（diff 正常,find-replace 重置 pending）。配套：Word 新文档物化拒答边界入长期观察项（release-review-08 实证,五层修复只治兼容模式文档）。
 
 - **popup_ignores pack 级来源（spec，[06 运行时治理](docs/06-design-blueprint.md)——逐模板抄窗格清单不可扩展的收口,release-review-08 回归根治）**：apps/*.yml 顶层 popup_ignores: [{app, name_contains}]（与 plan 级同构,pack 列全锚形态——Word=Word/.docx 两种）,CLI load_plan 自动并入模板级声明（并集去重/幂等/stderr 留痕）;注入用行级状态机提取（pack 是松散人读文档,严格 YAML 解析对 quirks 冒号形态炸——word/cloudmusic 实证）;lint-packs ⑥ 号检查守门（非空 app+name_contains）。**四个模板的手写声明全部撤除（pack 单一来源）**——新 Word 模板零声明成本即得导航/搜索降噪。测试：extract 纯函数 2（引号对/空值跳过/块边界）+E2E 契约 1（emit-plan 断言注入条目,仓库根 cwd）。
 
@@ -131,7 +133,6 @@
 
 ### Added
 
-- **flow-revise 收完整模板形态（spec 增补，[06 运行时治理④](docs/06-design-blueprint.md)——工具链缺口①收口,模板迭代不再全程重跑）**：--file 直接吃 workflow 模板——resources 块经 prepare 剥离（幂等,不建新 run）、{"input":...} 引用经 declared defaults 或新增 --inputs 值文件解析、pack 级 popup_ignores 注入与 load_plan 同口径（否则修订计划与冻结计划 diff 误报 ignores 变化）。此前直接 schema parse,引用/资源形态必报 PROTOCOL——VS Code 轮被迫 emit-plan 具体化+带外 plan.json 手术（v2 报废事故）的根源。真机实证：vscode-edit.yml 模板原文件直接 revise 成功（diff 正常,find-replace 重置 pending）。配套：Word 新文档物化拒答边界入长期观察项（release-review-08 实证,五层修复只治兼容模式文档）。
 
 - **popup_ignores pack 级来源（spec，[06 运行时治理](docs/06-design-blueprint.md)——逐模板抄窗格清单不可扩展的收口,release-review-08 回归根治）**：apps/*.yml 顶层 popup_ignores: [{app, name_contains}]（与 plan 级同构,pack 列全锚形态——Word=Word/.docx 两种）,CLI load_plan 自动并入模板级声明（并集去重/幂等/stderr 留痕）;注入用行级状态机提取（pack 是松散人读文档,严格 YAML 解析对 quirks 冒号形态炸——word/cloudmusic 实证）;lint-packs ⑥ 号检查守门（非空 app+name_contains）。**四个模板的手写声明全部撤除（pack 单一来源）**——新 Word 模板零声明成本即得导航/搜索降噪。测试：extract 纯函数 2（引号对/空值跳过/块边界）+E2E 契约 1（emit-plan 断言注入条目,仓库根 cwd）。
 
@@ -174,7 +175,6 @@
 
 ### Added
 
-- **flow-revise 收完整模板形态（spec 增补，[06 运行时治理④](docs/06-design-blueprint.md)——工具链缺口①收口,模板迭代不再全程重跑）**：--file 直接吃 workflow 模板——resources 块经 prepare 剥离（幂等,不建新 run）、{"input":...} 引用经 declared defaults 或新增 --inputs 值文件解析、pack 级 popup_ignores 注入与 load_plan 同口径（否则修订计划与冻结计划 diff 误报 ignores 变化）。此前直接 schema parse,引用/资源形态必报 PROTOCOL——VS Code 轮被迫 emit-plan 具体化+带外 plan.json 手术（v2 报废事故）的根源。真机实证：vscode-edit.yml 模板原文件直接 revise 成功（diff 正常,find-replace 重置 pending）。配套：Word 新文档物化拒答边界入长期观察项（release-review-08 实证,五层修复只治兼容模式文档）。
 
 - **popup_ignores pack 级来源（spec，[06 运行时治理](docs/06-design-blueprint.md)——逐模板抄窗格清单不可扩展的收口,release-review-08 回归根治）**：apps/*.yml 顶层 popup_ignores: [{app, name_contains}]（与 plan 级同构,pack 列全锚形态——Word=Word/.docx 两种）,CLI load_plan 自动并入模板级声明（并集去重/幂等/stderr 留痕）;注入用行级状态机提取（pack 是松散人读文档,严格 YAML 解析对 quirks 冒号形态炸——word/cloudmusic 实证）;lint-packs ⑥ 号检查守门（非空 app+name_contains）。**四个模板的手写声明全部撤除（pack 单一来源）**——新 Word 模板零声明成本即得导航/搜索降噪。测试：extract 纯函数 2（引号对/空值跳过/块边界）+E2E 契约 1（emit-plan 断言注入条目,仓库根 cwd）。
 
@@ -271,7 +271,6 @@
 
 ### Added
 
-- **flow-revise 收完整模板形态（spec 增补，[06 运行时治理④](docs/06-design-blueprint.md)——工具链缺口①收口,模板迭代不再全程重跑）**：--file 直接吃 workflow 模板——resources 块经 prepare 剥离（幂等,不建新 run）、{"input":...} 引用经 declared defaults 或新增 --inputs 值文件解析、pack 级 popup_ignores 注入与 load_plan 同口径（否则修订计划与冻结计划 diff 误报 ignores 变化）。此前直接 schema parse,引用/资源形态必报 PROTOCOL——VS Code 轮被迫 emit-plan 具体化+带外 plan.json 手术（v2 报废事故）的根源。真机实证：vscode-edit.yml 模板原文件直接 revise 成功（diff 正常,find-replace 重置 pending）。配套：Word 新文档物化拒答边界入长期观察项（release-review-08 实证,五层修复只治兼容模式文档）。
 
 - **popup_ignores pack 级来源（spec，[06 运行时治理](docs/06-design-blueprint.md)——逐模板抄窗格清单不可扩展的收口,release-review-08 回归根治）**：apps/*.yml 顶层 popup_ignores: [{app, name_contains}]（与 plan 级同构,pack 列全锚形态——Word=Word/.docx 两种）,CLI load_plan 自动并入模板级声明（并集去重/幂等/stderr 留痕）;注入用行级状态机提取（pack 是松散人读文档,严格 YAML 解析对 quirks 冒号形态炸——word/cloudmusic 实证）;lint-packs ⑥ 号检查守门（非空 app+name_contains）。**四个模板的手写声明全部撤除（pack 单一来源）**——新 Word 模板零声明成本即得导航/搜索降噪。测试：extract 纯函数 2（引号对/空值跳过/块边界）+E2E 契约 1（emit-plan 断言注入条目,仓库根 cwd）。
 
@@ -316,7 +315,6 @@
 
 ### Added
 
-- **flow-revise 收完整模板形态（spec 增补，[06 运行时治理④](docs/06-design-blueprint.md)——工具链缺口①收口,模板迭代不再全程重跑）**：--file 直接吃 workflow 模板——resources 块经 prepare 剥离（幂等,不建新 run）、{"input":...} 引用经 declared defaults 或新增 --inputs 值文件解析、pack 级 popup_ignores 注入与 load_plan 同口径（否则修订计划与冻结计划 diff 误报 ignores 变化）。此前直接 schema parse,引用/资源形态必报 PROTOCOL——VS Code 轮被迫 emit-plan 具体化+带外 plan.json 手术（v2 报废事故）的根源。真机实证：vscode-edit.yml 模板原文件直接 revise 成功（diff 正常,find-replace 重置 pending）。配套：Word 新文档物化拒答边界入长期观察项（release-review-08 实证,五层修复只治兼容模式文档）。
 
 - **popup_ignores pack 级来源（spec，[06 运行时治理](docs/06-design-blueprint.md)——逐模板抄窗格清单不可扩展的收口,release-review-08 回归根治）**：apps/*.yml 顶层 popup_ignores: [{app, name_contains}]（与 plan 级同构,pack 列全锚形态——Word=Word/.docx 两种）,CLI load_plan 自动并入模板级声明（并集去重/幂等/stderr 留痕）;注入用行级状态机提取（pack 是松散人读文档,严格 YAML 解析对 quirks 冒号形态炸——word/cloudmusic 实证）;lint-packs ⑥ 号检查守门（非空 app+name_contains）。**四个模板的手写声明全部撤除（pack 单一来源）**——新 Word 模板零声明成本即得导航/搜索降噪。测试：extract 纯函数 2（引号对/空值跳过/块边界）+E2E 契约 1（emit-plan 断言注入条目,仓库根 cwd）。
 
@@ -352,7 +350,6 @@
 
 ### Added
 
-- **flow-revise 收完整模板形态（spec 增补，[06 运行时治理④](docs/06-design-blueprint.md)——工具链缺口①收口,模板迭代不再全程重跑）**：--file 直接吃 workflow 模板——resources 块经 prepare 剥离（幂等,不建新 run）、{"input":...} 引用经 declared defaults 或新增 --inputs 值文件解析、pack 级 popup_ignores 注入与 load_plan 同口径（否则修订计划与冻结计划 diff 误报 ignores 变化）。此前直接 schema parse,引用/资源形态必报 PROTOCOL——VS Code 轮被迫 emit-plan 具体化+带外 plan.json 手术（v2 报废事故）的根源。真机实证：vscode-edit.yml 模板原文件直接 revise 成功（diff 正常,find-replace 重置 pending）。配套：Word 新文档物化拒答边界入长期观察项（release-review-08 实证,五层修复只治兼容模式文档）。
 
 - **popup_ignores pack 级来源（spec，[06 运行时治理](docs/06-design-blueprint.md)——逐模板抄窗格清单不可扩展的收口,release-review-08 回归根治）**：apps/*.yml 顶层 popup_ignores: [{app, name_contains}]（与 plan 级同构,pack 列全锚形态——Word=Word/.docx 两种）,CLI load_plan 自动并入模板级声明（并集去重/幂等/stderr 留痕）;注入用行级状态机提取（pack 是松散人读文档,严格 YAML 解析对 quirks 冒号形态炸——word/cloudmusic 实证）;lint-packs ⑥ 号检查守门（非空 app+name_contains）。**四个模板的手写声明全部撤除（pack 单一来源）**——新 Word 模板零声明成本即得导航/搜索降噪。测试：extract 纯函数 2（引号对/空值跳过/块边界）+E2E 契约 1（emit-plan 断言注入条目,仓库根 cwd）。
 
@@ -389,7 +386,6 @@ M2 收官批:命令面 27/31 + 窗口治理与可观测性 + 信号条重设计 
 
 ### Added
 
-- **flow-revise 收完整模板形态（spec 增补，[06 运行时治理④](docs/06-design-blueprint.md)——工具链缺口①收口,模板迭代不再全程重跑）**：--file 直接吃 workflow 模板——resources 块经 prepare 剥离（幂等,不建新 run）、{"input":...} 引用经 declared defaults 或新增 --inputs 值文件解析、pack 级 popup_ignores 注入与 load_plan 同口径（否则修订计划与冻结计划 diff 误报 ignores 变化）。此前直接 schema parse,引用/资源形态必报 PROTOCOL——VS Code 轮被迫 emit-plan 具体化+带外 plan.json 手术（v2 报废事故）的根源。真机实证：vscode-edit.yml 模板原文件直接 revise 成功（diff 正常,find-replace 重置 pending）。配套：Word 新文档物化拒答边界入长期观察项（release-review-08 实证,五层修复只治兼容模式文档）。
 
 - **popup_ignores pack 级来源（spec，[06 运行时治理](docs/06-design-blueprint.md)——逐模板抄窗格清单不可扩展的收口,release-review-08 回归根治）**：apps/*.yml 顶层 popup_ignores: [{app, name_contains}]（与 plan 级同构,pack 列全锚形态——Word=Word/.docx 两种）,CLI load_plan 自动并入模板级声明（并集去重/幂等/stderr 留痕）;注入用行级状态机提取（pack 是松散人读文档,严格 YAML 解析对 quirks 冒号形态炸——word/cloudmusic 实证）;lint-packs ⑥ 号检查守门（非空 app+name_contains）。**四个模板的手写声明全部撤除（pack 单一来源）**——新 Word 模板零声明成本即得导航/搜索降噪。测试：extract 纯函数 2（引号对/空值跳过/块边界）+E2E 契约 1（emit-plan 断言注入条目,仓库根 cwd）。
 
@@ -450,7 +446,6 @@ M2 第三批:观察层强化 + 定位性能结构优化 + 可观测性 + 信号�
 
 ### Added
 
-- **flow-revise 收完整模板形态（spec 增补，[06 运行时治理④](docs/06-design-blueprint.md)——工具链缺口①收口,模板迭代不再全程重跑）**：--file 直接吃 workflow 模板——resources 块经 prepare 剥离（幂等,不建新 run）、{"input":...} 引用经 declared defaults 或新增 --inputs 值文件解析、pack 级 popup_ignores 注入与 load_plan 同口径（否则修订计划与冻结计划 diff 误报 ignores 变化）。此前直接 schema parse,引用/资源形态必报 PROTOCOL——VS Code 轮被迫 emit-plan 具体化+带外 plan.json 手术（v2 报废事故）的根源。真机实证：vscode-edit.yml 模板原文件直接 revise 成功（diff 正常,find-replace 重置 pending）。配套：Word 新文档物化拒答边界入长期观察项（release-review-08 实证,五层修复只治兼容模式文档）。
 
 - **popup_ignores pack 级来源（spec，[06 运行时治理](docs/06-design-blueprint.md)——逐模板抄窗格清单不可扩展的收口,release-review-08 回归根治）**：apps/*.yml 顶层 popup_ignores: [{app, name_contains}]（与 plan 级同构,pack 列全锚形态——Word=Word/.docx 两种）,CLI load_plan 自动并入模板级声明（并集去重/幂等/stderr 留痕）;注入用行级状态机提取（pack 是松散人读文档,严格 YAML 解析对 quirks 冒号形态炸——word/cloudmusic 实证）;lint-packs ⑥ 号检查守门（非空 app+name_contains）。**四个模板的手写声明全部撤除（pack 单一来源）**——新 Word 模板零声明成本即得导航/搜索降噪。测试：extract 纯函数 2（引号对/空值跳过/块边界）+E2E 契约 1（emit-plan 断言注入条目,仓库根 cwd）。
 
@@ -477,7 +472,6 @@ M2 收尾:分发三渠道 + crates.io 自动化发布 + 信号条交互打磨 + 
 
 ### Added
 
-- **flow-revise 收完整模板形态（spec 增补，[06 运行时治理④](docs/06-design-blueprint.md)——工具链缺口①收口,模板迭代不再全程重跑）**：--file 直接吃 workflow 模板——resources 块经 prepare 剥离（幂等,不建新 run）、{"input":...} 引用经 declared defaults 或新增 --inputs 值文件解析、pack 级 popup_ignores 注入与 load_plan 同口径（否则修订计划与冻结计划 diff 误报 ignores 变化）。此前直接 schema parse,引用/资源形态必报 PROTOCOL——VS Code 轮被迫 emit-plan 具体化+带外 plan.json 手术（v2 报废事故）的根源。真机实证：vscode-edit.yml 模板原文件直接 revise 成功（diff 正常,find-replace 重置 pending）。配套：Word 新文档物化拒答边界入长期观察项（release-review-08 实证,五层修复只治兼容模式文档）。
 
 - **popup_ignores pack 级来源（spec，[06 运行时治理](docs/06-design-blueprint.md)——逐模板抄窗格清单不可扩展的收口,release-review-08 回归根治）**：apps/*.yml 顶层 popup_ignores: [{app, name_contains}]（与 plan 级同构,pack 列全锚形态——Word=Word/.docx 两种）,CLI load_plan 自动并入模板级声明（并集去重/幂等/stderr 留痕）;注入用行级状态机提取（pack 是松散人读文档,严格 YAML 解析对 quirks 冒号形态炸——word/cloudmusic 实证）;lint-packs ⑥ 号检查守门（非空 app+name_contains）。**四个模板的手写声明全部撤除（pack 单一来源）**——新 Word 模板零声明成本即得导航/搜索降噪。测试：extract 纯函数 2（引号对/空值跳过/块边界）+E2E 契约 1（emit-plan 断言注入条目,仓库根 cwd）。
 
@@ -507,7 +501,6 @@ M2 前两批:输入可靠性硬化 + 命令面 24 + fallback 定位链 + US1 跨
 
 ### Added
 
-- **flow-revise 收完整模板形态（spec 增补，[06 运行时治理④](docs/06-design-blueprint.md)——工具链缺口①收口,模板迭代不再全程重跑）**：--file 直接吃 workflow 模板——resources 块经 prepare 剥离（幂等,不建新 run）、{"input":...} 引用经 declared defaults 或新增 --inputs 值文件解析、pack 级 popup_ignores 注入与 load_plan 同口径（否则修订计划与冻结计划 diff 误报 ignores 变化）。此前直接 schema parse,引用/资源形态必报 PROTOCOL——VS Code 轮被迫 emit-plan 具体化+带外 plan.json 手术（v2 报废事故）的根源。真机实证：vscode-edit.yml 模板原文件直接 revise 成功（diff 正常,find-replace 重置 pending）。配套：Word 新文档物化拒答边界入长期观察项（release-review-08 实证,五层修复只治兼容模式文档）。
 
 - **popup_ignores pack 级来源（spec，[06 运行时治理](docs/06-design-blueprint.md)——逐模板抄窗格清单不可扩展的收口,release-review-08 回归根治）**：apps/*.yml 顶层 popup_ignores: [{app, name_contains}]（与 plan 级同构,pack 列全锚形态——Word=Word/.docx 两种）,CLI load_plan 自动并入模板级声明（并集去重/幂等/stderr 留痕）;注入用行级状态机提取（pack 是松散人读文档,严格 YAML 解析对 quirks 冒号形态炸——word/cloudmusic 实证）;lint-packs ⑥ 号检查守门（非空 app+name_contains）。**四个模板的手写声明全部撤除（pack 单一来源）**——新 Word 模板零声明成本即得导航/搜索降噪。测试：extract 纯函数 2（引号对/空值跳过/块边界）+E2E 契约 1（emit-plan 断言注入条目,仓库根 cwd）。
 
@@ -552,7 +545,6 @@ M1 激进 MVP:纵向跑通"snapshot → 定位 → 操作 → 反馈"全链路;1
 
 ### Added
 
-- **flow-revise 收完整模板形态（spec 增补，[06 运行时治理④](docs/06-design-blueprint.md)——工具链缺口①收口,模板迭代不再全程重跑）**：--file 直接吃 workflow 模板——resources 块经 prepare 剥离（幂等,不建新 run）、{"input":...} 引用经 declared defaults 或新增 --inputs 值文件解析、pack 级 popup_ignores 注入与 load_plan 同口径（否则修订计划与冻结计划 diff 误报 ignores 变化）。此前直接 schema parse,引用/资源形态必报 PROTOCOL——VS Code 轮被迫 emit-plan 具体化+带外 plan.json 手术（v2 报废事故）的根源。真机实证：vscode-edit.yml 模板原文件直接 revise 成功（diff 正常,find-replace 重置 pending）。配套：Word 新文档物化拒答边界入长期观察项（release-review-08 实证,五层修复只治兼容模式文档）。
 
 - **popup_ignores pack 级来源（spec，[06 运行时治理](docs/06-design-blueprint.md)——逐模板抄窗格清单不可扩展的收口,release-review-08 回归根治）**：apps/*.yml 顶层 popup_ignores: [{app, name_contains}]（与 plan 级同构,pack 列全锚形态——Word=Word/.docx 两种）,CLI load_plan 自动并入模板级声明（并集去重/幂等/stderr 留痕）;注入用行级状态机提取（pack 是松散人读文档,严格 YAML 解析对 quirks 冒号形态炸——word/cloudmusic 实证）;lint-packs ⑥ 号检查守门（非空 app+name_contains）。**四个模板的手写声明全部撤除（pack 单一来源）**——新 Word 模板零声明成本即得导航/搜索降噪。测试：extract 纯函数 2（引号对/空值跳过/块边界）+E2E 契约 1（emit-plan 断言注入条目,仓库根 cwd）。
 

@@ -70,6 +70,7 @@ pub fn resolve(text: &str, inputs: Option<&str>) -> Result<super::Plan, CtlError
         values.insert(name, value);
     }
     resolve_arguments(&mut raw, &values)?;
+    resolve_anchor_inputs(&mut raw, &values)?;
     // 真机发现 #6b(用户目击):引号包裹的 `{input: name}` 是纯字符串,替换不发生;
     // 若 run 与 verify 拿同一字面量会**自洽假通过**(set-clipboard 假通过实证)。
     // 替换后仍残留绑定形态的 args 字符串 = 几乎必然是引号/转义错误 → 拒绝。
@@ -77,6 +78,47 @@ pub fn resolve(text: &str, inputs: Option<&str>) -> Result<super::Plan, CtlError
     crate::sequence::expand(&mut raw)?;
     crate::for_each::expand(&mut raw)?;
     super::parse(&serde_json::to_string(&raw).map_err(|e| CtlError::internal(e.to_string()))?)
+}
+
+/// 弹层声明的锚引用解析(工具链缺口②收口):popup_handlers[].app 与
+/// popup_ignores[].app 支持 `{input: name}`——模板锚为运行输入(如
+/// `${run.id}` 前缀形态)时可静态声明 handler/ignore。在输入解析期展开为
+/// 具体字符串,引擎的 `app.contains(&handler.app)` 匹配语义不变;
+/// 引号包裹的字符串形式与其他位置同样由 reject_unresolved_bindings
+/// 家族的语义兜底(锚字段不在 args 内,这里按"对象才解析、字符串不认"
+/// 的既有口径处理——写错为字符串会作为字面锚匹配不到,模板验证即可见)。
+fn resolve_anchor_inputs(
+    raw: &mut serde_json::Value,
+    values: &BTreeMap<String, String>,
+) -> Result<(), CtlError> {
+    for section in ["popup_handlers", "popup_ignores"] {
+        let Some(items) = raw
+            .get_mut(section)
+            .and_then(serde_json::Value::as_array_mut)
+        else {
+            continue;
+        };
+        for item in items {
+            let Some(app) = item.get_mut("app") else {
+                continue;
+            };
+            let Some(binding) = app.as_object() else {
+                continue; // 字面锚:原样保留
+            };
+            let name = binding
+                .get("input")
+                .and_then(serde_json::Value::as_str)
+                .filter(|_| binding.len() == 1)
+                .ok_or_else(|| {
+                    super::schema::error(section, None, "expected app: {input: name}")
+                })?;
+            let value = values
+                .get(name)
+                .ok_or_else(|| super::schema::error(section, None, "undeclared input reference"))?;
+            *app = serde_json::Value::String(value.clone());
+        }
+    }
+    Ok(())
 }
 
 fn reject_unresolved_bindings(raw: &serde_json::Value) -> Result<(), CtlError> {
@@ -168,5 +210,29 @@ mod tests {
 - id: s1\n    title: t1\n    run:\n      command: press\n      args: [enter, --app, {input: window}]\n";
         let plan = resolve(yaml, None).expect("resolves");
         assert_eq!(plan.steps[0].run.args, vec!["enter", "--app", "w1"]);
+    }
+
+    #[test]
+    fn popup_anchor_input_reference_resolves() {
+        // 工具链缺口②:锚为运行输入时 handler/ignore 可声明 {input: name}。
+        let yaml = "version: 1\nname: t\ninputs:\n  window: {default: 'task-1 - VS Code'}\n\
+popup_handlers:\n  - app: {input: window}\n    classification: error\n    \
+name_contains: 找不到文件\n    click: id:2\npopup_ignores:\n  - app: {input: window}\n    \
+name_contains: 通知\nsteps:\n  - id: s1\n    title: t1\n    run:\n      command: wait\n      \
+args: [--window, w1, --timeout, '1000']\n";
+        let plan = resolve(yaml, None).expect("resolves");
+        assert_eq!(plan.popup_handlers[0].app, "task-1 - VS Code");
+        assert_eq!(plan.popup_ignores[0].name_contains, "通知");
+    }
+
+    #[test]
+    fn undeclared_popup_anchor_reference_is_rejected() {
+        let yaml = "version: 1\nname: t\ninputs:\n  window: {default: w1}\n\
+popup_handlers:\n  - app: {input: missing}\n    classification: error\n    \
+name_contains: x\n    click: id:2\nsteps:\n  - id: s1\n    title: t1\n    run:\n      \
+command: wait\n      args: [--window, w1, --timeout, '1000']\n";
+        let error = resolve(yaml, None).unwrap_err();
+        assert_eq!(error.code, actl_core::ErrorCode::Protocol);
+        assert!(error.message.contains("undeclared input reference"));
     }
 }

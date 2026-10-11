@@ -184,7 +184,6 @@ pub fn status_name(status: &str) -> &str {
         // run 级停止与执行级急停("急停已启用")是两个概念,文案刻意区分。
         "stopped" => "流程已停止",
         "completed" => "已完成",
-        "ready" => "待开始",
         "pending" => "待执行",
         "verifying" => "核验中",
         "uncertain" => "待核对",
