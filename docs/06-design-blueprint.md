@@ -1,65 +1,13 @@
 # 06 · 设计蓝图:Windows AI-native 桌面操作 CLI
 
-更新:2026-09-28 · 状态:现行命令语义与设计；实现记录见 CHANGELOG，待办见 ROADMAP · 前置:[01 调研](01-research-landscape.md) · [04 选型](04-tech-decision.md) · [05 估算](05-implementation-estimate.md)
+状态:现行命令语义与设计 · 实现记录见 CHANGELOG，待办见 ROADMAP · 前置:[01 调研](01-research-landscape.md) · [04 选型](04-tech-decision.md) · [05 估算](05-implementation-estimate.md)
+
+> **维护契约**:本文只记**现行态**——每份契约在所属章节保有一处权威位置,修改直接编辑该章节。
+> 变更叙事(日期、实证过程、事故编号、提交哈希)一律进 CHANGELOG 与提交信息,不在此重复;
+> 禁止在文末追加带日期的"增补节"(2026-10-11 整理裁定:彼时尾部增补已累积至全文 37%,
+> 与 CHANGELOG/git 三层冗余)。
 
 ## 1. 定位
-
-### 流程日志阶段与结果（2026-09-28）
-
-执行型 flow 的 call_finished 在已有调用 phase/error_code 之外增加 workflow_status、
-workflow_completed、workflow_reason、workflow_error_code。done 只表示调用处理完毕；
-是否完成流程以 workflow_completed 为准。没有可用流程上下文时不输出这些字段。
-workflow_invocation 逐次记录 run/before/verify/resume_check 的 started/succeeded/failed、
-attempt 和错误码，继承 call_id/run_id/step_id；不含命令参数和业务内容。
-flow_resume_requested 记录请求 run_id、retry_step 及来源 cli/signal_control/unknown，
-source_verified=false。显示端通过 ACTL_FLOW_REQUEST_SOURCE=signal_control 标记子进程；
-该信息仅供诊断，不证明用户点击或授予权限。未标记旧显示端也会归入 cli。
-
-### 流程重新观察与恢复核验（2026-09-28）
-
-新增 `retry: stale_read`：只读调用遇到 STALE_REF 最多调用三次，写调用始终单次；
-state.steps[].observation_retries 保存阶段、错误码和重试序号（最多 32 条），暂停/急停阻止后续重试。
-新增可选 `resume_check`（verify/wait）：恢复时每个未完成步骤先核对上下文，再核验 uncertain 结果。
-失败保存 resume_check_failed，保留原步骤阶段；不会自动导航、切换目标或重新授权。
-恢复写步骤的结果核验若无法观察，保存 needs_review/result_observation_failed，
-即使指定 --retry-step 也不重放；只有明确 ASSERTION_FAILED 加显式重试才可进入写步骤。
-完整约束见 [20 §9](20-yaml-workflow-protocol.md)，实现与验收矩阵见 [39](39-flow-observation-recovery.md)。
-
-### 流程输出绑定（2026-09-28）
-
-flow v1 增加可选 outputs（只读 run 的 JSON Pointer＋显式类型）与 bind（前序步骤输出替换完整参数）。
-字段和实际 CLI 参数分别预检，输出随步骤状态持久化，恢复不重跑已完成步骤；写步骤不导出数据。
-state/run 响应的步骤可带 outputs，显式保存的业务数据不受 error evidence 脱敏策略影响。
-缺失/类型/绑定错误为 PROTOCOL；绑定解析失败保存 paused/failed、reason=binding_validation_failed，动作次数不增加。
-输出可声明正整数 `max_age_ms`；步骤保存 `outputs_captured_ms`（读取调用开始时间）。
-消费步骤入口与每次 run 调用前检查有效期，超限、缺失时间或当前时间早于采集时间时，
-保存 PROTOCOL 与 reason=output_freshness_failed，按 on_failure 暂停或失败，保留已有步骤阶段。
-诊断只包含输出名称、来源步骤和时间，默认 metadata 也保留；不自动刷新或重放已完成步骤。
-完整语法、预算、负号参数限制及恢复语义见 [20 §8](20-yaml-workflow-protocol.md#8-显式输出与完整参数绑定2026-09-28)，测试记录见 [38](38-flow-output-bindings.md)。
-
-### UIA 读取状态修订（2026-09-28）
-
-- `get` 保留成功读取的空字符串；`value` 仅在 ValuePattern 明确不支持时回退 TextPattern，读取失败不回退。
-- 默认 `get` 的 data 增加 `unsupported` 属性名数组（如 `["value","text"]`），表示已确认不支持的读取通道；空数组表示本次没有不支持项。其他读取错误使命令失败，不能输出看似完整的成功结果。
-- 显式 `get --property value|text`、verify 和属性等待遇到不支持通道返回 NOT_ACTIONABLE，evidence.reason=`pattern_unsupported`；value 的 get/自动等待允许上述双通道，而 `verify --property value` 严格读取 ValuePattern。
-- UIA 元素失效映射 STALE_REF，访问拒绝映射 PERM_DENIED，其余 provider/属性读取错误映射 INTERNAL；evidence 带 channel、native_code（原生错误存在时）。观察失败不能等同空值、断言不满足或稳定。
-- `wait --stable` 只在明确不支持时按 Text → Value → Name 取样；`type --verify-value` 复用读取状态并在错误中保留 delivered/value_verified/retry，禁止重放输入。
-- 本轮未扩展等待谓词的空期望语法；snapshot/定位/整表提取的后续修订如下，证据见 [37](37-uia-observation.md)。
-
-#### 观察完整性修订
-
-- snapshot、旧语义定位与表格树回退使用显式 RawView 的可失败枚举；子级为空与枚举错误分开。必要属性读取失败按 channel/native_code 报错，成功空名称与 ID 保留为空字符串。
-- snapshot 增加 `truncation_reasons` 数组，完整时为 `[]`；节点/深度预算实际省略内容时分别记录 `node_limit` / `depth_limit`，并设 `truncated=true`。恰好达到上限但无未观察节点不算截断。属性或枚举失败整次报错，本轮不提供携带属性错误的部分树。
-- 过滤式 find、旧语义定位/ref 重放和表格树提取拒绝不完整范围，返回 NOT_ACTIONABLE，evidence 为 `{reason:"observation_incomplete",causes:[...]}`。content 投影在截断范围内未见 Document 时也不能声称 NOT_FOUND。成功采样仍不是原子快照，控件可能在调用之间变化。
-- 所有元素等待仅将 NOT_FOUND 解释为缺席；STALE_REF、权限、provider 错误及超限立即传播。虚拟化查询区分成功空结果与原生失败，多个匹配拒绝为 AMBIGUOUS。
-- extract 仅在 GridPattern availability 明确为 false 时回退树提取，输出 `fallback_reason:"grid_pattern_unsupported"`；Grid 直读时为 null。Grid 属性、单元格失败不回退；合法空表和空单元格保留。负行列数报 INTERNAL；超限或前后行列数变化报 NOT_ACTIONABLE（causes 为 `table_limit` / `table_changed`）。树回退只反映已物化 Text/Edit 单元格，不保证与逻辑表格的列结构一致。
-- 窗口清单、窗口 RuntimeId 基线、等待新窗口及按 PID 定位也使用可失败的 RawView 枚举；根、子窗口、分类及必要 name/class/pid/hwnd/runtime_id 读取失败传播原错误，不输出成功的部分清单，不用漏掉候选后的结果证明唯一性。成功空标题仍按清单约定过滤。
-- `wait --idle` 的 GetLastInputInfo 失败返回 INTERNAL，evidence 为 `{reason:"input_observation_failed",api:"GetLastInputInfo"}`，不把未知状态当空闲；每次轮询先检查 flow 暂停/停止。Rust `idle_ms` 接口相应返回 Result。
-- 输入交接增加独立 Raw Input 键鼠活动计数。注册丢失、消息泵心跳超过 1000ms 或监听线程退出返回既有 `input_monitor_unavailable`，撤销旧授权；健康恢复不恢复授权。不存储键值或坐标，不发送探针输入，不替代 `--physical` 参数或人工授权。真实设备接管验收另记。
-- 预算约束的是遍历节点/深度与表格规模；单个同步 COM 调用仍可能阻塞，不宣称硬超时或全局观察原子性。
-
-实验说明：`prototypes/browser` 独立验证 CDP 会话、CSS/XPath、iframe 和写后核验。
-它没有新增 actl 命令、目标语法或 YAML 字段，报告文件不属于本协议；范围与验收见 [34](34-browser-connection-prototype.md)。
 
 一句话:**给 AI agent 用的 Windows 桌面原子操作 CLI——accessibility(UIA)驱动、原子命令可独立调用、输出机器友好。** 类比:Playwright 之于浏览器,本工具之于 Windows 桌面。
 
@@ -504,6 +452,27 @@ L2  actl commands     机器 schema:全命令+参数的 JSON(agent 自发现入�
 | `toggle` vs `click` | Toggle pattern 直调(无点击副作用、可读状态)vs 点击语义 |
 | `launch` vs `focus-window` | launch 默认启动**新实例**(不做已运行检测);前置已有窗口是 focus-window 的职责 |
 
+### 3.7 观察与读取语义(UIA 轨现行契约)
+
+- `get` 保留成功读取的空字符串；`value` 仅在 ValuePattern 明确不支持时回退 TextPattern，读取失败不回退。
+- 默认 `get` 的 data 增加 `unsupported` 属性名数组（如 `["value","text"]`），表示已确认不支持的读取通道；空数组表示本次没有不支持项。其他读取错误使命令失败，不能输出看似完整的成功结果。
+- 显式 `get --property value|text`、verify 和属性等待遇到不支持通道返回 NOT_ACTIONABLE，evidence.reason=`pattern_unsupported`；value 的 get/自动等待允许上述双通道，而 `verify --property value` 严格读取 ValuePattern。
+- UIA 元素失效映射 STALE_REF，访问拒绝映射 PERM_DENIED，其余 provider/属性读取错误映射 INTERNAL；evidence 带 channel、native_code（原生错误存在时）。观察失败不能等同空值、断言不满足或稳定。
+- `wait --stable` 只在明确不支持时按 Text → Value → Name 取样；`type --verify-value` 复用读取状态并在错误中保留 delivered/value_verified/retry，禁止重放输入。
+- 等待谓词无空期望语法；证据记录见 [37](37-uia-observation.md)。
+
+**观察完整性**：
+
+- snapshot、旧语义定位与表格树回退使用显式 RawView 的可失败枚举；子级为空与枚举错误分开。必要属性读取失败按 channel/native_code 报错，成功空名称与 ID 保留为空字符串。
+- snapshot 增加 `truncation_reasons` 数组，完整时为 `[]`；节点/深度预算实际省略内容时分别记录 `node_limit` / `depth_limit`，并设 `truncated=true`。恰好达到上限但无未观察节点不算截断。属性或枚举失败整次报错，不提供携带属性错误的部分树。
+- 过滤式 find、旧语义定位/ref 重放和表格树提取拒绝不完整范围，返回 NOT_ACTIONABLE，evidence 为 `{reason:"observation_incomplete",causes:[...]}`。content 投影在截断范围内未见 Document 时也不能声称 NOT_FOUND。成功采样仍不是原子快照，控件可能在调用之间变化。
+- 所有元素等待仅将 NOT_FOUND 解释为缺席；STALE_REF、权限、provider 错误及超限立即传播。虚拟化查询区分成功空结果与原生失败，多个匹配拒绝为 AMBIGUOUS。
+- extract 仅在 GridPattern availability 明确为 false 时回退树提取，输出 `fallback_reason:"grid_pattern_unsupported"`；Grid 直读时为 null。Grid 属性、单元格失败不回退；合法空表和空单元格保留。负行列数报 INTERNAL；超限或前后行列数变化报 NOT_ACTIONABLE（causes 为 `table_limit` / `table_changed`）。树回退只反映已物化 Text/Edit 单元格，不保证与逻辑表格的列结构一致。
+- 窗口清单、窗口 RuntimeId 基线、等待新窗口及按 PID 定位也使用可失败的 RawView 枚举；根、子窗口、分类及必要 name/class/pid/hwnd/runtime_id 读取失败传播原错误，不输出成功的部分清单，不用漏掉候选后的结果证明唯一性。成功空标题仍按清单约定过滤。
+- `wait --idle` 的 GetLastInputInfo 失败返回 INTERNAL，evidence 为 `{reason:"input_observation_failed",api:"GetLastInputInfo"}`，不把未知状态当空闲；每次轮询先检查 flow 暂停/停止。Rust `idle_ms` 接口相应返回 Result。
+- 输入交接增加独立 Raw Input 键鼠活动计数。注册丢失、消息泵心跳超过 1000ms 或监听线程退出返回既有 `input_monitor_unavailable`，撤销旧授权；健康恢复不恢复授权。不存储键值或坐标，不发送探针输入，不替代 `--physical` 参数或人工授权。
+- 预算约束的是遍历节点/深度与表格规模；单个同步 COM 调用仍可能阻塞，不宣称硬超时或全局观察原子性。
+
 ## 4. 输出协议
 
 **stdout 不变量**:要么 envelope JSON,要么 `--help/--version` 文本,无第三形态。
@@ -749,6 +718,17 @@ CLI 写入前与显示端后台共用 history 检查，任务报告仍在归档�
 文件及具有新鲜运行心跳的调用。并发/在途增长可暂时超限，无法释放容量时报告失败；不清理 desktop 恢复记录。
 日志不保证防篡改或断电完整性。完整设计见 [19](19-history-and-user-experience.md)。
 
+### 流程事件字段
+
+执行型 flow 的 call_finished 在已有调用 phase/error_code 之外增加 workflow_status、
+workflow_completed、workflow_reason、workflow_error_code。done 只表示调用处理完毕；
+是否完成流程以 workflow_completed 为准。没有可用流程上下文时不输出这些字段。
+workflow_invocation 逐次记录 run/before/verify/resume_check 的 started/succeeded/failed、
+attempt 和错误码，继承 call_id/run_id/step_id；不含命令参数和业务内容。
+flow_resume_requested 记录请求 run_id、retry_step 及来源 cli/signal_control/unknown，
+source_verified=false。显示端通过 ACTL_FLOW_REQUEST_SOURCE=signal_control 标记子进程；
+该信息仅供诊断，不证明用户点击或授予权限。未标记旧显示端也会归入 cli。
+
 ## 7.7 YAML 顺序流程 v1
 
 有界观察恢复扩展：步骤 `recovery: {max_retries, timeout_ms, interval_ms}` 与 retry 互斥，仅额外重查可恢复的只读观察；预算跨暂停/重启持久化，继续不重置。StepRecord 增加可选 recovery 及观察事件，历史增加 workflow_recovery；参数范围、错误分类、同步超时限制和 UI 语义以 [64](64-bounded-observation-recovery.md) 为规范性扩展。
@@ -759,6 +739,28 @@ CLI 写入前与显示端后台共用 history 检查，任务报告仍在归档�
 
 新增 flow-validate/run/status/pause/resume，完整字段、状态与边界以
 [20](20-yaml-workflow-protocol.md) 为本节规范性扩展。
+
+### 重新观察与恢复核验
+
+`retry: stale_read`：只读调用遇到 STALE_REF 最多调用三次，写调用始终单次；
+state.steps[].observation_retries 保存阶段、错误码和重试序号（最多 32 条），暂停/急停阻止后续重试。
+可选 `resume_check`（verify/wait）：恢复时每个未完成步骤先核对上下文，再核验 uncertain 结果。
+失败保存 resume_check_failed，保留原步骤阶段；不会自动导航、切换目标或重新授权。
+恢复写步骤的结果核验若无法观察，保存 needs_review/result_observation_failed，
+即使指定 --retry-step 也不重放；只有明确 ASSERTION_FAILED 加显式重试才可进入写步骤。
+完整约束见 [20 §9](20-yaml-workflow-protocol.md)，实现与验收矩阵见 [39](39-flow-observation-recovery.md)。
+
+### 输出绑定
+
+可选 outputs（只读 run 的 JSON Pointer＋显式类型）与 bind（前序步骤输出替换完整参数）。
+字段和实际 CLI 参数分别预检，输出随步骤状态持久化，恢复不重跑已完成步骤；写步骤不导出数据。
+state/run 响应的步骤可带 outputs，显式保存的业务数据不受 error evidence 脱敏策略影响。
+缺失/类型/绑定错误为 PROTOCOL；绑定解析失败保存 paused/failed、reason=binding_validation_failed，动作次数不增加。
+输出可声明正整数 `max_age_ms`；步骤保存 `outputs_captured_ms`（读取调用开始时间）。
+消费步骤入口与每次 run 调用前检查有效期，超限、缺失时间或当前时间早于采集时间时，
+保存 PROTOCOL 与 reason=output_freshness_failed，按 on_failure 暂停或失败，保留已有步骤阶段。
+诊断只包含输出名称、来源步骤和时间，默认 metadata 也保留；不自动刷新或重放已完成步骤。
+完整语法、预算、负号参数限制及恢复语义见 [20 §8](20-yaml-workflow-protocol.md)，测试记录见 [38](38-flow-output-bindings.md)。
 
 **运行时治理第一轮（2026-10-04 spec，弹层/失败采集/步前门禁）**：① **failure_bundle 失败采集包**——uncertain/门禁阻断时 capture_failure 自动归集四工件：全屏截图、原生窗口清单、按 `--app` 定向的 UIA 快照、**失败瞬间前台弹层快照**（front-report 全文+分类，弹窗滞留事故的一手证据），外加 bundle.json 采集清单（只列实际存在的工件，不伪造）；`flow-evidence --id <id> [--step <sid>]`（新增只读命令）索引采集包。② **写步步前弹层门禁**——写步派发前经 `Host::front_layer` 观察其 `--app`（含 sequence 内嵌锚）的前台引导层：非 clear 且存在未声明处理的面板 → run 进 needs_review、reason=`popup_pending:<step>`、步保持 **Pending**（未执行无副作用，恢复走普通 flow-resume，门禁复查通过即续跑）；flow-status 附 popup_hint（判读入口+续跑命令）。读步与无 `--app` 步不设防；观察失败放行（门禁是阳性检测，写步自身 fail-closed 守卫兜底）。③ **popup_handlers 声明**（AGENTS 人肉弹层白名单的机制化）——flow 顶层声明 `popup_handlers: [{app, classification, name_contains?, click}]`：classification 仅允许 error/save/confirm/update/**notice**（**未声明的 unknown 永远上抛**，不可直接声明 unknown）；匹配面板经既有 click 全护栏（守卫/预告/审计）自动处置并逐次 popup_event 留痕，处置后复查清层才放行，未清或处置失败一律 popup_pending。每个 popup_pending 阻断同样落 failure_bundle。**notice 分类（2026-10-11 spec，最窄形态）**：认领 naive 词表落 unknown 的 INFO 级流程自产表面（VS Code 1.141「扩展已禁用」通知实证——无按钮/非 error 语义，词表四分类覆盖不到，滞留即挡后续步）；`name_contains` **必填**（按名认领，schema 层拒绝空/缺失——不存在「任意 unknown 一律处置」的宽形态），匹配语义 = unknown 面板且 name/text 含认领词；已分类面板不被 notice 吞并（分类等值匹配优先语义不变）；审计面 popup_event 记 `classification`（面板本体，如实 unknown）+ `handler`（认领声明分类）双字段。词表演进纪律：更宽分类等真实滞留事故再扩，不预置。
 
