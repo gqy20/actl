@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=../../schemas/flow-v1.schema.json
+# §7 路线积累 #4:pack 路线 explore_navigate_back(探索回写,run
+# explorer-route4-02,goal_met:true actions=1)的 agent 侧重放。
+# 重放通过 = 真机走通证据(人工复核迁移 verified 用)。
+# 前置:探针窗已导航到 explore-probe-dir 子目录(锚=该标题)。
+# 注意:标题随导航变(modal_vs_page)——click 时锚是子目录标题,
+# verify 断言的是父目录标题(后缀区分,子目录名含父串的坑已修)。
+version: 1
+name: replay-explorer-back
+steps:
+  - id: click_back
+    title: 路线步骤:点击导航栏后退按钮
+    run:
+      command: click
+      args: ['id:backButton', --app, 'explore-probe-dir - 文件资源管理器']
+    verify:
+      command: wait
+      args: [--window, 'tmp - 文件资源管理器', --timeout, '8000']
+    retry: never

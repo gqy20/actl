@@ -14,7 +14,7 @@
 
 ### 高优先（用户标记）
 
-- [ ] **探索模式（用户标记关键）**：S1–S3、L2 原语与先验飞轮已全部真机通过（[77](77-exploration-s2-acceptance.md)；观察锚点弹窗转移/type --paste 通道/L0 命中重放 skill 流程化三项已落地收口）。待办：①RuntimeBroker pid 放宽——**已收口**（判据落地+复现轮跑毕：Store 记事本另存为=同 pid #32770 非跨进程,RuntimeBroker 猜想该场景不成立（否定性数据入档 [77](77-exploration-s2-acceptance.md)）；owner 归属判据无害在位,跨进程 picker 形态待其他场景——**降为观察项**）；②路线积累（§7 目标 5 条已 **4** 条——#3 记事本中文已复核迁移 verified（2026-10-11 用户授权,[77](77-exploration-s2-acceptance.md)）;#4 资源管理器组件验证中（地址栏双歧义发现,探针窗留存续跑）;#5 计算器=引擎形态边界实证（差分前沿×无增量应用+texts 无 focused 形态,两改进候选见 77）——任务形态待重定义）；③UCB 统计剪枝（待 quirks 样本量）
+- [ ] **探索模式（用户标记关键）**：S1–S3、L2 原语与先验飞轮已全部真机通过（[77](77-exploration-s2-acceptance.md)；观察锚点弹窗转移/type --paste 通道/L0 命中重放 skill 流程化三项已落地收口）。待办：①RuntimeBroker pid 放宽——**已收口**（判据落地+复现轮跑毕：Store 记事本另存为=同 pid #32770 非跨进程,RuntimeBroker 猜想该场景不成立（否定性数据入档 [77](77-exploration-s2-acceptance.md)）；owner 归属判据无害在位,跨进程 picker 形态待其他场景——**降为观察项**）；②路线积累（§7 目标 5 条已 **4** 条——#3 记事本中文已复核迁移 verified（2026-10-11 用户授权,[77](77-exploration-s2-acceptance.md)）;#4 资源管理器**三步闭环完成**（后退导航:探索 goal_met actions=1 一发命中→回写→重放 verified attempts=1,材料待用户复核迁 verified=第 5 条;地址栏双歧义+goal 子串坑两发现入档 [77](77-exploration-s2-acceptance.md)）;#5 计算器=引擎形态边界实证（两改进候选,不计 verified 数））；③UCB 统计剪枝（待 quirks 样本量）
 - [ ] release-review-draft 写段联测（待用户授权，[43](43-release-review-draft.md)）
 
 ### 流程与集成
