@@ -771,93 +771,11 @@ fn load_plan(
     // pack 级常驻面板声明注入(降噪第二轮 pack 来源,2026-10-11):apps/*.yml
     // 的 popup_ignores 与模板级声明并集去重——逐模板抄窗格清单不可扩展,
     // pack 是应用知识持有者(锚形态列全是 pack 职责)。注入留 stderr 痕。
-    inject_pack_popup_ignores(&mut plan)?;
+    crate::pack_inject::inject_pack_popup_ignores(&mut plan)?;
     // 持久 profile 声明治理(docs/60/72):flow 中 browser-launch --profile <name>
     // 只允许使用 resources.browser_profiles 已声明的名字——凭据资产显式归属
     validate_profile_declarations(&plan, prepared.browser_profiles())?;
     Ok((plan, prepared))
-}
-
-/// pack 级常驻面板声明注入(降噪第二轮 pack 来源,2026-10-11):扫描
-/// skills/actl/apps/*.yml 顶层 `popup_ignores: [{app, name_contains}]`
-/// (与 plan 级同构——pack 作者列全该应用的锚形态),并入 plan 与模板级
-/// 声明并集去重。注入幂等(重复字段跳过),失败不阻断(pack 缺失/损坏
-/// 时模板级声明仍然自洽)。来源留 stderr 痕(诊断透明)。
-fn inject_pack_popup_ignores(plan: &mut Plan) -> Result<(), CtlError> {
-    let apps_dir = std::path::Path::new("skills").join("actl").join("apps");
-    let entries = match std::fs::read_dir(&apps_dir) {
-        Ok(e) => e,
-        Err(_) => return Ok(()), // pack 目录不存在(嵌入式/测试环境):跳过
-    };
-    let mut added: Vec<actl_flow::PopupIgnore> = Vec::new();
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.extension().is_none_or(|x| x != "yml") {
-            continue;
-        }
-        let Ok(text) = std::fs::read_to_string(&path) else {
-            continue;
-        };
-        // 行级提取而非完整 YAML 解析:pack 是给人读的松散文档,quirks 文本
-        // 的冒号/星号形态会让严格流式解析炸(word/cloudmusic 实证)——注入
-        // 只需 popup_ignores 块的 app/name_contains 两字段,状态机最鲁棒。
-        // (pack 的语法守门员是 lint-packs,注入失败不阻断。)
-        for ignore in extract_pack_ignores(&text) {
-            if plan.popup_ignores.contains(&ignore) || added.contains(&ignore) {
-                continue;
-            }
-            eprintln!(
-                "[flow] popup_ignores + {}:{} (pack {})",
-                ignore.app,
-                ignore.name_contains,
-                path.file_stem().and_then(|s| s.to_str()).unwrap_or("?")
-            );
-            added.push(ignore);
-        }
-    }
-    plan.popup_ignores.extend(added);
-    Ok(())
-}
-
-/// 从 pack 文本提取顶层 `popup_ignores:` 块的 {app, name_contains} 对。
-/// 状态机:块内匹配 `  - app: "X"` 开条目、`    name_contains: "Y"` 补全;
-/// 遇非缩进行(块结束)停止。值取引号内文本(无引号取整行 trim)。
-fn extract_pack_ignores(text: &str) -> Vec<actl_flow::PopupIgnore> {
-    let mut out = Vec::new();
-    let mut in_block = false;
-    let mut pending_app: Option<String> = None;
-    for line in text.lines() {
-        if !in_block {
-            if line == "popup_ignores:" {
-                in_block = true;
-            }
-            continue;
-        }
-        if !line.starts_with(' ') {
-            break; // 块结束(下一个顶层键)
-        }
-        let value_of = |l: &str| -> String {
-            let raw = l.split_once(':').map(|(_, v)| v).unwrap_or("").trim();
-            raw.trim_matches('"').to_string()
-        };
-        if let Some(app) = line.strip_prefix("  - app:") {
-            let app = app.trim().trim_matches('"').to_string();
-            if app.is_empty() {
-                continue;
-            }
-            pending_app = Some(app);
-        } else if line.trim_start().starts_with("name_contains:") && pending_app.is_some() {
-            let name = value_of(line);
-            if name.is_empty() {
-                continue;
-            }
-            out.push(actl_flow::PopupIgnore {
-                app: pending_app.take().unwrap_or_default(),
-                name_contains: name,
-            });
-        }
-    }
-    out
 }
 
 fn validate_profile_declarations(plan: &Plan, declared: &[String]) -> Result<(), CtlError> {
@@ -1159,7 +1077,7 @@ pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
             let mut new_plan = actl_flow::inputs::resolve(&prepared.text, values.as_deref())?;
             // pack 级常驻面板声明注入(与 load_plan 同口径):修订计划同样
             // 注入,否则与冻结计划 diff 时 ignores 差异误报为规格变化。
-            inject_pack_popup_ignores(&mut new_plan)?;
+            crate::pack_inject::inject_pack_popup_ignores(&mut new_plan)?;
             if new_plan.explore.is_some() {
                 return Err(CtlError::protocol(
                     "revision file declares an exploration plan; flow-revise is static-flow only",
@@ -1458,29 +1376,5 @@ mod failure_evidence_tests {
         // 内嵌值本身是旗标形态(--app 后紧跟另一个旗)时不误取。
         let flag_next = call(&["{\"args\":[\"--app\",\"--timeout\"],\"command\":\"wait\"}"]);
         assert_eq!(app_context(&flag_next), None);
-    }
-}
-
-#[cfg(test)]
-mod pack_ignore_tests {
-    use super::extract_pack_ignores;
-
-    #[test]
-    fn extracts_quoted_pairs_and_stops_at_block_end() {
-        // 标准块:引号值、多锚形态;块后顶层键终止(quirks 里的词不误提取)
-        let pack = "name: word\nwindow: \"Word\"\npopup_ignores:\n  - app: \"Word\"\n    name_contains: \"导航\"\n  - app: \".docx\"\n    name_contains: \"导航\"\nroutes:\n  - id: r1\n    note: >-\n      文本里有 popup_ignores: 和 name_contains: 字样(缩进块内)不误提取\n";
-        let got = extract_pack_ignores(pack);
-        assert_eq!(got.len(), 2);
-        assert_eq!(got[0].app, "Word");
-        assert_eq!(got[0].name_contains, "导航");
-        assert_eq!(got[1].app, ".docx");
-    }
-
-    #[test]
-    fn skips_empty_values_and_missing_block() {
-        // 空 name(空串)跳过——与 plan 级最窄形态同规;无块返回空
-        let with_empty = "popup_ignores:\n  - app: \"X\"\n    name_contains: \"\"\n";
-        assert!(extract_pack_ignores(with_empty).is_empty());
-        assert!(extract_pack_ignores("name: word\n").is_empty());
     }
 }

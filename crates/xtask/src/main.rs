@@ -26,7 +26,7 @@ fn main() -> ExitCode {
         Some("regress") => regress(),
         Some("timing") => timing(),
         Some("preview-tests") => preview_tests(),
-        Some("fixture" | "diagnose" | "package") => devtools(),
+        Some("fixture" | "diagnose" | "package" | "install") => devtools(),
         Some("lint-packs") => lint_packs(std::env::args().nth(2).as_deref()),
         Some(_) | None => {
             eprintln!(
@@ -37,7 +37,7 @@ fn main() -> ExitCode {
                  cargo xtask doctor [--clean]  one-shot diagnosis: process census (live/ghost), build-artifact locks, ghost images, display status; --clean also deletes ghost leftover images\n  \
                  cargo xtask gate    quality gate: file-lines + pnpm UI verify + fmt --check + clippy -D warnings + tests (= pre-push = CI)\n  \
                  cargo xtask fmt     format all code
-                 cargo xtask fixture CASE | diagnose KIND | package [OPTIONS]
+                 cargo xtask fixture CASE | diagnose KIND | package [OPTIONS] | install --label ID (--zip PATH | --release)
                  cargo xtask regress [--list | --suite flow|system|scenario | --case ID] [--unattended] (native Rust)
   \
                  cargo xtask preview-tests  serially run ignored preview_window live tests (interactive desktop)

@@ -5,6 +5,16 @@
 0.x 期间破坏性变更在条目中以 **[BC]** 标注。条目只记"变了什么与为什么"；
 过程细节与归因在 git 提交信息与 docs/ 里，不在此重复。
 
+## [Unreleased]
+
+### Added
+
+- **`cargo xtask install`——本机安装链接布局（devtools 工具）**：把发布布局（exe×3+README/LICENSE+skills/）装进 `~/.local/share/actl/<label>/`,建立免管理员链接全套——`current` junction（升级只重指）+ `~/.local/bin` 三个 exe 硬链接 + `bin/skills` junction（pack 注入 exe 旁回退的落点）+ `~/.agents/skills/actl` junction（agent 知识面）。源支持 `--zip <发布 zip>` 或 `--release`（仓库 target/release+仓库文件本地组装）。安全约束：只替换经 reparse 校验的 junction 与既有硬链接文件,**拒绝删除任何真实目录**（如用户自建的 ~/.agents/skills/actl 会明确报错让人工处理）;版本目录就位后建链接,不留半链接状态。测试：roundtrip（安装/链接可读/版本切换 current 重指/真实目录拒绝）×2。手段说明：文件符号链接需管理员（实测拒绝）,junction 与同卷硬链接免特权。
+
+### Fixed
+
+- **pack 注入 exe 旁 skills 回退（[06 运行时治理④](docs/06-design-blueprint.md) 文档已声明/代码未做的收口）**：`inject_pack_popup_ignores` 此前只认 CWD 相对 `skills/actl/apps`——安装态（exe 链接进 bin,CWD 任意）pack 级 popup_ignores 注入会**静默失效**,而 Word 模板降噪是 pack 单一来源,失效=导航窗格挡写步回归。现 CWD 优先、exe 同目录 skills 回退（发布 zip 的 exe 旁打包布局）,首个存在的候选生效避免重复注入。测试：候选序纯函数 +1。
+
 ## [0.2.2] - 2026-10-11
 
 本版双主线：**稳定性终局**（尾段挂起族全链根治+僵尸清零、看门狗 P0 恒等式、前台快拒绝根杀后台懒激活慢墙、物化拒答回落——"慢日"重定性为自身污染并沉淀慢现场处置协议）与**编排/观察能力面**（for_each 有界循环、AMBIGUOUS pick 串联、popup 治理三层、collect 虚拟化收集、get-selection、浏览器 --all/--deep/--wait-for/--no-popups、focus 原语、MCP 适配服务、display-stop 生命周期动词）。docs/06 全面重写为纯现行态设计蓝图。

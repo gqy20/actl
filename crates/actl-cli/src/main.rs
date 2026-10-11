@@ -12,6 +12,7 @@ mod file_check;
 mod flow;
 mod help_text;
 mod interact;
+mod pack_inject;
 mod query;
 mod record;
 mod selector_input;

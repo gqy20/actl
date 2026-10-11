@@ -2,6 +2,7 @@ pub mod capture;
 pub mod checks;
 pub mod diagnostics;
 pub mod fixtures;
+pub mod install;
 pub mod package;
 pub mod regress;
 pub mod timing;
@@ -48,7 +49,7 @@ impl Args {
             let key = args[i]
                 .strip_prefix("--")
                 .ok_or_else(|| CtlError::protocol("expected --option"))?;
-            if ["list", "unattended", "physical"].contains(&key) {
+            if ["list", "unattended", "physical", "release"].contains(&key) {
                 if flags.iter().any(|f| f == key) {
                     return Err(CtlError::protocol("duplicate flag"));
                 }
