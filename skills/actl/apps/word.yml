@@ -34,6 +34,19 @@ quirks:
     note: 2026-10-04 实证：粘贴"N. 文本"到上一编号条目后的新段会触发 Word 自动编号列表——显示成"N. N. 文本"（自动编号+粘贴文本自带编号叠加）；流程文本改用 ①②③④/• 等非 ASCII 数字编号规避。
   - id: n_drive_startup_dialog
     note: 2026-10-04 起本机 Word 每次开文档弹「目录名无效。(N:\)」错误框（某项配置指向未连接的 N: 盘）；错误框 OK 按钮 automation_id=2，popup_handlers 声明(app 锚为步骤 --app 子串/classification error/name_contains 目录名无效/click id:2)可由引擎弹层治理处置（word-note-typography 流程真机通过）。
+# 常驻面板声明(降噪第二轮 pack 来源,2026-10-11):flow 引擎解析计划时自动
+# 并入 popup_ignores(与模板级声明并集去重)——Word 家族锚形态两种
+# (标题 <文件名> - Word 含 Word;文件名锚 .docx),各声明一条。
+# 词表退役(2026-10-11)后此声明是导航/搜索类任务窗格不挡写步的唯一来源。
+popup_ignores:
+  - app: "Word"
+    name_contains: "导航"
+  - app: ".docx"
+    name_contains: "导航"
+  - app: "Word"
+    name_contains: "搜索"
+  - app: ".docx"
+    name_contains: "搜索"
 routes:
   - id: body_read
     description: 正文读取(TextPattern 文档通道;中英文皆逐字)

@@ -601,6 +601,46 @@ fn lint_packs(dir_arg: Option<&str>) -> ExitCode {
         // ⑤ 选择器形态建议(知识层,advisory 不计失败):name: 走全树扫描,
         // id: 走 provider 单调用快路径(2026-10-06 性能轮)——元素有稳定
         // AutomationId 时优先 id:;name: 子串语义保留给无 id 的元素。
+        // ⑥ popup_ignores 块形态(降噪第二轮 pack 来源,2026-10-11):每条
+        // 必须带非空 app+name_contains(与 plan 级最窄形态同规——空声明
+        // =「忽略该 app 全部表面」,会把门禁掏空)。行级状态机与 CLI 注入
+        // 同族解析。
+        {
+            let mut pending_app = false;
+            let mut in_block = false;
+            for line in text.lines() {
+                if !in_block {
+                    if line == "popup_ignores:" {
+                        in_block = true;
+                    }
+                    continue;
+                }
+                if !line.starts_with(' ') {
+                    break;
+                }
+                let value = |l: &str| -> String {
+                    l.split_once(':')
+                        .map(|(_, v)| v)
+                        .unwrap_or("")
+                        .trim()
+                        .trim_matches('"')
+                        .to_string()
+                };
+                if let Some(app) = line.strip_prefix("  - app:") {
+                    if app.trim().trim_matches('"').is_empty() {
+                        eprintln!("✗ {rel}: popup_ignores entry with empty app");
+                        bad += 1;
+                    }
+                    pending_app = true;
+                } else if line.trim_start().starts_with("name_contains:") && pending_app {
+                    if value(line).is_empty() {
+                        eprintln!("✗ {rel}: popup_ignores entry with empty name_contains");
+                        bad += 1;
+                    }
+                    pending_app = false;
+                }
+            }
+        }
         let mut name_selectors = 0usize;
         for line in text.lines() {
             let Some(start) = line.find("[\"") else {

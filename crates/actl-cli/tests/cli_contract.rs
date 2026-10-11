@@ -851,3 +851,42 @@ fn focus_bad_target_is_protocol() {
     let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
     assert_eq!(v["error"]["code"], "PROTOCOL", "{v}");
 }
+
+#[test]
+fn pack_popup_ignores_inject_into_plans() {
+    // pack 级声明注入(降噪第二轮 pack 来源,2026-10-11):word.yml 的
+    // popup_ignores(Word/.docx × 导航/搜索)在 load_plan 时并入——模板
+    // 手写声明已撤(pack 单一来源),注入是导航窗格不挡写步的唯一通道
+    // (release-review-08 回归的根治)。仓库根 cwd:注入读 skills/actl/apps
+    // 相对路径,共享 actl() 继承的 crate 根 cwd 不满足。
+    let out = support::IsolatedCommand::new()
+        .command
+        .current_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/../../"))
+        .args([
+            "flow-validate",
+            "--file",
+            "skills/actl/workflows/word-note-typography.yml",
+            "--emit-plan",
+        ])
+        .output()
+        .expect("spawn actl");
+    let code = out.status.code().unwrap_or(-1);
+    let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+    assert_eq!(code, 0, "{stdout}");
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
+    let plan = &v["data"]["plan"];
+    let ignores = plan["popup_ignores"].as_array().expect("injected ignores");
+    let has = |app: &str, name: &str| {
+        ignores
+            .iter()
+            .any(|i| i["app"] == app && i["name_contains"] == name)
+    };
+    assert!(
+        has(".docx", "导航"),
+        "pack word ignores missing: {ignores:?}"
+    );
+    assert!(
+        has("Word", "搜索"),
+        "pack word ignores missing: {ignores:?}"
+    );
+}

@@ -19,9 +19,6 @@
 #   - 私有仓库形态需要持久 profile+登录(v2 教训在案,真实需求出现再立)
 version: 1
 name: 生成 zotero_cli 发布页核对草稿
-popup_ignores:
-  - app: Word
-    name_contains: 导航
 inputs:
   browser_executable:
     default: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'

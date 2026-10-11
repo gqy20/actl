@@ -14,6 +14,10 @@
 
 ### Added
 
+- **flow-revise 收完整模板形态（spec 增补，[06 运行时治理④](docs/06-design-blueprint.md)——工具链缺口①收口,模板迭代不再全程重跑）**：--file 直接吃 workflow 模板——resources 块经 prepare 剥离（幂等,不建新 run）、{"input":...} 引用经 declared defaults 或新增 --inputs 值文件解析、pack 级 popup_ignores 注入与 load_plan 同口径（否则修订计划与冻结计划 diff 误报 ignores 变化）。此前直接 schema parse,引用/资源形态必报 PROTOCOL——VS Code 轮被迫 emit-plan 具体化+带外 plan.json 手术（v2 报废事故）的根源。真机实证：vscode-edit.yml 模板原文件直接 revise 成功（diff 正常,find-replace 重置 pending）。配套：Word 新文档物化拒答边界入长期观察项（release-review-08 实证,五层修复只治兼容模式文档）。
+
+- **popup_ignores pack 级来源（spec，[06 运行时治理](docs/06-design-blueprint.md)——逐模板抄窗格清单不可扩展的收口,release-review-08 回归根治）**：apps/*.yml 顶层 popup_ignores: [{app, name_contains}]（与 plan 级同构,pack 列全锚形态——Word=Word/.docx 两种）,CLI load_plan 自动并入模板级声明（并集去重/幂等/stderr 留痕）;注入用行级状态机提取（pack 是松散人读文档,严格 YAML 解析对 quirks 冒号形态炸——word/cloudmusic 实证）;lint-packs ⑥ 号检查守门（非空 app+name_contains）。**四个模板的手写声明全部撤除（pack 单一来源）**——新 Word 模板零声明成本即得导航/搜索降噪。测试：extract 纯函数 2（引号对/空值跳过/块边界）+E2E 契约 1（emit-plan 断言注入条目,仓库根 cwd）。
+
 - **browser-read --wait-for N 沉降谓词（spec，[06 浏览器节](docs/06-design-blueprint.md)——CDP 轨缺沉降原语补面,43 联测暴露）**：命中数 ≥ N 才返回,内建 500ms 轮询共用药洞超时,超时 TIMEOUT 附实测命中数（异步渲染差多少一目了然）；与 --all/唯一读通用。背景:browser 轨无 wait 谓词（wait 是 UIA 轨）,异步渲染页（GitHub hpc 列表 CSR ~3s）读到半成品,04/06 轮 output field missing 根因;外挂 ps1 轮询循环（用户两度指正:为何不用 yml/actl——基建缺口实为根因,修基建让场景塌缩,探测降为单命令）。真机实证:zotero_cli releases 页 --wait-for 2 等 3s 沉降后返回 19 元素。测试:契约 help 四要素。
 
 - **popup_ignores 弹层门禁降噪第二轮（spec，[06 运行时治理](docs/06-design-blueprint.md)——两个独立应用同根因升级为类问题后的声明式收口）**：门禁观察面分不清「常驻部件」与「真弹窗」——Word 停靠导航窗格（fill-3 误拦）+ VS Code Find/Replace 面板（常驻 UIA 表面，关闭仅视觉折叠、带按钮挡一切写步=结构性死锁）两实例实证。**词表启发退役**（is_docked_pane 面板词白名单不泛化，第二实例即滑过）；**provider 可见性路线探针否证**（VS Code 折叠面板仍报 offscreen=false——Electron 对视觉折叠不说实话，如实入档）。正解=声明认领：popup_ignores: [{app, name_contains}]，门禁三处同口径跳过（步前判定/pending 过滤/处置后复查）；name_contains 必填（最窄形态，禁止掏空门禁的宽声明）；同表面 handler+ignore 双声明 PROTOCOL（处置与放行互斥）；与 handler 双层共存合法。Word 模板按 010 实证补认领（.docx+导航）。测试：popup_gate +4（认领放行/词不符仍拦/双层共存处置+认领两不相扰/schema 互斥拒绝）；uia 词表测试随退役删除。真机验收通过（2026-10-11，VS Code 主轮 v4 修订同现场 A/B）：v3 同现场被常驻面板死锁挡住的 find-replace/quick-open×2，认领声明后全部 completed+verified——同一现场的对照铁证；run 收于 25/26（close 步 precondition 阻断于操作者中途清窗导致的 bind 陈旧，非机制缺陷，手动等价收尾+进程零残留）。
@@ -80,6 +84,10 @@
 
 ### Added
 
+- **flow-revise 收完整模板形态（spec 增补，[06 运行时治理④](docs/06-design-blueprint.md)——工具链缺口①收口,模板迭代不再全程重跑）**：--file 直接吃 workflow 模板——resources 块经 prepare 剥离（幂等,不建新 run）、{"input":...} 引用经 declared defaults 或新增 --inputs 值文件解析、pack 级 popup_ignores 注入与 load_plan 同口径（否则修订计划与冻结计划 diff 误报 ignores 变化）。此前直接 schema parse,引用/资源形态必报 PROTOCOL——VS Code 轮被迫 emit-plan 具体化+带外 plan.json 手术（v2 报废事故）的根源。真机实证：vscode-edit.yml 模板原文件直接 revise 成功（diff 正常,find-replace 重置 pending）。配套：Word 新文档物化拒答边界入长期观察项（release-review-08 实证,五层修复只治兼容模式文档）。
+
+- **popup_ignores pack 级来源（spec，[06 运行时治理](docs/06-design-blueprint.md)——逐模板抄窗格清单不可扩展的收口,release-review-08 回归根治）**：apps/*.yml 顶层 popup_ignores: [{app, name_contains}]（与 plan 级同构,pack 列全锚形态——Word=Word/.docx 两种）,CLI load_plan 自动并入模板级声明（并集去重/幂等/stderr 留痕）;注入用行级状态机提取（pack 是松散人读文档,严格 YAML 解析对 quirks 冒号形态炸——word/cloudmusic 实证）;lint-packs ⑥ 号检查守门（非空 app+name_contains）。**四个模板的手写声明全部撤除（pack 单一来源）**——新 Word 模板零声明成本即得导航/搜索降噪。测试：extract 纯函数 2（引号对/空值跳过/块边界）+E2E 契约 1（emit-plan 断言注入条目,仓库根 cwd）。
+
 - **browser-read --wait-for N 沉降谓词（spec，[06 浏览器节](docs/06-design-blueprint.md)——CDP 轨缺沉降原语补面,43 联测暴露）**：命中数 ≥ N 才返回,内建 500ms 轮询共用药洞超时,超时 TIMEOUT 附实测命中数（异步渲染差多少一目了然）；与 --all/唯一读通用。背景:browser 轨无 wait 谓词（wait 是 UIA 轨）,异步渲染页（GitHub hpc 列表 CSR ~3s）读到半成品,04/06 轮 output field missing 根因;外挂 ps1 轮询循环（用户两度指正:为何不用 yml/actl——基建缺口实为根因,修基建让场景塌缩,探测降为单命令）。真机实证:zotero_cli releases 页 --wait-for 2 等 3s 沉降后返回 19 元素。测试:契约 help 四要素。
 
 - **popup_ignores 弹层门禁降噪第二轮（spec，[06 运行时治理](docs/06-design-blueprint.md)——两个独立应用同根因升级为类问题后的声明式收口）**：门禁观察面分不清「常驻部件」与「真弹窗」——Word 停靠导航窗格（fill-3 误拦）+ VS Code Find/Replace 面板（常驻 UIA 表面，关闭仅视觉折叠、带按钮挡一切写步=结构性死锁）两实例实证。**词表启发退役**（is_docked_pane 面板词白名单不泛化，第二实例即滑过）；**provider 可见性路线探针否证**（VS Code 折叠面板仍报 offscreen=false——Electron 对视觉折叠不说实话，如实入档）。正解=声明认领：popup_ignores: [{app, name_contains}]，门禁三处同口径跳过（步前判定/pending 过滤/处置后复查）；name_contains 必填（最窄形态，禁止掏空门禁的宽声明）；同表面 handler+ignore 双声明 PROTOCOL（处置与放行互斥）；与 handler 双层共存合法。Word 模板按 010 实证补认领（.docx+导航）。测试：popup_gate +4（认领放行/词不符仍拦/双层共存处置+认领两不相扰/schema 互斥拒绝）；uia 词表测试随退役删除。真机验收通过（2026-10-11，VS Code 主轮 v4 修订同现场 A/B）：v3 同现场被常驻面板死锁挡住的 find-replace/quick-open×2，认领声明后全部 completed+verified——同一现场的对照铁证；run 收于 25/26（close 步 precondition 阻断于操作者中途清窗导致的 bind 陈旧，非机制缺陷，手动等价收尾+进程零残留）。
@@ -121,6 +129,10 @@
 
 ### Added
 
+- **flow-revise 收完整模板形态（spec 增补，[06 运行时治理④](docs/06-design-blueprint.md)——工具链缺口①收口,模板迭代不再全程重跑）**：--file 直接吃 workflow 模板——resources 块经 prepare 剥离（幂等,不建新 run）、{"input":...} 引用经 declared defaults 或新增 --inputs 值文件解析、pack 级 popup_ignores 注入与 load_plan 同口径（否则修订计划与冻结计划 diff 误报 ignores 变化）。此前直接 schema parse,引用/资源形态必报 PROTOCOL——VS Code 轮被迫 emit-plan 具体化+带外 plan.json 手术（v2 报废事故）的根源。真机实证：vscode-edit.yml 模板原文件直接 revise 成功（diff 正常,find-replace 重置 pending）。配套：Word 新文档物化拒答边界入长期观察项（release-review-08 实证,五层修复只治兼容模式文档）。
+
+- **popup_ignores pack 级来源（spec，[06 运行时治理](docs/06-design-blueprint.md)——逐模板抄窗格清单不可扩展的收口,release-review-08 回归根治）**：apps/*.yml 顶层 popup_ignores: [{app, name_contains}]（与 plan 级同构,pack 列全锚形态——Word=Word/.docx 两种）,CLI load_plan 自动并入模板级声明（并集去重/幂等/stderr 留痕）;注入用行级状态机提取（pack 是松散人读文档,严格 YAML 解析对 quirks 冒号形态炸——word/cloudmusic 实证）;lint-packs ⑥ 号检查守门（非空 app+name_contains）。**四个模板的手写声明全部撤除（pack 单一来源）**——新 Word 模板零声明成本即得导航/搜索降噪。测试：extract 纯函数 2（引号对/空值跳过/块边界）+E2E 契约 1（emit-plan 断言注入条目,仓库根 cwd）。
+
 - **browser-read --wait-for N 沉降谓词（spec，[06 浏览器节](docs/06-design-blueprint.md)——CDP 轨缺沉降原语补面,43 联测暴露）**：命中数 ≥ N 才返回,内建 500ms 轮询共用药洞超时,超时 TIMEOUT 附实测命中数（异步渲染差多少一目了然）；与 --all/唯一读通用。背景:browser 轨无 wait 谓词（wait 是 UIA 轨）,异步渲染页（GitHub hpc 列表 CSR ~3s）读到半成品,04/06 轮 output field missing 根因;外挂 ps1 轮询循环（用户两度指正:为何不用 yml/actl——基建缺口实为根因,修基建让场景塌缩,探测降为单命令）。真机实证:zotero_cli releases 页 --wait-for 2 等 3s 沉降后返回 19 元素。测试:契约 help 四要素。
 
 - **popup_ignores 弹层门禁降噪第二轮（spec，[06 运行时治理](docs/06-design-blueprint.md)——两个独立应用同根因升级为类问题后的声明式收口）**：门禁观察面分不清「常驻部件」与「真弹窗」——Word 停靠导航窗格（fill-3 误拦）+ VS Code Find/Replace 面板（常驻 UIA 表面，关闭仅视觉折叠、带按钮挡一切写步=结构性死锁）两实例实证。**词表启发退役**（is_docked_pane 面板词白名单不泛化，第二实例即滑过）；**provider 可见性路线探针否证**（VS Code 折叠面板仍报 offscreen=false——Electron 对视觉折叠不说实话，如实入档）。正解=声明认领：popup_ignores: [{app, name_contains}]，门禁三处同口径跳过（步前判定/pending 过滤/处置后复查）；name_contains 必填（最窄形态，禁止掏空门禁的宽声明）；同表面 handler+ignore 双声明 PROTOCOL（处置与放行互斥）；与 handler 双层共存合法。Word 模板按 010 实证补认领（.docx+导航）。测试：popup_gate +4（认领放行/词不符仍拦/双层共存处置+认领两不相扰/schema 互斥拒绝）；uia 词表测试随退役删除。真机验收通过（2026-10-11，VS Code 主轮 v4 修订同现场 A/B）：v3 同现场被常驻面板死锁挡住的 find-replace/quick-open×2，认领声明后全部 completed+verified——同一现场的对照铁证；run 收于 25/26（close 步 precondition 阻断于操作者中途清窗导致的 bind 陈旧，非机制缺陷，手动等价收尾+进程零残留）。
@@ -159,6 +171,10 @@
 本版是可靠性、验收与安全加固的版本：金任务跨日双百达标，全部原生夹具和四场景真机复验通过，输入护栏与显示协议健壮化（前台沉降/租约重读/换行折叠/悬浮卡不抢前台），前台弹层优先体系落地（front-report + 判定树 + 清理白名单），授权通道定案（agent 不可自授、急停压过预授权）。
 
 ### Added
+
+- **flow-revise 收完整模板形态（spec 增补，[06 运行时治理④](docs/06-design-blueprint.md)——工具链缺口①收口,模板迭代不再全程重跑）**：--file 直接吃 workflow 模板——resources 块经 prepare 剥离（幂等,不建新 run）、{"input":...} 引用经 declared defaults 或新增 --inputs 值文件解析、pack 级 popup_ignores 注入与 load_plan 同口径（否则修订计划与冻结计划 diff 误报 ignores 变化）。此前直接 schema parse,引用/资源形态必报 PROTOCOL——VS Code 轮被迫 emit-plan 具体化+带外 plan.json 手术（v2 报废事故）的根源。真机实证：vscode-edit.yml 模板原文件直接 revise 成功（diff 正常,find-replace 重置 pending）。配套：Word 新文档物化拒答边界入长期观察项（release-review-08 实证,五层修复只治兼容模式文档）。
+
+- **popup_ignores pack 级来源（spec，[06 运行时治理](docs/06-design-blueprint.md)——逐模板抄窗格清单不可扩展的收口,release-review-08 回归根治）**：apps/*.yml 顶层 popup_ignores: [{app, name_contains}]（与 plan 级同构,pack 列全锚形态——Word=Word/.docx 两种）,CLI load_plan 自动并入模板级声明（并集去重/幂等/stderr 留痕）;注入用行级状态机提取（pack 是松散人读文档,严格 YAML 解析对 quirks 冒号形态炸——word/cloudmusic 实证）;lint-packs ⑥ 号检查守门（非空 app+name_contains）。**四个模板的手写声明全部撤除（pack 单一来源）**——新 Word 模板零声明成本即得导航/搜索降噪。测试：extract 纯函数 2（引号对/空值跳过/块边界）+E2E 契约 1（emit-plan 断言注入条目,仓库根 cwd）。
 
 - **browser-read --wait-for N 沉降谓词（spec，[06 浏览器节](docs/06-design-blueprint.md)——CDP 轨缺沉降原语补面,43 联测暴露）**：命中数 ≥ N 才返回,内建 500ms 轮询共用药洞超时,超时 TIMEOUT 附实测命中数（异步渲染差多少一目了然）；与 --all/唯一读通用。背景:browser 轨无 wait 谓词（wait 是 UIA 轨）,异步渲染页（GitHub hpc 列表 CSR ~3s）读到半成品,04/06 轮 output field missing 根因;外挂 ps1 轮询循环（用户两度指正:为何不用 yml/actl——基建缺口实为根因,修基建让场景塌缩,探测降为单命令）。真机实证:zotero_cli releases 页 --wait-for 2 等 3s 沉降后返回 19 元素。测试:契约 help 四要素。
 
@@ -253,6 +269,10 @@
 
 ### Added
 
+- **flow-revise 收完整模板形态（spec 增补，[06 运行时治理④](docs/06-design-blueprint.md)——工具链缺口①收口,模板迭代不再全程重跑）**：--file 直接吃 workflow 模板——resources 块经 prepare 剥离（幂等,不建新 run）、{"input":...} 引用经 declared defaults 或新增 --inputs 值文件解析、pack 级 popup_ignores 注入与 load_plan 同口径（否则修订计划与冻结计划 diff 误报 ignores 变化）。此前直接 schema parse,引用/资源形态必报 PROTOCOL——VS Code 轮被迫 emit-plan 具体化+带外 plan.json 手术（v2 报废事故）的根源。真机实证：vscode-edit.yml 模板原文件直接 revise 成功（diff 正常,find-replace 重置 pending）。配套：Word 新文档物化拒答边界入长期观察项（release-review-08 实证,五层修复只治兼容模式文档）。
+
+- **popup_ignores pack 级来源（spec，[06 运行时治理](docs/06-design-blueprint.md)——逐模板抄窗格清单不可扩展的收口,release-review-08 回归根治）**：apps/*.yml 顶层 popup_ignores: [{app, name_contains}]（与 plan 级同构,pack 列全锚形态——Word=Word/.docx 两种）,CLI load_plan 自动并入模板级声明（并集去重/幂等/stderr 留痕）;注入用行级状态机提取（pack 是松散人读文档,严格 YAML 解析对 quirks 冒号形态炸——word/cloudmusic 实证）;lint-packs ⑥ 号检查守门（非空 app+name_contains）。**四个模板的手写声明全部撤除（pack 单一来源）**——新 Word 模板零声明成本即得导航/搜索降噪。测试：extract 纯函数 2（引号对/空值跳过/块边界）+E2E 契约 1（emit-plan 断言注入条目,仓库根 cwd）。
+
 - **browser-read --wait-for N 沉降谓词（spec，[06 浏览器节](docs/06-design-blueprint.md)——CDP 轨缺沉降原语补面,43 联测暴露）**：命中数 ≥ N 才返回,内建 500ms 轮询共用药洞超时,超时 TIMEOUT 附实测命中数（异步渲染差多少一目了然）；与 --all/唯一读通用。背景:browser 轨无 wait 谓词（wait 是 UIA 轨）,异步渲染页（GitHub hpc 列表 CSR ~3s）读到半成品,04/06 轮 output field missing 根因;外挂 ps1 轮询循环（用户两度指正:为何不用 yml/actl——基建缺口实为根因,修基建让场景塌缩,探测降为单命令）。真机实证:zotero_cli releases 页 --wait-for 2 等 3s 沉降后返回 19 元素。测试:契约 help 四要素。
 
 - **popup_ignores 弹层门禁降噪第二轮（spec，[06 运行时治理](docs/06-design-blueprint.md)——两个独立应用同根因升级为类问题后的声明式收口）**：门禁观察面分不清「常驻部件」与「真弹窗」——Word 停靠导航窗格（fill-3 误拦）+ VS Code Find/Replace 面板（常驻 UIA 表面，关闭仅视觉折叠、带按钮挡一切写步=结构性死锁）两实例实证。**词表启发退役**（is_docked_pane 面板词白名单不泛化，第二实例即滑过）；**provider 可见性路线探针否证**（VS Code 折叠面板仍报 offscreen=false——Electron 对视觉折叠不说实话，如实入档）。正解=声明认领：popup_ignores: [{app, name_contains}]，门禁三处同口径跳过（步前判定/pending 过滤/处置后复查）；name_contains 必填（最窄形态，禁止掏空门禁的宽声明）；同表面 handler+ignore 双声明 PROTOCOL（处置与放行互斥）；与 handler 双层共存合法。Word 模板按 010 实证补认领（.docx+导航）。测试：popup_gate +4（认领放行/词不符仍拦/双层共存处置+认领两不相扰/schema 互斥拒绝）；uia 词表测试随退役删除。真机验收通过（2026-10-11，VS Code 主轮 v4 修订同现场 A/B）：v3 同现场被常驻面板死锁挡住的 find-replace/quick-open×2，认领声明后全部 completed+verified——同一现场的对照铁证；run 收于 25/26（close 步 precondition 阻断于操作者中途清窗导致的 bind 陈旧，非机制缺陷，手动等价收尾+进程零残留）。
@@ -294,6 +314,10 @@
 
 ### Added
 
+- **flow-revise 收完整模板形态（spec 增补，[06 运行时治理④](docs/06-design-blueprint.md)——工具链缺口①收口,模板迭代不再全程重跑）**：--file 直接吃 workflow 模板——resources 块经 prepare 剥离（幂等,不建新 run）、{"input":...} 引用经 declared defaults 或新增 --inputs 值文件解析、pack 级 popup_ignores 注入与 load_plan 同口径（否则修订计划与冻结计划 diff 误报 ignores 变化）。此前直接 schema parse,引用/资源形态必报 PROTOCOL——VS Code 轮被迫 emit-plan 具体化+带外 plan.json 手术（v2 报废事故）的根源。真机实证：vscode-edit.yml 模板原文件直接 revise 成功（diff 正常,find-replace 重置 pending）。配套：Word 新文档物化拒答边界入长期观察项（release-review-08 实证,五层修复只治兼容模式文档）。
+
+- **popup_ignores pack 级来源（spec，[06 运行时治理](docs/06-design-blueprint.md)——逐模板抄窗格清单不可扩展的收口,release-review-08 回归根治）**：apps/*.yml 顶层 popup_ignores: [{app, name_contains}]（与 plan 级同构,pack 列全锚形态——Word=Word/.docx 两种）,CLI load_plan 自动并入模板级声明（并集去重/幂等/stderr 留痕）;注入用行级状态机提取（pack 是松散人读文档,严格 YAML 解析对 quirks 冒号形态炸——word/cloudmusic 实证）;lint-packs ⑥ 号检查守门（非空 app+name_contains）。**四个模板的手写声明全部撤除（pack 单一来源）**——新 Word 模板零声明成本即得导航/搜索降噪。测试：extract 纯函数 2（引号对/空值跳过/块边界）+E2E 契约 1（emit-plan 断言注入条目,仓库根 cwd）。
+
 - **browser-read --wait-for N 沉降谓词（spec，[06 浏览器节](docs/06-design-blueprint.md)——CDP 轨缺沉降原语补面,43 联测暴露）**：命中数 ≥ N 才返回,内建 500ms 轮询共用药洞超时,超时 TIMEOUT 附实测命中数（异步渲染差多少一目了然）；与 --all/唯一读通用。背景:browser 轨无 wait 谓词（wait 是 UIA 轨）,异步渲染页（GitHub hpc 列表 CSR ~3s）读到半成品,04/06 轮 output field missing 根因;外挂 ps1 轮询循环（用户两度指正:为何不用 yml/actl——基建缺口实为根因,修基建让场景塌缩,探测降为单命令）。真机实证:zotero_cli releases 页 --wait-for 2 等 3s 沉降后返回 19 元素。测试:契约 help 四要素。
 
 - **popup_ignores 弹层门禁降噪第二轮（spec，[06 运行时治理](docs/06-design-blueprint.md)——两个独立应用同根因升级为类问题后的声明式收口）**：门禁观察面分不清「常驻部件」与「真弹窗」——Word 停靠导航窗格（fill-3 误拦）+ VS Code Find/Replace 面板（常驻 UIA 表面，关闭仅视觉折叠、带按钮挡一切写步=结构性死锁）两实例实证。**词表启发退役**（is_docked_pane 面板词白名单不泛化，第二实例即滑过）；**provider 可见性路线探针否证**（VS Code 折叠面板仍报 offscreen=false——Electron 对视觉折叠不说实话，如实入档）。正解=声明认领：popup_ignores: [{app, name_contains}]，门禁三处同口径跳过（步前判定/pending 过滤/处置后复查）；name_contains 必填（最窄形态，禁止掏空门禁的宽声明）；同表面 handler+ignore 双声明 PROTOCOL（处置与放行互斥）；与 handler 双层共存合法。Word 模板按 010 实证补认领（.docx+导航）。测试：popup_gate +4（认领放行/词不符仍拦/双层共存处置+认领两不相扰/schema 互斥拒绝）；uia 词表测试随退役删除。真机验收通过（2026-10-11，VS Code 主轮 v4 修订同现场 A/B）：v3 同现场被常驻面板死锁挡住的 find-replace/quick-open×2，认领声明后全部 completed+verified——同一现场的对照铁证；run 收于 25/26（close 步 precondition 阻断于操作者中途清窗导致的 bind 陈旧，非机制缺陷，手动等价收尾+进程零残留）。
@@ -325,6 +349,10 @@
 踩坑细节见 docs/16 与 git 日志,此处只记变更本体。
 
 ### Added
+
+- **flow-revise 收完整模板形态（spec 增补，[06 运行时治理④](docs/06-design-blueprint.md)——工具链缺口①收口,模板迭代不再全程重跑）**：--file 直接吃 workflow 模板——resources 块经 prepare 剥离（幂等,不建新 run）、{"input":...} 引用经 declared defaults 或新增 --inputs 值文件解析、pack 级 popup_ignores 注入与 load_plan 同口径（否则修订计划与冻结计划 diff 误报 ignores 变化）。此前直接 schema parse,引用/资源形态必报 PROTOCOL——VS Code 轮被迫 emit-plan 具体化+带外 plan.json 手术（v2 报废事故）的根源。真机实证：vscode-edit.yml 模板原文件直接 revise 成功（diff 正常,find-replace 重置 pending）。配套：Word 新文档物化拒答边界入长期观察项（release-review-08 实证,五层修复只治兼容模式文档）。
+
+- **popup_ignores pack 级来源（spec，[06 运行时治理](docs/06-design-blueprint.md)——逐模板抄窗格清单不可扩展的收口,release-review-08 回归根治）**：apps/*.yml 顶层 popup_ignores: [{app, name_contains}]（与 plan 级同构,pack 列全锚形态——Word=Word/.docx 两种）,CLI load_plan 自动并入模板级声明（并集去重/幂等/stderr 留痕）;注入用行级状态机提取（pack 是松散人读文档,严格 YAML 解析对 quirks 冒号形态炸——word/cloudmusic 实证）;lint-packs ⑥ 号检查守门（非空 app+name_contains）。**四个模板的手写声明全部撤除（pack 单一来源）**——新 Word 模板零声明成本即得导航/搜索降噪。测试：extract 纯函数 2（引号对/空值跳过/块边界）+E2E 契约 1（emit-plan 断言注入条目,仓库根 cwd）。
 
 - **browser-read --wait-for N 沉降谓词（spec，[06 浏览器节](docs/06-design-blueprint.md)——CDP 轨缺沉降原语补面,43 联测暴露）**：命中数 ≥ N 才返回,内建 500ms 轮询共用药洞超时,超时 TIMEOUT 附实测命中数（异步渲染差多少一目了然）；与 --all/唯一读通用。背景:browser 轨无 wait 谓词（wait 是 UIA 轨）,异步渲染页（GitHub hpc 列表 CSR ~3s）读到半成品,04/06 轮 output field missing 根因;外挂 ps1 轮询循环（用户两度指正:为何不用 yml/actl——基建缺口实为根因,修基建让场景塌缩,探测降为单命令）。真机实证:zotero_cli releases 页 --wait-for 2 等 3s 沉降后返回 19 元素。测试:契约 help 四要素。
 - **浏览器内容通道**:`snapshot --view content` 内容域投影(应用工具栏等
@@ -358,6 +386,10 @@ M2 收官批:命令面 27/31 + 窗口治理与可观测性 + 信号条重设计 
 + 应用档案 pack 体系。
 
 ### Added
+
+- **flow-revise 收完整模板形态（spec 增补，[06 运行时治理④](docs/06-design-blueprint.md)——工具链缺口①收口,模板迭代不再全程重跑）**：--file 直接吃 workflow 模板——resources 块经 prepare 剥离（幂等,不建新 run）、{"input":...} 引用经 declared defaults 或新增 --inputs 值文件解析、pack 级 popup_ignores 注入与 load_plan 同口径（否则修订计划与冻结计划 diff 误报 ignores 变化）。此前直接 schema parse,引用/资源形态必报 PROTOCOL——VS Code 轮被迫 emit-plan 具体化+带外 plan.json 手术（v2 报废事故）的根源。真机实证：vscode-edit.yml 模板原文件直接 revise 成功（diff 正常,find-replace 重置 pending）。配套：Word 新文档物化拒答边界入长期观察项（release-review-08 实证,五层修复只治兼容模式文档）。
+
+- **popup_ignores pack 级来源（spec，[06 运行时治理](docs/06-design-blueprint.md)——逐模板抄窗格清单不可扩展的收口,release-review-08 回归根治）**：apps/*.yml 顶层 popup_ignores: [{app, name_contains}]（与 plan 级同构,pack 列全锚形态——Word=Word/.docx 两种）,CLI load_plan 自动并入模板级声明（并集去重/幂等/stderr 留痕）;注入用行级状态机提取（pack 是松散人读文档,严格 YAML 解析对 quirks 冒号形态炸——word/cloudmusic 实证）;lint-packs ⑥ 号检查守门（非空 app+name_contains）。**四个模板的手写声明全部撤除（pack 单一来源）**——新 Word 模板零声明成本即得导航/搜索降噪。测试：extract 纯函数 2（引号对/空值跳过/块边界）+E2E 契约 1（emit-plan 断言注入条目,仓库根 cwd）。
 
 - **browser-read --wait-for N 沉降谓词（spec，[06 浏览器节](docs/06-design-blueprint.md)——CDP 轨缺沉降原语补面,43 联测暴露）**：命中数 ≥ N 才返回,内建 500ms 轮询共用药洞超时,超时 TIMEOUT 附实测命中数（异步渲染差多少一目了然）；与 --all/唯一读通用。背景:browser 轨无 wait 谓词（wait 是 UIA 轨）,异步渲染页（GitHub hpc 列表 CSR ~3s）读到半成品,04/06 轮 output field missing 根因;外挂 ps1 轮询循环（用户两度指正:为何不用 yml/actl——基建缺口实为根因,修基建让场景塌缩,探测降为单命令）。真机实证:zotero_cli releases 页 --wait-for 2 等 3s 沉降后返回 19 元素。测试:契约 help 四要素。
 - **命令**:`wait --property` 谓词等待(value/name/checked,--contains 子串);
@@ -416,6 +448,10 @@ M2 第三批:观察层强化 + 定位性能结构优化 + 可观测性 + 信号�
 
 ### Added
 
+- **flow-revise 收完整模板形态（spec 增补，[06 运行时治理④](docs/06-design-blueprint.md)——工具链缺口①收口,模板迭代不再全程重跑）**：--file 直接吃 workflow 模板——resources 块经 prepare 剥离（幂等,不建新 run）、{"input":...} 引用经 declared defaults 或新增 --inputs 值文件解析、pack 级 popup_ignores 注入与 load_plan 同口径（否则修订计划与冻结计划 diff 误报 ignores 变化）。此前直接 schema parse,引用/资源形态必报 PROTOCOL——VS Code 轮被迫 emit-plan 具体化+带外 plan.json 手术（v2 报废事故）的根源。真机实证：vscode-edit.yml 模板原文件直接 revise 成功（diff 正常,find-replace 重置 pending）。配套：Word 新文档物化拒答边界入长期观察项（release-review-08 实证,五层修复只治兼容模式文档）。
+
+- **popup_ignores pack 级来源（spec，[06 运行时治理](docs/06-design-blueprint.md)——逐模板抄窗格清单不可扩展的收口,release-review-08 回归根治）**：apps/*.yml 顶层 popup_ignores: [{app, name_contains}]（与 plan 级同构,pack 列全锚形态——Word=Word/.docx 两种）,CLI load_plan 自动并入模板级声明（并集去重/幂等/stderr 留痕）;注入用行级状态机提取（pack 是松散人读文档,严格 YAML 解析对 quirks 冒号形态炸——word/cloudmusic 实证）;lint-packs ⑥ 号检查守门（非空 app+name_contains）。**四个模板的手写声明全部撤除（pack 单一来源）**——新 Word 模板零声明成本即得导航/搜索降噪。测试：extract 纯函数 2（引号对/空值跳过/块边界）+E2E 契约 1（emit-plan 断言注入条目,仓库根 cwd）。
+
 - **browser-read --wait-for N 沉降谓词（spec，[06 浏览器节](docs/06-design-blueprint.md)——CDP 轨缺沉降原语补面,43 联测暴露）**：命中数 ≥ N 才返回,内建 500ms 轮询共用药洞超时,超时 TIMEOUT 附实测命中数（异步渲染差多少一目了然）；与 --all/唯一读通用。背景:browser 轨无 wait 谓词（wait 是 UIA 轨）,异步渲染页（GitHub hpc 列表 CSR ~3s）读到半成品,04/06 轮 output field missing 根因;外挂 ps1 轮询循环（用户两度指正:为何不用 yml/actl——基建缺口实为根因,修基建让场景塌缩,探测降为单命令）。真机实证:zotero_cli releases 页 --wait-for 2 等 3s 沉降后返回 19 元素。测试:契约 help 四要素。
 - **L4 虚拟化容器定位(spec)**:定位链第四级——已物化树空手时走
   ItemContainerPattern 精确查询(Explorer 文件列表实证:树内 0 命中 → 命中未物化
@@ -438,6 +474,10 @@ M2 第三批:观察层强化 + 定位性能结构优化 + 可观测性 + 信号�
 M2 收尾:分发三渠道 + crates.io 自动化发布 + 信号条交互打磨 + 时序评估闭环。
 
 ### Added
+
+- **flow-revise 收完整模板形态（spec 增补，[06 运行时治理④](docs/06-design-blueprint.md)——工具链缺口①收口,模板迭代不再全程重跑）**：--file 直接吃 workflow 模板——resources 块经 prepare 剥离（幂等,不建新 run）、{"input":...} 引用经 declared defaults 或新增 --inputs 值文件解析、pack 级 popup_ignores 注入与 load_plan 同口径（否则修订计划与冻结计划 diff 误报 ignores 变化）。此前直接 schema parse,引用/资源形态必报 PROTOCOL——VS Code 轮被迫 emit-plan 具体化+带外 plan.json 手术（v2 报废事故）的根源。真机实证：vscode-edit.yml 模板原文件直接 revise 成功（diff 正常,find-replace 重置 pending）。配套：Word 新文档物化拒答边界入长期观察项（release-review-08 实证,五层修复只治兼容模式文档）。
+
+- **popup_ignores pack 级来源（spec，[06 运行时治理](docs/06-design-blueprint.md)——逐模板抄窗格清单不可扩展的收口,release-review-08 回归根治）**：apps/*.yml 顶层 popup_ignores: [{app, name_contains}]（与 plan 级同构,pack 列全锚形态——Word=Word/.docx 两种）,CLI load_plan 自动并入模板级声明（并集去重/幂等/stderr 留痕）;注入用行级状态机提取（pack 是松散人读文档,严格 YAML 解析对 quirks 冒号形态炸——word/cloudmusic 实证）;lint-packs ⑥ 号检查守门（非空 app+name_contains）。**四个模板的手写声明全部撤除（pack 单一来源）**——新 Word 模板零声明成本即得导航/搜索降噪。测试：extract 纯函数 2（引号对/空值跳过/块边界）+E2E 契约 1（emit-plan 断言注入条目,仓库根 cwd）。
 
 - **browser-read --wait-for N 沉降谓词（spec，[06 浏览器节](docs/06-design-blueprint.md)——CDP 轨缺沉降原语补面,43 联测暴露）**：命中数 ≥ N 才返回,内建 500ms 轮询共用药洞超时,超时 TIMEOUT 附实测命中数（异步渲染差多少一目了然）；与 --all/唯一读通用。背景:browser 轨无 wait 谓词（wait 是 UIA 轨）,异步渲染页（GitHub hpc 列表 CSR ~3s）读到半成品,04/06 轮 output field missing 根因;外挂 ps1 轮询循环（用户两度指正:为何不用 yml/actl——基建缺口实为根因,修基建让场景塌缩,探测降为单命令）。真机实证:zotero_cli releases 页 --wait-for 2 等 3s 沉降后返回 19 元素。测试:契约 help 四要素。
 - README 示例化(安装三渠道/快速上手/信号条/安全设计/命令面);
@@ -464,6 +504,10 @@ M2 前两批:输入可靠性硬化 + 命令面 24 + fallback 定位链 + US1 跨
 显示信号层(actl-signal 状态条与紧急停止)。
 
 ### Added
+
+- **flow-revise 收完整模板形态（spec 增补，[06 运行时治理④](docs/06-design-blueprint.md)——工具链缺口①收口,模板迭代不再全程重跑）**：--file 直接吃 workflow 模板——resources 块经 prepare 剥离（幂等,不建新 run）、{"input":...} 引用经 declared defaults 或新增 --inputs 值文件解析、pack 级 popup_ignores 注入与 load_plan 同口径（否则修订计划与冻结计划 diff 误报 ignores 变化）。此前直接 schema parse,引用/资源形态必报 PROTOCOL——VS Code 轮被迫 emit-plan 具体化+带外 plan.json 手术（v2 报废事故）的根源。真机实证：vscode-edit.yml 模板原文件直接 revise 成功（diff 正常,find-replace 重置 pending）。配套：Word 新文档物化拒答边界入长期观察项（release-review-08 实证,五层修复只治兼容模式文档）。
+
+- **popup_ignores pack 级来源（spec，[06 运行时治理](docs/06-design-blueprint.md)——逐模板抄窗格清单不可扩展的收口,release-review-08 回归根治）**：apps/*.yml 顶层 popup_ignores: [{app, name_contains}]（与 plan 级同构,pack 列全锚形态——Word=Word/.docx 两种）,CLI load_plan 自动并入模板级声明（并集去重/幂等/stderr 留痕）;注入用行级状态机提取（pack 是松散人读文档,严格 YAML 解析对 quirks 冒号形态炸——word/cloudmusic 实证）;lint-packs ⑥ 号检查守门（非空 app+name_contains）。**四个模板的手写声明全部撤除（pack 单一来源）**——新 Word 模板零声明成本即得导航/搜索降噪。测试：extract 纯函数 2（引号对/空值跳过/块边界）+E2E 契约 1（emit-plan 断言注入条目,仓库根 cwd）。
 
 - **browser-read --wait-for N 沉降谓词（spec，[06 浏览器节](docs/06-design-blueprint.md)——CDP 轨缺沉降原语补面,43 联测暴露）**：命中数 ≥ N 才返回,内建 500ms 轮询共用药洞超时,超时 TIMEOUT 附实测命中数（异步渲染差多少一目了然）；与 --all/唯一读通用。背景:browser 轨无 wait 谓词（wait 是 UIA 轨）,异步渲染页（GitHub hpc 列表 CSR ~3s）读到半成品,04/06 轮 output field missing 根因;外挂 ps1 轮询循环（用户两度指正:为何不用 yml/actl——基建缺口实为根因,修基建让场景塌缩,探测降为单命令）。真机实证:zotero_cli releases 页 --wait-for 2 等 3s 沉降后返回 19 元素。测试:契约 help 四要素。
 - **M2 第一批·输入可靠性硬化**:
@@ -505,6 +549,10 @@ M1 激进 MVP:纵向跑通"snapshot → 定位 → 操作 → 反馈"全链路;1
 双金任务 10/10,冷启动 P95 53.9ms(实测)。首个可安装版本。
 
 ### Added
+
+- **flow-revise 收完整模板形态（spec 增补，[06 运行时治理④](docs/06-design-blueprint.md)——工具链缺口①收口,模板迭代不再全程重跑）**：--file 直接吃 workflow 模板——resources 块经 prepare 剥离（幂等,不建新 run）、{"input":...} 引用经 declared defaults 或新增 --inputs 值文件解析、pack 级 popup_ignores 注入与 load_plan 同口径（否则修订计划与冻结计划 diff 误报 ignores 变化）。此前直接 schema parse,引用/资源形态必报 PROTOCOL——VS Code 轮被迫 emit-plan 具体化+带外 plan.json 手术（v2 报废事故）的根源。真机实证：vscode-edit.yml 模板原文件直接 revise 成功（diff 正常,find-replace 重置 pending）。配套：Word 新文档物化拒答边界入长期观察项（release-review-08 实证,五层修复只治兼容模式文档）。
+
+- **popup_ignores pack 级来源（spec，[06 运行时治理](docs/06-design-blueprint.md)——逐模板抄窗格清单不可扩展的收口,release-review-08 回归根治）**：apps/*.yml 顶层 popup_ignores: [{app, name_contains}]（与 plan 级同构,pack 列全锚形态——Word=Word/.docx 两种）,CLI load_plan 自动并入模板级声明（并集去重/幂等/stderr 留痕）;注入用行级状态机提取（pack 是松散人读文档,严格 YAML 解析对 quirks 冒号形态炸——word/cloudmusic 实证）;lint-packs ⑥ 号检查守门（非空 app+name_contains）。**四个模板的手写声明全部撤除（pack 单一来源）**——新 Word 模板零声明成本即得导航/搜索降噪。测试：extract 纯函数 2（引号对/空值跳过/块边界）+E2E 契约 1（emit-plan 断言注入条目,仓库根 cwd）。
 
 - **browser-read --wait-for N 沉降谓词（spec，[06 浏览器节](docs/06-design-blueprint.md)——CDP 轨缺沉降原语补面,43 联测暴露）**：命中数 ≥ N 才返回,内建 500ms 轮询共用药洞超时,超时 TIMEOUT 附实测命中数（异步渲染差多少一目了然）；与 --all/唯一读通用。背景:browser 轨无 wait 谓词（wait 是 UIA 轨）,异步渲染页（GitHub hpc 列表 CSR ~3s）读到半成品,04/06 轮 output field missing 根因;外挂 ps1 轮询循环（用户两度指正:为何不用 yml/actl——基建缺口实为根因,修基建让场景塌缩,探测降为单命令）。真机实证:zotero_cli releases 页 --wait-for 2 等 3s 沉降后返回 19 元素。测试:契约 help 四要素。
 
