@@ -8,6 +8,7 @@
 
 use crate::SelectorKind;
 use crate::cdp::{self, CdpError, Connection};
+use crate::scripts::{locate_all_script, locate_deep_script, locate_script, popup_scan_script};
 use crate::session::{self, BrowserSession, Mode, Paths};
 use actl_core::state::unix_ms;
 use actl_core::{CtlError, ErrorCode};
@@ -137,123 +138,6 @@ fn validate_property(property: &str) -> Result<(), CtlError> {
             READ_PROPERTIES.join(", ")
         )))
     }
-}
-
-/// 白名单属性 → 固定 JS 表达式(非用户输入,无注入面)
-fn property_expr(property: &str) -> &'static str {
-    match property {
-        "value" => "(e.value===undefined?null:String(e.value))",
-        "href" => "(e.href?String(e.href):null)",
-        "name" => "(e.getAttribute('name'))",
-        "id" => "(e.id||null)",
-        "checked" => "(e.checked===undefined?null:(e.checked?'true':'false'))",
-        "tag" => "(e.tagName||null)",
-        _ => "(e.textContent==null?'':String(e.textContent))",
-    }
-}
-
-/// JS 定位脚本:唯一匹配为硬条件,返回 JSON.stringify 的结果对象。
-/// 选择器以 JSON 字符串字面量嵌入(serde_json 转义,防注入);
-/// property 附带白名单属性值(value/href 等,textContent 之外的读取通道)。
-fn locate_script(kind: SelectorKind, value: &str, property: Option<&str>) -> String {
-    let embedded = serde_json::to_string(value).unwrap_or_default();
-    let prop_field = match property {
-        Some(p) => format!(",property:{}", property_expr(p)),
-        None => String::new(),
-    };
-    match kind {
-        SelectorKind::Css => format!(
-            "(function(){{var els=document.querySelectorAll({embedded});\
-             if(els.length===0)return JSON.stringify({{matches:0}});\
-             if(els.length>1)return JSON.stringify({{matches:els.length}});\
-             var e=els[0];\
-             return JSON.stringify({{matches:1,text:e.textContent==null?'':String(e.textContent),\
-             tag:e.tagName,id:e.id||null,name:e.getAttribute('name')||null{prop_field}}});}})()"
-        ),
-        SelectorKind::Xpath => format!(
-            "(function(){{var it=document.evaluate({embedded},document,null,\
-             XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,null);\
-             if(it.snapshotLength===0)return JSON.stringify({{matches:0}});\
-             if(it.snapshotLength>1)return JSON.stringify({{matches:it.snapshotLength}});\
-             var e=it.snapshotItem(0);\
-             return JSON.stringify({{matches:1,text:e.textContent==null?'':String(e.textContent),\
-             tag:e.tagName||null{prop_field}}});}})()"
-        ),
-    }
-}
-
-/// 枚举脚本(--all,docs/73 round7 痛点收口):返回**全部**匹配,不在 JS
-/// 侧判唯一。结构 {total, elements:[…]}——elements 每项带 text/property/
-/// tag/id,截断与去重不在 JS 做(诚实枚举,Rust 侧按 limit 截断上报);
-/// 零匹配 total:0(枚举语义,空集合法——不是 NOT_FOUND)。
-fn locate_all_script(kind: SelectorKind, value: &str, property: Option<&str>) -> String {
-    let embedded = serde_json::to_string(value).unwrap_or_default();
-    let prop_field = match property {
-        Some(p) => format!(",property:{}", property_expr(p)),
-        None => String::new(),
-    };
-    match kind {
-        SelectorKind::Css => format!(
-            "(function(){{var els=document.querySelectorAll({embedded});\
-             var out=[];for(var i=0;i<els.length;i++){{var e=els[i];\
-             out.push({{text:e.textContent==null?'':String(e.textContent),\
-             tag:e.tagName,id:e.id||null,name:e.getAttribute('name')||null{prop_field}}});}}\
-             return JSON.stringify({{matches:els.length,elements:out}});}})()"
-        ),
-        SelectorKind::Xpath => format!(
-            "(function(){{var it=document.evaluate({embedded},document,null,\
-             XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,null);\
-             var out=[];for(var i=0;i<it.snapshotLength;i++){{var e=it.snapshotItem(i);\
-             out.push({{text:e.textContent==null?'':String(e.textContent),\
-             tag:e.tagName||null,name:e.getAttribute('name')||null{prop_field}}});}}\
-             return JSON.stringify({{matches:it.snapshotLength,elements:out}});}})()"
-        ),
-    }
-}
-
-/// 深度穿透脚本(--deep,2026-10-11 spec):**开放 shadow DOM 递归遍历**——
-/// 在 document 与每个 `element.shadowRoot`(open 模式;closed 对页面 JS
-/// 结构性不可见,如实边界)内执行选择器,收集全部命中。
-/// 预算有界:访问节点 ≤50000、收集元素 ≤5000,超限停止并把
-/// `traversal_capped` 如实上报(matches 变成下界,不谎称全量)。
-/// 返回枚举形态 {matches, elements, traversal_capped}——唯一模式由 Rust
-/// 侧在 elements[0] 上判定,与 --all 共用同一脚本。
-fn locate_deep_script(kind: SelectorKind, value: &str, property: Option<&str>) -> String {
-    let embedded = serde_json::to_string(value).unwrap_or_default();
-    let prop_field = match property {
-        Some(p) => format!(",property:{}", property_expr(p)),
-        None => String::new(),
-    };
-    let query = match kind {
-        SelectorKind::Css => format!(
-            "try{{var els=root.querySelectorAll({embedded});\
-             for(var i=0;i<els.length&&out.length<5000;i++)out.push(els[i]);}}catch(e){{}}"
-        ),
-        SelectorKind::Xpath => format!(
-            "try{{var it=document.evaluate({embedded},root,null,\
-             XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,null);\
-             for(var i=0;i<it.snapshotLength&&out.length<5000;i++)out.push(it.snapshotItem(i));}}catch(e){{}}"
-        ),
-    };
-    format!(
-        "(function(){{\
-         var out=[];var visited=0;var capped=false;\
-         function collect(root){{{query}\
-         try{{var all=root.querySelectorAll('*');\
-         for(var j=0;j<all.length;j++){{\
-         if(visited>50000){{capped=true;return;}}\
-         visited++;\
-         var sr=all[j].shadowRoot;\
-         if(sr)collect(sr);}}}}catch(e){{}}\
-         }}\
-         collect(document);\
-         var payload=[];\
-         for(var k=0;k<out.length;k++){{var e=out[k];\
-         payload.push({{text:e.textContent==null?'':String(e.textContent),\
-         tag:e.tagName,id:e.id||null,name:e.getAttribute('name')||null{prop_field}}});}}\
-         return JSON.stringify({{matches:out.length,elements:payload,\
-         traversal_capped:capped}});}})()"
-    )
 }
 
 /// Runtime.evaluate;脚本约定返回 JSON 字符串(内部脚本,非用户表达式)。
@@ -1235,7 +1119,24 @@ pub enum VerifyMode {
         value: String,
         contains: Option<String>,
     },
+    /// 页内弹层清零断言(2026-10-11 v1):枚举可见弹层表面,0=通过,
+    /// >0=ASSERTION_FAILED 带样本——flow condition 位映射 false
+    /// (ASSERTION_FAILED→false 是既有语义),when/unless 分支可组合。
+    /// 原生弹层门禁结构性不覆盖页内 DOM 弹层(browser-* 走 --session,
+    /// front-report 只收 role:Window),本断言是那个空档的检测原语。
+    NoPopups {
+        session: String,
+        selector: Option<String>,
+    },
 }
+
+/// 默认弹层枚举选择器:标准弹层结构(<dialog open>/ARIA dialog/
+/// alertdialog/aria-modal)。如实边界:无标注的自绘 fixed 浮层(cookie 条/
+/// 推广层)不在默认面——站点特有横幅走 --popup-selector 显式声明;
+/// 在流内的静态 role=dialog 段落会过检(过度检测由 samples 证据暴露,
+/// 调用方收窄选择器)。
+pub const DEFAULT_POPUP_SELECTOR: &str =
+    "dialog[open],[role=dialog],[role=alertdialog],[aria-modal=true]";
 
 /// 只读断言动词(flow 的 verify 位只认断言族;浏览器步骤的副作用核验入口)。
 pub fn verify(paths: &Paths, mode: VerifyMode, timeout_ms: Option<u64>) -> Result<Value, CtlError> {
@@ -1354,6 +1255,44 @@ pub fn verify(paths: &Paths, mode: VerifyMode, timeout_ms: Option<u64>) -> Resul
                 "session_id": session,
                 "text": text,
                 "truncated": truncated,
+            }))
+        }
+        VerifyMode::NoPopups { session, selector } => {
+            let sel = selector.unwrap_or_else(|| DEFAULT_POPUP_SELECTOR.to_string());
+            if sel.is_empty() || sel.chars().count() > 4096 {
+                return Err(CtlError::protocol("popup selector must be 1-4096 chars"));
+            }
+            let record = session::load(paths, &session)?;
+            let conn = connect_browser(&record)?;
+            let cdp_session = attach_target(&conn, &record.target_id, timeout)?;
+            verify_target_alive(&conn, &record.target_id, timeout)?;
+            let scanned = eval_json(&conn, &cdp_session, &popup_scan_script(&sel), None, timeout)?;
+            // 选择器语法错误如实 PROTOCOL——吞错成 total=0 等于谎称「无弹层」
+            if let Some(err) = scanned.get("error").and_then(Value::as_str) {
+                return Err(CtlError::protocol(format!(
+                    "popup selector is not valid CSS: {err}"
+                )));
+            }
+            let total = scanned.get("total").and_then(Value::as_u64).unwrap_or(0);
+            if total > 0 {
+                return Err(CtlError::with_evidence(
+                    ErrorCode::AssertionFailed,
+                    format!("{total} visible in-page popup surface(s) present"),
+                    json!({
+                        "assertion": "no_popups",
+                        "selector": sel,
+                        "total": total,
+                        "samples": scanned.get("samples").cloned().unwrap_or(Value::Null),
+                        "session_id": session,
+                    }),
+                ));
+            }
+            Ok(json!({
+                "assertion": "no_popups",
+                "passed": true,
+                "selector": sel,
+                "total": 0,
+                "session_id": session,
             }))
         }
     }

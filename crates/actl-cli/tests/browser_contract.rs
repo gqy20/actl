@@ -373,3 +373,34 @@ fn deep_flag_documents_shadow_piercing_semantics() {
     let (code, _) = actl(&["browser-read", "--session", "x", "--css", "div", "--deep"]);
     assert_eq!(code, 1, "unknown session is NOT_FOUND(1), not clap error");
 }
+
+#[test]
+fn no_popups_flag_documents_popup_predicate_semantics() {
+    // --no-popups 页内弹层断言(2026-10-11 spec):默认选择器/可见性口径/
+    // ASSERTION_FAILED→false 条件映射/--popup-selector 收窄——进 help 四要素。
+    let (code, stdout) = actl(&["browser-verify", "--help"]);
+    assert_eq!(code, 0);
+    assert!(stdout.contains("--no-popups"), "{stdout}");
+    assert!(stdout.contains("dialog[open]"), "{stdout}");
+    assert!(stdout.contains("FALSE condition"), "{stdout}");
+    assert!(stdout.contains("--popup-selector"), "{stdout}");
+    assert!(stdout.contains("Errors:"), "{stdout}");
+    // --popup-selector 从属于 --no-popups(requires 链,clap 拒绝孤立使用)
+    let (code2, _) = actl(&[
+        "browser-verify",
+        "--session",
+        "x",
+        "--popup-selector",
+        "div",
+    ]);
+    assert_eq!(code2, 2, "orphan --popup-selector is a clap usage error");
+}
+
+#[test]
+fn no_popups_unknown_session_is_not_found() {
+    // 会话不存在 → NOT_FOUND(1),不是 clap 错误(形态与 --css 谓词同规)
+    let (code, stdout) = actl(&["browser-verify", "--session", "nope", "--no-popups"]);
+    assert_eq!(code, 1, "{stdout}");
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
+    assert_eq!(v["error"]["code"], "NOT_FOUND", "{v}");
+}

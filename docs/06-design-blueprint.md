@@ -392,12 +392,21 @@ browser-click --session <id> (--css S | --xpath X) [--iframe] [--expect-text sub
 browser-close --session <id>     # CDP Browser.close 优雅关闭自有浏览器+注销会话文件;
                                      # ephemeral profile 删除、persistent 保留;幂等(端点已死→如实行)
 browser-list                      # 只读枚举活跃会话(新→旧):session_id/target/url/pid/mode
-browser-verify [--newest-alive | --none | --session <id> --alive|--gone | --session <id> (--css S|--xpath X) [--contains T]]
+browser-verify [--newest-alive | --none | --session <id> --alive|--gone | --session <id> (--css S|--xpath X) [--contains T] | --session <id> --no-popups [--popup-selector S]]
                                      # 只读断言族(flow verify 位专用):launch 后 --newest-alive、
                                      # close 后 --none、按会话 --alive/--gone;**登录态谓词**
                                      # --session+--css/--xpath [--contains]:选择器唯一解析
                                      # (+文本包含)——登录暂停点的 resume_check 判据;值级
-                                     # 断言在写动词上(--expect-text)
+                                     # 断言在写动词上(--expect-text)。**页内弹层谓词
+                                     # --no-popups(2026-10-11 v1)**:枚举可见弹层表面
+                                     # (默认 dialog[open]/role=dialog/alertdialog/aria-modal,
+                                     # 零布局盒不计;站点自绘浮层走 --popup-selector 显式
+                                     # 声明),0=通过、>0=ASSERTION_FAILED 带 total+样本
+                                     # (≤5 条、text≤200 字符)——flow condition 位映射
+                                     # false,when/unless 弹层分支可组合(原生弹层门禁
+                                     # 结构性不覆盖页内 DOM 弹层,本谓词是那个空档的
+                                     # 检测原语);选择器真语法错误 PROTOCOL(浏览器
+                                     # tokenizer 对未闭合 [ 按 EOF 闭合是如实语义)
 ```
 **显示层协同(P2,2026-10-02)**:browser 的写与生命周期命令(launch/navigate/click/
 type/close)在信号流声明动作卡(kind/effects/target)——**不经显示租约门**(CDP 写非桌面

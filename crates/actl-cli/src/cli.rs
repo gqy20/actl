@@ -956,29 +956,35 @@ pub(crate) enum Command {
     },
     /// Read-only browser assertions for flow verify steps (exactly one mode)
     BrowserVerify {
-        /// Session id for --alive/--gone/--css/--xpath assertions
+        /// Session id for --alive/--gone/--css/--xpath/--no-popups assertions
         #[arg(long)]
         session: Option<String>,
         /// With --session: the bound tab target answers (implies browser + endpoint alive)
-        #[arg(long, requires = "session", conflicts_with_all = ["bv_gone", "bv_css", "bv_xpath"])]
+        #[arg(long, requires = "session", conflicts_with_all = ["bv_gone", "bv_css", "bv_xpath", "bv_popups"])]
         alive: bool,
         /// With --session: the session record no longer exists
-        #[arg(long, requires = "session", id = "bv_gone", conflicts_with_all = ["alive", "bv_css", "bv_xpath"])]
+        #[arg(long, requires = "session", id = "bv_gone", conflicts_with_all = ["alive", "bv_css", "bv_xpath", "bv_popups"])]
         gone: bool,
         /// Login-state predicate: with --session, assert this CSS selector resolves uniquely
-        #[arg(long, requires = "session", id = "bv_css", conflicts_with_all = ["alive", "bv_gone", "bv_xpath"])]
+        #[arg(long, requires = "session", id = "bv_css", conflicts_with_all = ["alive", "bv_gone", "bv_xpath", "bv_popups"])]
         css: Option<String>,
         /// Login-state predicate: with --session, assert this XPath resolves uniquely
         #[arg(
             long,
             requires = "session",
             id = "bv_xpath",
-            conflicts_with_all = ["alive", "bv_gone", "bv_css"]
+            conflicts_with_all = ["alive", "bv_gone", "bv_css", "bv_popups"]
         )]
         xpath: Option<String>,
         /// With --css/--xpath: also assert the resolved element text contains this substring
         #[arg(long, requires = "session")]
         contains: Option<String>,
+        /// Popup-surface predicate: with --session, assert ZERO visible in-page popup surfaces
+        #[arg(long, requires = "session", id = "bv_popups", conflicts_with_all = ["alive", "bv_gone", "bv_css", "bv_xpath"])]
+        no_popups: bool,
+        /// With --no-popups: replace the default popup selector (dialog[open], role=dialog/alertdialog, aria-modal)
+        #[arg(long, requires = "bv_popups")]
+        popup_selector: Option<String>,
         /// Assert zero active sessions (post-close in a flow-owned lifecycle)
         #[arg(long, conflicts_with_all = ["session"])]
         none: bool,
@@ -1216,7 +1222,7 @@ fn after_help_for(name: &str) -> Option<&'static str> {
             "Example:\n  actl app-remove my-tool\nRemoves a registration by name. The underlying application is untouched.\nErrors: NOT_FOUND unknown name | INTERNAL storage failure"
         }
         "browser-verify" => {
-            "Example:\n  actl browser-verify --newest-alive\n  actl browser-verify --session s1a2b3 --css '[data-testid=\"app-bar-user\"]'\n  actl browser-verify --session s1a2b3 --css '#avatar' --contains work\n  actl browser-verify --none\nRead-only assertion family for flow verify steps: --newest-alive (post-launch), --none (post-close in a flow-owned lifecycle), --session+--alive/--gone (target responds / record deregistered), and the login-state predicate --session+--css/--xpath [--contains] (unique resolution + optional text substring; the resume_check for login pause points). Value assertions on writes live on browser-click --expect-text.\nErrors: PROTOCOL mode/args | ASSERTION_FAILED assertion unmet (incl. non-unique login selector) | NOT_FOUND unknown session"
+            "Example:\n  actl browser-verify --newest-alive\n  actl browser-verify --session s1a2b3 --css '[data-testid=\"app-bar-user\"]'\n  actl browser-verify --session s1a2b3 --css '#avatar' --contains work\n  actl browser-verify --session s1a2b3 --no-popups\n  actl browser-verify --none\nRead-only assertion family for flow verify steps: --newest-alive (post-launch), --none (post-close in a flow-owned lifecycle), --session+--alive/--gone (target responds / record deregistered), the login-state predicate --session+--css/--xpath [--contains] (unique resolution + optional text substring; the resume_check for login pause points), and the popup-surface predicate --session+--no-popups [--popup-selector S] (asserts ZERO visible in-page popup surfaces; default selector dialog[open],[role=dialog],[role=alertdialog],[aria-modal=true]; hidden zero-layout nodes never count; ASSERTION_FAILED carries total + up to 5 text samples; maps to a FALSE condition in flow when/unless, so dismiss branches compose; unannotated self-drawn banners need --popup-selector). Value assertions on writes live on browser-click --expect-text.\nErrors: PROTOCOL mode/args/invalid popup selector | ASSERTION_FAILED assertion unmet (incl. non-unique login selector / popups present) | NOT_FOUND unknown session"
         }
         "flow-validate" => {
             "Example:\n  actl flow-validate --file task.yml\nOptional --inputs values.yml resolves declared whole-argument inputs before validating every step. Resources are checked without creating files; data.resources uses the validation-preview context. --emit-plan includes the concrete preview plan and input values, not initialized resources. when/unless select run or otherwise using immediate assertions; unknown observations stop. Both routes are prevalidated. run/otherwise.sequence groups up to 16 calls with one result check. outputs select typed read-only data via JSON Pointer; bind replaces a whole args entry by index. Resolved CLI arguments are revalidated before execution.\nErrors: PROTOCOL invalid YAML/command/policy/resource | INTERNAL file error"

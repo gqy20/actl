@@ -128,6 +128,8 @@ pub(crate) struct VerifyArgs<'a> {
     pub contains: Option<&'a str>,
     pub none: bool,
     pub newest_alive: bool,
+    pub no_popups: bool,
+    pub popup_selector: Option<&'a str>,
     pub timeout: Option<u64>,
 }
 
@@ -142,32 +144,47 @@ pub(crate) fn verify_cmd(args: VerifyArgs<'_>) -> Result<CommandOutput, CtlError
         contains,
         none,
         newest_alive,
+        no_popups,
+        popup_selector,
         timeout,
     } = args;
-    let mode = match (session, alive, gone, css, xpath, none, newest_alive) {
-        (Some(id), true, false, None, None, false, false) => {
+    let mode = match (
+        session,
+        alive,
+        gone,
+        css,
+        xpath,
+        none,
+        newest_alive,
+        no_popups,
+    ) {
+        (Some(id), true, false, None, None, false, false, false) => {
             VerifyMode::SessionAlive(id.to_string())
         }
-        (Some(id), false, true, None, None, false, false) => {
+        (Some(id), false, true, None, None, false, false, false) => {
             VerifyMode::SessionGone(id.to_string())
         }
-        (Some(id), false, false, Some(css), None, false, false) => VerifyMode::Selector {
+        (Some(id), false, false, Some(css), None, false, false, false) => VerifyMode::Selector {
             session: id.to_string(),
             kind: SelectorKind::Css,
             value: css.to_string(),
             contains: contains.map(str::to_string),
         },
-        (Some(id), false, false, None, Some(xpath), false, false) => VerifyMode::Selector {
+        (Some(id), false, false, None, Some(xpath), false, false, false) => VerifyMode::Selector {
             session: id.to_string(),
             kind: SelectorKind::Xpath,
             value: xpath.to_string(),
             contains: contains.map(str::to_string),
         },
-        (None, false, false, None, None, true, false) => VerifyMode::NoneActive,
-        (None, false, false, None, None, false, true) => VerifyMode::NewestAlive,
+        (Some(id), false, false, None, None, false, false, true) => VerifyMode::NoPopups {
+            session: id.to_string(),
+            selector: popup_selector.map(str::to_string),
+        },
+        (None, false, false, None, None, true, false, false) => VerifyMode::NoneActive,
+        (None, false, false, None, None, false, true, false) => VerifyMode::NewestAlive,
         _ => {
             return Err(CtlError::protocol(
-                "browser-verify requires exactly one mode: --newest-alive | --none | --session+--alive | --session+--gone | --session+--css/--xpath [--contains]",
+                "browser-verify requires exactly one mode: --newest-alive | --none | --session+--alive | --session+--gone | --session+--css/--xpath [--contains] | --session+--no-popups [--popup-selector]",
             ));
         }
     };

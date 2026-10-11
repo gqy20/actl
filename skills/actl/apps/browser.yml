@@ -163,6 +163,18 @@ quirks:
       纹丝不动)。多 tab 疑点:title 带"另外 N 个页面"、browser-list
       文档数与预期不符、对目标 tab 操作"生效"但页面无变化——操作前
       browser-list 核对 tab 实况,ctrl+w 关多余 tab 收敛到单 tab 再操作
+  - id: in_page_popups_outside_native_gate
+    note: >-
+      页内 DOM 弹层(登录墙/cookie 条/推广浮层)不在原生弹层门禁覆盖内
+      (门禁只作用带 --app 锚写步,front-report 只收 role:Window 表面;
+      2026-10-11 结构性裁定入册)。检测原语 = browser-verify --no-popups
+      (默认 dialog[open]/role=dialog/alertdialog/aria-modal 的可见面,
+      站点自绘横幅走 --popup-selector;>0 报 ASSERTION_FAILED 带样本,
+      flow condition 映射 false)——when/unless 组合 browser-click 处置
+      分支即弹层守卫。已知形态:xhs 笔记弹层/猫抓扩展弹层 press esc
+      直达(键盘通道,不经本谓词);登录墙走暂停点+resume_check 谓词。
+      headless 本地 fixture 六假设实证(可见命中/隐藏不计/自定义横幅
+      显式中/垃圾选择器 PROTOCOL/干净页通过/会话清零)
 routes:
   - id: window_title_read
     description: 读浏览器窗口标题(=当前标签页页面名+浏览器后缀;标签切换标题随变)

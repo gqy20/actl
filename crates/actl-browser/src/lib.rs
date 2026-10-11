@@ -9,6 +9,7 @@
 
 pub mod cdp;
 pub mod ops;
+mod scripts;
 pub mod session;
 
 pub use ops::VerifyMode;

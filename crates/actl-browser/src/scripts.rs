@@ -1,0 +1,150 @@
+//! 页面侧 JS 脚本构造器(纯字符串构造,无 IO)——从 ops.rs 按内聚拆出
+//! (file-lines 治理)。选择器一律以 JSON 字符串字面量嵌入(serde_json
+//! 转义,防注入);脚本约定返回 JSON.stringify 结果,由 ops::eval_json
+//! 经 Runtime.evaluate 执行并解析。
+
+use crate::SelectorKind;
+
+/// 白名单属性 → 固定 JS 表达式(非用户输入,无注入面)
+pub(crate) fn property_expr(property: &str) -> &'static str {
+    match property {
+        "value" => "(e.value===undefined?null:String(e.value))",
+        "href" => "(e.href?String(e.href):null)",
+        "name" => "(e.getAttribute('name'))",
+        "id" => "(e.id||null)",
+        "checked" => "(e.checked===undefined?null:(e.checked?'true':'false'))",
+        "tag" => "(e.tagName||null)",
+        _ => "(e.textContent==null?'':String(e.textContent))",
+    }
+}
+
+/// JS 定位脚本:唯一匹配为硬条件,返回 JSON.stringify 的结果对象。
+/// 选择器以 JSON 字符串字面量嵌入(serde_json 转义,防注入);
+/// property 附带白名单属性值(value/href 等,textContent 之外的读取通道)。
+pub(crate) fn locate_script(kind: SelectorKind, value: &str, property: Option<&str>) -> String {
+    let embedded = serde_json::to_string(value).unwrap_or_default();
+    let prop_field = match property {
+        Some(p) => format!(",property:{}", property_expr(p)),
+        None => String::new(),
+    };
+    match kind {
+        SelectorKind::Css => format!(
+            "(function(){{var els=document.querySelectorAll({embedded});\
+             if(els.length===0)return JSON.stringify({{matches:0}});\
+             if(els.length>1)return JSON.stringify({{matches:els.length}});\
+             var e=els[0];\
+             return JSON.stringify({{matches:1,text:e.textContent==null?'':String(e.textContent),\
+             tag:e.tagName,id:e.id||null,name:e.getAttribute('name')||null{prop_field}}});}})()"
+        ),
+        SelectorKind::Xpath => format!(
+            "(function(){{var it=document.evaluate({embedded},document,null,\
+             XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,null);\
+             if(it.snapshotLength===0)return JSON.stringify({{matches:0}});\
+             if(it.snapshotLength>1)return JSON.stringify({{matches:it.snapshotLength}});\
+             var e=it.snapshotItem(0);\
+             return JSON.stringify({{matches:1,text:e.textContent==null?'':String(e.textContent),\
+             tag:e.tagName||null{prop_field}}});}})()"
+        ),
+    }
+}
+
+/// 枚举脚本(--all,docs/73 round7 痛点收口):返回**全部**匹配,不在 JS
+/// 侧判唯一。结构 {total, elements:[…]}——elements 每项带 text/property/
+/// tag/id,截断与去重不在 JS 做(诚实枚举,Rust 侧按 limit 截断上报);
+/// 零匹配 total:0(枚举语义,空集合法——不是 NOT_FOUND)。
+pub(crate) fn locate_all_script(kind: SelectorKind, value: &str, property: Option<&str>) -> String {
+    let embedded = serde_json::to_string(value).unwrap_or_default();
+    let prop_field = match property {
+        Some(p) => format!(",property:{}", property_expr(p)),
+        None => String::new(),
+    };
+    match kind {
+        SelectorKind::Css => format!(
+            "(function(){{var els=document.querySelectorAll({embedded});\
+             var out=[];for(var i=0;i<els.length;i++){{var e=els[i];\
+             out.push({{text:e.textContent==null?'':String(e.textContent),\
+             tag:e.tagName,id:e.id||null,name:e.getAttribute('name')||null{prop_field}}});}}\
+             return JSON.stringify({{matches:els.length,elements:out}});}})()"
+        ),
+        SelectorKind::Xpath => format!(
+            "(function(){{var it=document.evaluate({embedded},document,null,\
+             XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,null);\
+             var out=[];for(var i=0;i<it.snapshotLength;i++){{var e=it.snapshotItem(i);\
+             out.push({{text:e.textContent==null?'':String(e.textContent),\
+             tag:e.tagName||null,name:e.getAttribute('name')||null{prop_field}}});}}\
+             return JSON.stringify({{matches:it.snapshotLength,elements:out}});}})()"
+        ),
+    }
+}
+
+/// 深度穿透脚本(--deep,2026-10-11 spec):**开放 shadow DOM 递归遍历**——
+/// 在 document 与每个 `element.shadowRoot`(open 模式;closed 对页面 JS
+/// 结构性不可见,如实边界)内执行选择器,收集全部命中。
+/// 预算有界:访问节点 ≤50000、收集元素 ≤5000,超限停止并把
+/// `traversal_capped` 如实上报(matches 变成下界,不谎称全量)。
+/// 返回枚举形态 {matches, elements, traversal_capped}——唯一模式由 Rust
+/// 侧在 elements[0] 上判定,与 --all 共用同一脚本。
+pub(crate) fn locate_deep_script(
+    kind: SelectorKind,
+    value: &str,
+    property: Option<&str>,
+) -> String {
+    let embedded = serde_json::to_string(value).unwrap_or_default();
+    let prop_field = match property {
+        Some(p) => format!(",property:{}", property_expr(p)),
+        None => String::new(),
+    };
+    let query = match kind {
+        SelectorKind::Css => format!(
+            "try{{var els=root.querySelectorAll({embedded});\
+             for(var i=0;i<els.length&&out.length<5000;i++)out.push(els[i]);}}catch(e){{}}"
+        ),
+        SelectorKind::Xpath => format!(
+            "try{{var it=document.evaluate({embedded},root,null,\
+             XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,null);\
+             for(var i=0;i<it.snapshotLength&&out.length<5000;i++)out.push(it.snapshotItem(i));}}catch(e){{}}"
+        ),
+    };
+    format!(
+        "(function(){{\
+         var out=[];var visited=0;var capped=false;\
+         function collect(root){{{query}\
+         try{{var all=root.querySelectorAll('*');\
+         for(var j=0;j<all.length;j++){{\
+         if(visited>50000){{capped=true;return;}}\
+         visited++;\
+         var sr=all[j].shadowRoot;\
+         if(sr)collect(sr);}}}}catch(e){{}}\
+         }}\
+         collect(document);\
+         var payload=[];\
+         for(var k=0;k<out.length;k++){{var e=out[k];\
+         payload.push({{text:e.textContent==null?'':String(e.textContent),\
+         tag:e.tagName,id:e.id||null,name:e.getAttribute('name')||null{prop_field}}});}}\
+         return JSON.stringify({{matches:out.length,elements:payload,\
+         traversal_capped:capped}});}})()"
+    )
+}
+
+/// 弹层扫描脚本(--no-popups,2026-10-11 v1):只计**可见**命中(零布局盒
+/// =display:none 族,不计);样本有界(≤5 条,每条 text ≤200 字符折叠空白)。
+/// 选择器语法错误走 error 字段如实上报(PROTOCOL),不静默当零弹层。
+pub(crate) fn popup_scan_script(selector: &str) -> String {
+    let embedded = serde_json::to_string(selector).unwrap_or_default();
+    format!(
+        "(function(){{\
+         try{{\
+         var els=document.querySelectorAll({embedded});\
+         var total=0;var samples=[];\
+         for(var i=0;i<els.length;i++){{var e=els[i];\
+         if(e.getClientRects().length===0)continue;\
+         total++;\
+         if(samples.length<5){{\
+         var t=e.textContent==null?'':String(e.textContent);\
+         samples.push({{tag:e.tagName,id:e.id||null,\
+         text:t.replace(/\\s+/g,' ').trim().slice(0,200)}});}}}}\
+         return JSON.stringify({{total:total,samples:samples}});\
+         }}catch(err){{return JSON.stringify({{error:String(err)}});}}\
+         }})()"
+    )
+}
