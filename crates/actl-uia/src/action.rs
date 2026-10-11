@@ -107,6 +107,59 @@ pub fn click(
     pattern.map(|pattern| (info, pattern))
 }
 
+/// focus:建立元素键盘焦点(UIA SetFocus,2026-10-11 spec)——补协议空档:
+/// `press --target` 只**断言**焦点不建立焦点,错误提示"focus the element
+/// first"引用的动词此前不存在;type 靠打字顺带聚焦但有注入副作用。
+/// 读回核验:UIA focused 元素的 RuntimeId 与目标一致才算成功(有界 3 轮
+/// ×120ms 容 SetFocus 异步);不符 → NOT_ACTIONABLE 带 expected/current
+/// 证据(Electron find widget 拒焦/WinUI focused 视图谎报均如实暴露),
+/// 指引 --physical 点击兜底。不注入任何键。
+pub fn focus_element(
+    app: Option<&str>,
+    target: &Target,
+    near: Option<&str>,
+) -> Result<crate::locate::ResolvedInfo, CtlError> {
+    let loc = locate(app, target, near)?;
+    // SetFocus + 读回核验 + Release 都在区内(析构纪律,与 click 同形)
+    let _watchdog = crate::watchdog::enter();
+    loc.element.set_focus().map_err(|_| {
+        CtlError::new(
+            ErrorCode::NotActionable,
+            format!("{} ({}) refuses UIA focus", target.describe(), loc.role),
+        )
+    })?;
+    let expected_rid = loc.element.get_runtime_id().unwrap_or_default();
+    let mut actual: Option<(String, String)> = None;
+    for _ in 0..3 {
+        std::thread::sleep(std::time::Duration::from_millis(120));
+        let Ok(auto) = uiautomation::UIAutomation::new() else {
+            break;
+        };
+        if let Ok(focused) = auto.get_focused_element() {
+            let rid = focused.get_runtime_id().unwrap_or_default();
+            if !rid.is_empty() && rid == expected_rid {
+                return Ok(loc.into_info());
+            }
+            actual = Some((
+                crate::observation::role_of(&focused)
+                    .map(|r| format!("{r:?}"))
+                    .unwrap_or_default(),
+                crate::observation::name_of(&focused).unwrap_or_default(),
+            ));
+        }
+    }
+    let info = loc.into_info();
+    Err(CtlError::with_evidence(
+        ErrorCode::NotActionable,
+        "focus was requested but the focused element read back differently",
+        serde_json::json!({
+            "reason": "focus_readback_mismatch",
+            "expected": {"role": info.role, "name": info.name},
+            "actual": actual.map(|(role, name)| serde_json::json!({"role": role, "name": name})),
+        }),
+    ))
+}
+
 /// type:定位 → SetFocus →(护栏)→ 逐字键盘输入或剪贴板粘贴。
 /// `--paste`:文本经剪贴板 + ctrl+v 送达——**中文模式 IME 下唯一可靠的文本通道**
 /// (UNICODE 包在 WinUI/TSF 仍会被 IME 组合改写:空格吞成上屏、标点全角化,

@@ -829,3 +829,25 @@ fn watchdog_terminates_a_stuck_process_with_stderr_marker() {
         "stderr marker missing: {stderr}"
     );
 }
+
+#[test]
+fn focus_help_documents_establish_semantics() {
+    // focus 原语(2026-10-11 spec):建立焦点(补 press --target 只断言
+    // 的空档)、读回核验、零键注入、失配带 expected/actual 证据——进
+    // help 四要素。
+    let (code, stdout) = actl(&["focus", "--help"]);
+    assert_eq!(code, 0);
+    assert!(stdout.contains("SetFocus"), "help: {stdout}");
+    assert!(stdout.contains("readback"), "help: {stdout}");
+    assert!(stdout.contains("No keys injected"), "help: {stdout}");
+    assert!(stdout.contains("Errors:"), "help: {stdout}");
+}
+
+#[test]
+fn focus_bad_target_is_protocol() {
+    // 参数语义错误先于 UIA 触碰
+    let (code, stdout) = actl(&["focus", "just-a-word"]);
+    assert_eq!(code, 2);
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
+    assert_eq!(v["error"]["code"], "PROTOCOL", "{v}");
+}

@@ -125,6 +125,26 @@ pub(crate) fn click(
     Ok(data.into())
 }
 
+/// focus(2026-10-11 spec):UIA SetFocus 建立元素键盘焦点+读回核验。
+/// 语义动作(零键注入):与 press --target 的"只断言不建立"互补。
+pub(crate) fn focus(
+    target_raw: &str,
+    app: Option<&str>,
+    near: Option<&str>,
+    snapshot: Option<&str>,
+) -> Result<CommandOutput, CtlError> {
+    let target = actl_core::parse_target(target_raw)?;
+    let _replay = replay_guard(snapshot, app)?;
+    let info = actl_uia::focus_element(app, &target, near)?;
+    Ok(json!({
+        "action": "focus",
+        "target": target.describe(),
+        "resolved_by": info.resolved_by,
+        "input_effects": { "keyboard": "none", "clipboard": "untouched", "pointer": "none" },
+    })
+    .into())
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn type_cmd(
     target_raw: &str,

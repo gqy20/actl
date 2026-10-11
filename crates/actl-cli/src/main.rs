@@ -380,6 +380,12 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             expect.as_deref(),
             *timeout,
         ),
+        Command::Focus {
+            target,
+            app,
+            near,
+            snapshot,
+        } => focus(target, app.as_deref(), near.as_deref(), snapshot.as_deref()),
         Command::Get {
             target,
             property,

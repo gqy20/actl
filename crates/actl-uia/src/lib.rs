@@ -76,8 +76,8 @@ pub use collect::{CollectOptions, CollectReport, collect};
 pub use native_windows::{native_window, native_windows};
 
 pub use action::{
-    InputResult, TypeOutcome, click, paste, press_half, press_half_with_direction, press_keys,
-    press_keys_targeted, select_option, set_value, toggle_element, type_text,
+    InputResult, TypeOutcome, click, focus_element, paste, press_half, press_half_with_direction,
+    press_keys, press_keys_targeted, select_option, set_value, toggle_element, type_text,
 };
 pub use idle::{idle_ms, wait_idle};
 pub use locate::{

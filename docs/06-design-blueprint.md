@@ -253,6 +253,8 @@ click xy:1420,856 --app X --physical   # 坐标寻址(视觉兜底的手;§7 守
 click @e3 --physical --no-activate     # 抑制激活的物理点击(见 §7.8;指针族通用)
 type @e5 "text"            set-value @e5 "v"    # UIA Value pattern 优先
 press ctrl+s               key-down shift / key-up shift  # 状态保持键必须成对
+focus @e5 --app X          # 建立键盘焦点(SetFocus+读回核验,零键注入;补 press
+                           # --target 只断言不建立的空档;语义见 §控件身份节)
 paste --app Excel                                 # ctrl+v 到当前选中(无元素落点;pack 路线原语)
 select @e7 "选项"          toggle @e8
 scroll @e9 --down 3        drag @e3 @e8                   # drag/hover 无 UIA pattern,默认物理执行
@@ -865,6 +867,16 @@ NOT_ACTIONABLE 显示或窗口未就绪；ABORTED 用户停止；INTERNAL 持久
   `NOT_ACTIONABLE`，尚未发键。目标歧义遵循现有 `AMBIGUOUS`，ref 可绑定快照身份。
   成功新增 `focus_verified`，有目标为 true、无目标为 false。原 `--expect/--timeout` 继续适用。
   无目标的 press 保持现有窗口级行为。
+- `focus <target> --app X [--near <sel>] [--snapshot ID]`（2026-10-11 spec）：**建立**键盘焦点,
+  补 `press --target` 只断言不建立的空档(树对 name/id 不可见但焦点可达的元素,或 click 后焦点
+  未落在预期控件的场景——VS Code Find 面板实证:Close 点击后焦点滞留,`focused:` 断言与注入分离)。
+  语义:UIA `SetFocus` 调用后读回核验(GUITHREADINFO 物理焦点根,3×120ms 退避),RuntimeId 与目标
+  不符返回 `NOT_ACTIONABLE` 且 evidence 带 expected/actual(焦点去了别处,先读证据再决定下一步,
+  禁盲目重放)。**零键注入**——只建立焦点,不发送任何键盘事件(input_effects.keyboard:"none"),
+  与 type/press 的注入语义严格分离;后续注入由 press/type 既有护栏接管(verify-then-inject、
+  前台复核)。目标歧义遵循 `AMBIGUOUS`;`--snapshot` 走 ref 身份校验链;成功 envelope 含
+  `focus_verified:true` 与 resolved_by。flow 中定位为**写步**(改变焦点状态,非只读),verify 伴随
+  要求与 click 同规。
 - 键盘沿用 §1 的显式 `--app` 授权；鼠标物理路径仍要求 `--physical`。
 
 

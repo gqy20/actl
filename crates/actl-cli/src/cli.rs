@@ -466,6 +466,20 @@ pub(crate) enum Command {
         #[arg(long)]
         snapshot: Option<String>,
     },
+    /// Focus an element for subsequent keyboard input (UIA SetFocus + readback verification; no keys injected)
+    Focus {
+        /// Target: uia:<JSON> (strict match/within/scope) | @eN (needs --app) | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | focused:[<Type>]
+        target: String,
+        /// Target window by title substring or hwnd:<n> (@eN refs require it; otherwise focused window)
+        #[arg(long)]
+        app: Option<String>,
+        /// Disambiguate multi-matches by picking the one nearest to this anchor element's name
+        #[arg(long)]
+        near: Option<String>,
+        /// Validate window and ref element identities against this snapshot id
+        #[arg(long)]
+        snapshot: Option<String>,
+    },
     /// Right-click an element (physical; opens context menus)
     RightClick {
         /// Target: uia:<JSON> (strict match/within/scope) | @eN | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | focused:[<Type>] (OS keyboard focus element; role-checked, fail-closed)
@@ -1060,6 +1074,7 @@ pub(crate) fn app_of(cmd: &Command) -> Option<String> {
     match cmd {
         Command::Preview { app, .. } => Some(app.clone()),
         Command::Click { app, .. }
+        | Command::Focus { app, .. }
         | Command::Get { app, .. }
         | Command::Type { app, .. }
         | Command::Press { app, .. }
@@ -1114,6 +1129,7 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
         Command::Desktop(DesktopCommand::DesktopRestore { .. }) => "desktop-restore",
         Command::Snapshot { .. } => "snapshot",
         Command::Click { .. } => "click",
+        Command::Focus { .. } => "focus",
         Command::Get { .. } => "get",
         Command::Launch { .. } => "launch",
         Command::Type { .. } => "type",
@@ -1301,6 +1317,9 @@ fn after_help_for(name: &str) -> Option<&'static str> {
         }
         "click" => {
             "Example:\n  actl click @e3 --app Notepad --snapshot s1a2b\n  actl click name:item --app Explorer --physical --with ctrl\n(multi-select)\n  actl click id:session_item_x --app 微信 --physical --no-activate\n  actl click id:session_item_x --app 微信 --expect element:id:chat_message_list\n--expect window:<substr> = NEW window appears; element:<target> = postcondition resolves (implicit wait, 2s default).\nErrors: NOT_FOUND | AMBIGUOUS (candidates) | STALE_REF (re-snapshot) | NOT_ACTIONABLE occluded/xy: outside | PERM_DENIED guard | ASSERTION_FAILED --expect unmet | PROTOCOL bad args"
+        }
+        "focus" => {
+            "Example:\n  actl focus name:搜索框 --app 应用\n  actl focus @e7 --snapshot s1a2b --app 应用\nEstablishes UIA keyboard focus on the target element (SetFocus + readback verification: the focused element's RuntimeId must match the target, bounded 3×120ms). No keys injected. Fills the assert-vs-establish gap: press --target only ASSERTS focus. On mismatch returns NOT_ACTIONABLE with expected/actual evidence and hints --physical.\nErrors: NOT_FOUND | AMBIGUOUS (candidates) | STALE_REF (re-snapshot) | NOT_ACTIONABLE refuses focus / readback mismatch (Electron stale widgets, WinUI focus lies) | PROTOCOL bad args"
         }
         "execution-status" => {
             "Usage: actl execution-status\nArguments: none\nExample:\n  actl execution-status\nReports ready/stopped/repair_required; never grants permission.\nErrors: PROTOCOL invalid arguments"

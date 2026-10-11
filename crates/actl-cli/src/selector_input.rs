@@ -89,7 +89,8 @@ pub(crate) fn validate(command: &Command) -> Result<(), CtlError> {
         | Command::Hover { target, near, .. }
         | Command::Scroll { target, near, .. }
         | Command::Select { target, near, .. }
-        | Command::Toggle { target, near, .. } => check(target, near.as_deref())?,
+        | Command::Toggle { target, near, .. }
+        | Command::Focus { target, near, .. } => check(target, near.as_deref())?,
         Command::Drag {
             target,
             to,
