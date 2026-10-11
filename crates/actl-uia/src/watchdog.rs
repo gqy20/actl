@@ -72,6 +72,27 @@ pub fn enter() -> UiaCallScope {
     UiaCallScope { _private: () }
 }
 
+/// **envelope 后硬终止**(尾段挂起族根杀,2026-10-11):`finish` 打完
+/// envelope 并 flush 后调用——析构链上的无界阻塞面(thread_local 定位缓
+/// 存、栈上 UIElement COM 代理的跨进程 Release、signal worker join)在
+/// `process::exit` 里仍可能卡死(exit 走 C 运行时清理,不保证到达 OS;
+/// 13112 签名实证:envelope 已落盘、进程 CPU 恒零赖活数小时)。本函数直
+/// 接 TerminateProcess——绕过一切运行时清理,把「永久挂起」变成「立即
+/// 消失」;envelope 已 flush、状态已显式落盘(finish(phase)/Journal 每
+/// 事件 flush),不依赖析构面。仅限 main 的 finish 调用,库代码禁用。
+pub fn hard_exit_after_envelope(code: i32) -> ! {
+    // Windows TerminateProcess(当前进程):无清理、无析构、无 atexit。
+    // unsafe 理由(AGENTS §5,crate 豁免点):win32 直调,当前进程伪句柄
+    // (GetCurrentProcess)按文档恒常;不能经 std::process::exit——它走
+    // CRT 清理,恰是挂起面。
+    unsafe {
+        let handle = windows::Win32::System::Threading::GetCurrentProcess();
+        let _ = windows::Win32::System::Threading::TerminateProcess(handle, code as u32);
+    }
+    // TerminateProcess(自身)不返回;防御性兜底(理论上到不了)
+    std::process::abort();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -166,9 +166,14 @@ impl SignalSession {
         }
     }
     fn stop_worker(&mut self) {
+        // 不 join(2026-10-11):worker 只做磁盘心跳写,send(stop) 后让它
+        // 自然退出即可——join 曾把 finish 卡在 envelope 打印之前(尾段挂起
+        // 族的"空输出"形态:worker 若恰在 write_state 的锁/IO 上慢,主线程
+        // 无界等它)。进程随后即硬退出(TerminateProcess),worker 不需要
+        // 也等不到收尾——detach 语义,泄漏窗口为 0(envelope flush 已完成)。
         let _ = self.stop.send(());
         if let Some(worker) = self.worker.take() {
-            let _ = worker.join();
+            std::mem::drop(worker);
         }
     }
 }

@@ -789,6 +789,7 @@ fn finish(command_name: &'static str, result: Result<CommandOutput, CtlError>, d
                 "{}",
                 serde_json::to_string(&env).expect("envelope serializes")
             );
+            let _ = std::io::Write::flush(&mut std::io::stdout());
             // 成功路径硬退出(与下方错误路径对称):析构链上有无界阻塞面——
             // thread_local 定位缓存与栈上的 UIElement COM 代理,其 Drop 是
             // 对目标应用的跨进程 Release(提供程序不泵消息即无限阻塞,
@@ -796,8 +797,10 @@ fn finish(command_name: &'static str, result: Result<CommandOutput, CtlError>, d
             // join 同为无界。状态落盘不依赖析构(finish(phase) 已显式调用、
             // Journal 每事件即 flush、stop::Scope 仅清 TLS);进程死亡时
             // OS 断连清理 COM 通道是 providers 必须容忍的正常路径。
-            let _ = std::io::Write::flush(&mut std::io::stdout());
-            std::process::exit(0);
+            // 2026-10-11 升级:process::exit 走 CRT 清理,13112 签名实证
+            // 它到不了 OS(envelope 落盘后进程 CPU 恒零赖活数小时)——
+            // envelope flush 后直接 TerminateProcess,尾段挂起族根杀。
+            actl_uia::watchdog::hard_exit_after_envelope(0);
         }
         Err(mut err) => {
             // 单命令失败轻量采集(2026-10-06 基建①:flow-evidence 的下沉——
@@ -815,13 +818,15 @@ fn finish(command_name: &'static str, result: Result<CommandOutput, CtlError>, d
                 "{}",
                 serde_json::to_string(&env).expect("envelope serializes")
             );
-            // 退出码契约(06 §4):PROTOCOL 不可恢复 → 2;其余业务失败 → 1
+            let _ = std::io::Write::flush(&mut std::io::stdout());
+            // 退出码契约(06 §4):PROTOCOL 不可恢复 → 2;其余业务失败 → 1。
+            // 同成功路径:flush 后 TerminateProcess,不进 CRT 清理(挂起面)。
             let code = if err.code == actl_core::ErrorCode::Protocol {
                 2
             } else {
                 1
             };
-            std::process::exit(code);
+            actl_uia::watchdog::hard_exit_after_envelope(code);
         }
     }
 }
