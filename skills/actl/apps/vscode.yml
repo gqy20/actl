@@ -38,6 +38,31 @@ quirks:
     note: type --paste 在当前选区或光标位置插入，不能假设覆盖全文。本轮在新打开临时文件的开头插入后保存，磁盘全文核验通过；会使用剪贴板。
   - id: edit_regression
     note: workflows/vscode-edit.yml 使用独立 profile 和临时文件，覆盖三轮中英文/符号输入、菜单撤销和重做、Ctrl+A 全文替换和关闭重开。每次保存均核验磁盘全文，重开另验编辑器 TextPattern；不能用文件标题作为保存证据。
+  - id: v1141_extensions_disabled_notification
+    note: >-
+      VS Code 1.141 隔离 profile + --disable-extensions 启动时弹 INFO 通知
+      "All installed extensions are temporarily disabled."（1.139 时代无此
+      通知，2026-10-11 模板轮实证）。分类 unknown → 弹层门禁如实拦截
+      popup_pending；模板无 popup_handlers 可声明（词表只收 error/save/
+      confirm/update）。当前处置：人工判读后点 "Clear Notification (Del)"
+      清理自产痕迹（通知本身是 --disable-extensions 触发的良性表面）。
+      长期解：popup_handlers 词表裁（ROADMAP 在案）。
+  - id: find_widget_uia_stale_surface
+    note: >-
+      Find/Replace 面板的可达性面对 Electron UIA 呈滞后/禁用态：Close
+      按钮报 target_disabled（enabled:false），set-value 对 Find 输入框
+      同拒；点 Close 后面板仍出现在 front-report（UIA 滞留），但键通道
+      可用——ctrl+f（聚焦 find 输入框）后 esc 关闭，面板 UIA 文本随状态
+      变化（"No results"→"1 of 1"）说明表面活着但语义通道半瘫。
+      vscode-edit.yml find-replace 步已在 Close 后加 wait --gone 断言
+      （2026-10-11）：面板 UIA 滞留则该步诚实失败，不再毒化下一步门禁。
+  - id: keyboard_escape_channel
+    note: >-
+      press 的键名是 esc 不是 escape（PROTOCOL 会给别名提示）；全局键盘
+      通道（press esc --app，不带 --target）走系统焦点不校验元素，VS Code
+      编辑器聚焦时 esc 关 find 面板可靠；带 --target 的 press 严格断言
+      焦点元素——焦点在编辑器时对 find 输入框的定向 press 会被如实拒绝
+      （expected/current 证据），先用点击/键盘建立焦点再用。
 routes:
   - id: navigate_by_controls
     description: 状态栏内部按钮打开行号框；快速访问按钮打开文件框；ValuePattern 写值并激活容器内唯一结果
