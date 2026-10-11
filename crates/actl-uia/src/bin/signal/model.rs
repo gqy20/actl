@@ -449,6 +449,16 @@ pub fn view(states: &[SessionState], now: u64, stop_ms: Option<u64>, busy: Optio
                             Some("precondition_failed") => {
                                 (Mode::Blocked, "条件未满足 · 可操作".into())
                             }
+                            // 弹层门禁/候选歧义/决策卡:专属短文案替代泛化的
+                            // "待核对结果"——这三态的正确动作不是核对结果
+                            // (release-review-10 两次 popup_pending 实证错配)。
+                            Some(r) if r.starts_with("popup_pending") => {
+                                (Mode::Blocked, "前台有弹窗 · 处理后继续".into())
+                            }
+                            Some(r) if r.starts_with("ambiguous_target") => {
+                                (Mode::Partial, "多个候选 · 待指定目标".into())
+                            }
+                            Some("decision_pending") => (Mode::Partial, "待决策 · 需应答".into()),
                             Some("action_failed") => (
                                 Mode::Blocked,
                                 match f.step_id.as_deref() {

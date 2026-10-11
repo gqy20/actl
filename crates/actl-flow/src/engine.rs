@@ -640,8 +640,9 @@ pub fn execute(
                 }
                 run.status = Status::NeedsReview;
                 run.reason = Some(failure_reason(
+                    // 纯枚举:提示语归显示层/调用方 hint,不在 reason 里拼长句
                     if replay_confirmed {
-                        "result_unconfirmed; inspect before authorizing --retry-step"
+                        "result_unconfirmed"
                     } else {
                         "result_observation_failed"
                     },

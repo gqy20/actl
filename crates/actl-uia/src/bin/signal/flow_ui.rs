@@ -181,11 +181,12 @@ pub fn status_name(status: &str) -> &str {
         "paused" => "已暂停",
         "needs_review" => "待核对",
         "failed" => "失败",
-        "stopped" => "已停止",
+        // run 级停止与执行级急停("急停已启用")是两个概念,文案刻意区分。
+        "stopped" => "流程已停止",
         "completed" => "已完成",
         "ready" => "待开始",
         "pending" => "待执行",
-        "verifying" => "核对中",
+        "verifying" => "核验中",
         "uncertain" => "待核对",
         "skipped" => "已跳过",
         _ => "状态未知",
@@ -212,7 +213,7 @@ pub fn details(paths: &SignalPaths, id: &str) -> String {
         for (name, label) in [
             ("pending", "待执行"),
             ("running", "进行中"),
-            ("verifying", "核对中"),
+            ("verifying", "核验中"),
             ("uncertain", "待核对"),
             ("needs_review", "待核对"),
             ("failed", "失败"),
@@ -280,7 +281,7 @@ pub fn details(paths: &SignalPaths, id: &str) -> String {
     } else if status == "failed" {
         lines.push("失败：查看异常步骤的原因后修正路线；直接重试不会绕过失败。".into());
     } else if status == "stopped" {
-        lines.push("已停止：新任务可直接发起；旧任务不会自动恢复。".into());
+        lines.push("流程已停止：旧调用不会自动恢复；可核对后继续此任务，或发起新任务。".into());
     }
     lines.join("\n")
 }
@@ -303,7 +304,7 @@ mod tests {
         let dir = paths.dir.join("flows").join("review");
         std::fs::create_dir_all(&dir).unwrap();
         for (reason, expected) in [
-            ("resume_check_failed", "恢复检查未通过"),
+            ("resume_check_failed", "恢复核验未通过"),
             ("binding_validation_failed", "步骤输入未通过检查"),
         ] {
             std::fs::write(

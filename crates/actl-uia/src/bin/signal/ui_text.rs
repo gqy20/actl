@@ -25,24 +25,42 @@ pub fn task_title(plan: Option<&Value>) -> String {
         .replace(['\r', '\n'], " ")
 }
 pub fn reason(reason: &str) -> &'static str {
+    // 前缀族:引擎按 `族:<步骤/子类>` 复合的 reason——popup_pending:step、
+    // ambiguous_target:step、budget_exhausted:actions|decisions|wall。
+    if reason.starts_with("popup_pending:") {
+        return "目标应用前台有未认领弹窗；请先处理弹窗（或判读后由调用方声明），再继续。";
+    }
+    if reason.starts_with("ambiguous_target:") {
+        return "该步骤命中多个候选目标；请在详细信息中核对候选，由调用方指定其一后继续。";
+    }
+    if reason.starts_with("budget_exhausted:") {
+        return "探索预算已用完；可调整预算后重新运行，或核对已有结果。";
+    }
     match reason {
         "checkpoint" | "start_paused" => "等待你确认后继续。",
         "pause_requested" | "user_paused" => "你已请求暂停。",
         "human_takeover_or_grant_expired" => "检测到其他输入或授权已过期，请重新确认。",
         "handoff_pending" => "尚未获得桌面授权；若提示已关闭，请重新发起。",
         "user_deferred" => "本次暂不开始。",
-        "stop_requested" => "上一轮执行已停止；核对结果后可继续，也可开始新任务。",
+        "stop_requested" => {
+            "上一轮执行已停止。旧调用不会自动恢复；可核对后继续此任务，或发起新任务。"
+        }
         "precondition_failed" => "操作条件未满足，请查看技术详情。",
         "condition_observation_failed" => "暂时无法判断当前界面，已暂停；不会自动改走另一条路线。",
-        "resume_check_failed" => "恢复检查未通过，请核对目标后再继续。",
+        "resume_check_failed" => "恢复核验未通过，请核对目标后再继续。",
         "binding_validation_failed" => "步骤输入未通过检查，请查看技术详情。",
         "action_failed" => "操作未完成，请先核对已有结果。",
-        "verification_failed" => "结果未通过核对，不会自动重做。",
+        "verification_failed" => "结果未通过核验，不会自动重做。",
         "result_observation_failed" => "暂时无法读取上一步结果；继续仅重新核验，不会重做。",
-        "result_unconfirmed; inspect before authorizing --retry-step" => {
+        "result_unconfirmed" => {
             "实际结果与预期不符，可能只完成了一部分；继续仅重新核验，不会重做。"
         }
+        "output_freshness_failed" => "步骤输入已过期；请核对来源步骤的输出后继续。",
         "input_monitor_unavailable" => "输入监听暂不可用，任务已暂停；恢复后点击继续重新核验。",
+        "decision_pending" => "探索引擎需要决策；候选清单在详细信息中，由调用方应答后继续。",
+        "observation_failed" => "暂时无法观察界面；请确认应用状态后继续。",
+        "goal_check_failed" => "目标核验本身出错，请查看技术详情。",
+        "no_candidates" => "没有可执行的候选；请核对起点或放宽条件后重新运行。",
         _ => "需要处理，请查看技术详情。",
     }
 }
@@ -110,7 +128,7 @@ pub fn summary(state: Option<&Value>, plan: Option<&Value>, stopped: bool) -> Su
         }
     }
     if stopped {
-        lines.push("可核对并继续此任务，或发起新任务；旧调用不会恢复。".into());
+        lines.push("旧调用不会自动恢复；可核对后继续此任务，或发起新任务。".into());
     } else if let Some(r) = state["reason"].as_str() {
         lines.push(reason(r).into());
     } else if status == "needs_review" {
@@ -248,7 +266,7 @@ pub fn feedback(message: &str, status: Option<&str>) -> String {
     match message {
         "" | "流程状态已更新" => String::new(),
         "正在继续流程" if status == Some("running") => String::new(),
-        "正在继续流程" => "正在检查，请稍候…".into(),
+        "正在继续流程" => "正在核验，请稍候…".into(),
         "正在请求暂停" | "已请求暂停，等待当前操作结束" if status == Some("paused") => {
             String::new()
         }
@@ -303,7 +321,7 @@ mod tests {
         let view = summary(Some(&s), Some(&p), false);
         assert_eq!(view.title, "整理会议记录");
         assert!(view.body.contains("写入纪要"));
-        assert!(view.body.contains("恢复检查未通过"));
+        assert!(view.body.contains("恢复核验未通过"));
         assert!(!view.body.contains("technical-id"));
         let done =
             json!({"status":"completed", "steps":[{"status":"completed", "verified":false}]});
@@ -320,5 +338,27 @@ mod tests {
         assert!(!feedback("正在继续流程", Some("paused")).is_empty());
         assert_eq!(feedback("已请求暂停，等待当前操作结束", Some("paused")), "");
         assert!(!feedback("INTERNAL：example", Some("paused")).is_empty());
+    }
+    #[test]
+    fn compound_reasons_get_actionable_text_not_generic_fallback() {
+        // 前缀族:popup_pending/ambiguous_target/budget_exhausted 带 :步骤/:子类
+        assert!(reason("popup_pending:open_save_as").contains("弹窗"));
+        assert!(reason("ambiguous_target:type_filename").contains("候选"));
+        assert!(reason("budget_exhausted:actions").contains("预算"));
+        // 新增枚举族:不再落"需要处理"兜底
+        assert!(reason("decision_pending").contains("决策"));
+        assert!(reason("output_freshness_failed").contains("过期"));
+        assert!(reason("observation_failed").contains("观察"));
+        assert!(reason("goal_check_failed").contains("目标核验"));
+        assert!(reason("no_candidates").contains("候选"));
+        // 纯枚举化后的 result_unconfirmed(原为分号拼英文长句)
+        assert!(reason("result_unconfirmed").contains("重新核验"));
+    }
+    #[test]
+    fn stop_family_uses_one_standard_sentence() {
+        // 停止族三处(reason/detail 行)统一标准句;run 级与执行级急停在文案上区分。
+        assert!(reason("stop_requested").contains("旧调用不会自动恢复"));
+        assert_eq!(super::super::flow_ui::status_name("stopped"), "流程已停止");
+        assert_eq!(super::super::flow_ui::status_name("verifying"), "核验中");
     }
 }
