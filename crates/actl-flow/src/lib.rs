@@ -38,8 +38,26 @@ pub struct Plan {
     /// 上抛。AGENTS 人肉弹层白名单的机制化形态;unknown 分类不可声明。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub popup_handlers: Vec<PopupHandler>,
+    /// 常驻表面认领声明(降噪第二轮,2026-10-11 spec):匹配表面是**声明
+    /// 已知的常驻部件**(停靠窗格/折叠挂件),门禁跳过不阻断——从词表
+    /// 启发(is_docked_pane,Word 实例)升级为声明形态(VS Code Find
+    /// 面板第二实例证启发不泛化)。name_contains 必填(最窄形态,禁止
+    /// "忽略该 app 全部 unknown"的宽声明);同一表面同时声明 handler
+    /// 与 ignore → PROTOCOL(处置与放行语义互斥)。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub popup_ignores: Vec<PopupIgnore>,
     #[serde(default)]
     pub steps: Vec<Step>,
+}
+
+/// 单条常驻表面认领:此表面是该应用的已知常驻部件(非弹窗),门禁放行。
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct PopupIgnore {
+    /// 目标应用锚(标题子串):仅当写步的 --app 包含此锚时生效。
+    pub app: String,
+    /// 表面名/文本包含词(必填——按名认领,禁止宽形态)。
+    pub name_contains: String,
 }
 
 /// 单条弹层处理器:classification 必须显式(error/save/confirm/update/

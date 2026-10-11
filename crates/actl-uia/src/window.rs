@@ -1176,30 +1176,6 @@ fn runtime_ids_match(recorded: &[i32], current: &[i32]) -> bool {
 /// (保存/确认/错误/更新)即视为停靠面板,不进前台引导层。保守设计:
 /// 只降噪已知词,新面板仍走 unknown 拦截(误放行代价 >> 误拦截代价,
 /// 误拦截只多一次人工判读)。
-fn is_docked_pane(text: &str) -> bool {
-    let pane_names = [
-        "导航",
-        "搜索",
-        "任务窗格",
-        "剪贴板",
-        "Navigation",
-        "Search",
-        "Clipboard",
-    ];
-    let dialog_markers = [
-        "保存",
-        "确认",
-        "是否",
-        "错误",
-        "失败",
-        "找不到",
-        "更新",
-        "升级",
-    ];
-    let hit_pane = pane_names.iter().any(|n| text.contains(n));
-    let has_dialog = dialog_markers.iter().any(|m| text.contains(m));
-    hit_pane && !has_dialog
-}
 /// 朴素分类提示(不裁决,判读归调用方):按弹窗文本关键词给类别。
 fn classify_front_text(text: &str) -> &'static str {
     if text.contains("找不到") || text.contains("错误") || text.contains("失败") {
@@ -1263,16 +1239,11 @@ pub fn front_report(app: &str) -> Result<serde_json::Value, CtlError> {
         }
         if !texts.is_empty() || !buttons.is_empty() {
             let joined = texts.join(" ");
-            // 停靠面板降噪(2026-10-07,Word 导航窗格实证):常驻停靠面板
-            // (导航/搜索/任务窗格类)不是「引导用户的弹窗」——它在窗口常规
-            // 布局里,不挡步骤目标。判定特征:名称为已知面板词且无保存/
-            // 确认/错误类文本。误判代价:popup_pending 假拦截(010 fill-3
-            // 被导航窗格挡住实证);漏判代价:真弹窗被放行——故只对已知
-            // 面板词白名单降噪,unknown 兜底保守。
-            if is_docked_pane(&joined) {
-                i = j;
-                continue;
-            }
+            // 停靠面板词表降噪已退役(2026-10-11,降噪第二轮 spec):
+            // is_docked_pane 词表启发不泛化——VS Code Find 面板(常驻
+            // 挂件,不在词表)第二实例实证。常驻表面降噪上移到 flow 层
+            // 的 popup_ignores 声明(按名认领,docs/06 运行时治理③);
+            // front_report 如实上报全部树内表面,判读归调用方。
             surfaces.push(serde_json::json!({
                 "name": node.name.clone().unwrap_or_default(),
                 "text": joined,
@@ -1293,16 +1264,6 @@ pub fn front_report(app: &str) -> Result<serde_json::Value, CtlError> {
 }
 #[cfg(test)]
 mod identity_regression_tests {
-    #[test]
-    fn docked_pane_is_denonised_but_dialogs_are_not() {
-        // 停靠面板降噪(Word 导航窗格实证):面板词命中且无弹窗语义 → 降噪;
-        // 同词带保存/确认语义(真弹窗)不降噪;unknown 面板词不降噪(保守)。
-        assert!(super::is_docked_pane("导航 笔记 2026-10-04 过程记录 心得"));
-        assert!(super::is_docked_pane("搜索"));
-        assert!(!super::is_docked_pane("保存对此文件所做的更改? 导航"));
-        assert!(!super::is_docked_pane("是否要保存对 导航 的更改"));
-        assert!(!super::is_docked_pane("一些未识别的面板内容"));
-    }
     #[test]
     fn missing_window_identity_must_not_authorize_replay() {
         assert!(!super::runtime_ids_match(&[], &[]));

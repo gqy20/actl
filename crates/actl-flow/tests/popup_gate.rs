@@ -449,3 +449,99 @@ fn notice_handler_neither_overclaims_nor_underclaims() {
     assert_eq!(run2.status, Status::NeedsReview);
     std::fs::remove_dir_all(root2).unwrap();
 }
+
+#[test]
+fn ignore_declaration_skips_claimed_persistent_surface() {
+    // 降噪第二轮(2026-10-11):声明认领的常驻表面(VS Code Find 面板形态)
+    // 门禁直接放行——无处置 click、无 popup_pending,步执行完成
+    let ignores = "popup_ignores:\n  - app: myapp\n    name_contains: Find / Replace\n";
+    let p = plan_with_handlers(ignores, &write_call());
+    let (root, store, mut run) = setup(&p);
+    let mut host = PopupHost {
+        calls: Vec::new(),
+        read_only: |c| c.command != "write",
+        // 常驻表面持续存在(开与关都在树上)——门禁必须跳过而非阻断
+        layers: RefCell::new(vec![FrontLayer {
+            clear: false,
+            surfaces: vec![surface("unknown", "Find / Replace No results")],
+        }]),
+        popups: RefCell::new(Vec::new()),
+        captures: RefCell::new(Vec::new()),
+    };
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
+    assert_eq!(run.status, Status::Completed);
+    // 无处置 click(表面被认领放行,不是被处置),只有业务 write
+    assert_eq!(host.calls, vec!["write:--app".to_string()]);
+    assert!(host.popups.borrow().is_empty());
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn undeclared_or_mismatched_surfaces_still_block() {
+    // 认领词不符的表面不受 ignore 豁免——认领是按名的,不是按 app 的
+    let ignores = "popup_ignores:\n  - app: myapp\n    name_contains: Find / Replace\n";
+    let p = plan_with_handlers(ignores, &write_call());
+    let (root, store, mut run) = setup(&p);
+    let mut host = PopupHost {
+        calls: Vec::new(),
+        read_only: |c| c.command != "write",
+        layers: RefCell::new(vec![FrontLayer {
+            clear: false,
+            surfaces: vec![surface("unknown", "许可证过期")],
+        }]),
+        popups: RefCell::new(Vec::new()),
+        captures: RefCell::new(Vec::new()),
+    };
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
+    assert_eq!(run.status, Status::NeedsReview);
+    assert_eq!(run.reason.as_deref(), Some("popup_pending:w1"));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn ignore_and_handler_coexist_for_distinct_surfaces() {
+    // 双层共存:常驻表面被 ignore 放行,真弹层被 handler 处置——两不相扰
+    let decl = "popup_handlers:\n  - app: myapp\n    classification: save\n    click: 'name:不保存'\npopup_ignores:\n  - app: myapp\n    name_contains: Find / Replace\n";
+    let p = plan_with_handlers(decl, &write_call());
+    let (root, store, mut run) = setup(&p);
+    let mut host = PopupHost {
+        calls: Vec::new(),
+        read_only: |c| c.command != "write",
+        // 同层两表面:save 弹窗(处置)+ Find 常驻面板(认领放行);
+        // 复查层:常驻面板仍在(它的本性)——复查必须不因它而失败
+        layers: RefCell::new(vec![
+            FrontLayer {
+                clear: false,
+                surfaces: vec![
+                    surface("save", "是否保存?"),
+                    surface("unknown", "Find / Replace No results"),
+                ],
+            },
+            FrontLayer {
+                clear: false,
+                surfaces: vec![surface("unknown", "Find / Replace No results")],
+            },
+        ]),
+        popups: RefCell::new(Vec::new()),
+        captures: RefCell::new(Vec::new()),
+    };
+    execute(&p, &mut run, &store, &mut host, None, None).unwrap();
+    assert_eq!(run.status, Status::Completed);
+    assert_eq!(
+        host.calls,
+        vec!["click:name:不保存".to_string(), "write:--app".to_string()]
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn ignore_and_handler_on_the_same_surface_is_rejected_at_parse() {
+    // 处置与放行语义互斥:同 app+同认领词 → schema 层 PROTOCOL
+    let decl = "popup_handlers:\n  - app: myapp\n    classification: notice\n    name_contains: Find / Replace\n    click: c\npopup_ignores:\n  - app: myapp\n    name_contains: Find / Replace\n";
+    let yaml = format!(
+        "version: 1\nname: P\n{decl}steps:\n - id: w1\n   title: W\n   run: {{command: write}}\n"
+    );
+    let result = parse(&yaml);
+    assert!(result.is_err());
+    assert_eq!(result.unwrap_err().code, ErrorCode::Protocol);
+}

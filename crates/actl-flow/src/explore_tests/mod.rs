@@ -547,6 +547,7 @@ fn setup(spec: &ExploreSpec) -> (std::path::PathBuf, Store, Run) {
         auto_resume: None,
         explore: Some(spec.clone()),
         popup_handlers: Vec::new(),
+        popup_ignores: Vec::new(),
         steps: Vec::new(),
     };
     let store = Store::at(&root, "run1").expect("store");

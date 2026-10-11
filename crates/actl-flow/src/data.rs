@@ -71,6 +71,33 @@ pub fn validate(plan: &Plan) -> Result<(), CtlError> {
             return Err(error("", &field, "app and click must be non-empty"));
         }
     }
+    for (i, ignore) in plan.popup_ignores.iter().enumerate() {
+        let field = format!("popup_ignores[{i}]");
+        // 最窄形态(2026-10-11 降噪第二轮):按名认领,两个字段都必填——
+        // 空声明=「忽略该 app 全部表面」,会把门禁掏空。
+        if ignore.app.is_empty() || ignore.name_contains.is_empty() {
+            return Err(error(
+                "",
+                &field,
+                "app and name_contains must be non-empty (narrow ignores name the surface)",
+            ));
+        }
+        // 处置与放行语义互斥:同一表面(app 锚+认领词都相等)不得同时
+        // 声明 handler 与 ignore——两套意图会让门禁行为取决于数组顺序。
+        if plan.popup_handlers.iter().any(|handler| {
+            handler.app == ignore.app
+                && handler
+                    .name_contains
+                    .as_deref()
+                    .is_some_and(|needle| needle == ignore.name_contains)
+        }) {
+            return Err(error(
+                "",
+                &field,
+                "the same surface is declared both a popup_handler and a popup_ignore; dismissal and pass-through are mutually exclusive",
+            ));
+        }
+    }
     for (i, step) in plan.steps.iter().enumerate() {
         crate::branch::validate(step)?;
         crate::bounded::validate(step)?;

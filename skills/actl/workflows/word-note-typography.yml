@@ -12,6 +12,12 @@
                                "name_contains":  "目录名无效"
                            }
                        ],
+    "popup_ignores":  [
+                          {
+                              "app":  ".docx",
+                              "name_contains":  "导航"
+                          }
+                      ],
     "inputs":  {
                    "program":  {
                                    "default":  "${env:ProgramFiles}/Microsoft Office/Root/Office16/WINWORD.EXE"

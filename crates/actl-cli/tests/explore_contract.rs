@@ -178,6 +178,7 @@ fn pending_card_decision_protocol() {
         auto_resume: None,
         explore: Some(spec.clone()),
         popup_handlers: Vec::new(),
+        popup_ignores: Vec::new(),
         steps: Vec::new(),
     };
     std::fs::write(flows.join("plan.json"), serde_json::to_vec(&plan).unwrap()).unwrap();
@@ -393,6 +394,7 @@ fn writeback_extracts_unverified_route_fragment() {
         auto_resume: None,
         explore: Some(spec.clone()),
         popup_handlers: Vec::new(),
+        popup_ignores: Vec::new(),
         steps: Vec::new(),
     };
     std::fs::write(flows.join("plan.json"), serde_json::to_vec(&plan).unwrap()).unwrap();

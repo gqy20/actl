@@ -422,6 +422,7 @@ impl Host for Adapter<'_> {
             explore: None,
             name: self.plan.name.clone(),
             popup_handlers: Vec::new(),
+            popup_ignores: Vec::new(),
             steps: vec![step.clone()],
         })
     }

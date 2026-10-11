@@ -60,6 +60,7 @@ pub fn validate(plan: &Plan) -> Result<(), CtlError> {
                 auto_resume: None,
                 explore: None,
                 popup_handlers: Vec::new(),
+                popup_ignores: Vec::new(),
                 steps: vec![child],
             })?;
         }
@@ -80,6 +81,7 @@ pub fn validate(plan: &Plan) -> Result<(), CtlError> {
                     auto_resume: None,
                     explore: None,
                     popup_handlers: Vec::new(),
+                    popup_ignores: Vec::new(),
                     steps: vec![child],
                 })?;
             }
@@ -107,6 +109,7 @@ pub fn validate(plan: &Plan) -> Result<(), CtlError> {
                     auto_resume: None,
                     explore: None,
                     popup_handlers: Vec::new(),
+                    popup_ignores: Vec::new(),
                     steps: vec![child],
                 })?;
             }

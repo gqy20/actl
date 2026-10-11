@@ -200,6 +200,17 @@ fn classification_matches(handler: &PopupHandler, surface: &Surface) -> bool {
     }
 }
 
+/// 常驻表面认领匹配(降噪第二轮,2026-10-11):ignore 声明的表面是
+/// 声明已知的常驻部件(停靠窗格/折叠挂件),门禁跳过——pending 过滤
+/// 与处置后复查**两处同口径**(否则复查永不清层,认领失效)。
+fn ignored(plan: &Plan, app: &str, surface: &Surface) -> bool {
+    plan.popup_ignores.iter().any(|ignore| {
+        app.contains(&ignore.app)
+            && (surface.name.contains(&ignore.name_contains)
+                || surface.text.contains(&ignore.name_contains))
+    })
+}
+
 fn popup_gate(
     plan: &Plan,
     step: &crate::Step,
@@ -207,7 +218,11 @@ fn popup_gate(
     app: &str,
     layer: &FrontLayer,
 ) -> Result<bool, CtlError> {
-    let pending: Vec<&Surface> = layer.surfaces.iter().filter(|s| actionable(s)).collect();
+    let pending: Vec<&Surface> = layer
+        .surfaces
+        .iter()
+        .filter(|s| actionable(s) && !ignored(plan, app, s))
+        .collect();
     let mut handled = Vec::new();
     for surface in pending {
         let matched = plan.popup_handlers.iter().find(|handler| {
@@ -250,7 +265,13 @@ fn popup_gate(
     }
     if !handled.is_empty() {
         let recheck = host.front_layer(app)?;
-        if recheck.surfaces.iter().any(actionable) {
+        // 复查与 pending 同口径:认领的常驻表面不算「未清层」——否则
+        // 处置了真弹层,常驻表面仍让复查失败,认领失效。
+        if recheck
+            .surfaces
+            .iter()
+            .any(|s| actionable(s) && !ignored(plan, app, s))
+        {
             host.capture_failure(step.id.as_str(), "popup_pending", Some(&step.run));
             return Ok(false);
         }
@@ -720,12 +741,16 @@ pub fn execute(
             }
             // 步前弹层门禁(运行时治理第一轮,docs/06):写步动手前先听前台
             // 引导层——unknown 面板 = popup_pending,步不执行(保持 Pending,
-            // 无副作用不需 uncertain);声明过的面板自动处置留痕后复查放行。
+            // 无副作用不需 uncertain);声明过的面板自动处置留痕后复查放行;
+            // popup_ignores 认领的常驻表面(降噪第二轮)三处同口径跳过。
             // 只读步与无 --app 锚的步不设防;观察失败放行(写步守卫兜底)。
             if !host.read_only(&step.run)
                 && let Some(app) = invocation_app(&step.run)
                 && let Ok(layer) = host.front_layer(&app)
-                && layer.surfaces.iter().any(actionable)
+                && layer
+                    .surfaces
+                    .iter()
+                    .any(|s| actionable(s) && !ignored(plan, &app, s))
                 && !popup_gate(plan, &step, host, &app, &layer)?
             {
                 run.status = Status::NeedsReview;
