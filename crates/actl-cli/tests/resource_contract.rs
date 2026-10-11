@@ -153,7 +153,7 @@ fn combined_template_matches_individual_steps_and_resources() {
         }
     }
     let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/actl/workflows");
-    let mut expected = json!({"version":1,"name":"Application verification","handoff":{"approval":"once_per_run"},"inputs":{},"resources":{"directories":[],"files":[]},"steps":[]});
+    let mut expected = json!({"version":1,"name":"Application verification","handoff":{"approval":"once_per_run"},"inputs":{},"resources":{"directories":[],"files":[]},"popup_ignores":[],"steps":[]});
     // 整批专属首步:桌面空闲门(验收批的无人值守约定,单应用流程保持可交互,
     // 因此不出现在任何单应用模板,由合成推导单独注入)。
     expected["steps"]
@@ -183,6 +183,12 @@ fn combined_template_matches_individual_steps_and_resources() {
                 .as_array_mut()
                 .unwrap()
                 .push(json!(format!("{name}/{}", dir.as_str().unwrap())));
+        }
+        // popup_ignores 同步推导(降噪第二轮:常驻面板声明随单模板进组合——
+        // 词表退役后组合模板同样需要声明,与 steps 同款 concat)
+        if let Some(ignores) = raw["popup_ignores"].as_array() {
+            let dst = expected["popup_ignores"].as_array_mut().unwrap();
+            dst.extend(ignores.iter().cloned());
         }
         for file in raw["resources"]["files"].as_array().unwrap() {
             let mut file = file.clone();

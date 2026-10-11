@@ -1,6 +1,9 @@
 {
   "version": 1,
   "name": "Application verification",
+  "popup_ignores": [
+    {"app": ".docx", "name_contains": "导航"}
+  ],
   "handoff": {
     "approval": "once_per_run"
   },

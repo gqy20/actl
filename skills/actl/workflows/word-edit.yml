@@ -1,5 +1,6 @@
 {
   "version": 1,
+  "popup_ignores": [{"app": ".docx", "name_contains": "导航"}],
   "name": "Word 正文编辑与磁盘核验",
   "handoff": {
     "approval": "once_per_run"

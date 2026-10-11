@@ -1221,3 +1221,5 @@ R1 三块机械能力的增强（编译器纯函数 + 捕获层一个新事件�
 1. **DPI 坐标口径**：钩子事件坐标是物理屏幕坐标，而 `WindowFromPoint`/`ElementFromPoint` 按调用线程的 DPI 感知解释——多显示器混合 DPI 下错位（实测点击反查命中隔壁屏元素、窗口元数据全空）。会话线程设 `SetThreadDpiAwarenessContext(PER_MONITOR_AWARE_V2)` 对齐。
 2. **键盘注入标志位**：`KBDLLHOOKSTRUCT` 的 INJECTED 是 **0x10（LLKHF_INJECTED）**——0x1 是 EXTENDED 位；鼠标侧 LLMHF_INJECTED=0x1 恰好同位，首版误用 0x1 导致注入键全部漏标（实测 enter 与 VK_PACKET 键均 false，机器输入伪装成人工输入进入编译路径）。修为 0x10 后注入键正确排除。
 3. **值读回回退链**：Win11 记事本的 Document 不支持 ValuePattern（TextPattern 型应用）——Value 读回失败后回退 Text 文档区全文读回（与 verify 的 value/text 通道同族；burst 末一次，演示量级文档全文可承受，超长文档的截断边界留给改写轮）。
+
+**降噪第二轮落地审计失误案例（2026-10-11 同日回归,如实入册）**：词表退役是**全局行为**,补声明只做了 word-note-typography（当时唯一有实证的模板）——release-review-draft/word-edit/verify-applications 三个 Word 模板裸奔,同日 release-review-08 写段被 Word「导航」任务窗格挡（popup_pending,front 证据 `name:"导航"` 与 2026-10-07 词表降噪的同款表面）。**教训：改全局默认行为时必须审计全部消费方**（词表四词=导航/搜索/任务窗格/剪贴板,对应所有 Word 模板的可能表面）,不能只补验证过的那一个;组合推导（resource_contract）同步扩展 popup_ignores concat。**暴露的结构性成本**：逐模板抄窗格清单不可扩展——pack 级声明来源（apps/*.yml 声明应用常驻面板,plan 编译期注入）是正解方向,登记候选。
