@@ -1,18 +1,15 @@
 # yaml-language-server: $schema=../../schemas/flow-v1.schema.json
-# 探索路线积累 #5(计算器形态,2026-10-11):XAML 原生应用形态——第三种
-# 应用形态(记事本 Win32/资源管理器混合/计算器 XAML UWP),验证飞轮
-# 在 provider 形态谱系另一端的寻址能力。
-# 任务:在计算器输入 7x8 并确认显示 56。
-# 前置:计算器是 fixtures 常客(preview/回归均用);app 锚=标题"计算器"。
-# 预期:status=completed,goal_met=true(显示=56);
-# 副证据:结果元素文本变化。
-# texts 走键盘通道(数字 ASCII);XAML 显示元素通常是 Text role,name=数字。
+# 探索路线积累 #5(计算器 XAML 形态,2026-10-11 真机校正后):
+# 无输入框应用——texts 原语不适用(schema 要求元素选择器,计算器无
+# 输入域);路线=关键词驱动按钮点击:词表命中 七/八/乘/等于 按钮
+# (探测唯一命中)进前沿,引擎点击,等号后显示「显示为 56」。
+# 组件实证:type focused: "7*8=" 键盘通道 4 字符送达显示 56(人工
+# 验证通道;引擎路线走按钮点击);显示区=Text「显示为 N」唯一命中。
 version: 1
 name: explore-route5-calc-compute
 explore:
-  task: 在计算器计算 7 乘 8 并确认显示 56
+  task: 在计算器依次点击七八乘等于并确认显示 56
   app: 计算器
-  keywords: [七, 8, 显示]
-  texts: {"focused:": "78="}
-  goal: {command: verify, args: [--value, 'role:Text', '56', --property, name, --contains, --app, 计算器]}
-  budgets: {actions: 4, decisions: 3}
+  keywords: [七, 八, 乘, 等于, 显示为]
+  goal: {command: verify, args: [--value, 'name:显示为', '56', --property, name, --contains, --app, 计算器]}
+  budgets: {actions: 6, decisions: 3}
