@@ -80,6 +80,17 @@
   press、定向 --target 不通换全局键、UIA 滞留表面用 ctrl+f→esc 类键盘
   组合绕行）。硬退出修复（hard_exit_after_envelope）已消除大部分楔死
   残留，但慢 provider 仍可能让命令慢——换通道的成本远低于磨同一通道。
+- **冻结计划修订走 emit-plan 具体化，禁止对 plan.json 带外手术**
+  （2026-10-11 VS Code 轮实证）：flow-revise 的校验路径不解析
+  `{"input":…}` 引用（schema 只见原始对象直接 PROTOCOL），喂模板原文件
+  必拒。正道：`flow-run --emit-plan` 产出**解析后的具体计划**，在它
+  基础上做最小修改后喂 revise——全程在治理面内。该轮的带外 JSON 手术
+  （直接改 run 目录 plan.json）做坏了一次（v2 binding_validation_failed
+  报废重来），绕过校验的代价当场兑现；revise 缺口本身登记 ROADMAP。
+- **3+ 顺序 actl 调用走 batch，不写 ps1 循环裸调**（同轮自省，AGENTS
+  验收纪律 2 的执行失守）：headless fixture 验证 6+ 条 browser-* 调用
+  用 PowerShell 循环逐条 spawn——每条独立进程各自初始化 CDP 连接。
+  batch 单进程共享连接才是正道；ps1 只做 envelope 解析（纪律 4 允许面）。
 
 ## 5. 共享桌面与无人值守
 
