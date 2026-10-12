@@ -168,6 +168,7 @@ fn pending_card_decision_protocol() {
             bind: Default::default(),
         },
         priors: Default::default(),
+        stats: Default::default(),
         texts: Default::default(),
         budgets: Budgets::default(),
     };
@@ -384,6 +385,7 @@ fn writeback_extracts_unverified_route_fragment() {
             bind: Default::default(),
         },
         priors: Default::default(),
+        stats: Default::default(),
         texts: Default::default(),
         budgets: Budgets::default(),
     };
@@ -564,4 +566,36 @@ fn texts_validation_rejects_bad_shapes() {
     let (code, result) = s.invoke(&["flow-validate", "--file", &file]);
     assert_eq!(code, 0, "{result}");
     assert_eq!(result["data"]["valid"], true);
+}
+
+#[test]
+fn stats_validation_rejects_bad_shapes() {
+    // 统计剪枝 v2 的 schema 面:有效形态通过,effective>tried / tried=0 /
+    // 超界 tried 拒绝;有效形态可整轮通过(统计注入不破坏探索契约)
+    let s = Sandbox::new();
+    for (text, field) in [
+        (
+            "version: 1\nname: s1\nexplore:\n  task: T\n  app: A\n  keywords: [k]\n  goal: {command: verify, args: [--exists, 'name:x', --app, A]}\n  stats: {'id:btn': {tried: 5, effective: 7}}\n",
+            "explore.stats",
+        ),
+        (
+            "version: 1\nname: s2\nexplore:\n  task: T\n  app: A\n  keywords: [k]\n  goal: {command: verify, args: [--exists, 'name:x', --app, A]}\n  stats: {'id:btn': {tried: 0, effective: 0}}\n",
+            "explore.stats",
+        ),
+        (
+            "version: 1\nname: s3\nexplore:\n  task: T\n  app: A\n  keywords: [k]\n  goal: {command: verify, args: [--exists, 'name:x', --app, A]}\n  stats: {'id:btn': {tried: 99999, effective: 0}}\n",
+            "explore.stats",
+        ),
+    ] {
+        let file = s.file(text);
+        let (code, result) = s.invoke(&["flow-validate", "--file", &file]);
+        assert_ne!(code, 0, "{result}");
+        assert_eq!(result["error"]["code"], "PROTOCOL", "{result}");
+        assert_eq!(result["error"]["evidence"]["field"], field, "{result}");
+    }
+    let ok = s.file(
+        "version: 1\nname: s4\nexplore:\n  task: T\n  app: A\n  keywords: [k]\n  goal: {command: verify, args: [--exists, 'name:x', --app, A]}\n  stats: {'id:btn': {tried: 4, effective: 1}}\n",
+    );
+    let (code, result) = s.invoke(&["flow-validate", "--file", &ok]);
+    assert_eq!(code, 0, "{result}");
 }

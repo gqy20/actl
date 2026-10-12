@@ -118,6 +118,50 @@ pub fn score_candidate(element: &ElementOut, keywords: &[String], added_this_fra
     score
 }
 
+/// 选择器历史统计(docs/42 §4.5 v2,UCB 语义的数据形态):跨 run 累积的
+/// (尝试次数, 有效次数)。单 run 增量由 writeback 的 suggested_stats 产出,
+/// 调用方累积进 pack 后随 spec 注入——引擎不读 pack,计数显式入参。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SelectorStats {
+    /// 历史尝试次数(该选择器进入过动作/探测的 run 累积数)。
+    pub tried: u32,
+    /// 其中产生正效果的次数(揭示新内容或位于 goal_met 最终路线)。
+    pub effective: u32,
+}
+
+/// 统计样本门槛:tried 低于此值不启用统计调整(冷启动回落到静态先验)——
+/// 稀疏样本的置信区间反而乱序,宁可回退已知语义。
+const MIN_SAMPLES: u32 = 3;
+/// UCB 探索系数(与评分域同标定:基础分典型 0..=15,静态先验 ±4)。
+const UCB_C: f64 = 1.5;
+
+/// 候选分数调整的统一入口(静态先验与统计的裁决):
+/// - 无统计条目或 tried<MIN_SAMPLES → 静态先验(v1 行为;冷启动回落,
+///   统计不生效——schema 亦拒绝 tried=0 的键,零尝试不是统计);
+/// - tried≥MIN_SAMPLES → **UCB 项替代静态先验**(避免同一知识双计):
+///   exploit = round(6·eff_rate) − 4 ∈ [−4,+2](eff_rate 0% 收敛 dead 先验,
+///   100% 已知有效)+ explore = c·√(ln N/n)(N=全图总尝试;不确定者
+///   保探索余量,证据累积后项衰减)。
+pub fn statistical_adjustment(
+    selector: &str,
+    priors: &std::collections::BTreeMap<String, i32>,
+    stats: &std::collections::BTreeMap<String, SelectorStats>,
+) -> i32 {
+    let Some(entry) = stats.get(selector) else {
+        return priors.get(selector).copied().unwrap_or(0);
+    };
+    if entry.tried < MIN_SAMPLES {
+        return priors.get(selector).copied().unwrap_or(0);
+    }
+    let family_n: u64 = stats.values().map(|v| u64::from(v.tried)).sum();
+    let eff_rate = f64::from(entry.effective) / f64::from(entry.tried);
+    let exploit = (eff_rate * 6.0).round() as i32 - 4;
+    let ln_family = (family_n.max(1) as f64).ln();
+    let explore = (UCB_C * (ln_family / f64::from(entry.tried)).sqrt()).round() as i32;
+    exploit + explore
+}
+
 /// 观察帧中通过评分产生的前沿候选。
 #[derive(Debug, Clone, PartialEq)]
 pub struct ScoredCandidate {
@@ -132,14 +176,18 @@ pub struct ScoredCandidate {
 /// 从观察帧构建前沿候选:交互元素 + 可定位选择器,按 (分数降序, 选择器字典序)
 /// 稳定排序——同分不随机,卡内容与回退序完全确定。
 ///
-/// `priors`(docs/42 §4.5 统计剪枝的 v1 形态):选择器 → 分数调整,由调用方从
+/// `priors`(docs/42 §4.5 v1):选择器 → 分数调整,由调用方从
 /// pack quirks/历史 tried 效果注入(writeback 的 suggested_priors 即其数据源);
-/// 负值压低已知有风险/无效果的候选,正值提高已知有效候选。调整后分数下限 0。
+/// 负值压低已知有风险/无效果的候选,正值提高已知有效候选。
+/// `stats`(v2):累积计数——条目在场且样本足够时按 UCB 语义替代静态先验
+/// (见 [`statistical_adjustment`]);缺省/冷启动时与 v1 完全一致。
+/// 调整后分数下限 0。
 pub fn frontier(
     elements: &[ElementOut],
     keywords: &[String],
     added_selectors: &std::collections::BTreeSet<String>,
     priors: &std::collections::BTreeMap<String, i32>,
+    stats: &std::collections::BTreeMap<String, SelectorStats>,
 ) -> Vec<ScoredCandidate> {
     let mut candidates: Vec<ScoredCandidate> = elements
         .iter()
@@ -147,9 +195,8 @@ pub fn frontier(
             let selector = selector_of(e)?;
             let added_this_frame = added_selectors.contains(&selector);
             let base = score_candidate(e, keywords, added_this_frame);
-            let adjusted = (i64::from(base)
-                + i64::from(priors.get(&selector).copied().unwrap_or(0)))
-            .clamp(0, i64::from(u32::MAX)) as u32;
+            let adjustment = i64::from(statistical_adjustment(&selector, priors, stats));
+            let adjusted = (i64::from(base) + adjustment).clamp(0, i64::from(u32::MAX)) as u32;
             Some(ScoredCandidate {
                 dangerous: dangerous(e.name.as_deref(), e.automation_id.as_deref()),
                 selector,
@@ -512,7 +559,13 @@ mod tests {
     #[test]
     fn gate_and_frontier_agree_on_stable_ordering() {
         let elements = vec![el("Button", Some("b"), None), el("Button", Some("a"), None)];
-        let candidates = frontier(&elements, &[], &Default::default(), &Default::default());
+        let candidates = frontier(
+            &elements,
+            &[],
+            &Default::default(),
+            &Default::default(),
+            &Default::default(),
+        );
         // 同分按 selector 字典序:a 在前(确定性,不随机)
         assert_eq!(candidates[0].selector, "name:a");
         // 等分即平局:外抛
@@ -528,7 +581,13 @@ mod tests {
         ];
         let mut priors = std::collections::BTreeMap::new();
         priors.insert("id:btnTop".to_string(), -4);
-        let candidates = frontier(&elements, &[], &Default::default(), &priors);
+        let candidates = frontier(
+            &elements,
+            &[],
+            &Default::default(),
+            &priors,
+            &Default::default(),
+        );
         // 同基础分(Button+id=3),btnTop 被压到 0,btnSave 3 → 领先 3 ≥ 2
         assert_eq!(candidates[0].selector, "id:btnSave");
         assert_eq!(candidates[0].score, 3);
@@ -537,7 +596,13 @@ mod tests {
         // 正先验提升已验证候选(下限 0 不产生负分)
         let mut priors = std::collections::BTreeMap::new();
         priors.insert("id:btnSave".to_string(), 2);
-        let candidates = frontier(&elements, &[], &Default::default(), &priors);
+        let candidates = frontier(
+            &elements,
+            &[],
+            &Default::default(),
+            &priors,
+            &Default::default(),
+        );
         assert_eq!(candidates[0].score, 5);
     }
 
@@ -701,5 +766,121 @@ mod tests {
         );
         assert_eq!(selector_of(&el("Button", None, None)), None);
         assert_eq!(selector_of(&el("Text", Some("标签"), None)), None);
+    }
+}
+
+#[cfg(test)]
+mod stats_tests {
+
+    use super::*;
+
+    fn el(role: &str, name: Option<&str>, id: Option<&str>) -> ElementOut {
+        ElementOut {
+            ref_id: None,
+            role: role.to_string(),
+            name: name.map(str::to_string),
+            automation_id: id.map(str::to_string),
+            depth: 1,
+        }
+    }
+
+    fn stats(entries: &[(&str, u32, u32)]) -> std::collections::BTreeMap<String, SelectorStats> {
+        entries
+            .iter()
+            .map(|(sel, tried, eff)| {
+                (
+                    (*sel).to_string(),
+                    SelectorStats {
+                        tried: *tried,
+                        effective: *eff,
+                    },
+                )
+            })
+            .collect()
+    }
+
+    fn no_priors() -> std::collections::BTreeMap<String, i32> {
+        Default::default()
+    }
+
+    /// v1 完全向后兼容:零 stats 注入 = 静态先验原语义。
+    #[test]
+    fn absent_stats_fall_back_to_static_priors() {
+        let mut priors = std::collections::BTreeMap::new();
+        priors.insert("id:btn".to_string(), -4);
+        assert_eq!(
+            statistical_adjustment("id:btn", &priors, &stats(&[])),
+            -4,
+            "无统计条目 → 静态先验"
+        );
+        assert_eq!(statistical_adjustment("id:other", &priors, &stats(&[])), 0);
+    }
+
+    /// 冷启动:样本不足(tried<3)统计不生效,回落静态先验——
+    /// 稀疏样本的置信区间反而乱序,宁可回退已知语义。
+    #[test]
+    fn cold_start_samples_fall_back_to_priors() {
+        let mut priors = std::collections::BTreeMap::new();
+        priors.insert("id:btn".to_string(), -2);
+        let s = stats(&[("id:btn", 1, 0), ("id:other", 5, 0)]);
+        assert_eq!(statistical_adjustment("id:btn", &priors, &s), -2);
+        let s = stats(&[("id:btn", 2, 0), ("id:other", 5, 0)]);
+        assert_eq!(statistical_adjustment("id:btn", &priors, &s), -2);
+        // 阈值边界:第 3 次尝试起统计生效(不再等于静态先验)
+        let s = stats(&[("id:btn", 3, 0), ("id:other", 5, 0)]);
+        let adj = statistical_adjustment("id:btn", &priors, &s);
+        assert_ne!(adj, -2, "tried=3 统计接管");
+    }
+
+    /// dead 收敛:eff_rate=0 的候选随证据累积逼近静态 dead 先验(-4),
+    /// 样本少时探索余量让它少受一点压(不确定者保探索)。
+    #[test]
+    fn dead_candidates_converge_toward_static_prior() {
+        let n_small = stats(&[("id:btn", 3, 0), ("id:x", 20, 0), ("id:y", 20, 0)]);
+        let n_large = stats(&[("id:btn", 30, 0), ("id:x", 20, 0), ("id:y", 20, 0)]);
+        let small = statistical_adjustment("id:btn", &no_priors(), &n_small);
+        let large = statistical_adjustment("id:btn", &no_priors(), &n_large);
+        assert!(small > -4, "小样本探索余量: {small} > -4");
+        assert!((-4..=-3).contains(&large), "大样本收敛 dead: {large}");
+        assert!(large < small, "证据越多压得越实");
+    }
+
+    /// 已知有效候选被抬升:eff_rate=100% 的调整恒正,且统计接管时
+    /// 忽略静态先验(同知识不双计)。
+    #[test]
+    fn effective_candidates_are_boosted_and_priors_ignored() {
+        let s = stats(&[("id:btn", 6, 6), ("id:x", 20, 0)]);
+        let adj = statistical_adjustment("id:btn", &no_priors(), &s);
+        assert!(adj >= 2, "eff_rate=1 至少 +2: {adj}");
+        // 静态先验在场也被忽略(统计条目已覆盖同一知识)
+        let mut priors = std::collections::BTreeMap::new();
+        priors.insert("id:btn".to_string(), 4);
+        assert_eq!(
+            statistical_adjustment("id:btn", &priors, &s),
+            adj,
+            "统计接管后不与静态先验叠加"
+        );
+    }
+
+    /// 半效率候选落在温和区间(-4..+2 的中段),不出现极端跳变。
+    #[test]
+    fn middling_candidates_stay_moderate() {
+        let s = stats(&[("id:btn", 10, 5), ("id:x", 20, 0)]);
+        let adj = statistical_adjustment("id:btn", &no_priors(), &s);
+        assert!(adj > -4 && adj < 2, "半效率温和: {adj}");
+    }
+
+    /// frontier 集成:统计压低改变熵门裁决(与 priors 同路径)。
+    #[test]
+    fn stats_integrate_with_frontier_and_gate() {
+        let elements = vec![
+            el("Button", Some("置顶"), Some("btnTop")),
+            el("Button", Some("保存"), Some("btnSave")),
+        ];
+        // btnTop 历史全死(大样本),btnSave 无统计 → btnSave 领先,自动执行
+        let s = stats(&[("id:btnTop", 30, 0), ("id:x", 20, 0)]);
+        let candidates = frontier(&elements, &[], &Default::default(), &no_priors(), &s);
+        assert_eq!(candidates[0].selector, "id:btnSave");
+        assert_eq!(gate(&candidates), GateOutcome::AutoExecute(0));
     }
 }

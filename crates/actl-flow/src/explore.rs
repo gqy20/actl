@@ -1188,6 +1188,7 @@ pub fn execute(
             &effective_keywords(spec),
             &added_selectors,
             &spec.priors,
+            &spec.stats,
         )
         .into_iter()
         .filter(|c| !state.tried.contains_key(&c.selector))

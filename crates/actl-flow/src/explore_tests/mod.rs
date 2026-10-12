@@ -25,6 +25,7 @@ fn spec(keywords: &[&str], goal_exists: &str) -> ExploreSpec {
             bind: Default::default(),
         },
         priors: Default::default(),
+        stats: Default::default(),
         texts: Default::default(),
         budgets: Default::default(),
     }
@@ -54,6 +55,7 @@ fn value_spec(keywords: &[&str], target: &str, expected: &str, contains: bool) -
             bind: Default::default(),
         },
         priors: Default::default(),
+        stats: Default::default(),
         texts: Default::default(),
         budgets: Default::default(),
     }
@@ -1037,6 +1039,7 @@ fn fold_falls_back_when_element_absent_or_goal_non_foldable() {
             bind: Default::default(),
         },
         priors: Default::default(),
+        stats: Default::default(),
         texts: Default::default(),
         budgets: crate::Budgets {
             actions: 1,

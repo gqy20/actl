@@ -100,6 +100,12 @@ pub struct ExploreSpec {
     /// 窗口重构类候选被压低,已知有效候选提升。引擎不读 pack,先验显式入参。
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub priors: std::collections::BTreeMap<String, i32>,
+    /// 历史统计(docs/42 §4.5 v2,UCB):选择器 → (tried, effective) 计数,
+    /// 由调用方从 pack 累积的 suggested_stats 注入。条目在场且 tried ≥3 时
+    /// UCB 项**替代**该选择器的静态先验(同知识不双计);冷启动(tried<3)
+    /// 回落静态先验,零注入时行为与 v1 完全一致(纯向后兼容)。≤32 项。
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub stats: std::collections::BTreeMap<String, actl_core::decision::SelectorStats>,
     /// 输入原语(docs/42 L2):完整语义选择器(id:/name:) → 待输入文本。
     /// 键的选择器值并入观察关键词(种子+评分激活 Edit),候选命中即执行
     /// `type`(复用键盘护栏与 --app 绑定)。≤8 项,词表+texts 键 ≤16。
@@ -645,6 +651,36 @@ fn validate_explore(explore: &ExploreSpec) -> Result<(), CtlError> {
                 "explore.priors",
                 None,
                 "prior adjustments must be -4..=4",
+            ));
+        }
+    }
+    if explore.stats.len() > 32 {
+        return Err(schema::error(
+            "explore.stats",
+            None,
+            "at most 32 stats entries",
+        ));
+    }
+    for (selector, entry) in &explore.stats {
+        if selector.is_empty() || selector.len() > 96 {
+            return Err(schema::error(
+                "explore.stats",
+                None,
+                "stats selectors require 1-96 bytes",
+            ));
+        }
+        if entry.tried == 0 || entry.tried > 10_000 {
+            return Err(schema::error(
+                "explore.stats",
+                None,
+                "stats tried must be 1-10000 (zero-tried keys are not stats)",
+            ));
+        }
+        if entry.effective > entry.tried {
+            return Err(schema::error(
+                "explore.stats",
+                None,
+                "stats effective cannot exceed tried",
             ));
         }
     }

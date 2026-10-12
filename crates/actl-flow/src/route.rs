@@ -46,9 +46,15 @@ pub struct RouteFragment {
     pub steps: Vec<Vec<String>>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub quirks: Vec<QuirkFragment>,
-    /// 下一轮探索的 priors 数据源(统计剪枝闭环):dead → -4,no_effect → -2。
+    /// 下一轮探索的 priors 数据源(统计剪枝闭环 v1):dead → -4,no_effect → -2。
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub suggested_priors: BTreeMap<String, i32>,
+    /// 统计剪枝 v2 的 run 增量(docs/42 §4.5):每个 tried 选择器记
+    /// (tried:1, effective:0|1)——effective = 揭示新内容或位于 goal_met
+    /// 最终路线;调用方跨 run 累积进 pack 后随 explore.stats 注入,引擎
+    /// 样本足量(tried≥3)时按 UCB 替代静态先验。
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub suggested_stats: BTreeMap<String, actl_core::decision::SelectorStats>,
     pub evidence: RouteEvidence,
 }
 
@@ -146,6 +152,26 @@ pub fn extract(state: &ExploreState, run_id: &str) -> Result<RouteFragment, CtlE
             _ => {}
         }
     }
+    // 统计增量:本 run 每个 tried 选择器记 1 次尝试;有效判定 = 揭示新内容
+    // (reveals)或位于导出的最终路线(acted 步骤链)。dead/no_effect/试过
+    // 但不在最终路线上的点击记 0——它们消耗了预算未贡献 goal。
+    let route_selectors: std::collections::BTreeSet<&str> = steps
+        .iter()
+        .filter_map(|step| step.get(1).map(String::as_str))
+        .filter(|sel| sel.contains(':'))
+        .collect();
+    let mut suggested_stats = BTreeMap::new();
+    for (selector, effect) in &state.tried {
+        let effective =
+            u32::from(effect == "reveals" || route_selectors.contains(selector.as_str()));
+        suggested_stats.insert(
+            selector.clone(),
+            actl_core::decision::SelectorStats {
+                tried: 1,
+                effective,
+            },
+        );
+    }
     let goal_text = format!("{} {}", spec.goal.command, spec.goal.args.join(" "))
         .replace(&spec.app, "{window}");
     Ok(RouteFragment {
@@ -158,6 +184,7 @@ pub fn extract(state: &ExploreState, run_id: &str) -> Result<RouteFragment, CtlE
         steps,
         quirks,
         suggested_priors,
+        suggested_stats,
         evidence: RouteEvidence {
             run_id: run_id.to_owned(),
             actions: state.actions,
@@ -319,6 +346,19 @@ pub fn render_yaml(fragment: &RouteFragment) -> String {
             out.push_str(&format!("#   {}: {}\n", yaml_scalar(selector), adjustment));
         }
     }
+    if !fragment.suggested_stats.is_empty() {
+        out.push_str(
+            "# suggested_stats(统计剪枝 v2 run 增量:跨 run 累积进 pack 后随 explore.stats 注入)\n",
+        );
+        for (selector, entry) in &fragment.suggested_stats {
+            out.push_str(&format!(
+                "#   {}: {{tried: {}, effective: {}}}\n",
+                yaml_scalar(selector),
+                entry.tried,
+                entry.effective
+            ));
+        }
+    }
     out
 }
 
@@ -348,6 +388,7 @@ mod tests {
                 bind: Default::default(),
             },
             priors: BTreeMap::new(),
+            stats: BTreeMap::new(),
             texts: BTreeMap::new(),
             budgets: Budgets::default(),
         }

@@ -56,8 +56,12 @@ agent 约 4-8 倍;pack 命中后趋近零(飞轮:首次探索贵,回写后同类
 3. **单向门词法闸**:删除/发送/支付/卸载类模式(name+控件类型先验)不进自动
    探索,转 NeedsReview 或隔离世界(隔离 profile/测试账号,fixtures 纪律)。
 4. **强制效果核验**:mmui 应用(UIA 假成功)一律 `--expect element`。
-5. **统计剪枝**:pack quirks 积累每控件历史效果,前沿排序用 UCB/Thompson,排序
-   不调 LLM。
+5. **统计剪枝（v2 已落地,UCB 形态）**：pack quirks 积累每控件历史计数（tried/
+   effective）,`explore.stats` 注入——样本足量（tried≥3）时前沿排序按 UCB
+   调整（exploit=eff_rate 映射 [−4,+2] + explore=c·√(lnN/n)）**替代**该选择器的
+   静态先验（同知识不双计）;冷启动（样本不足/零注入）回落静态先验,行为与 v1
+   完全一致。数据闭环:writeback 产出 `suggested_stats` run 增量（每 tried 选择器
+   {tried:1, effective:0|1}）,调用方跨 run 累积进 pack。排序纯函数不调 LLM。
 6. **可回滚探索序**:只读交互先行,状态变更靠后,每步自动生成回滚步(Escape/
    close-window --pid,归属差集判定)。
 
@@ -188,7 +192,7 @@ S3 落地范围：路线回写（`actl-flow/route.rs`）+ `explore.priors` 效�
 1. **回写是"片段生成"，不是"pack 写入"**：`explore-writeback --id <run> [--out <file>]` 从 goal_met 的完成运行抽取 pack 格式路线片段（envelope data + 可选落盘），由调用方合并进 `apps/<slug>.yml`。依据分层铁律（PACKS.md：核心 CLI 永不读 pack）——actl 不感知 pack 文件的存在，知识流经 agent 手。
 2. **verified 迁移不是命令**：片段 status 恒 `unverified`；迁移 = pack 文件编辑 + git PR（review 即人工复核,PACKS 红线生效）。自动化只做证据收集（AGENTS「修正与验收分开」）。重放由 agent 执行片段步骤（batch/flow）并留 envelope 证据随 PR 提交。
 3. **L0 命中重放留在 skill 层**：与 PACKS「当前引擎不自动展开 pack 路线」一致。飞轮闭环 = 探索 → writeback 片段 → agent 合并 pack → 人工复核转 verified → 下次任务 agent 读 pack 路线直接执行（零探索）。
-4. **quirks 与 priors 是数据不是行为**：writeback 输出死候选 quirk 片段与 suggested_priors（dead=-4/no_effect=-2）；`explore.priors` 由调用方注入,引擎评分时叠加（下限 0）。§4.5 统计剪枝的 v1 = 这条显式数据链,UCB/Thompson 等自动统计留待 pack quirks 积累出样本量后评估。
+4. **quirks 与 priors 是数据不是行为**：writeback 输出死候选 quirk 片段与 suggested_priors（dead=-4/no_effect=-2）+ `suggested_stats` run 增量（v2,2026-10-12）；`explore.priors`/`explore.stats` 由调用方注入,引擎评分时叠加（下限 0）。§4.5 统计剪枝 v2 = UCB 机制已落地（actl-core `statistical_adjustment` 纯函数:样本 ≥3 时 UCB 项替代静态先验,冷启动回落——零数据行为与 v1 一致,样本随应用轮自然积累后自动生效）。
 5. **goal 有界重试**：瞬态 NOT_FOUND/TIMEOUT 重试 2 次（300ms 沉降,goal_retries 如实入状态,重试不计 errors）;耗尽或非瞬态维持失败闭合。docs/77 发现 1 的机制化收口。
 6. **不完整路线不导出**：action_log 达上限（可能截断）即 PROTOCOL 拒绝;goal 未达成即 PROTOCOL 拒绝（失败现场保留在 run 目录,quirk 提取走人工读 explore.json）。
 
