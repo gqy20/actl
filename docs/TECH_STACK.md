@@ -135,6 +135,7 @@ AGENTS 硬规则 5 的登记处。**共同不变量**(适用本节全部条目,�
 | foreground | SetForegroundWindow 单次请求+核验实际前台,AllowSetForegroundWindow 归还资格 | 不注入 Alt、不放宽前台锁;已在前台不重复请求 |
 | preview_window | 自有预览窗口创建/销毁、消息派发、只读窗口检查、绘制 | 不注入输入、不持桌面授权 |
 | evidence | WMI/进程句柄、ZIP/OOXML、Windows.Data.Xml.Dom | XML 禁 DTD/外部实体,深度 ≤128 |
+| find_image | WIC PNG **解码**(模板→BGRA,与截图编码同栈零新依赖)、PrintWindow 窗口捕获、GetWindowRect 原点 | 匹配算法在 actl-core(纯逻辑无 unsafe);64M 像素上限;均匀模板/越界 PROTOCOL |
 | native_windows / observation | EnumWindows 同步回调、FindAllBuildCache/TreeWalker 直调、数组 Length/GetElement | 不跨调用缓存元素;负长度拒绝为 INTERNAL;枚举错误传播不伪装空列表 |
 | 输入监听(Raw Input) | 注册、消息窗口、计时器、GetRawInputData 对齐缓冲读取 | 校验长度/来源/类型后读;不存键值坐标;不可识别事件保守计外部输入 |
 | history 清理 | std 文件锁,60 分钟限频,显示端后台线程 | 前台资格转交与审计不在 UI 回调扫描历史 |

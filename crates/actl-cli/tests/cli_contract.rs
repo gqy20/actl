@@ -920,3 +920,40 @@ fn pack_popup_ignores_inject_into_plans() {
         "pack word ignores missing: {ignores:?}"
     );
 }
+
+#[test]
+fn find_image_arg_surface_contract() {
+    // find-image(确定性模板匹配,2026-10-12 spec):help 四要素 + 离线参数面。
+    let (code, text) = actl(&["find-image", "--help"]);
+    assert_eq!(code, 0);
+    for element in [
+        "Usage",
+        "Example",
+        "Errors",
+        "--threshold",
+        "--scales",
+        "template",
+    ] {
+        assert!(text.contains(element), "help missing {element}");
+    }
+    // 阈值越界 PROTOCOL(exit 2)
+    let (code, text) = actl(&["find-image", "--template", "x.png", "--threshold", "1.5"]);
+    assert_eq!(code, 2, "{text}");
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&text).unwrap()["error"]["code"],
+        "PROTOCOL"
+    );
+    // --limit 从属 --all(clap 拒绝)
+    let (code, _) = actl(&["find-image", "--template", "x.png", "--limit", "5"]);
+    assert_eq!(code, 2, "limit requires --all");
+    // 模板文件不存在 → INTERNAL(带 evidence),exit 1
+    let (code, text) = actl(&["find-image", "--template", "definitely-missing-xyz.png"]);
+    assert_eq!(code, 1, "{text}");
+    let v = serde_json::from_str::<serde_json::Value>(&text).unwrap();
+    assert_eq!(v["error"]["code"], "INTERNAL");
+    assert!(
+        v["error"]["message"]
+            .to_string()
+            .contains("template unreadable")
+    );
+}

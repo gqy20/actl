@@ -410,6 +410,27 @@ pub(crate) enum Command {
         #[arg(long)]
         verify_value: Option<String>,
     },
+    /// Locate a template image inside a window by deterministic pixel matching (RPA-style, no AI vision)
+    FindImage {
+        /// Template PNG path (crop via screenshot --element/--rect on this machine)
+        #[arg(long)]
+        template: String,
+        /// Window anchor: title substring or hwnd:<n> (default: foreground window)
+        #[arg(long)]
+        app: Option<String>,
+        /// ZNCC match threshold in (0,1] (default 0.85)
+        #[arg(long)]
+        threshold: Option<f64>,
+        /// Enumerate all matches (default: unique — multiple matches report AMBIGUOUS)
+        #[arg(long)]
+        all: bool,
+        /// Max matches returned with --all (default 20, max 50)
+        #[arg(long, requires = "all")]
+        limit: Option<usize>,
+        /// Multi-scale search (0.5x-2x, six steps) for DPI/zoom mismatch; ~6x slower
+        #[arg(long)]
+        scales: bool,
+    },
     /// Capture pixels as a PNG file (explicit fallback when UIA is blind)
     Screenshot {
         /// Capture this window (title substring, or --hwnd; PrintWindow-based)
@@ -1188,6 +1209,7 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
         Command::Type { .. } => "type",
         Command::Press { .. } => "press",
         Command::Paste { .. } => "paste",
+        Command::FindImage { .. } => "find-image",
         Command::Screenshot { .. } => "screenshot",
         Command::SetValue { .. } => "set-value",
         Command::RightClick { .. } => "right-click",

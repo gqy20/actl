@@ -26,6 +26,7 @@ pub mod snapshot;
 pub mod state;
 pub mod stop;
 pub mod target;
+pub mod template_match;
 pub mod timing;
 pub mod trace;
 pub mod wait_control;

@@ -35,7 +35,9 @@
 供其他设备上的客户端调用本设备能力；复用本地交接、急停和执行护栏。当前尚未实现，
 传输、认证与恢复契约待设计，见 [ROADMAP](ROADMAP.md)。Linux/macOS 执行后端不安排实现。
 
-**非目标(明确不做,详见 [06 §9](06-design-blueprint.md))**:可视化编排、触发面板/热键、动作市场、MCP 进核心、截图视觉定位、常驻 agent、Linux/macOS 桌面执行后端（暂不考虑实现）。
+**非目标(明确不做,详见 [06 §9](06-design-blueprint.md))**:可视化编排、触发面板/热键、动作市场、MCP 进核心、**语义视觉定位**(OCR/物体识别/VLM grounding——那是"视觉 agent"赛道,actl 刻意不竞争)、常驻 agent、Linux/macOS 桌面执行后端（暂不考虑实现）。
+
+2026-10-12 用户授权**确定性模板匹配**(`find-image`,传统 RPA 图色定位)入范围:ZNCC 像素相关是确定性运算(与校验和同类),**不是**上面的语义视觉——与 actl"确定性、快、零模型成本"定位一致,补 UIA 失明目标(自绘菜单/frameless 按钮/canvas)的定位空档。边界:只做像素相关定位,不理解内容;零新依赖(WIC 解码复用截图编码同栈);算法在 actl-core 纯逻辑单测。语义视觉(OCR/VLM)仍是非目标。详见 [06 §3.4 find-image](06-design-blueprint.md)。
 
 2026-09-28 用户授权浏览器接入原型：独立验证目标会话、iframe、一次写后核验与断连，
 限定 Windows 隔离本地测试页面。暂不接入正式 CLI/YAML；生产适配层另行设计与验收，见 [34](34-browser-connection-prototype.md)。

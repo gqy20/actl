@@ -826,6 +826,28 @@ pub(crate) fn screenshot_cmd(
     .into())
 }
 
+/// find-image:确定性模板匹配定位(RPA 图色,非语义视觉)。像素相关在
+/// actl-core::template_match(纯逻辑单测),原生胶合(WIC 解码+窗口捕获+
+/// 物理坐标换算)在 actl-uia::find_image。只读观察命令(flow read_only)。
+pub(crate) fn find_image_cmd(
+    template: &str,
+    app: Option<&str>,
+    threshold: Option<f64>,
+    all: bool,
+    limit: Option<usize>,
+    scales: bool,
+) -> Result<CommandOutput, CtlError> {
+    actl_uia::find_image::find_image(actl_uia::find_image::FindImageSpec {
+        app,
+        template,
+        threshold,
+        all,
+        limit,
+        scales,
+    })
+    .map(Into::into)
+}
+
 #[cfg(test)]
 mod input_contract_tests {
     #[test]

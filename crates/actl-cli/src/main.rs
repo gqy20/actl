@@ -332,6 +332,14 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
         Command::Desktop(DesktopCommand::DesktopRestore { session }) => {
             actl_uia::desktop::restore(session).map(Into::into)
         }
+        Command::FindImage {
+            template,
+            app,
+            threshold,
+            all,
+            limit,
+            scales,
+        } => find_image_cmd(template, app.as_deref(), *threshold, *all, *limit, *scales),
         Command::Screenshot {
             app,
             hwnd,

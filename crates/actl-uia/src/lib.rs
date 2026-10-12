@@ -23,6 +23,8 @@ pub mod diagnostic;
 pub mod display_gate;
 pub mod display_support;
 mod feedback;
+#[allow(unsafe_op_in_unsafe_fn)] // WIC PNG 解码直调集中在该模块(与 capture 同栈)
+pub mod find_image;
 /// 输入动作前台快拒绝(2026-10-11):锚窗非前台时 provider 懒激活节流,
 /// 昂贵 locate 前先廉价原生核对+两级激活,仍非前台让行。
 mod foreground_gate;

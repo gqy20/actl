@@ -191,6 +191,20 @@ collect <容器目标> [--role 子串]     # 虚拟化容器有界全量收集(�
                                      # items/max_rounds/scroll_reset_failed/
                                      # scroll_pattern_missing/scroll_call_failed/
                                      # container_rebuilt)
+find-image --template <png> [--app X] [--threshold 0.85] [--all] [--limit N] [--scales]
+                                     # 确定性模板匹配定位(传统 RPA 图色,非语义视觉):
+                                     # ZNCC 像素相关在窗口表面定位参考 PNG,返回物理
+                                     # 像素坐标(PMv2,与 screenshot/xy: 同系)直接喂
+                                     # click xy: --physical。用于 UIA 失明目标:自绘
+                                     # 菜单、frameless 标题栏按钮、canvas 内容。诚实
+                                     # 语义:score<threshold 一律 NOT_FOUND(不猜);多
+                                     # 命中无 --all 报 AMBIGUOUS 附候选;均匀模板
+                                     # (零方差)ZNCC 无定义→PROTOCOL;--scales 搜
+                                     # 0.5×–2× 六档(DPI/缩放失配兜底,慢 ~6×)。模板
+                                     # 像素精确:目标机 screenshot --element/--rect
+                                     # 裁取,主题/DPI 变更需重采。零新依赖(WIC 解码
+                                     # 复用截图编码同栈)。算法在 actl-core(纯逻辑
+                                     # 单测),原生胶合在 actl-uia
 ```
 
 #### 交互(interact)
@@ -449,6 +463,7 @@ L2  actl commands     机器 schema:全命令+参数的 JSON(agent 自发现入�
 | `--expect P` | 执行成功后的隐式断言(默认 2s,失败 `ASSERTION_FAILED`)——"执行+验证"内联但不吞决策。P 文法 v2:`window:<substr>`(须**新窗口**出现,基线排除既有同名)| `element:<target>`(动作后目标元素**可解析**的后置条件,复用 wait 元素文法;已存在即成立——与 window: 的"新出现"刻意不对称:mmui 类应用 UIA 假成功的验证点是物化,失败 evidence 附 cause 区分"假成功"与"目标错误") |
 | `snapshot` vs `find` | **全局认知**(不知道界面有什么)vs **定向查找**(知道要什么,省 token) |
 | `find` vs `collect` | 定向找**一个**(唯一性纪律)vs 定向要**全部**(虚拟化列表的有界收集,条目无 ref) |
+| `find` vs `find-image` | UIA 树内定位(语义选择器,provider 暴露即可达)vs 像素模板匹配(UIA 失明目标的兜底:自绘/frameless/canvas;返回坐标非 ref,须 `click xy: --physical` 消费) |
 | `scroll` vs `press pgdn` | 容器内滚动(UIA Scroll pattern)vs 焦点键滚动 |
 | `select` vs `set-value` | 离散选项 vs 文本值(combo box 用 select) |
 | `toggle` vs `click` | Toggle pattern 直调(无点击副作用、可读状态)vs 点击语义 |
@@ -613,8 +628,9 @@ click（Invoke/SelectionItem/Toggle/ExpandCollapse）、set-value、select、tog
   可校验的物理专用通道——①强制 `--app` + 显式 `--physical`;②**窗口边界守卫**:
   注入瞬间坐标必须落在 `--app` 窗口当前 bounds 内(PMv2 物理像素,与 screenshot
   同坐标系),窗口移动/最小化即拒(防"截图后窗口漂移点进窗外");③复用遮挡
-  检查(WindowFromPoint 命中窗口须属目标)。坐标来源是调用方(screenshot+VLM/人),
-  core 不做视觉(PRD §1.3 非目标不破);click 家族 + hover 适用,drag 暂不含;
+  检查(WindowFromPoint 命中窗口须属目标)。坐标来源是调用方:`find-image`
+  (确定性模板匹配,核心内)或 screenshot+VLM/人(语义视觉,核心外);core 不做
+  **语义**视觉(PRD §1.3 非目标不破——find-image 是像素相关非识别);click 家族 + hover 适用,drag 暂不含;
 - 管理员窗口/跨完整性级别受 UIPI 限制时返回 `PERM_DENIED` 而非静默失败;
 - 敏感命令白名单(clipboard-set 到密码框等场景)留给上层 agent 策略,CLI 不做内容审查,但 `--dry-run` 全局可用。
 

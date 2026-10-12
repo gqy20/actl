@@ -168,7 +168,7 @@ fn release_dc_safe(hdc: windows::Win32::Graphics::Gdi::HDC) -> i32 {
 }
 
 /// 捕获窗口本体(PrintWindow 抗遮挡;失败降级窗口矩形 blt)
-unsafe fn blt_window(
+pub(crate) unsafe fn blt_window(
     hwnd: windows::Win32::Foundation::HWND,
 ) -> Result<(Vec<u8>, i32, i32), CtlError> {
     use windows::Win32::Foundation::RECT;

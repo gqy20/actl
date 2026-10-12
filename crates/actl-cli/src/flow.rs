@@ -54,6 +54,7 @@ fn read_only(cmd: &Command) -> bool {
             | Command::VerifyClipboard { .. }
             | Command::Wait { .. }
             | Command::GetClipboard
+            | Command::FindImage { .. }
             | Command::BrowserList
             | Command::BrowserRead { .. }
             | Command::BrowserVerify { .. }
