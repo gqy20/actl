@@ -85,8 +85,8 @@ actl CLI / flow(统一 envelope、错误码、人工交接、急停)
 
 ## 7. uncertain 与持久化恢复
 
-- 内存语义已实现(spike `write_state`):**写派发前置 uncertain**,核验通过才回 Idle;uncertain 期间拒绝一切新写(`WRITE_REFUSED_UNCERTAIN`);重连后只读 recheck,不重放。
-- 正式实现:写意图随 flow 步骤持久化(对齐 docs/47 execution-recovery),进程重启后恢复路径=只读 recheck;recheck 确认前禁止重放,与 flow uncertain 步骤纪律一致。
+- **uncertain 治理归 flow 引擎 WAL(现行态,对齐 docs/47 execution-recovery)**:写步(含 browser-click/type,同一 dispatch 链)派发前置 Running 态落盘——持久化失败阻止副作用(engine.rs「Write-ahead record is required」);进程崩溃后 resume 对 Running/Uncertain 步**先只读 recheck verify**——通过转 Completed 不重放,不通过转 NeedsReview 等显式 `--retry-step`;recheck 确认前禁止重放。
+- 早期 A1 spike 的进程内 `write_state` 内存态已随架构定稿移除(单 CLI 进程一命令到底,进程退出内存态即消失,无跨命令内存 uncertain 场景)——曾登记于此的「已实现(spike)」描述过时删除。
 
 ## 8. 安全护栏
 
@@ -159,7 +159,7 @@ iframe 守卫写+核验→iframe 读"1"→navigate(标题+计数归零证明新�
   会话句柄贯穿,收尾 browser-list 归零、零残留进程)。**治理发现**:未声明 handoff 的
   流程里浏览器写不触发审批门(CDP 写非桌面物理输入,引擎按命令分类裁决)——授权语义
   =停止代次核验(browser-click 已过);动作卡/审批卡与显示端的接线归显示层待办(§13)。
-  余量:写入 uncertain 跨进程持久化(对齐 docs/47)。
+  (写入 uncertain 跨进程持久化已由引擎 WAL 覆盖——见 §7 现行态,余量行删除。)
 - [x] **持久 profile 四件套(2026-10-02 实测通过)**:① 登录暂停点——`pause_before: true` +
   `resume_check: browser-verify --session X --css <登录标记>`(本地页全链:暂停→恢复通过→
   完成;谓词不满足→`reason: resume_check_failed` 保持 paused);② 登录态核验谓词——
