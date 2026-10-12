@@ -58,6 +58,7 @@
 - [ ] 探索引擎形态边界与改进候选（[77](77-exploration-s2-acceptance.md)）:①差分前沿语义×无增量应用（XAML 计算器按钮序列点击无 added 元素——前沿语义扩展候选）;②texts 原语无全局键盘形态（focused: 不收,而 CLI type focused: 已验证——texts focused 键支持候选）;③automation_id 歧义场景（对话框控件 id 随宿主变异——记事本 1001 双命中/画图 1148,稳健定位 role+name;引擎歧义收紧策略候选）;④跨进程 picker 形态（记事本另存为+画图打开双证否=同进程 32770,待照片类 Store 应用场景验证 RuntimeBroker 放宽判据）;⑤UCB 真机对照轮（v2 机制已落地冷启动回落,待 quirks 计数积累后对比无统计基线:死候选自动压后/预算下降）
 
 - [ ] companion_unresponsive 复发观察（机制已实测澄清:显示端消息泵 500ms 往返+lease 心跳,历史事件全落污染期——诊断详情见 git 历史与 [41](41-logging-metadata.md)）。复发条件=干净现场再现;届时怀疑方向=显示端 UI 线程被合法工作阻塞 >1s,500ms 泵窗口为固定常量不为猜测调参
+- [ ] **关闭后残留崩溃框族（条件触发项,2026-10-12 首例登记）**：腾讯会议 WMExternal helper 在主窗优雅关闭、收尾核对通过**之后**才 fail-fast 崩溃,弹窗滞留数小时(用户肉眼发现——机制面全漏:list-windows 可见但不主动报;front-report 判定面只含锚窗 owned 链+树内子窗,不含 WerFault 弹的独立 #32770;verify-closed 是时点判定;标题/pid 归属过滤对该形态失效——「WMExternal.exe - Fail Fast Exception」不含主应用名,对话框 pid 与应用进程树无关)。**首例处置=流程纪律**(AGENTS「残留延迟复查」:下一轮开场全量 list-windows 差集判读,已入);本例具体形态已入 tencent-meeting.yml quirk。**工具化触发条件=第二起同签名**:候选形态=崩溃框族检测面(class #32770+标题含 Fail Fast Exception/应用程序错误/已停止工作——应用无关、只读、带全文样本),挂 front-report 或独立 residue 谓词再评审。
 
 - [ ] UIA 观察长阻塞的**根因定位**（防护已落地：进程级看门狗 + UIA 区段看门狗双保险；根因——60s NOT_FOUND 未复现、故障提供程序未确认，见 [41](41-logging-metadata.md)、[65](65-observation-blocking-diagnosis.md)）
 - [ ] UWP 挂起恢复（类配对后疑似绕开，更长放置待证）
