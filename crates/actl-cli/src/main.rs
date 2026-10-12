@@ -762,6 +762,22 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             result.map(|_| serde_json::json!({"registered": name}).into())
         }
         Command::AppList => actl_uia::app_registry::list().map(Into::into),
+        Command::AppLocate { name, register } => {
+            let mut result = actl_uia::app_locate::locate(name)?;
+            if *register {
+                let first = result
+                    .get("first")
+                    .and_then(serde_json::Value::as_str)
+                    .ok_or_else(|| CtlError::internal("locate returned no candidate to register"))?
+                    .to_string();
+                actl_uia::app_registry::register(name, &first, false)?;
+                result
+                    .as_object_mut()
+                    .expect("locate result is an object")
+                    .insert("registered".into(), serde_json::json!(name));
+            }
+            Ok(result.into())
+        }
         Command::AppRemove { name } => actl_uia::app_registry::remove(name)
             .map(|_| serde_json::json!({"removed": name}).into()),
         Command::BrowserVerify {

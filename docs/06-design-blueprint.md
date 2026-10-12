@@ -255,6 +255,19 @@ close-window 存活复核:消息投递成功≠已关——模态未清时窗口
   归属弹窗清单(title/class/hwnd),调用方直接看到挡路者(docs/81 §8)
 launch --wait-window:等待成功新增 window 对象{hwnd,pid,title,foreground:true,
   matched_by:"title"},window_ready:true;匹配不证明窗口来自新 PID(§7.5.2)
+launch 解析优先级(程序名形态):app-registry 别名(%LOCALAPPDATA%/actl/
+  apps.json,app-register/app-locate 维护——**pack 的 launch 字段只写别名,
+  机器路径不入 pack**——pack 可移植,其他用户机器跑一次 app-locate 即本地化)
+  → App Paths 注册表(HKLM→HKCU)→ 字面路径 → PATH;Store 版本目录漂移用
+  --pattern glob 条目(resolved 缓存失效自动重解析)。
+app-locate <名> [--register]:软件位置五通道只读探测(①别名→②App Paths
+  →③常见安装目录 Program Files×2/%LOCALAPPDATA%\Programs→④**开始菜单
+  .lnk 递归 ≤3 层含中文名,IShellLink 解析 TargetPath**——非标准盘符安装
+  的唯一系统入口,2026-10-12 腾讯会议教训:曾因漏此通道误判「未安装」→
+  ⑤PATH);去重后按通道优先序返回存在的候选+first,**卸载类快捷方式与
+  可执行永不入列**(first 候选指向卸载器是注册事故);有界(≤800 .lnk、
+  每目录 ≤64 条目);零候选 NOT_FOUND。--register 把 first 写入 apps.json
+  (探测本身不启动应用);绿色软件/无开始菜单入口的怪形态走显式 app-register。
 list-windows 前台兜底:UIA 桌面子树在 provider 楔死时漏窗(无标题保存框实证),
   前台窗缺失时用 Win32 直读回填——枚举不失明于"当前正挡着什么"
 UIA 看门狗(引擎行为):定位/树观察/焦点查询区段超过 ACTL_UIA_WATCHDOG_MS

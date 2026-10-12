@@ -37,6 +37,9 @@ pub(crate) fn after_help_for(name: &str) -> Option<&'static str> {
         "app-list" => {
             "Example:\n  actl app-list\nLists all registered apps with name, path/pattern, resolved cache, and discovery source. Read-only.\nErrors: INTERNAL apps.json unreadable"
         }
+        "app-locate" => {
+            "Example:\n  actl app-locate 腾讯会议\n  actl app-locate utools --register\nRead-only probe across five channels (in priority order): app-registry alias → App Paths registry → common install dirs (Program Files x2, %LOCALAPPDATA%/Programs) → Start Menu .lnk (recursive, Chinese names included — IShellLink resolves the target path; custom install drives surface here) → PATH. Returns deduplicated existing-file candidates with their channel; zero candidates = honest NOT_FOUND. --register additionally writes the first candidate into apps.json (a write action — the located app is not launched). Use before hand-editing packs: pack `launch:` fields carry the ALIAS only; per-machine paths live in apps.json.\nErrors: PROTOCOL bad query (1-96 bytes) | NOT_FOUND zero candidates across all channels | INTERNAL COM/IShellLink failure"
+        }
         "app-remove" => {
             "Example:\n  actl app-remove my-tool\nRemoves a registration by name. The underlying application is untouched.\nErrors: NOT_FOUND unknown name | INTERNAL storage failure"
         }

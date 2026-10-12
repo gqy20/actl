@@ -957,3 +957,52 @@ fn find_image_arg_surface_contract() {
             .contains("template unreadable")
     );
 }
+
+/// app-locate 契约:垃圾名跨通道零候选=NOT_FOUND(五通道 evidence);
+/// --register 不改变无候选语义;help 四要素宣告通道面。
+#[test]
+fn app_locate_contract() {
+    use serde_json::Value;
+    let out = support::IsolatedCommand::new()
+        .command
+        .args(["app-locate", "actl-no-such-app-xyz"])
+        .output()
+        .expect("spawn actl");
+    assert_eq!(out.status.code(), Some(1));
+    let v: Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert_eq!(v["error"]["code"], "NOT_FOUND");
+    let channels: Vec<&str> = v["error"]["evidence"]["channels"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|c| c.as_str())
+        .collect();
+    assert_eq!(
+        channels,
+        vec![
+            "app-registry",
+            "app-paths",
+            "program-dirs",
+            "start-menu",
+            "path"
+        ]
+    );
+    // Command 复用会累积 args——每次独立构造
+    let out = support::IsolatedCommand::new()
+        .command
+        .args(["app-locate", "actl-no-such-app-xyz", "--register"])
+        .output()
+        .expect("spawn actl");
+    assert_eq!(out.status.code(), Some(1), "register cannot fabricate hits");
+    let out = support::IsolatedCommand::new()
+        .command
+        .args(["app-locate", "--help"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.contains("Usage:"), "help lacks Usage");
+    assert!(text.contains("Example:"), "help lacks Example");
+    assert!(text.contains("Errors:"), "help lacks Errors");
+    assert!(text.contains("Start Menu"), "help lacks channel surface");
+}

@@ -1026,6 +1026,14 @@ pub(crate) enum Command {
     },
     /// List registered local applications and their resolution status
     AppList,
+    /// Locate an application executable across channels (read-only probe; Start Menu .lnk covers custom install dirs)
+    AppLocate {
+        /// Application name to search (ASCII alias or Chinese display name, 1-96 bytes)
+        name: String,
+        /// Register the first found candidate as an app-registry alias (write action)
+        #[arg(long)]
+        register: bool,
+    },
     /// Remove a registered application by name
     AppRemove {
         /// The registered name to remove
@@ -1257,6 +1265,7 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
         Command::BrowserList => "browser-list",
         Command::AppRegister { .. } => "app-register",
         Command::AppList => "app-list",
+        Command::AppLocate { .. } => "app-locate",
         Command::AppRemove { .. } => "app-remove",
         Command::BrowserVerify { .. } => "browser-verify",
         Command::GetClipboard => "get-clipboard",

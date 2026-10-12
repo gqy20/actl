@@ -1,7 +1,7 @@
 pack_format: 1
 name: vscode
 display: Visual Studio Code
-launch: "{installed_executable}"
+launch: code            # app-registry 别名(已注册);显示名查询 app-locate "visual studio code" 可再发现
 window: "hwnd:{hwnd}"
 app_version: "1.139.0"
 verified_date: 2026-09-28

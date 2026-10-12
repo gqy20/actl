@@ -17,7 +17,7 @@ thiserror = "2"
 zip = { version = "=8.6.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
 uiautomation = "0.25.1"
-windows = { version = "0.62.2", features = ["Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging", "Win32_System_DataExchange", "Win32_System_Memory", "Win32_System_Threading", "Win32_System_Com_StructuredStorage", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Pipes"] }
+windows = { version = "0.62.2", features = ["Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging", "Win32_System_DataExchange", "Win32_System_Memory", "Win32_System_Threading", "Win32_System_Com_StructuredStorage", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Pipes", "Win32_UI_Shell"] }
 webview2-com = "=0.39.1"
 
 # deny(而非 forbid)以保留 actl-uia 的唯一豁免点(AGENTS.md §5.5)

@@ -64,7 +64,7 @@
   2. **batch 优先**:3 条以上顺序 actl 调用必须走 `batch`(单进程共享 snapshot/COM,消除 N-1 次 spawn+初始化);bash 逐条 spawn 是反模式;
   3. **双循环二进制纪律**:诊断/试错循环一律 `cargo xtask dev`(增量 DEBUG 构建,秒级;产物 `target/debug/actl.exe`);**证据轮单独走 `cargo xtask evidence`**(RELEASE 构建+二进制指纹落 `target/evidence/binary-log.txt`,每轮验收一次)——诊断二进制与证据二进制分离,**禁止在诊断循环里 `--release`**(实测 40× 差距:debug 增量秒级 vs release 全量分钟级);
   4. **JSON 解析不用 bash grep**:验收脚本解析 actl 输出用 PowerShell `ConvertFrom-Json`(前置 `[Console]::OutputEncoding=UTF8`——PS 5.1 无 `-Encoding` 参数)或脚本内 JSON 库;bash grep 中文/嵌套 JSON 是编码双重污染的温床(已实证多次);
-  5. **先探测再写死**:脚本/流程中的窗口标题/app 锚/exe 路径,先跑一次 `list-windows`/`where.exe` 确认实际值,不猜——猜错=整轮重跑;
+  5. **先探测再写死**:脚本/流程中的窗口标题/app 锚/exe 路径,先跑一次 `list-windows`/`app-locate <名>` 确认实际值,不猜——猜错=整轮重跑;软件位置探测一律 `app-locate`(五通道含开始菜单 .lnk 中文解析,别手工拼 reg/ls/find——腾讯会议非标准盘符安装曾因漏开始菜单通道误判「未安装」);探得即 `app-locate --register`/`app-register` 入 apps.json,pack 的 launch 字段只写别名不写路径(pack 可移植);
   6. **一轮多假设**:重编译前先列全本轮待验假设,一轮埋多个探针(多处 eprintln/ACTL_TRACE=1)——"一假设一重编译"是慢循环的结构性根因(实证:多发现轮理想 2-3 轮收齐,逐假设实跑 8+ 轮);
   7. **事件等待替代固定 sleep**:等窗口用 `wait --window <标题>`,不用 `sleep N`(快机慢机都准);固定 sleep 是拍脑袋值,慢机不够快机浪费。
 - **暂停、停止与恢复**:人工让行和主动暂停不写急停。急停变更持久停止代次，旧调用不得因开始新任务或修复而复活；新任务可正常请求用户开始，纯观察不因历史急停拒绝。损坏或旧格式状态通过 execution-status 诊断，由明确的 execution-recover/修复运行状态操作归档并修复，不手动删标记、不自动恢复旧任务或授予权限。实现契约见 docs/47-execution-recovery.md。

@@ -68,6 +68,7 @@ mod window_observation;
 mod window_ready;
 pub use window_ready::wait_window_ready;
 
+pub mod app_locate;
 pub mod app_registry;
 pub mod input;
 pub mod scoped_snapshot;
