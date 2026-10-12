@@ -390,8 +390,13 @@ pub(crate) fn launch(
     action.executing();
     // App Paths 解析:裸程序名(Office/商店别名)不在 PATH 时查注册表取完整路径
     // (通用增强,docs/14 实测痛点:launch WINWORD 曾 NotFound)
-    // GUI 程序不得继承控制台句柄:Word 等会攥住 stdout 写端,调用方的
-    // 管道(head/$())永远等不到 EOF(实测挂死)。stdio 显式分离。
+    // GUI 程序不得继承控制台句柄:null 三件套只换子进程自身 stdio,挡不住
+    // 句柄表继承——派生时长命子进程(记事本/Word)仍攥住调用方管道写端,
+    // flow-run|head/$()/ReadToEnd 全部等到 GUI 退出才 EOF(2026-10-12
+    // handoff-02 实证:引擎 4.4s 结束,管道吊 9 分钟到 notepad 关闭)。
+    // 浏览器通道/record-worker 同坑先例(docs/72 process_io):派生前清
+    // 自身 stdio 的 INHERIT 标志。
+    actl_uia::process_io::clear_stdio_inheritance();
     let detached = |cmd: &mut std::process::Command| {
         cmd.stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())

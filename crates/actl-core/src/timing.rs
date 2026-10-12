@@ -40,6 +40,11 @@ pub struct Timing {
     pub vis_probe_ms: u64,
     /// 桌面交接 pending 态轮询间隔
     pub handoff_poll_ms: u64,
+    /// 桌面交接宽限上限:显示端已出「开始/继续」提示卡后,CLI 进程内等待
+    /// 用户点击的预算(docs/32)。超出即如实 NOT_ACTIONABLE 返回——flow 场景
+    /// 该步转 uncertain、run 暂停,显示端「继续」按钮是既有的恢复通道
+    /// (CLI 不陪等人类;2026-10-12 用户裁定从 25s 收紧)。
+    pub handoff_grace_ms: u64,
     /// UIA 调用区段看门狗上限(docs/81 §8):定位/树观察等区段超过此时长,
     /// 守护线程带专用退出码自毙——无界 COM 挂起会变成不可杀僵尸(实证)。
     /// 0 = 禁用。
@@ -75,6 +80,7 @@ impl Default for Timing {
             ready_poll_ms: 50,
             vis_probe_ms: 1000,
             handoff_poll_ms: 100,
+            handoff_grace_ms: 5_000,
             uia_watchdog_ms: 20_000,
         }
     }
@@ -109,6 +115,7 @@ impl Timing {
                 ready_poll_ms: env_num("ACTL_READY_POLL_MS", d.ready_poll_ms),
                 vis_probe_ms: env_num("ACTL_VIS_PROBE_MS", d.vis_probe_ms),
                 handoff_poll_ms: env_num("ACTL_HANDOFF_POLL_MS", d.handoff_poll_ms),
+                handoff_grace_ms: env_num("ACTL_HANDOFF_GRACE_MS", d.handoff_grace_ms),
                 uia_watchdog_ms: env_num("ACTL_UIA_WATCHDOG_MS", d.uia_watchdog_ms),
             }
         })
@@ -134,6 +141,7 @@ mod tests {
         assert_eq!(d.ready_poll_ms, 50);
         assert_eq!(d.vis_probe_ms, 1000);
         assert_eq!(d.handoff_poll_ms, 100);
+        assert_eq!(d.handoff_grace_ms, 5_000); // 交接宽限:CLI 不陪等人类(docs/32)
     }
 
     #[test]

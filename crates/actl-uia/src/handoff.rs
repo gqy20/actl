@@ -204,8 +204,13 @@ fn request(target: &str, action: &str) -> Result<(), CtlError> {
         plan_hash: PLAN_HASH.with(|h| h.borrow().clone()),
     };
     let mut waiting = false;
+    // 宽限预算(docs/32,timing().handoff_grace_ms 默认 5s):显示端已出提示卡,
+    // CLI 进程内只等短宽限——用户在场两三秒即点;缺席时如实 handoff_pending
+    // 返回,flow 场景转暂停+显示端「继续」恢复,CLI 不陪等人类
+    // (2026-10-12 收紧,旧值 25s)。
+    let grace = Duration::from_millis(crate::timing().handoff_grace_ms);
     let start = Instant::now();
-    while start.elapsed() < Duration::from_secs(25) {
+    while start.elapsed() < grace {
         crate::feedback::check_stop()?;
         request.ts_ms = unix_ms();
         paths

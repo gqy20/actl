@@ -753,7 +753,7 @@ NOT_ACTIONABLE 显示或窗口未就绪；ABORTED 用户停止；INTERNAL 持久
 不存在 authorized/跳过确认字段。授权仅在显示端内存中，文件不保存授权。flow 以保存的 plan 策略为准。
 完整规则见 [32-desktop-handoff.md](32-desktop-handoff.md)。
 
-动作反馈门禁在展示动作前要求人工点击任务交接窗口，25 秒未响应返回 NOT_ACTIONABLE；ACTL_TASK_ID / flow ID 范围内
+动作反馈门禁在展示动作前要求人工点击任务交接窗口，宽限期未响应（默认 5s,`ACTL_HANDOFF_GRACE_MS` 可调,2026-10-12 从 25s 收紧——CLI 不陪等人类;flow 转暂停+显示端「继续」恢复）返回 NOT_ACTIONABLE；ACTL_TASK_ID / flow ID 范围内
 可短期复用，输入活动、60 秒空闲、10 分钟总长、急停及显示端重启撤销。无任务 ID 只限单调用。
 物理鼠标仍须显式 --physical。只读观察不唤醒窗口。
 错误 evidence.stage=handoff，reason 为 handoff_pending / user_deferred /

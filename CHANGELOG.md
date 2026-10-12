@@ -23,6 +23,10 @@
 
 ### Fixed
 
+- **CLI 管道挂死族修三连（handoff-02 轮实证定位——「CLI 侧要等很久」的三层拆解）**：
+  - **①launch 派生 GUI 子进程攥住管道写端（主凶）**：flow-run 引擎 4.4s 结束、envelope 已打印、actl 进程已退出,但调用方管道（`| head`/$()/ReadToEnd/harness 后台任务）等不到 EOF——通用 `launch` 只做了 null 三件套,挡不住 Windows 句柄表继承：记事本/Word 等 GUI 子进程继承了管道写端,一直吊到 GUI 退出（实测 9 分钟,直到关掉 notepad）。浏览器通道/record-worker 早有同坑修法（`process_io::clear_stdio_inheritance`）,通用 launch 补齐该调用位。测试：**机制级活体回归**（CreatePipe 可继承写端挂为本进程 stdout→派生 5s 长命子进程→断言 EOF 不等子进程,删掉 clear 调用即 4.3s 失败）+ 真机 E2E（exec 直连 harness 管道,1.8s 返回而两个 notepad 实例仍在场——修复前该形态吊到 notepad 关闭）。
+  - **②显示端 repair probe 固定 5s 轮询冷启**：run 暂停后显示端每 5 秒派生完整 actl.exe 跑阻塞步 before/verify 探测,放弃窗 10 分钟 = **120 次冷启**（机器高载时与真工作抢 UI 线程）。修法：指数退避（首个探测照旧即时派发,完成次数推进 5→10→20→40→60s 封顶;键切换重置）,10 分钟窗口降到 ~13 次;verdict 新鲜度窗随当前退避缩放,面板标签不闪断。AlreadyDone 语义核验为建议性标签（"可能是你手动完成了这步,请先核对"）无自动动作,维持。测试：退避序列/键重置/封顶 +4。
+  - **③写步桌面交接 25s 阻塞等待收紧为 5s 宽限（spec,[32](docs/32-desktop-handoff.md)）**：显示端已出「开始/继续」提示卡后,CLI 进程内等用户点击的预算从 25s 收紧到 5s（`ACTL_HANDOFF_GRACE_MS` 可调）——用户在场两三秒即点,缺席时如实 NOT_ACTIONABLE 返回;flow 场景该步转 uncertain、run 暂停,显示端「继续」按钮是既有的恢复通道（handoff-01 实证）,CLI 不陪等人类。docs/32 同步。
 - **临时 profile 删除竞争修复（docs/73 v1 缺口末条收口——五条至此全清）**：finish_close 对 ephemeral profile 的 `remove_dir_all` 单次吞错,浏览器进程树句柄释放晚于端点死亡时 `ephemeral_profile_removed:false` 泄漏目录（twitter 场景 7 轮中 2 次）。修法：有界退避重试（立即一次+200/400/800/1600ms,上界 ~3s;目录缺席=目标态已达成不进重试）,穷尽仍败如实 false。测试：锁文件独占句柄（share_mode 0）**活体复现竞争**并验证重试路径收口——单次实现（旧代码）此形态恒 false。
 
 - **`--deep` shadow 文本提取两缺陷（B 站评论应用轮实证,2026-10-12）**：① shadow host 元素的 `textContent` 只含 light DOM——嵌套 shadow（B 站评论 thread→comment 渲染器多层）的正文结构性读不到（恒空）；② 修复①后全文被 shadow 内 `<style>` 的 CSS 文本污染。修法：deepText 递归穿透嵌套 open shadowRoot + TreeWalker 过滤 STYLE/SCRIPT/TEMPLATE 文本节点——`browser-read --deep` 与 `browser-collect --deep` 同源受益。真机：匿名 B 站评论文本全通（用户名/内容/时间戳/回复数完整）。
