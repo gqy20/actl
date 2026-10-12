@@ -1,12 +1,18 @@
 pack_format: 1
 name: tencent_meeting
 display: 腾讯会议
-launch: "{installed_executable}"
+launch: wemeet           # app-registry 别名(已注册)→ D:\tools\Tecent\WeMeet\WeMeetApp.exe;非标准盘符安装,App Paths 未注册
 window: "hwnd:{hwnd}"
 app_version: "3.46.1.409"
 verified_date: 2026-09-28
 verified_env: Win11 25H2 (build 26200) zh-cn
 quirks:
+  - id: install_path_nonstandard
+    note: 安装在 `D:\tools\Tecent\WeMeet\`(用户自选盘符,注意目录拼写 Tecent)——App Paths 注册表未注册、Program Files/LOCALAPPDATA 均无,开始菜单 `C:\ProgramData\...\Start Menu\Programs\腾讯会议\腾讯会议.lnk` 是唯一系统入口。**探测通道教训(2026-10-12)**:曾因只查 App Paths/Program Files/LOCALAPPDATA 误判「本机未安装」——软件探测标准序必须含开始菜单 .lnk 解析(WScript.Shell CreateShortcut 读 TargetPath);别名 wemeet 已注册 app-register,`actl launch wemeet` 直达。
+  - id: launch_bootstrap_handoff
+    note: launch 派生的 pid 是 bootstrap,真窗口进程 pid 不同(交接形态)——spawned_pid 不作窗口归属判据。启动期 UIA 观察可能撞 0x80040201(事件无订户)瞬态:launch --wait-window 一体形态会如实失败,窗口就绪判定用分离式 `wait --window 腾讯会议`(notepad launch_resolution 同款纪律)。
+  - id: background_helper_resident
+    note: 窗口级优雅关闭后 WeMeetApp bootstrap(~22MB 无窗 helper)常驻属应用自身设计(同 cloudmusic 托盘形态)——勿 taskkill;窗口归属判定只看窗口,不看进程清零。
   - id: current_execution_contract
     note: 确认框的 cancel_ref/cancel_snapshot_id 来自该确认框最新 snapshot，核对名称、角色和本任务会议。日期编辑只在已确认日期框焦点下继续。视觉坐标每次由当前截图确定，click 保留 --physical；多窗口按 HWND/PID/进程实例核对，窗口枚举错误不证明会议已经结束。
   - id: homepage_controls_missing

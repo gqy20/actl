@@ -32,7 +32,7 @@
 
 - [ ] Excel 写入闭环（当前：UIA 树空属 Office 慢启动，需 MSAA 路线或等待）
 - [ ] Zotero 导入导出
-- [ ] 腾讯会议 draft-date 键盘路线（ctrl+a+paste+tab，QDateEdit set-value 无效）——2026-10-11 排期尝试，**本机未安装 wemeet（注册表 App Paths/常见 Program Files/本地 Programs 均无）如实记录不可验收**，待有环境机器轮
+- [ ] 腾讯会议 draft-date 键盘路线（ctrl+a+paste+tab，QDateEdit set-value 无效）——实装于 `D:\tools\Tecent\WeMeet\`（非标准盘符,App Paths 未注册;2026-10-12 经开始菜单 .lnk 找到并注册别名 wemeet,launch+窗口冒烟通过）;路线已解锁,待桌面空闲轮
 - [ ] 浏览器扩展操作面余量（UIA 轨三批已沉淀 [16 §5.5](16-browser-scenarios.md) / browser.yml `extension_surfaces`）：①右键菜单扩展项复验（机制在，两次被用户桌面并发占用护栏正确拒绝，待空闲）；②CDP 自有会话扩展操作实测（persistent profile 保留扩展策略已定 [72](72-browser-cdp-integration.md)，chrome 层归 UIA 的路径无实测证据，chrome 层 Invoke E_FAIL 同款风险预期）；③扩展弹层内写动作成链（现存证据只覆盖「读」）
 - [ ] 应用 pack 长尾维护
 
