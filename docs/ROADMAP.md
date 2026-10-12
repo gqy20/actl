@@ -34,7 +34,6 @@
 
 ### 应用深化
 - [ ] Zotero 导入导出
-- [ ] 腾讯会议 draft-date 键盘路线（ctrl+a+paste+tab，QDateEdit set-value 无效）——实装于 `D:\tools\Tecent\WeMeet\`（非标准盘符,App Paths 未注册;2026-10-12 经开始菜单 .lnk 找到并注册别名 wemeet,launch+窗口冒烟通过）。**2026-10-12 复验轮卡点**：进预定窗口需视觉点击（首页自绘树 91 元素全无名 Group 实证——scheduled 入口无 UIA 锚），键盘路线（窗口开后）待用户在场点开预定窗口或视觉轮补坐标；窗口一开 QDateEdit 链路可全自动
 - [ ] 浏览器扩展操作面余量（UIA 轨三批已沉淀 [16 §5.5](16-browser-scenarios.md) / browser.yml `extension_surfaces`）：①右键菜单扩展项复验（机制在，两次被用户桌面并发占用护栏正确拒绝，待空闲）；②扩展弹层内写动作成链（现存证据只覆盖「读」）。②原「CDP 自有会话扩展操作实测」已收（2026-10-12 探测:扩展 headless 存活+chrome 层扩展按钮/面板 UIA 全物化可 Invoke,「chrome 层无实测证据」空档闭合,余量并入①③——写动作成链仍待轮）
 - [ ] 应用 pack 长尾维护
 

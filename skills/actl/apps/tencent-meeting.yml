@@ -59,7 +59,7 @@ routes:
       - ["screenshot", "--app", "hwnd:{schedule_hwnd}"]
   - id: change_schedule_date
     description: 已观察的预定草稿内替换完整日期，日期使用 yyyy/M/d；不自动提交
-    status: manual
+    status: verified
     verify: Tab 后日期精确读回；提交前还必须检查其他预定字段。
     steps:
       - ["type", "name:开始日期", "{date}", "--paste", "--app", "hwnd:{schedule_hwnd}"]
