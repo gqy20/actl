@@ -32,7 +32,6 @@
 - [ ] 游戏场景（Minecraft 命令通道）——含指针原语缺口（[17 §3](17-game-scenarios.md) M3 候选，「手工搭」路线才需要）：`mouse-move dx,dy` 增量移动（前置 GLFW raw-input spike）、鼠标按键 down/up 拆分带时长（按住挖掘）、节奏敏感动作时窗参数
 
 ### 应用深化
-- [ ] Zotero 导入导出
 - [ ] 浏览器扩展操作面余量（UIA 轨三批已沉淀 [16 §5.5](16-browser-scenarios.md) / browser.yml `extension_surfaces`）：①右键菜单扩展项复验（机制在，两次被用户桌面并发占用护栏正确拒绝，待空闲）；②扩展弹层内写动作成链（现存证据只覆盖「读」）。②原「CDP 自有会话扩展操作实测」已收（2026-10-12 探测:扩展 headless 存活+chrome 层扩展按钮/面板 UIA 全物化可 Invoke,「chrome 层无实测证据」空档闭合,余量并入①③——写动作成链仍待轮）
 - [ ] 应用 pack 长尾维护
 
