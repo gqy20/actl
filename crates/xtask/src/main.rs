@@ -474,10 +474,15 @@ fn lint_packs(dir_arg: Option<&str>) -> ExitCode {
         eprintln!("✗ lint-packs: {} not found", packs_dir.display());
         return ExitCode::FAILURE;
     };
-    if !build_pair() {
+    // commands 清单要的是**当前源码**的命令面:增量 debug 构建(无变更时
+    // ~0.3s no-op;gate 的测试步已把产物编好)。不碰 target/validation 的
+    // release 对——那是 regress/evidence 的稳定二进制专用,lint-packs 借用
+    // 它曾是每轮 gate ~3-5 分钟 release 重建的根源(AGENTS 承诺的「秒级」
+    // 被它吃掉,2026-10-12 三轮 gate 实测 lint-packs 占 58-74%)。
+    if !run(&["build", "-p", "actl-cli"]) {
         return ExitCode::FAILURE;
     }
-    let actl = ws_root.join("target/validation/release/actl.exe");
+    let actl = ws_root.join("target/debug/actl.exe");
     // 命令全集(单一事实来源)
     let known: Vec<String> = match std::process::Command::new(&actl).arg("commands").output() {
         Ok(o) if o.status.success() => {
