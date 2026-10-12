@@ -209,6 +209,53 @@ fn launch_rejects_non_bare_proxy_values() {
 }
 
 #[test]
+fn launch_user_agent_surface_contract() {
+    // --user-agent 覆盖(headless UA 壁垒,docs/73 登记)。UA 校验前置在
+    // 环境探测之前——用不存在的 exe 即可确定性锁定校验面,不依赖机器
+    // 是否装有 Edge。合法 UA 走到 exe 检查失败=flag 已被接受。
+    let exe = "Z:/definitely/not/here/msedge.exe";
+    for bad in ["", "with\nnewline", "带中文", &"x".repeat(513)] {
+        let (code, stdout) = actl(&[
+            "browser-launch",
+            "--browser-executable",
+            exe,
+            "--user-agent",
+            bad,
+        ]);
+        assert_eq!(code, 2, "user-agent {bad:?} must be rejected");
+        let v: Value = serde_json::from_str(&stdout).unwrap();
+        assert_eq!(v["error"]["code"], "PROTOCOL", "{stdout}");
+        assert!(
+            v["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("user-agent"),
+            "must be a user-agent rejection: {stdout}"
+        );
+    }
+    let (code, stdout) = actl(&[
+        "browser-launch",
+        "--browser-executable",
+        exe,
+        "--user-agent",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    ]);
+    assert_eq!(code, 2);
+    let v: Value = serde_json::from_str(&stdout).unwrap();
+    assert!(
+        v["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("not found"),
+        "valid UA must pass validation and fail later at the exe: {stdout}"
+    );
+    let (code, stdout) = actl(&["browser-launch", "--help"]);
+    assert_eq!(code, 0);
+    assert!(stdout.contains("--user-agent"), "{stdout}");
+    assert!(stdout.contains("fingerprint"), "{stdout}");
+}
+
+#[test]
 fn navigate_rejects_bad_url_before_touching_the_browser() {
     let (code, stdout) = actl(&[
         "browser-navigate",

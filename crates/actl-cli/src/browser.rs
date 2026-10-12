@@ -23,11 +23,14 @@ fn selector_of<'a>(
     }
 }
 
+// clap 变体字段直转的薄适配层——参数即命令面(与 read_cmd/collect_cmd 同豁免)
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn launch_cmd(
     browser_executable: &str,
     url: Option<&str>,
     profile: Option<&str>,
     proxy: Option<&str>,
+    user_agent: Option<&str>,
     headless: bool,
     disable_extensions: bool,
     timeout: Option<u64>,
@@ -39,6 +42,7 @@ pub(crate) fn launch_cmd(
             url: url.map(str::to_string),
             profile: profile.map(str::to_string),
             proxy: proxy.map(str::to_string),
+            user_agent: user_agent.map(str::to_string),
             headless,
             disable_extensions,
             timeout_ms: timeout,
@@ -243,5 +247,5 @@ pub(crate) fn verify_cmd(args: VerifyArgs<'_>) -> Result<CommandOutput, CtlError
             ));
         }
     };
-    ops::verify(&paths(), mode, timeout).map(Into::into)
+    actl_browser::verify::verify(&paths(), mode, timeout).map(Into::into)
 }

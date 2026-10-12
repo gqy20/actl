@@ -303,7 +303,7 @@ list-notifications              # 系统通知读取
 
 #### 浏览器会话(browser,CDP 通道 v1)
 ```
-browser-launch --browser-executable <abs> [--url U] [--profile name] [--proxy host:port] [--headless] [--disable-extensions] [--timeout ms]
+browser-launch --browser-executable <abs> [--url U] [--profile name] [--proxy host:port] [--user-agent UA] [--headless] [--disable-extensions] [--timeout ms]
                                      # 启动 actl 自有的隔离浏览器(系统 Edge/Chrome 二进制,
                                      # 专用 user-data-dir——默认 profile 被 Chrome/Edge 136+
                                      # 禁调试端口,永不附着用户会话;用户日常浏览器的插件/
@@ -312,7 +312,11 @@ browser-launch --browser-executable <abs> [--url U] [--profile name] [--proxy ho
                                      # 可全程旁观(非隐身执行立场)、持久 profile 人工登录就绪,
                                      # 且浏览器 chrome 层的 UIA 兜底面在场;--headless 才是无
                                      # 窗口后台形态(HeadlessChrome UA 会被部分站点拒服务,
-                                     # 无 UIA 面,代价自担);--profile 持久 profile(一次性
+                                     # 无 UIA 面,代价自担;**--user-agent 覆盖 UA 字符串**
+                                     # (可打印 ASCII,1-512 字节,入口前置校验)是 headless
+                                     # UA 壁垒的通行道——只覆盖 UA 本身,不伪装指纹面
+                                     # (canvas/WebGL 仍如实应答 headless);复用活跃会话时
+                                     # 不重申);--profile 持久 profile(一次性
                                      # 人工登录复用),**同名再启=复用活跃会话**(reused:true,
                                      # 陈旧记录自动接管);扩展策略:ephemeral 恒禁用,
                                      # 持久 profile 默认保留(合法自动化资产),--disable-extensions

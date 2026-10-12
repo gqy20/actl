@@ -48,9 +48,14 @@ href 枚举)、唯一匹配纪律(含漂移拒绝)、位置谓词消歧、真实
 - **read 只读 textContent**:input 值读不到(空文本),登录流字段识别受限→需要
   `--property`(value/href/name 等)读取通道;
 - **无输入写动词**(`browser-type`):登录/搜索类流程的天然后续;
-- **headless 模式 UA 覆盖**(`--user-agent` 级选项):不牺牲无头形态过 UA 壁垒;
-- **epub 临时 profile 删除竞争**:7 轮中 2 次 `ephemeral_profile_removed:false`
-  (浏览器句柄延迟释放)→close 后延迟重试;
+- ~~headless 模式 UA 覆盖(`--user-agent` 级选项):不牺牲无头形态过 UA 壁垒。~~
+  (2026-10-12 收口:`browser-launch --user-agent`(可打印 ASCII,1-512 字节)落地——
+  只覆盖 UA 字符串不伪装指纹面,headless 真机对照实证 `navigator.userAgent` 精确
+  等于覆盖值;[06 浏览器节](06-design-blueprint.md))
+- ~~epub 临时 profile 删除竞争:7 轮中 2 次 `ephemeral_profile_removed:false`
+  (浏览器句柄延迟释放)→close 后延迟重试。~~
+  (2026-10-12 收口:finish_close 单次吞错→有界退避重试(200/400/800/1600ms,
+  上界 ~3s),独占句柄活体竞争单测复现并验证重试路径收口)
 - ~~选择器索引消歧助手(UIA 轨 `role:#N` 的等价物):本轮靠位置谓词 xpath 手工达成。~~
   (2026-10-11 更强收口:`browser-read --all [--limit N]` 枚举形态落地——列表语义
   零命中=空集非 NOT_FOUND,位置谓词绕行不再需要;[06 浏览器节](06-design-blueprint.md))

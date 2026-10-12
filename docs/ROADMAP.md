@@ -19,7 +19,7 @@
 ### 流程与集成
 
 - [ ] 流程扩展（嵌套分支——**缓办**，无真实场景，出现再立项；循环已落地 for_each 形态，2026-10-11）
-- [ ] 浏览器通道余量：flow 级 uncertain 持久化、pipe 传输 spike（`--remote-debugging-pipe`）、`--user-agent` 覆盖（headless UA 壁垒站点）、选择器索引消歧、batch 组合验收
+- [ ] 浏览器通道余量：flow 级 uncertain 持久化、pipe 传输 spike（`--remote-debugging-pipe`）、batch 组合验收
 - [ ] WebView2 专项验收（键盘跨原生/网页、屏幕阅读器、多屏 DPI、缺失运行时回退）
 - [ ] 中央任务提示专项验收：真实失败/停止/接管暂停、显示端重启后旧流程恢复、跨屏 DPI 与减少动态设置（[75](75-action-start-notification.md)）；并轨补入：急停真实按钮 + 跨进程解除完整交互（[35](35-stop-lifecycle.md)/[39](39-flow-observation-recovery.md) 尾自 2026-09-28 悬置——真实按钮路径待验收，与真实停止项同轮收口）
 - [ ] agent 自驱授权白名单通道（仅真实需求时立项，[32](32-desktop-handoff.md)）
@@ -41,8 +41,8 @@
 
 - [ ] 非开发机 US3 复现（用户裁定 2026-10-02 搁置——作为已知限制已记录于 0.2.0 CHANGELOG；机器到位后补验）
 - [ ] Phase 2 人工/专用环境验收子集（[44](44-phase2-acceptance.md) 表格聚合）：观察故障注入五类（空值/截断/控件重建/虚拟化/provider 故障——[50](50-deep-container-query.md) 的 provider 重建待验收同族）、监听冗余 hook 失效现场验收（[39](39-flow-observation-recovery.md)）、外部对照 Blender/Photoshop/Minecraft 可用环境。注：provider 故障路径已有物化回落真机实证（Word MSAA 拒答自动降级,CHANGELOG）,正式表格对照仍待
-- [ ] 浏览器场景实测余项聚合：**~~B 站登录态全量评论复跑~~ 已完成（2026-10-12 用户登录持久 profile+browser-collect --deep 真机 31 条全收/29 轮收敛/完整用户名时间戳提取——docs/16 §5.2 增补）**；持久 profile 真实站点登录验收待用户选站（[72](72-browser-cdp-integration.md)）；settle 噪声鲁棒（[16](16-browser-scenarios.md) 登记 M3 候选未动）；epub 临时 profile 删除竞争（[73](73-browser-twitter-scenario.md) v1 缺口五条中唯一未收口——close 后延迟重试,finish_close 当前单次吞错）；WebView CUA 检查流程重跑（[71](71-signal-webview-details.md)——那次 CDP 连接超时的**孤立性已由后续多轮 headless/fixture CDP 全链成功间接核验**,剩检查流程本身）；xhs「展开更多评论」低优先附带
-- [x] **浏览器页内弹层引擎门禁（核心面已落地,2026-10-11）**：`browser-click`/`browser-type` 派发前自动弹层扫描,命中 NOT_ACTIONABLE 拒发附样本+专用 hint,`--allow-popups` 显式放行（headless 真机 5 项验收,见 CHANGELOG Unreleased）;navigate/collect 不设门禁（CDP 绕过 DOM/DOM 级读不受覆盖层拦截）。**剩余候选**=声明式处置（pack 级 browser 弹层 allow 清单注入,与 popup_ignores 对称——真实站点误报面出现再立项,不为猜测建基建）
+- [ ] 浏览器场景实测余项聚合：持久 profile 真实站点登录验收待用户选站（[72](72-browser-cdp-integration.md)）；settle 噪声鲁棒（[16](16-browser-scenarios.md) 登记 M3 候选未动）；WebView CUA 检查流程重跑（[71](71-signal-webview-details.md)——那次 CDP 连接超时的**孤立性已由后续多轮 headless/fixture CDP 全链成功间接核验**,剩检查流程本身）；xhs「展开更多评论」低优先附带
+- [ ] 浏览器页内弹层声明式处置（pack 级 browser 弹层 allow 清单注入,与 popup_ignores 对称——引擎级自动门禁已落地,真实站点误报面出现再立项,不为猜测建基建）
 - [ ] **浏览器 CDP 工程余量（[72 §13](72-browser-cdp-integration.md) 聚合）**：`--remote-debugging-pipe` 实现形态 spike（当前 port+127.0.0.1，pipe 消除端口暴露面）；写入 uncertain 跨进程持久化（对齐 [47](47-execution-recovery.md) 恢复语义）；UIA 轨路线固化（browser.yml 10 条中 3 verified/5 manual/2 unverified——随应用轮渐进，pack 治理日常非协议项）
 - [ ] **flow 工具链缺口聚合（①revise 模板形态/②handlers 锚引用已收口,见 CHANGELOG）——剩余③④**：③ **companion_unresponsive 复发观察（暂缓;机制已实测澄清,2026-10-12）**——真实机制是**显示端消息泵 500ms SendMessageTimeout 往返**（CHECK 类+1 重试,历史事件均先记 handoff_query_retry 再失败）+ lease 心跳 1500ms 新鲜度,**不存在**"resume 累计时长超 lease 窗口"（原始登记与首次重写均误述,数据修正）。历史 20+ 事件全落在污染期（09-29→10-11 上午）;根杀后唯一一次（ts 1791713306）已归因=display-stop 轮对显示端的 close-window 被正确 fail-closed,非复发。归因维持:污染期系统饱和饿死显示端 UI 线程。**复发条件**：干净现场再现 companion_unresponsive——届时怀疑方向=显示端 UI 线程被合法工作（绘制/消息处理）阻塞>1s,非污染;500ms 泵窗口为固定常量,不为猜测调参。④ word-note-typography 的 popup_ignores（导航）声明路径重验随下次 Word 轮顺带（不专跑）
 - [ ] Zotero 导入导出（2026-10-11 轮让行未跑——用户桌面活跃，GUI 启动让行）

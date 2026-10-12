@@ -12,8 +12,9 @@ pub mod collect;
 pub mod ops;
 mod scripts;
 pub mod session;
+pub mod verify;
 
-pub use ops::VerifyMode;
+pub use verify::VerifyMode;
 
 /// 定位方式(CSS 或 XPath;唯一匹配为硬条件)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

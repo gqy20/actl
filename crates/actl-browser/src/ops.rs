@@ -8,8 +8,9 @@
 
 use crate::SelectorKind;
 use crate::cdp::{self, CdpError, Connection};
-use crate::scripts::{locate_all_script, locate_deep_script, locate_script, popup_scan_script};
+use crate::scripts::{locate_all_script, locate_deep_script, locate_script};
 use crate::session::{self, BrowserSession, Mode, Paths};
+use crate::verify::pre_action_popup_gate;
 use actl_core::state::unix_ms;
 use actl_core::{CtlError, ErrorCode};
 use serde_json::{Value, json};
@@ -28,6 +29,10 @@ pub struct LaunchSpec {
     pub profile: Option<String>,
     /// 出站代理(HOST:PORT,无 scheme);显式本地代理路径,非任意参数注入
     pub proxy: Option<String>,
+    /// UA 覆盖(headless UA 壁垒站点的合规通行道):覆盖的是 UA 字符串本身,
+    /// 不伪装指纹面(canvas/WebGL 等)——站点若做指纹一致性校验仍会识破,
+    /// 如实边界。持久 profile 复用会话时不重申(进程已在跑)
+    pub user_agent: Option<String>,
     pub headless: bool,
     /// 显式禁用扩展(持久 profile 用;ephemeral 恒为禁用——隔离目录本无插件,
     /// 显式化是为确定性与防指纹方差。持久 profile 默认允许扩展:猫抓/沉浸式
@@ -107,6 +112,20 @@ pub(crate) fn validate_selector(kind: SelectorKind, value: &str) -> Result<(), C
 }
 
 /// 代理仅接受裸 HOST:PORT(拒绝 scheme/凭据),防参数注入面
+/// UA 覆盖仅接受可打印 ASCII(0x20-0x7E,允许空格),1..=512 字节——
+/// 控制字符/非 ASCII 是畸形 UA,拒绝在入口而非让站点 400
+fn validate_user_agent(value: &str) -> Result<(), CtlError> {
+    if value.is_empty() || value.len() > 512 {
+        return Err(protocol("--user-agent must be 1-512 bytes"));
+    }
+    if !value.bytes().all(|b| (0x20..=0x7e).contains(&b)) {
+        return Err(protocol(
+            "--user-agent must be printable ASCII (no control or non-ASCII bytes)",
+        ));
+    }
+    Ok(())
+}
+
 fn validate_proxy(value: &str) -> Result<(), CtlError> {
     let Some((host, port)) = value.rsplit_once(':') else {
         return Err(protocol(format!(
@@ -339,6 +358,11 @@ fn located_text_payload(located: &Value) -> Value {
 // ---------------------------------------------------------------------------
 
 pub fn launch(paths: &Paths, spec: LaunchSpec) -> Result<Value, CtlError> {
+    // UA 校验前置(先于环境探测):畸形 UA 是入口参数错误,与机器是否装有
+    // 目标浏览器无关——契约测试无需真实 Edge 即可锁定校验面
+    if let Some(ua) = &spec.user_agent {
+        validate_user_agent(ua)?;
+    }
     // app-registry 别名解析:名字(如 edge)→ 绝对路径;非注册名原样传
     let browser_executable = actl_uia::app_registry::resolve(&spec.browser_executable)
         .ok()
@@ -412,6 +436,9 @@ pub fn launch(paths: &Paths, spec: LaunchSpec) -> Result<Value, CtlError> {
     ];
     if spec.headless {
         edge_args.insert(0, "--headless=new".to_string());
+    }
+    if let Some(ua) = &spec.user_agent {
+        edge_args.push(format!("--user-agent={ua}"));
     }
     // 扩展策略:ephemeral 恒禁用;持久 profile 默认允许(扩展是合法资产),
     // 显式 --disable-extensions 才禁
@@ -519,6 +546,7 @@ pub fn launch(paths: &Paths, spec: LaunchSpec) -> Result<Value, CtlError> {
         "url": url,
         "mode": mode,
         "headless": spec.headless,
+        "user_agent": spec.user_agent,
         "profile_dir": profile_dir.display().to_string(),
     }))
 }
@@ -1180,249 +1208,6 @@ pub fn close(paths: &Paths, session_id: &str, timeout_ms: Option<u64>) -> Result
     })
 }
 
-/// 只读枚举活跃会话(新→旧排序)。flow 的 outputs 只允许只读生产者,
-/// browser-launch 是生命周期命令——会话句柄经本命令以观察者身份产出(docs/20 治理模型)。
-/// browser-verify 的断言模式(CLI 层负责互斥校验后构造)。
-pub enum VerifyMode {
-    /// 最新会话 target 应答(launch 后)
-    NewestAlive,
-    /// 零活跃会话(close 后)
-    NoneActive,
-    /// 按 id:target 存活
-    SessionAlive(String),
-    /// 按 id:会话记录已注销
-    SessionGone(String),
-    /// 登录态核验谓词:选择器唯一解析(+文本包含)——resume_check 与例行登录检查的判据
-    Selector {
-        session: String,
-        kind: SelectorKind,
-        value: String,
-        contains: Option<String>,
-    },
-    /// 页内弹层清零断言(2026-10-11 v1):枚举可见弹层表面,零命中=通过,
-    /// 非零=ASSERTION_FAILED 带样本——flow condition 位映射 false
-    /// (ASSERTION_FAILED→false 是既有语义),when/unless 分支可组合。
-    /// 原生弹层门禁结构性不覆盖页内 DOM 弹层(browser-* 走 --session,
-    /// front-report 只收 role:Window),本断言是那个空档的检测原语。
-    NoPopups {
-        session: String,
-        selector: Option<String>,
-    },
-}
-
-/// 默认弹层枚举选择器:标准弹层结构(<dialog open>/ARIA dialog/
-/// alertdialog/aria-modal)。如实边界:无标注的自绘 fixed 浮层(cookie 条/
-/// 推广层)不在默认面——站点特有横幅走 --popup-selector 显式声明;
-/// 在流内的静态 role=dialog 段落会过检(过度检测由 samples 证据暴露,
-/// 调用方收窄选择器)。
-pub const DEFAULT_POPUP_SELECTOR: &str =
-    "dialog[open],[role=dialog],[role=alertdialog],[aria-modal=true]";
-
-/// 写步弹层门禁(browser-click/type 前置,与 front-report「停下判读」同纪律):
-/// 动作派发前扫页内可见弹层(默认标准 dialog 语义面)。站点模态态下点击/输入
-/// 会被静默吞——派发成功 ≠ 语义生效,与其让动作空放后靠读回兜底,不如拒发
-/// 并附样本。NOT_ACTIONABLE(非断言失败:动作还没发生,是护栏拒绝);
-/// --allow-popups 显式放行(流内静态 role=dialog 的误报面,调用方拿样本证据决策)。
-pub(crate) fn pre_action_popup_gate(
-    conn: &Connection,
-    cdp_session: &str,
-    timeout: Duration,
-) -> Result<(), CtlError> {
-    let scanned = eval_json(
-        conn,
-        cdp_session,
-        &popup_scan_script(DEFAULT_POPUP_SELECTOR),
-        None,
-        timeout,
-    )?;
-    // 选择器语法错误如实 PROTOCOL——吞错成 total=0 等于门禁自废
-    if let Some(err) = scanned.get("error").and_then(Value::as_str) {
-        return Err(CtlError::protocol(format!(
-            "popup gate selector is not valid CSS: {err}"
-        )));
-    }
-    let total = scanned.get("total").and_then(Value::as_u64).unwrap_or(0);
-    if total > 0 {
-        return Err(CtlError::with_evidence_hint(
-            ErrorCode::NotActionable,
-            format!(
-                "{total} visible in-page popup surface(s) block this write action \
-                 (dismiss them, or pass --allow-popups after judging the samples)"
-            ),
-            json!({
-                "gate": "popup",
-                "selector": DEFAULT_POPUP_SELECTOR,
-                "total": total,
-                "samples": scanned.get("samples").cloned().unwrap_or(Value::Null),
-            }),
-            "judge the samples: click the popup's own dismiss/close control with \
-             --allow-popups, then re-check with browser-verify --no-popups; pass \
-             --allow-popups on the original target only for judged false positives",
-        ));
-    }
-    Ok(())
-}
-
-/// 只读断言动词(flow 的 verify 位只认断言族;浏览器步骤的副作用核验入口)。
-pub fn verify(paths: &Paths, mode: VerifyMode, timeout_ms: Option<u64>) -> Result<Value, CtlError> {
-    let timeout = dur(timeout_ms, OP_DEFAULT_TIMEOUT_MS);
-    match mode {
-        VerifyMode::NoneActive => {
-            let total = list(paths)?
-                .get("total")
-                .and_then(Value::as_u64)
-                .unwrap_or(0);
-            if total != 0 {
-                return Err(CtlError::with_evidence(
-                    ErrorCode::AssertionFailed,
-                    format!("{total} browser sessions still active"),
-                    json!({ "total": total }),
-                ));
-            }
-            Ok(json!({ "assertion": "none", "passed": true }))
-        }
-        VerifyMode::NewestAlive => {
-            let sessions = list(paths)?;
-            let newest = sessions.pointer("/sessions/0").cloned().ok_or_else(|| {
-                CtlError::with_evidence(
-                    ErrorCode::AssertionFailed,
-                    "no active browser session to assert",
-                    json!({ "total": 0 }),
-                )
-            })?;
-            let id = newest["session_id"]
-                .as_str()
-                .unwrap_or_default()
-                .to_string();
-            let record = session::load(paths, &id)?;
-            let conn = connect_browser(&record)?;
-            // attach 本身即端点+target 存活的第一重核验
-            attach_target(&conn, &record.target_id, timeout)?;
-            verify_target_alive(&conn, &record.target_id, timeout)?;
-            Ok(json!({ "assertion": "newest_alive", "passed": true, "session_id": id }))
-        }
-        VerifyMode::SessionGone(session_id) => match session::load(paths, &session_id) {
-            Err(e) if e.code == ErrorCode::NotFound => Ok(json!({
-                "assertion": "gone",
-                "passed": true,
-                "session_id": session_id
-            })),
-            Ok(_) => Err(CtlError::with_evidence(
-                ErrorCode::AssertionFailed,
-                format!("browser session {session_id} still registered"),
-                json!({ "session_id": session_id }),
-            )),
-            Err(e) => Err(e),
-        },
-        VerifyMode::SessionAlive(session_id) => {
-            let record = session::load(paths, &session_id)?;
-            let conn = connect_browser(&record)?;
-            attach_target(&conn, &record.target_id, timeout)?;
-            verify_target_alive(&conn, &record.target_id, timeout)?;
-            Ok(json!({ "assertion": "alive", "passed": true, "session_id": session_id }))
-        }
-        VerifyMode::Selector {
-            session,
-            kind,
-            value,
-            contains,
-        } => {
-            validate_selector(kind, &value)?;
-            let record = session::load(paths, &session)?;
-            let conn = connect_browser(&record)?;
-            let cdp_session = attach_target(&conn, &record.target_id, timeout)?;
-            verify_target_alive(&conn, &record.target_id, timeout)?;
-            let located = eval_json(
-                &conn,
-                &cdp_session,
-                &locate_script(kind, &value, None),
-                None,
-                timeout,
-            )?;
-            let matches = located.get("matches").and_then(Value::as_u64).unwrap_or(0);
-            if matches != 1 {
-                return Err(CtlError::with_evidence(
-                    ErrorCode::AssertionFailed,
-                    format!(
-                        "login-state selector did not resolve uniquely ({matches} matches; expected 1)"
-                    ),
-                    json!({
-                        "selector_kind": kind.as_str(),
-                        "selector": value,
-                        "matches": matches,
-                    }),
-                ));
-            }
-            let (text, truncated) = truncate_text(
-                located
-                    .get("text")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default(),
-            );
-            if let Some(expected) = &contains
-                && !text.contains(expected.as_str())
-            {
-                return Err(CtlError::with_evidence(
-                    ErrorCode::AssertionFailed,
-                    "login-state selector text does not contain the expected substring",
-                    json!({
-                        "selector_kind": kind.as_str(),
-                        "selector": value,
-                        "expected_contains": expected,
-                        "actual": text,
-                        "truncated": truncated,
-                    }),
-                ));
-            }
-            Ok(json!({
-                "assertion": "selector",
-                "passed": true,
-                "session_id": session,
-                "text": text,
-                "truncated": truncated,
-            }))
-        }
-        VerifyMode::NoPopups { session, selector } => {
-            let sel = selector.unwrap_or_else(|| DEFAULT_POPUP_SELECTOR.to_string());
-            if sel.is_empty() || sel.chars().count() > 4096 {
-                return Err(CtlError::protocol("popup selector must be 1-4096 chars"));
-            }
-            let record = session::load(paths, &session)?;
-            let conn = connect_browser(&record)?;
-            let cdp_session = attach_target(&conn, &record.target_id, timeout)?;
-            verify_target_alive(&conn, &record.target_id, timeout)?;
-            let scanned = eval_json(&conn, &cdp_session, &popup_scan_script(&sel), None, timeout)?;
-            // 选择器语法错误如实 PROTOCOL——吞错成 total=0 等于谎称「无弹层」
-            if let Some(err) = scanned.get("error").and_then(Value::as_str) {
-                return Err(CtlError::protocol(format!(
-                    "popup selector is not valid CSS: {err}"
-                )));
-            }
-            let total = scanned.get("total").and_then(Value::as_u64).unwrap_or(0);
-            if total > 0 {
-                return Err(CtlError::with_evidence(
-                    ErrorCode::AssertionFailed,
-                    format!("{total} visible in-page popup surface(s) present"),
-                    json!({
-                        "assertion": "no_popups",
-                        "selector": sel,
-                        "total": total,
-                        "samples": scanned.get("samples").cloned().unwrap_or(Value::Null),
-                        "session_id": session,
-                    }),
-                ));
-            }
-            Ok(json!({
-                "assertion": "no_popups",
-                "passed": true,
-                "selector": sel,
-                "total": 0,
-                "session_id": session,
-            }))
-        }
-    }
-}
-
 pub fn list(paths: &Paths) -> Result<Value, CtlError> {
     let dir = paths.sessions_dir();
     let mut sessions: Vec<BrowserSession> = Vec::new();
@@ -1471,10 +1256,12 @@ fn finish_close(paths: &Paths, record: &BrowserSession) -> Result<Value, CtlErro
     session::remove(paths, &record.session_id)?;
     let (kept, removed) = match &record.mode {
         Mode::Persistent { .. } => (true, None),
-        Mode::Ephemeral => {
-            let removed = std::fs::remove_dir_all(&record.profile_dir).is_ok();
-            (false, Some(removed))
-        }
+        Mode::Ephemeral => (
+            false,
+            Some(remove_dir_bounded_retry(std::path::Path::new(
+                &record.profile_dir,
+            ))),
+        ),
     };
     Ok(json!({
         "session_id": record.session_id,
@@ -1484,4 +1271,79 @@ fn finish_close(paths: &Paths, record: &BrowserSession) -> Result<Value, CtlErro
         "ephemeral_profile_removed": removed,
         "browser_pid": record.pid,
     }))
+}
+
+/// 临时 profile 删除(docs/73 实证:7 轮中 2 次失败)——进程树句柄释放
+/// 晚于端点死亡,单次 remove_dir_all 会漏。立即试一次(常态:进程已退,
+/// 秒成),失败后 200/400/800/1600ms 退避重试(上界 ~3s),穷尽仍败
+/// 如实 false(泄漏目录留在 profiles/ephemeral/,envelope 已报告)。
+/// 目录缺席(此前轮已清/外部清场)=目标态已达成,不进重试。
+fn remove_dir_bounded_retry(dir: &std::path::Path) -> bool {
+    for attempt in 0..5 {
+        if attempt > 0 {
+            std::thread::sleep(Duration::from_millis(200u64 << (attempt - 1)));
+        }
+        if std::fs::remove_dir_all(dir).is_ok() {
+            return true;
+        }
+        if !dir.exists() {
+            return true;
+        }
+    }
+    false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::remove_dir_bounded_retry;
+
+    fn temp(name: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!("actl-rm-retry-{name}-{}", std::process::id()))
+    }
+
+    #[test]
+    fn removal_succeeds_immediately_when_unlocked() {
+        let dir = temp("free");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("a.txt"), b"x").unwrap();
+        assert!(remove_dir_bounded_retry(&dir));
+        assert!(!dir.exists());
+    }
+
+    #[test]
+    fn missing_dir_counts_as_removed() {
+        let dir = temp("gone");
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(remove_dir_bounded_retry(&dir));
+    }
+
+    /// 活体竞争复现:独占句柄(share_mode 0)持锁期间 remove 必败,
+    /// 释放后重试路径必须成功——单次实现(旧 finish_close)此形态恒 false。
+    #[test]
+    #[cfg(windows)]
+    fn removal_retries_past_exclusive_handle_release() {
+        use std::io::Write;
+        use std::os::windows::fs::OpenOptionsExt;
+        let dir = temp("locked");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("locked.txt");
+        std::fs::File::create(&file)
+            .unwrap()
+            .write_all(b"x")
+            .unwrap();
+        let handle = std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .open(&file)
+            .unwrap();
+        let dir2 = dir.clone();
+        let worker = std::thread::spawn(move || remove_dir_bounded_retry(&dir2));
+        // 持锁跨过首次尝试与第一次退避(200ms),释放后由重试收口
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        drop(handle);
+        assert!(worker.join().unwrap());
+        assert!(!dir.exists());
+    }
 }

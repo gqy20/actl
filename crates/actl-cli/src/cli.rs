@@ -859,6 +859,10 @@ pub(crate) enum Command {
         /// explicit local proxy; no scheme/prefix allowed (not an arbitrary-arg escape hatch)
         #[arg(long)]
         proxy: Option<String>,
+        /// Override the browser user-agent (printable ASCII, 1-512 bytes) — the compliant
+        /// pass for headless-UA walls; overrides the UA string only, not fingerprint surfaces
+        #[arg(long)]
+        user_agent: Option<String>,
         /// Run without a window (HeadlessChrome UA — many sites serve 403 to it and the
         /// session is invisible to the user; default is a visible window)
         #[arg(long)]
