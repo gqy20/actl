@@ -131,7 +131,21 @@ quirks:
       (score 1.0/473ms,裁当前截图 60x60 模板)+物理点击触发
       扩展动作实证(沉浸式翻译图标点击=页面翻译切换)——
       shadow DOM 浮动图标(name/id 均不可靠,深度枚举 button
-      零命中)的标准定位通道
+      零命中)的标准定位通道;④**chrome 层几何矩阵(2026-10-12
+      对照实测)**:工具栏按钮 UIA bounds 有效(物理点击落真实坐标),
+      **扩展菜单气泡内元素 bounds 为空**(Chromium Views/WebUI 气泡
+      的几何在 renderer 进程,浏览器侧 UIA 代理不报)——菜单项
+      UIA 定位可确认存在性但物理点击无落点,坐标走 find-image
+      裁模板路线;Invoke 对菜单项同样 E_FAIL(同族已知);⑤**CDP
+      作用域边界**:chrome 层 UI(工具栏/扩展列表菜单)不是 CDP
+      target,结构性不可达;**扩展自己的 popup 页面(chrome-
+      extension:// URL)打开期间是 CDP target**——弹层内写动作的
+      正道=物理点击打开弹窗后 browser-read/type 读写其 DOM;④**chrome 层几何矩阵(2026-10-12
+      对照实测)**:工具栏按钮 UIA bounds 有效(物理点击落真实坐标),
+      **扩展菜单气泡内元素 bounds 为空**(Chromium Views/WebUI 气泡
+      的几何在 renderer 进程,浏览器侧 UIA 代理不报)——菜单项
+      UIA 定位可确认存在性但物理点击无落点,坐标走 find-image
+      裁模板路线;Invoke 对菜单项同样 E_FAIL(同族已知)
   - id: webui_weak_a11y
     note: >-
       Chrome 内置页面(WebUI)视觉完全渲染但 a11y 弱暴露(extensions
