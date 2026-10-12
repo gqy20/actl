@@ -147,9 +147,14 @@ B 站评论读取(真视频页)未完成,根因全部在**选卡与锚点层**,�
   at_bottom)。
 - **登录墙判决(两视频同签名实证)**:匿名会话 B 站只渲染 **2 条评论**
   且页面截断(总高 ~2.8 视口,推荐区不加载,滚到底无增量)——非懒加载
-  问题,是产品层墙。匿名形态下 collect 收 2 条收敛是**如实结果**;
-  全量评论需持久 profile 人工登录(browser-login-session)后复跑。
+  问题,是产品层墙。匿名形态下 collect 收 2 条收敛是**如实结果**。
   入 pack quirk `bilibili_anonymous_comment_wall`。
+- **登录态全量实证(同日,用户登录 persistent profile)**:persistent
+  profile `--profile bilibili` 人工登录后 browser-collect --deep 全量
+  收集 **31 条/29 轮空连收敛/complete:true**——首轮即加载 20 条,后续
+  滚动逐步加载到 31;用户名/内容/时间戳/回复数完整提取(嵌套 shadow
+  递归穿透+STYLE 过滤在真实评论数据上工作正常)。对照:匿名同视频
+  仅 2 条——登录墙的量化差距 2→31。pack quirk 已更新实测数据。
 
 ### 5.3 未登录 xhs(第一批遗留的澄清)
 

@@ -149,10 +149,12 @@ quirks:
     note: >-
       B 站对**匿名(未登录)会话**只渲染 2 条评论且页面截断(
       两视频同签名:页面总高仅 ~2.8 视口,评论区固定 2 条,推荐区
-      不加载,scrollY 到底也无增量——非懒加载问题,是登录墙)。全量
-      评论收集需持久 profile 人工登录(browser-login-session 流程,
-      resources.browser_profiles 声明)后复跑 browser-collect;匿名
-      形态下 collect 收到 2 条即收敛是**如实结果**不是缺陷。
+      不加载,scrollY 到底也无增量——非懒加载问题,是登录墙)。
+      **登录态已实证（2026-10-12）**：persistent profile（--profile
+      bilibili）人工登录后 browser-collect --deep 全量收集 **31 条
+      /29 轮空连收敛/complete:true**——用户名/内容/时间戳/回复数
+      完整提取;登录后首轮即加载 20 条,后续滚动逐步加载。匿名形态
+      下 collect 收到 2 条即收敛是**如实结果**不是缺陷。
   - id: bilibili_comments_mount_latency
     note: >-
       B 站评论挂载是异步时序(视频页就绪后 #commentapp
