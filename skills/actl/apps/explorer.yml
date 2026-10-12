@@ -15,8 +15,8 @@ quirks:
     note: explorer.exe 是 shell 进程(持任务栏/桌面),close-window --pid 会拒绝属安全巧合——一律按唯一标题或精确 hwnd 关;其窗口标题含完整路径(E:\...\dir - 文件资源管理器),路径变则标题变,hwnd 锚不随标题漂移。
   - id: navigation_pane_docked
     note: 导航窗格(automation_id:100,Tree)是常驻停靠面板非弹窗,不触发弹层门禁;窗口双 List 结构下 snapshot 建议带 --skeleton。
-  - id: address_bar_pending_probe
-    note: 地址栏可读(调研见 automation_id 呈 view_1012 形态,未现场核实不写死)+另存/打开对话框的文件名 Edit 可填——具体 id 待现场探测核实后回填路线;保存框路径交接整链待真机轮。
+  - id: address_bar_xaml_form
+    note: 地址栏实际形态 = `Edit name:地址栏 id=TextBox`(XAML 双态控件;调研的 view_1012 形态与 26200 不符,勿写死)。面包屑显示态下该 Edit 的 value **恒空**——不是路径读取通道;当前路径的确定性读取 = 窗口标题(全路径 + " - 文件资源管理器"后缀,strip 即得);面包屑按钮名是类名(PART_ItemButton)无路径文本。地址栏的用途是**写**(点击进入编辑态输入路径导航),不是读。
 routes:
   - id: open_dir_and_collect_files
     description: 打开目录并全量收集文件列表(collect 有界收集,零注入)

@@ -1,0 +1,96 @@
+# 记事本另存为路径交接——「快选快切」类需求的 actl 形态(docs/10 §4.2:
+# 把选定路径交给当前桌面应用+保存结果验证)。路线 = 另存为文件名框直填
+# 完整绝对路径(金任务 2 机制:set-value 清空 → --paste 录入 → Enter
+# 提交;对话框 id:1001 双命中地址 ToolBar 与文件名 Edit,role:Edit+
+# name_contains:文件名 复合定位)。
+# 前置纪律(缺一即 AMBIGUOUS/污染现场):①**零已存在记事本窗口**——
+# Store 记事本二启是同进程新窗口(非加标签),--app Notepad 锚即双窗
+# 歧义(2026-10-12 handoff-02 实证);②TabState 复活容忍——裸启动可能
+# 带回历史脏标签(标题任意),不清理历史,点 id:AddButton 新建空标签建
+# 立工作面(多标签应用只操作本任务标签;后台标签的编辑区不在 UIA 树,
+# name:文本编辑器 恒唯一);③目标目录须已存在(路径直填不建目录);
+# ④目标文件须不存在(存在会弹「确认另存为」覆盖框,不在清理白名单)。
+# 收尾(关本任务标签)由调用方治理:保存后标签干净,ctrl+w 即可;若窗
+# 口仍存在是历史标签在后台的预期态,不是泄漏。
+version: 1
+name: notepad-save-handoff
+inputs:
+  # 目标文件完整绝对路径(反斜杠形态——对话框粘贴通道直填;正斜杠会被
+  # 经典对话框当相对名处理,必须反斜杠)
+  save_path: {}
+popup_ignores:
+  # 另存为对话框是本流程自产表面(open_save_as 的产物、后续步骤的输入
+  # 目标)——门禁认领放行,与 release-review-draft 的 Word 另存为同款
+  - app: Notepad
+    name_contains: 另存为
+  - app: 另存为
+    name_contains: 另存为
+steps:
+  - id: launch_notepad
+    title: 启动记事本裸实例(标题任意——TabState 可能复活历史脏标签,不阻塞)
+    run:
+      command: launch
+      args: ['notepad.exe']
+    verify:
+      command: wait
+      args: ['--window', 'Notepad', '--timeout', '15000']
+  - id: new_tab
+    title: 点击加号新建空标签(用户既定做法;干净工作面,历史标签留在后台)
+    run:
+      command: click
+      args: ['id:AddButton', '--app', 'Notepad']
+    verify:
+      command: wait
+      args: ['--window', '无标题 - Notepad', '--timeout', '8000']
+  - id: type_content
+    title: 录入标准探针内容(粘贴通道,中文免疫)
+    run:
+      command: type
+      args: ['name:文本编辑器', 'actl handoff acceptance content', '--paste', '--app', 'Notepad']
+    verify:
+      command: verify
+      args: ['--value', 'name:文本编辑器', 'actl handoff acceptance content', '--property', 'value', '--contains', '--app', 'Notepad']
+  - id: open_save_as
+    title: 打开另存为对话框(锚定对话框自身标题——owned 对话框是独立前台窗口)
+    run:
+      command: press
+      args: ['ctrl+shift+s', '--app', 'Notepad']
+    verify:
+      command: wait
+      args: ['--element', 'uia:{"match":{"role":"Edit","name_contains":"文件名"}}', '--app', '另存为', '--timeout', '8000']
+  - id: clear_filename
+    title: 清空文件名框默认残留(金任务 2 机制:不清空则回车按默认旧名保存)
+    run:
+      command: set-value
+      args: ['uia:{"match":{"role":"Edit","name_contains":"文件名"}}', '', '--app', '另存为']
+    verify:
+      command: verify
+      args: ['--exists', 'uia:{"match":{"role":"Edit","name_contains":"文件名"}}', '--app', '另存为']
+  - id: type_path
+    title: 文件名框直填完整绝对路径(交接核心步;粘贴通道+读回断言)
+    run:
+      command: type
+      args:
+        - 'uia:{"match":{"role":"Edit","name_contains":"文件名"}}'
+        - {input: save_path}
+        - '--paste'
+        - '--verify-value'
+        - {input: save_path}
+        - '--app'
+        - '另存为'
+    verify:
+      command: verify
+      args: ['--value', 'uia:{"match":{"role":"Edit","name_contains":"文件名"}}', {input: save_path}, '--property', 'value', '--app', '另存为']
+  - id: confirm_save
+    title: 文件名框回车提交保存
+    run:
+      command: press
+      args: ['enter', '--app', '另存为']
+    verify:
+      command: verify-window
+      args: ['--app', '另存为', '--state', 'absent']
+  - id: verify_saved
+    title: 磁盘级业务核验(保存结果验证——docs/10 §4.2 的出口闭环)
+    run:
+      command: verify-file
+      args: ['--path', {input: save_path}, '--kind', 'text', '--expected', '"actl handoff acceptance content"']

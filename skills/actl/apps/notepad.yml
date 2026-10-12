@@ -14,7 +14,11 @@ quirks:
   - id: title_shape
     note: 标题「无标题 - Notepad」,输入后「*<内容前缀> - Notepad」(脏星号+内容随输入变)——hwnd 提取按 class "Notepad" 匹配,勿按标题精确匹配。稳定锚 = "Notepad" 后缀。
   - id: edit_area_channel
-    note: 编辑区 = `name:文本编辑器` role:Document,值读回走 `--property value`;中文输入必须 --paste 剪贴板通道(键盘通道中文 IME 不可靠)——探索引擎 texts 原语已按内容判据自动注入,手写步骤显式带 --paste。
+    note: 编辑区 = `name:文本编辑器` role:Document,值读回走 `--property value`;中文输入必须 --paste 剪贴板通道(键盘通道中文 IME 不可靠)——探索引擎 texts 原语已按内容判据自动注入,手写步骤显式带 --paste。后台标签的编辑区不在 UIA 树——多标签下该锚恒唯一(歧义只来自多窗,见 second_launch_new_window)。
+  - id: second_launch_new_window
+    note: Store 记事本二启 = **同进程新窗口**(非现有窗口加标签)——已有窗口时跑 `launch notepad.exe` 会开第二个窗口,`--app Notepad` 锚立即双窗 AMBIGUOUS(handoff-02 实证)。流程前置 = 零已存在记事本窗口;TabState 复活的历史标签不破坏锚(后台标签编辑区不在树),多窗才会。
+  - id: save_prompt_in_window_dialog
+    note: 脏标签关闭的「保存/不保存/取消」确认是**应用内 XAML 对话框**(子窗 name:记事本,按钮 id=PrimaryButton 保存/SecondaryButton 不保存/CloseButton 取消)——list-windows 看不到它,判定用 snapshot 找按钮;白名单清理动词 = 点击 `SecondaryButton | 不保存`(标签级废弃,TabState 根清)。
 routes:
   - id: explore_explore_l2_notepad_input_zh
     description: 在记事本输入中文文本（探索回写）
