@@ -216,3 +216,19 @@ S3 真机闭环验收通过:回写(证据收集)、人工复核迁移(用户裁�
 ## 路线 #4 复核迁移——§7 目标 5 条全部达成（2026-10-11 用户授权）
 
 explorer.yml explore_navigate_back unverified→**verified**（探索 goal_met actions=1 + 重放 verified attempts=1 双证）。**docs/42 §7 S3 验收目标「5 条 unverified 经人工复核转 verified」达成**：S1/S2 + #3 记事本中文 + #4 资源管理器后退导航；#5 计算器以形态边界实证计入贡献（差分前沿×无增量应用+texts 无 focused 形态,两改进候选在案）不占 verified 数。飞轮（探索→回写→重放→复核）在三种应用形态（Win32 记事本/混合资源管理器/XAML 计算器边界）完成验证。
+
+## 跨进程 picker 观察轮(2026-10-12,Store 画图——第二例证否)
+
+- **观察对象**:Store 画图(Microsoft.Paint 11.2605.81.0,MSPaintApp 窗口 pid 35224)的
+  「文件→打开」对话框(菜单 `id:FileOpen` 一发点击,UIA invoke 无需前台)。
+- **形态判定**:`#32770` 经典对话框、**pid=35224 与主窗同进程**、owner=主窗——
+  与 Store 记事本另存为(轮 C)同款。跨进程 picker 猜想(RuntimeBroker 承载)在
+  第二个 Store 应用**证否**;放宽判据继续无害在位。
+- **对话框族内变异(实用发现)**:文件名控件对 = `ComboBox|文件名(N):|id=1148` +
+  `Edit|文件名(N):|id=1148`——与记事本对话框的 `id:1001`(地址 ToolBar 与文件名
+  Edit 双命中)不同 id;经典对话框族的控件 id 随宿主变异,**稳健定位 = role:Edit
+  +name:文件名**(name 前缀恒同);文件列表条目为 `System.ItemNameDisplay` Edit
+  (14 个物化,虚拟化)。
+- **真跨进程 picker(FileOpenPicker 类)仍未现身**——观察项挂起,待其他 Store
+  应用场景(照片导入类)。
+- 现场清理:close-window 主窗优雅关闭(对话框随主窗归属消亡,0 残留)。
