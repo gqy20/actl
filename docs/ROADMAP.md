@@ -14,7 +14,7 @@
 
 ### 高优先（用户标记）
 
-- [ ] **探索模式（用户标记关键）**：S1–S3/L2/先验飞轮全链真机通过（[77](77-exploration-s2-acceptance.md),已收口部分见 CHANGELOG）。剩余：①**路线积累 §7 目标 5 条还差 #4 材料人工复核迁移 verified**（三步闭环已完成,材料在 [77](77-exploration-s2-acceptance.md)）;②**UCB 统计剪枝**（待 quirks 样本量）;③跨进程 picker 形态观察项（Store 记事本另存为已证否,见 [77]）
+- [ ] **探索模式（用户标记关键）**：S1–S3/L2/先验飞轮全链真机通过（[77](77-exploration-s2-acceptance.md),已收口部分见 CHANGELOG）。§7 路线积累 5 条目标已达成（S1/S2+#3 记事本+#4 资源管理器 verified;#5 计算器以形态边界实证计入贡献,两改进候选在案）。剩余两项均为**条件触发**:①**UCB 统计剪枝**——等 pack quirks 积累出样本量后评估（v1 显式数据链已落地:quirk 片段+suggested_priors 注入,docs/42 §11.4）;②**跨进程 picker 形态观察**——Store 记事本另存为已证否（同进程 32770,轮 C 实证）,待其他 Store 应用出现 FileOpenPicker 类真跨进程形态时验证 RuntimeBroker 放宽判据
 
 ### 流程与集成
 
