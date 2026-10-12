@@ -17,6 +17,8 @@ quirks:
     note: --app "Zotero" 会被浏览器内 Zotero 网页签（如「Zotero | Your personal research assistant - Google Chrome」）歧义命中;主窗锚用「我的文库 - Zotero」（全新隔离 profile 的主窗口标题）。用户同时开着真实 Zotero 时仍会歧义，届时护栏会如实报 AMBIGUOUS，不静默选错。
   - id: workflow_migration
     note: 业务步骤及隔离资源声明均在 workflows;直接 flow-run --file 对应模板 --id 新任务ID，无需准备脚本或输入文件。独立文件及进程归属核验已接入。
+  - id: exploration_isolation
+    note: 隔离策略:**single-instance,隔离不可行**——-datadir 指向独立数据目录会转发给既有实例(不出新窗),探索写入直接走真实实例+测试条目协议(PACKS.md):标记名条目+前后 find 核对+白名单删除+residue-report 收尾;写验证已在真实库与独立测试库双轨完成。
   - id: import_readback_correction
     note: RIS 导入(剪贴板)与条目导出已在真实库实证闭环——导入后列表视图出现条目行,导出产物落盘且字段与导入一致,不能重放导入当证据,须核对列表视图与产物文件。
   - id: current_execution_contract

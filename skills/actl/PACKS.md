@@ -67,6 +67,26 @@ pack 是"给 agent 读的应用知识"——路线(routes)+ 怪癖(quirks)+ 信�
 修改实际步骤、定位或输入通道后，原 `verified` 路线改记 `manual`，由调用方逐步观察复验；原 `unverified` 保持不变。未修改的路线可保留历史状态。
 `verified_date` 保留历史真机日期，不能以静态检查日期刷新。注释说明本次修订与待复验状态，原场景证据不覆盖；完整新版复验后再按实际结果更新状态和日期。
 
+## 探索回写与隔离协议（2026-10-12 定型）
+
+**双轨分工,不统一**:引擎轨(`explore-writeback`)从 goal_met 的探索运行抽取路线片段(status 恒 unverified),调用方合并进 pack;**自由探索轨(agent 直接驱动 CLI 原语)的回写就是 agent 手工编辑 pack**——quirks 给 agent 读、stats/priors 给引擎用,两种知识形态不同,不互相格式化,不建自动写入通道(verified 迁移=人工复核+PR,红线)。
+
+**隔离策略前置声明**:探索开工前先读 pack 的隔离声明,不现场试错。quirk 形式登记(不新增结构字段):
+
+```yaml
+  - id: exploration_isolation
+    note: 隔离策略:single-instance 应用 -datadir/-profile 会转发给既有实例,隔离实例开不出来——直接走真实实例+测试条目协议;写验证已在真实库与独立库双轨完成。
+```
+
+已知形态:`datadir 可隔离`(记可用的参数形态,如反斜杠要求)/`profile 可隔离`/`single-instance 隔离不可行`(直接声明走真实实例协议)。
+
+**真实实例探索协议**(隔离不可行时,须用户明确授权;2026-10-12 Zotero 轮全程实证):
+1. 产物(测试条目/测试文件)用可识别标记名,动作前后各一次 `find` 核对出现与消失;
+2. 写入走最稳通道(`type --verify-value`),产物核验走 `verify-file --discover`(过滤器补扩展名陷阱);
+3. 清理走应用内白名单动词(删除确认框按 pack quirk 定位),完成后 `find` 空返回核实;
+4. 收尾 `residue-report` 全量核对崩溃框残留,与任务前基线做差集;
+5. 清理失败如实报,不静默放弃测试产物。
+
 ## 模板
 
 ```yaml

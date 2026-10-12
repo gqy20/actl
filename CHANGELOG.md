@@ -7,7 +7,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`set-value --verify-value`（与 type 读回核验对齐）**：Value pattern 直写后在原控件读回核验（同实例身份复核、2s 轮询、换行折叠精确比较，绝不重放写入），成功 envelope 带 `value_verified:true`。**已知边界如实入册（docs/06 §5.2）**：provider 背书的系统对话框 Edit（公共另存文件名框类）读回恒空——`--verify-value` 诚实失败而非假通过，那类目标走 `type --verify-value`（键盘路径读回可达）；空白读回不等于写入丢失。
+- **`verify-file --discover <通配>`（产物发现断言）**：`--path` 为目录时取匹配锚定通配（仅 `*`、大小写不敏感、跨点号）的 mtime 最新文件断言，envelope 带 `discovered` 实名——保存对话框按类型过滤器补扩展名（输入 `.csl.json` 落盘 `.csl.json.bib`，Zotero 导出轮实证），预设精确名断言会静默落空；无匹配报 `ASSERTION_FAILED`（io_kind=no_match），与"文件可能稍后出现"同语义、参与 5s settle 窗（晚到产物被等到，契约测试覆盖）。
+
 ### Documentation and validation
+
+- **探索模式接口缝隙收口（2026-10-12 分析轮,P1/P2 落地）**：PACKS.md 新增「探索回写与隔离协议」——①双轨分工显式化:引擎轨 writeback 片段 vs 自由探索轨 agent 手工编辑 pack,两种知识形态不互相格式化,不建自动写入通道（verified 迁移=人工复核红线不变）；②隔离策略前置声明（quirk 形式,不新增结构字段）+ 真实实例探索协议五步成文（标记名产物/前后 find/白名单清理/find 空返回/residue-report 差集）;zotero.yml 以 `exploration_isolation` quirk 首个示范（single-instance 隔离不可行,实测 -datadir 转发给既有实例）。SKILL.md 增补:PowerShell 裸 `@eN` 被 splat 语法吞掉须加引号（实测两次踩坑）。AGENTS.md 验收脚本纪律增第 8 条:产物断言用发现不用预设名。
 
 - **Zotero 导入导出真实库闭环（2026-10-12,用户本地实例授权轮——ROADMAP 应用深化条目关闭）**：剪贴板 RIS 导入→条目行出现在列表视图→条目右键「导出条目…」(菜单项在主窗 UIA 树内 MenuItem,非独立 HWND)→格式窗(Zotero 自有窗,id:format-menu 默认停在**上次使用的格式**——装 Better BibTeX 时默认 bib)→系统另存对话框(独立进程,文件名 Edit id:1001)→**产物落盘字段与导入一致**。三条通道事实入 pack:①系统另存对话框文件名 Edit 的 get value 读回恒空(通道失明),写入走 `type --paste --verify-value`;②写入后保存按钮 STALE_REF(对话框回流重排),文件名内容保留,重 snapshot 后点新 ref;③**Windows 按保存类型过滤器补扩展名**(输入 `.csl.json` 选 bib 类型落盘 `.csl.json.bib`)——产物后缀与格式类型必须成对核对,首轮"文件未出现"实为后缀误判。测试条目经 Delete→「移动到回收站」确认框清理,find 空返回核实;`export_csl_json` 路线保存段换用实证通道,`dynamic_refs` 写入验证范围扩至真实库。
 - **腾讯会议 draft-date 键盘路线复验转 verified（2026-10-12,多模态会话——ROADMAP 应用深化子项关闭）**：视觉判读首页(自绘树 91 元素全无名 Group,UIA 无锚——多模态模型直接从截图定位「预定会议」入口 1421,977 物理点击,应用再无视觉轮依赖)→预定窗口 `schedule_meeting::ScheduleMeetingDialog` UIA 全在场(186 元素:主题/开始日期 QDateEdit/时间/时长/成员/会议室全可定位)→ctrl+a+paste+tab 键盘路线复验:开始日期 2026/10/12→**2026/10/15 精确替换+verify 读回确认**。`change_schedule_date` 路线 manual→**verified**;腾讯会议条目从 ROADMAP 应用深化整条移出。探测/安装/别名/bootstrap 交接四件此前已收,本条为该 pack 最后一块拼图。
