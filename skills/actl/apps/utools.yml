@@ -1,22 +1,17 @@
-# actl 应用档案 pack(pack_format: 1)—— uTools 启动器
-# 知识来源:docs/80-record-acceptance.md 改写重放轮(2026-10-04 真机六轮
-# 005-010,run demo-rewrite-010 全链 11 步 completed)+ 识图对比诊断
-# (uTools_paste/keystroke 效果对照)。Electron 应用,a11y 树对定位不可见。
 pack_format: 1
 name: utools
 display: uTools 启动器
-launch: uTools           # 裸名不可解析(App Paths 无注册);用 actl launch --wait-window uTools <exe全路径> 唤起,实测 %LOCALAPPDATA%\Programs\utools\uTools.exe
+launch: uTools           # 裸名不可解析(App Paths 无注册);用 actl launch --wait-window uTools <exe全路径> 唤起,常见路径 %LOCALAPPDATA%\Programs\utools\uTools.exe
 window: "uTools"
 app_version: "uTools 5.x(Electron)"
 verified_date: 2026-10-04
-verified_env: Win11 zh-cn(docs/80 改写重放轮,run demo-rewrite-010)
+verified_env: Win11 25H2 (build 26200) zh-cn
 quirks:
   - id: paste_does_not_filter
     note: >-
-      搜索框不吃粘贴(发现 #7,识图对比实证):ctrl+v 只生成关键词标签、
-      不驱动模糊筛选——结果列表保持默认全集,回车命中的是默认首项
-      「文件搜索」而非目标应用。文本输入必须逐键真实击键(press,与
-      手敲同通道);识图实证 jishi 逐键后记事本橙色高亮居首。
+      搜索框不吃粘贴:ctrl+v 只生成关键词标签、不驱动模糊筛选——结果
+      列表保持默认全集,回车命中的是默认首项「文件搜索」而非目标应用。
+      文本输入必须逐键真实击键(press,与手敲同通道)。
   - id: a11y_tree_invisible
     note: >-
       snapshot/find 全不可见(树呈 6 个空 Pane);焦点可达——focus-report
@@ -32,15 +27,13 @@ quirks:
   - id: focused_typing_channel
     note: >-
       搜索框文本输入用 type focused: <词> --app uTools(焦点元素寻址,
-      docs/06;逐字键盘通道单次注入,5 字符实测 916ms,识图实证筛选被
-      驱动、记事本居首高亮)——比逐键 press 快约一个数量级;元素读取
+      逐字键盘通道单次注入)——比逐键 press 快约一个数量级;元素读取
       用 get focused: --property name(焦点可达,树不可见)。
   - id: query_persistence
     note: >-
-      查询内容跨隐藏/唤起持久——重放前必须清空(发现 #9:backspace
-      按数清不净残留;全选删除幂等:press ctrl+a → press delete,空态
-      全部无副作用)。空查询时窗口收缩为 ~116px 高(仅搜索栏),窗口
-      高度可作空态探针。
+      查询内容跨隐藏/唤起持久——重放前必须清空(backspace 按数清不净
+      残留;全选删除幂等:press ctrl+a → press delete,空态全部无副作用)。
+      空查询时窗口收缩为 ~116px 高(仅搜索栏),窗口高度可作空态探针。
   - id: key_name_esc
     note: 键名是 esc 不是 escape(错误表达式直接 PROTOCOL 拒绝)。
 routes:

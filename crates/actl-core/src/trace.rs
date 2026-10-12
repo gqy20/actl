@@ -1,7 +1,7 @@
-//! stderr 阶段打点(`ACTL_TRACE=1` 启用):慢环境归因仪器。
+//! stderr 阶段打点(`ACTL_TRACE=1` 启用):慢现场归因仪器。
 //!
 //! stdout 契约不变(ADR-002)——trace 只进 stderr,禁用时零输出。
-//! 用途:慢日把"命令总耗时"分解到引擎阶段(窗口解析/唤醒/树遍历/L4/pattern),
+//! 用途:慢现场把"命令总耗时"分解到引擎阶段(窗口解析/唤醒/树遍历/L4/pattern),
 //! 与 envelope 的 duration_ms/wake_ms/waited_ms 构成完整观测面:
 //! envelope 字段 = 机器消费的常态数据;trace = 人类诊断的按需旁路。
 //! env 只在进程内读一次(OnceLock,同 timing.rs 纪律)。

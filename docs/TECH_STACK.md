@@ -1,6 +1,6 @@
 # TECH_STACK · 技术选型规格
 
-版本:v0.1 · 日期:2026-09-26
+版本:v0.2
 定位:本文是**执行层规格**(用什么、怎么配);选型论证(为什么 Rust、为什么不是 C#/Go/Python)见 [04-tech-decision.md](04-tech-decision.md)。
 
 ---
@@ -28,24 +28,19 @@ computer_cli/
 
 分层原则:`actl-core` 不 import 任何 Windows crate → 协议层可在任何平台单测/契约测试;`actl-uia` 是唯一接触 COM 的地方,脏活全部圈死在这一个 crate。
 
-新增 actl-flow：YAML 协议、纯同步状态机与持久化，不依赖 Windows；CLI adapter 复用原子 dispatch。
+actl-flow：YAML 协议、纯同步状态机与持久化，不依赖 Windows；CLI adapter 复用原子 dispatch。
 serde-saphyr 与标准文件锁要求的 MSRV 已同步根 Cargo.toml；实际工具链仍只在 rust-toolchain.toml 锁定。
 文件锁利用 OS 进程退出释放，不增加 unsafe、async 或后台服务。发布顺序增加 actl-flow → actl-cli。
 
 ## 3. 依赖清单
 
-2026-10-05 用户授权 MCP 适配服务（docs/82）：新增边界协议依赖 `rmcp`（官方 Rust SDK，跟 3.x stable，feature 最小集 server），**scope 仅 `actl-mcp` crate**；tokio 等为其传递依赖，`cargo tree -p actl-core/actl-cli` 不可见。随授权明确**预算口径**：核心执行路径（core/uia/flow/cli/browser）直依赖 ≤9 规则不变；边界适配 crate 的协议依赖在本表单独登记，传递依赖不腐蚀核心。协议层不手写（用户裁定：依赖数量不构成手写协议的理由——手写=自造维护债）。**实现落地（同日，轮 1-2）**：actl-mcp 实际直接依赖 rmcp 3.5（server + transport-streamable-http-server）、axum 0.8（HTTP 壳承载 Bearer/Origin 中间件）、tokio 1（rmcp 既成运行时显式化：process/signal）、getrandom 0.4（256-bit 配对 token 熵源）、clap 4.5（本 crate 自有，非 workspace 共享——workspace 无 clap 声明）；serde/serde_json 沿 workspace。actl-mcp 不依赖任何 actl workspace crate（纯薄壳，协议边界编译器强制）。
+本表是新增依赖的**唯一登记处**(AGENTS 硬规则 6)。预算口径与授权边界:
 
-2026-09-30 用户授权详情页使用 TypeScript + WebView2：增加 webview2-com 0.39.1（MIT），直接 Rust 依赖总数上限及实际数量为 9。该库沿用 windows 0.62，不引入 async/tokio；COM 回调与现有 Win32 消息泵集成，仅 actl-uia 接触 unsafe。TS 页面使用 pnpm 管理 TypeScript/Vite 开发工具，零前端运行时库；锁文件入库，Node/pnpm 仅构建与预览需要，发布嵌入本地静态页面、依赖机器已有 Evergreen WebView2。原生状态条、全局急停与所有授权/恢复校验继续由 Rust 执行。
-
-2026-09-29 前台交接：signal/foreground 的 unsafe 限于查询并持有执行进程句柄、核对同目录 actl.exe 路径与请求 PID、调用 AllowSetForegroundWindow；RAII 关闭句柄，不使用 ASFW_ANY、不注入 Alt、不改变系统前台锁。沿用已有 windows 依赖。
-客户端 handoff 的动作租约核验显示端 PID/版本/租约，在最外层动作退出时通过同一原生 API 归还资格；不授予任务权限。foreground 消息沿用有界同步 IPC，版本提升为 v9。
-
-2026-10-02 用户授权浏览器 CDP 通道 v1（docs/72）：新增 `actl-browser` crate 与 tungstenite（=0.29，仅 `handshake` feature，同步阻塞 IO，无 TLS/async）；直接 Rust 依赖 8/9（上限内）。只实现 Target/Runtime/Page/Browser 白名单域——cookie 读取域构造性不可达是安全边界而非功能取舍。stdio 继承守卫复用既有 `windows` 依赖（actl-uia 新增 `Win32_System_Console` feature）。
-
-2026-09-28 浏览器接入原型：`prototypes/browser` 使用 Python 同步 Playwright 1.54.0，
-以 uv 项目单独管理。复用本机已安装环境进行验证，不加入 Rust workspace/发布包；Rust 外部直接依赖仍为 7，
-另登记 1 个可选原型直接依赖。Python/浏览器为原型运行前提，无新增 Rust async/tokio 或常驻服务。
+- **核心执行路径**(core/uia/flow/cli/browser)直依赖 ≤9(现 9,见下表);边界适配 crate 的协议依赖单独登记,传递依赖不腐蚀核心。
+- **用户已授权的预算例外**:①WebView2 显示层(+`webview2-com`,仅 actl-uia 详情窗口;TS/pnpm 仅构建期,发布嵌入本地静态页面);②MCP 适配 crate(+`rmcp`/`axum`/`tokio`/`getrandom`,**仅 actl-mcp**——不依赖任何 workspace crate,crate 边界编译器强制;协议层不手写=用户裁定:依赖数量不构成手写协议的理由)。
+- **浏览器 CDP 通道**(用户已授权):`actl-browser`+`tungstenite`(仅 handshake,同步阻塞 IO);只实现 Target/Runtime/Page/Browser 白名单域,cookie 读取域构造性不可达(安全边界非功能取舍,docs/72 §8)。
+- 前台交接 unsafe 限于:查询并持有执行进程句柄、核对同目录 actl.exe 路径与请求 PID、调用 AllowSetForegroundWindow(RAII 关闭,不用 ASFW_ANY、不注入 Alt、不改前台锁);动作租约核验显示端 PID/版本/租约并在动作退出时归还资格。
+- 原型 `prototypes/browser`(Python/Playwright,uv 项目单独管理)不入 workspace/发布包。
 
 | 用途 | crate | 版本策略 | 备注/备选 |
 |---|---|---|---|
@@ -54,7 +49,7 @@ serde-saphyr 与标准文件锁要求的 MSRV 已同步根 Cargo.toml；实际�
 | UIA 高层封装 | `uiautomation`(**0.25,M0 评估期**:actl-uia 的 dev-dep,供 examples/probe 使用) | 评估结论(M1 采用或自写薄封装)写入 [spike-findings](spike-findings.md) |
 | CLI | `clap`(derive) | 4.6 | 子命令即契约;help 文本与 `commands` schema 从 doc comment 同源生成(06 §3.5) |
 | CDP websocket | `tungstenite` | =0.29(仅 handshake) | actl-browser 专用；同步阻塞 IO 无 tokio(ADR-001 兼容)；白名单域外不实现(安全边界,docs/72 §8) |
-| MCP 协议 | `rmcp`(官方) | =3.5 | **仅 actl-mcp**(边界适配,ADR-001 修订)；server+streamable-http-server 最小 feature；协议层不手写(2026-10-05 授权,docs/82) |
+| MCP 协议 | `rmcp`(官方) | =3.5 | **仅 actl-mcp**(边界适配,ADR-001 修订)；server+streamable-http-server 最小 feature；协议层不手写(用户裁定,docs/82) |
 | MCP HTTP 壳 | `axum` | 跟 0.8 stable | 仅 actl-mcp:承载 StreamableHttpService + Bearer/Origin 中间件 |
 | MCP 熵源 | `getrandom` | 跟 stable | 仅 actl-mcp:256-bit 配对 token(纯安全 API 无 unsafe) |
 | 序列化 | `serde` + `serde_json` | 跟 stable | envelope 唯一出口 |
@@ -66,13 +61,13 @@ serde-saphyr 与标准文件锁要求的 MSRV 已同步根 Cargo.toml；实际�
 | 进程/系统 | `sysinfo` | 评估 | 仅 launch/list 用;若够用则直接 windows-rs,少一个依赖 |
 | 汇总 | — | 上限以 [AGENTS.md](../AGENTS.md) 硬规则 6 为准 | 本表是新增依赖的**唯一登记处** |
 
-2026-09-29 全量 PowerShell 迁移登记：新增唯一外部直接依赖 zip 8.2.0（MIT，禁用默认特性，只开启 deflate-flate2-zlib-rs），用于 OOXML 只读检查与发布归档；外部直接依赖去重总数为 8。XML 使用既有 windows crate 的 Windows.Data.Xml.Dom，禁用 DTD/外部实体并限制深度；进程查询使用原生 Win32/WMI。相关 COM/WinRT/句柄 unsafe 仅位于 actl-uia：WMI COM 与进程句柄按 RAII 释放；WinRT 使用一个进程生命周期 MTA 租约，与 windows-rs 缓存工厂的生命周期一致，避免连续调用时缓存失效崩溃。不注入输入。开发测试工具复用 workspace 依赖，不增 async 或 shell 解释器。
+OOXML 只读检查与发布归档共用 `zip`(禁默认特性,仅 deflate-flate2-zlib-rs);XML 走 windows crate 的 Windows.Data.Xml.Dom(禁 DTD/外部实体,深度 ≤128);进程查询用原生 Win32/WMI(COM/句柄 RAII 释放;WinRT 持一个进程生命周期 MTA 租约,与 windows-rs 缓存工厂生命周期一致避免缓存失效崩溃)。
 
 ## 4. 架构决策记录(ADR)
 
 | # | 决策 | 理由 |
 |---|---|---|
-| ADR-001 | **桌面命令路径同步（core/uia/flow/cli/browser 不引入 async/tokio）；async 仅允许出现在边界适配 crate（actl-mcp），crate 边界由编译器强制**（2026-10-05 修订,原文「同步代码,不引入 async/tokio」） | 原理由对本修订依然成立:COM/UIA 同步模型、CLI 毫秒级生命周期——修订护的是桌面命令路径,不是给网络服务上锁;边界 crate 定界见 docs/82 §3.3 |
+| ADR-001 | **桌面命令路径同步（core/uia/flow/cli/browser 不引入 async/tokio）；async 仅允许出现在边界适配 crate（actl-mcp），crate 边界由编译器强制**（修订自原文「同步代码,不引入 async/tokio」） | 原理由对本修订依然成立:COM/UIA 同步模型、CLI 毫秒级生命周期——修订护的是桌面命令路径,不是给网络服务上锁;边界 crate 定界见 docs/82 §3.3 |
 | ADR-002 | **stdout 只输出 JSON envelope,一切日志/诊断走 stderr**(例外条款:`--help/--version` 元命令走人类文本,见 docs/06 §3.5) | stdout 是机器契约,必须零污染;agent 与测试可放心管道 |
 | ADR-003 | **`windows` crate 全依赖锁同一版本** | 该 crate 版本间类型不互通,是 Rust Windows 生态头号坑;用 workspace 统一版本 + CI 检查 |
 | ADR-004 | **单一 `CtlError` 枚举,thiserror 派生,`code()` 映射错误码表** | 错误码是协议的一部分(PRD FR6),映射必须集中一处、可测试 |
@@ -123,95 +118,27 @@ CI(GitHub Actions,`windows-latest`):`cargo xtask gate`(file-lines 单文件行�
 
 ## 8. 与既有文档的关系
 
-独立预览使用既有 Win32/UIA/GDI 依赖，unsafe 仅在 actl-uia 的 preview_window 模块：创建/销毁本次窗口、消息派发、只读窗口检查及绘制；不注入输入、不持有桌面授权。所有原生窗口由 RAII 清理，无新增依赖或常驻服务。
-
-Phase 2 输入监听冗余使用既有 windows 依赖的 Raw Input 注册、消息窗口和计时器，
-unsafe 限定在 actl-uia 的显示程序模块。原生资源由专用线程创建并释放，接收活动但不记录输入内容。
-GetRawInputData 仅向对齐的 RAWINPUT 栈缓冲区读取；校验返回长度、头部长度、设备来源与类型后读取对应 union 的附加标记，不保存键值或坐标。无法识别的事件保守计为外部输入。
-历史清理限频使用标准库文件锁，间隔为 60 分钟；显示端独立后台线程执行清理，前台资格转交与授权审计不在 UI 回调中扫描历史目录。没有新增直接依赖、async 或外部常驻服务。验收见 [44](44-phase2-acceptance.md)、[66](66-application-readiness.md)。
-
 - 选型**论证**(语言对比、冷启动数据、为什么不是 C#):[04-tech-decision.md](04-tech-decision.md)
 - 命令面与协议**内容**: [06-design-blueprint.md](06-design-blueprint.md)
 - 工期与行数:[05-implementation-estimate.md](05-implementation-estimate.md)
 
+## 9. unsafe 豁免与实现边界登记
 
-## 显示层 v2 实现登记（2026-09-27）
+AGENTS 硬规则 5 的登记处。**共同不变量**(适用本节全部条目,不逐条重复):unsafe 仅存在于 `actl-uia`(含其 bin/signal 与 tests);COM/句柄/GDI 对象 RAII 释放,失败路径同样清理;回调最小化(只写调用栈内 Vec/原子计数,不持指针、不做回调内 IO)且低级 hook 必 CallNextHookEx;不注入输入、不激活窗口、不授予权限(诊断探针同规);除边界 crate actl-mcp 外零 async/常驻服务。
 
-零新增直接依赖。`actl-core::{activity,signal_session,state}` 保持纯 Rust，心跳使用
-标准线程与 channel，不引入 async/tokio。`actl-signal` 拆为 model/paint/overlay/shell。
-unsafe 仍仅在 actl-uia：新增 display_support 用于互斥锁探测、截图隐藏确认和窗口排除；
-feedback 的物理焦点读取及原生显示模块的 GDI/消息泵/透明窗口操作沿用该 crate 豁免。
-所有 GDI 对象归还后释放，标记窗口销毁时停止定时器；无全局输入 hook。
+| 模块(actl-uia 内) | unsafe 范围 | 关键边界 |
+|---|---|---|
+| display_support / paint | 互斥锁探测、截图隐藏确认、窗口排除;Direct2D/DirectWrite/DXGI/WIC 绘制与预乘 BGRA 逐像素透明 | GDI 对象归还后释放,销毁停定时器 |
+| display_gate | 显示端生命周期:CreateProcessW 禁句柄继承(GUI 子系统,避免常驻子进程持管道) | 不自动授予桌面权限 |
+| signal(popup/controls/perimeter/shell) | SetWindowSubclass、DPI 字体、layered window、显示器枚举与四边像素条、--replace 进程同步+WM_CLOSE 有界等待 | 无全局输入 hook;每屏仅存窄边像素 |
+| handoff(signal) | 非激活提示窗口、KBDLLHOOKSTRUCT/MSLLHOOKSTRUCT 低级 hook、有界 SendMessageTimeout 查询 | 回调只递增原子序号;RAII 卸载;grant 只在显示进程内存 |
+| foreground | SetForegroundWindow 单次请求+核验实际前台,AllowSetForegroundWindow 归还资格 | 不注入 Alt、不放宽前台锁;已在前台不重复请求 |
+| preview_window | 自有预览窗口创建/销毁、消息派发、只读窗口检查、绘制 | 不注入输入、不持桌面授权 |
+| evidence | WMI/进程句柄、ZIP/OOXML、Windows.Data.Xml.Dom | XML 禁 DTD/外部实体,深度 ≤128 |
+| native_windows / observation | EnumWindows 同步回调、FindAllBuildCache/TreeWalker 直调、数组 Length/GetElement | 不跨调用缓存元素;负长度拒绝为 INTERNAL;枚举错误传播不伪装空列表 |
+| 输入监听(Raw Input) | 注册、消息窗口、计时器、GetRawInputData 对齐缓冲读取 | 校验长度/来源/类型后读;不存键值坐标;不可识别事件保守计外部输入 |
+| history 清理 | std 文件锁,60 分钟限频,显示端后台线程 | 前台资格转交与审计不在 UI 回调扫描历史 |
 
-状态条精细绘制复用 windows crate 的 Direct2D / DirectWrite / Dxgi Common feature，
-不新增直接依赖。WIC 软件渲染输出预乘 BGRA，UpdateLayeredWindow 提交逐像素透明度；
-COM 与 DIB/DC 生命周期仅位于 actl-uia 的 paint 模块，原生调用需要该 crate 的 unsafe 豁免。
+诊断探针(tests,默认 ignore 不进 CI):provider_probe(MTA/COM 客户端创建与只读查询、可比较 CUIAutomation8 与句柄缓存)、桌面根身份探针(≤16 直接子元素缓存身份,不读标题)、逐节点 TreeWalker 探针(≤256 项,DPI 对照仅临时切线程 PMv2 并恢复)——均不设超时、不调动作模式、不激活窗口,结果只存阶段/身份/错误。观察观察层(observation_query 等)与生产共用同一 MTA 客户端,不跨调用缓存,不以缓存当授权或长期身份依据。
 
-显示就绪协议 v3 仍使用文件租约与 std 轮询，不新增依赖。desktop 模块使用 UIA 身份和 Win32
-窗口状态 API 保存/恢复布局；signal/icon 生成各原生尺寸的预乘 BGRA 图标，不引入外部资源代码。
-CLI 增加命令后，clap 调试构建超过 MSVC 默认 1 MiB 栈保留；build.rs 为 actl 预留 4 MiB，
-页面按需提交。已有 CLI 启动/契约测试覆盖此前栈溢出复现。
-显示端为 Windows GUI 子系统；自动启动使用 CreateProcessW 禁止句柄继承，避免常驻子进程持有
-调用者管道而令 PowerShell 等待。该原生启动只位于 actl-uia/display_gate，按既有 unsafe 豁免执行。
-
-操作历史与任务报告使用 actl-core 的 std 文件 IO + 已有 serde_json，零新依赖、零 unsafe。
-`history_retention` 仅使用 std 扫描与删除候选判定，按需 trace 的阶段汇总不包含内容。
-默认 ignore 的只读 profile 复用生产扫描并替换删除回调，不写真实清理标记或恢复数据。
-每调用独立 JSONL，避免跨进程共享追加流；写入处清理，不增加后台服务。
-存储失败用 stderr 诊断；显式归档命令返回统一错误 envelope。保留与容量边界见 docs/06 §7.6。
-
-本轮显示补充仍复用现有 Win32 依赖：popup 的 SetWindowSubclass 保留静态文本原生可访问角色，
-仅跳过重复绘制；controls 的字体随 DPI 更新并在销毁时释放。shell --replace 使用进程同步句柄、
-WM_CLOSE 和有界等待完成正常替换；句柄在成功/失败路径均释放。以上 unsafe 仅位于 actl-uia。
-
-屏幕边缘提示复用 actl-uia 的原生 layered window 与 paint 的预乘 Alpha 提交函数，无新增依赖。
-perimeter 内 unsafe 用于显示器枚举、各屏 DPI、窗口生命周期与绘制；枚举回调只同步写入调用栈内 Vec，
-窗口失败时清理已创建部分，隐藏/退出/截图均销毁。每屏仅存四条窄边像素，不分配全屏动画缓冲。
-
-窗口基线复用现有 windows 依赖：`actl-uia/native_windows` 的 unsafe 仅用于 EnumWindows
-同步回调及读取 HWND 的原生属性。回调 LPARAM 指向调用栈中存活的 Vec，不保留指针，
-不取得窗口所有权、不发送消息、不更改前台。原生枚举错误向上传播，不伪装为空列表。
-
-手动观察诊断 `actl-uia/tests/provider_probe.rs` 复用现有依赖，默认 ignore，不进入 CI 桌面操作。
-unsafe 仅用于 MTA/COM 客户端创建、只读查询与数组转换、前台及输入 tick 元数据读取；
-可比较 CUIAutomation/CUIAutomation8 和最小/句柄缓存，不设置超时、不调用动作模式、
-不激活窗口或授予权限。结果只保存阶段、原生身份和错误，不保存键值、坐标或窗口正文。
-
-窗口观察在单次调用内复用现有 UIAutomation 客户端、RawView 条件与 UICacheRequest。
-`window_metadata` 使用既有安全封装：先读标题，仅对有标题的元素批量刷新 Class/PID/HWND；
-窗口及挂靠弹窗的句柄/类型从本次 FindAllBuildCache 返回值读取，必需缓存字段失败向上传播。
-不跨调用缓存元素、不把缓存当作授权或长期身份依据，不新增依赖、unsafe 或超时策略。
-默认 ignore 的缓存一致性用例在已有窗口核对实时值、RuntimeId 与原生进程实例，
-不注入输入、不恢复窗口、不创建业务资源；纯逻辑回归仍进入普通门禁。
-
-`actl-uia/observation_query` 在同一 MTA 内直调 FindAllBuildCache、数组 Length/GetElement，
-以区分提供程序查询与转换阶段；复用既有 windows 依赖，unsafe 仅在该模块，
-COM 数组和元素按现有智能接口所有权释放，不传递裸指针、不额外读取属性，不返回部分树。
-负长度拒绝为 INTERNAL，索引由成功读取的非负 i32 长度限定。
-开发工具的默认 ignore 捕获用例只派生自有 CLI 执行一次 list-windows，复用现有 std 进程留证，
-30 秒到期仅终止该只读 CLI，原始日志保留；该期限不是生产 UIA 超时策略。
-新增桌面根身份探针的 unsafe 同样只在 actl-uia 测试中：GetDesktopWindow、前台与输入 tick
-读取、同一 MTA 内的根对象和 COM 数组读取。最多采样 16 个直接子元素的缓存身份，不读标题，
-不激活或注入输入。开发工具使用相同 30 秒进程留证器约束自有探针，保留逐阶段 JSONL；
-缓存模式通过 ACTL_ROOT_PROBE_CACHE 显式选择 handle/metadata，无默认兜底；
-取根方式/缓存属性对照仅用于诊断，不切换生产客户端、授权或查询路线。
-
-逐节点桌面探针在同一 MTA 内直调 TreeWalker 的直接子节点/同级节点 BuildCache，
-逐项刷新证据，最多 256 项；成功的空 COM 指针表示遍历结束，失败 HRESULT 原样传播，
-非空返回接口由 windows 智能指针持有。DPI 对照仅临时切换测试线程 PMv2 并恢复。
-上述 unsafe 只在 actl-uia 测试中，不注入输入；TreeWalker 不替代生产批量查询。
-显示端修复探测使用 std 线程与有界 channel，单任务在途，消息线程只轮询结果；
-流程版本、停止代次及结果时效共同限制裁决复用。边缘窗口仅在屏幕几何变化时重建，
-色调更新重绘像素，隐藏使用 ShowWindow；窗口随显示进程退出释放。无新增依赖。
-
-
-桌面交接复用现有 std + serde_json + windows，无新增依赖。纯授权逻辑位于 actl-core/handoff。
-actl-uia/bin/signal/handoff 的 unsafe 用于原生非激活提示窗口和低级输入 hook：回调仅读取
-系统在回调期提供的 KBDLLHOOKSTRUCT/MSLLHOOKSTRUCT，递增原子序号并始终 CallNextHookEx，
-不持有指针、不做回调内 IO、不屏蔽输入；RAII 卸载 hooks。客户端仅用有界 SendMessageTimeout
-查询，不跨进程传递指针。window_ready 的 unsafe 仅诊断/恢复/核验目标 HWND，不绕过前台限制。
-显示 v5 强制新旧两端兼容；grant 只在显示进程内存，磁盘请求不是授权。
-
-window_ready 的原生激活使用 SetForegroundWindow 单次请求并核验实际前台；已在前台不重复请求。unsafe 仍限于 actl-uia，不注入 Alt、不放宽 Windows 前台限制，输入控件焦点仍由原护栏核验。
-
-应用验证迁移：verify-file/verify-owner/verify-closed 使用 actl-uia/evidence 原生 Win32/WMI、ZIP 与 XML 实现，详见 §3 与 docs/61。开发工具集中在 actl-devtools，由 xtask 转发；gate 仍只在 xtask 定义。CLI 输出重定向到独立文件，超时只结束本次启动的 CLI 子进程，不结束 GUI；不能据超时推断动作未送达。
+actl-core 侧(零 unsafe):activity/signal_session/state 用 std 线程+channel;操作历史与任务报告 std 文件 IO+serde_json,每调用独立 JSONL,写入处清理。CLI:build.rs 为 actl 预留 4 MiB 栈(clap 命令树超 MSVC 默认 1 MiB);devtools 由 xtask 转发,gate 单点在 xtask;CLI 输出重定向独立文件,超时只结束本次启动的 CLI 子进程,不据超时推断动作未送达。

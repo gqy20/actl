@@ -1,27 +1,22 @@
-# 2026-10-11 首建:资源管理器应用档案。来源:collect spec 真机验收轮(600 文件
-# fixture 三处否证+600/600 全收,docs/06 §3.4/CHANGELOG)+ ROADMAP 长期观察项
-# (虚拟化 provider 侧行为实证 2026-10-07)+ 锚定 smoke 轮(hwnd 锚标题漂移寻址)。
-# 待真机轮补验:地址栏读取的具体 automation_id(调研登记过 view_1012 形态,未
-# 现场核实不写死)与保存框路径交接链——探测后回填路线。
 pack_format: 1
 name: explorer
 display: 文件资源管理器
 launch: explorer.exe
 window: "文件资源管理器"
-app_version: "Win11 24H2 内置"
+app_version: "Win11 25H2 (build 26200) 内置"
 verified_date: 2026-10-11
-verified_env: Win11 zh-cn(2026-10-11 collect fixture 轮 + 2026-10-07 虚拟化 A/B 轮)
+verified_env: Win11 25H2 (build 26200) zh-cn
 quirks:
   - id: virtualized_list_provider_side
-    note: 文件列表虚拟化是 provider 侧行为(双模式各见 294 元素,输出逐字节一致);ListItem 不物化,L4 ItemContainerPattern::FindItemByProperty 可精确命中未物化条目(61 文件实测);collect 全量收集已实证(600 文件目录 600/600 全收,空连两轮收敛)。三处否证入册——ItemContainer 枚举模式只盖物化窗假报耗尽、滚动位置信号提前一页误报、起始位置依赖须复位到顶(docs/06 §3.4)。
+    note: 文件列表虚拟化是 provider 侧行为;ListItem 不物化,L4 ItemContainerPattern::FindItemByProperty 可精确命中未物化条目;collect 全量收集可用(空连两轮收敛)。三条边界——ItemContainer 枚举模式只盖物化窗会假报耗尽、滚动位置信号提前一页误报、起始位置依赖须复位到顶(docs/06 §3.4)。
   - id: dual_list_ambiguity
     note: 文件窗内恒有两个 List(「项目视图」内容列表 + TabListView 容器壳),role:List 必 AMBIGUOUS——用序数直选 role:List#1(项目视图,内容列表);collect/scroll/extract 同理。
   - id: close_by_hwnd_only
-    note: explorer.exe 是 shell 进程(持任务栏/桌面),close-window --pid 会拒绝属安全巧合——一律按唯一标题或精确 hwnd 关;其窗口标题含完整路径(E:\...\dir - 文件资源管理器),路径变则标题变,hwnd 锚不随标题漂移(2026-10-11 实证)。
+    note: explorer.exe 是 shell 进程(持任务栏/桌面),close-window --pid 会拒绝属安全巧合——一律按唯一标题或精确 hwnd 关;其窗口标题含完整路径(E:\...\dir - 文件资源管理器),路径变则标题变,hwnd 锚不随标题漂移。
   - id: navigation_pane_docked
-    note: 导航窗格(automation_id:100,Tree)是常驻停靠面板非弹窗——弹层门禁已降噪不误拦(2026-10-07 修复实证);窗口双 List 结构下 snapshot 建议带 --skeleton。
+    note: 导航窗格(automation_id:100,Tree)是常驻停靠面板非弹窗,不触发弹层门禁;窗口双 List 结构下 snapshot 建议带 --skeleton。
   - id: address_bar_pending_probe
-    note: 地址栏可读(路径交接链零件,调研登记 automation_id 呈 view_1012 形态)+另存/打开对话框的文件名 Edit 可填——具体 id 待现场探测核实后回填路线,不凭登记写死;保存框路径交接整链待真机轮。
+    note: 地址栏可读(调研见 automation_id 呈 view_1012 形态,未现场核实不写死)+另存/打开对话框的文件名 Edit 可填——具体 id 待现场探测核实后回填路线;保存框路径交接整链待真机轮。
 routes:
   - id: open_dir_and_collect_files
     description: 打开目录并全量收集文件列表(collect 有界收集,零注入)
@@ -37,9 +32,9 @@ routes:
     steps:
       - ["find", "--name", "{file_name}", "--role", "listitem", "--app", "{window}"]
   - id: explore_navigate_back
-    description: 点击导航栏后退按钮返回上一目录——探索回写(run explorer-route4-02,2026-10-11)
+    description: 点击导航栏后退按钮返回上一目录（探索回写）
     status: verified
-    verify: "目标断言:wait --window 'tmp - 文件资源管理器' --timeout 8000(标题回到父目录);人工复核通过(2026-10-11 用户授权):探索轮 goal_met actions=1 一发命中 id:backButton 真实导航+重放 replay-explorer-back-01 全步 verified attempts=1"
+    verify: "目标断言:wait --window 'tmp - 文件资源管理器' --timeout 8000(标题回到父目录)"
     steps:
       - ["click", "id:backButton", "--app", "{window}"]
       - ["wait", "--window", "tmp - 文件资源管理器", "--timeout", "8000"]

@@ -88,7 +88,7 @@
 
 **环境准备（010/011 失败因素的逐项清零）**：actl/actl-signal/WINWORD 零进程（10-07 三僵尸自然消亡后残件经 doctor --clean 清退）、四构建产物锁全 free、显示端 0.2.1 匹配就绪（旧 0.2.0 伴生端按 WM_CLOSE 用户通道优雅换新，停止代次不受影响）。
 
-**执行形态**：首轮 `flow-run` 在 open/ownership 完成后被 UIA 区段看门狗杀（exit 125——冷启动 Word 慢日形态：desktop_children 6.7s/物化 6.1s 后单次 UIA 调用挂超 20s；**已知族的当日实证，非新缺陷**）；focus 步未派发、文档零污染，`ACTL_UIA_WATCHDOG_MS=60000`（既有 knob）`flow-resume` 续跑——热 Word 后全链一次通过：focus 8s / fill-1 27s / fill-2 29s / fill-3 29s / save 6s / save-disk 22ms / close 4s / verify-styles 28ms，resume 段总 207s（capture.walk 24.1s 在放宽预算内）。**fill-2/fill-3 干净通过坐实 010/011 卡点=环境污染而非代码缺陷**；五层修复合力验证：默认行走模式（物化观察+live 动作链，无 ACTL_WALK_LEGACY 逃生舱）下 focus 步无 NOT_ACTIONABLE。
+**执行形态**：首轮 `flow-run` 在 open/ownership 完成后被 UIA 区段看门狗杀（exit 125——冷启动 Word 慢现场形态〔当时称"慢日",2026-10-12 重定性:污染期残留主嫌,见 AGENTS〕：desktop_children 6.7s/物化 6.1s 后单次 UIA 调用挂超 20s；**已知族的当日实证，非新缺陷**）；focus 步未派发、文档零污染，`ACTL_UIA_WATCHDOG_MS=60000`（既有 knob）`flow-resume` 续跑——热 Word 后全链一次通过：focus 8s / fill-1 27s / fill-2 29s / fill-3 29s / save 6s / save-disk 22ms / close 4s / verify-styles 28ms，resume 段总 207s（capture.walk 24.1s 在放宽预算内）。**fill-2/fill-3 干净通过坐实 010/011 卡点=环境污染而非代码缺陷**；五层修复合力验证：默认行走模式（物化观察+live 动作链，无 ACTL_WALK_LEGACY 逃生舱）下 focus 步无 NOT_ACTIONABLE。
 
 **产物与核验**：`%LOCALAPPDATA%\actl\flows\note-typo-012`（冻结计划+state）+ `flow-resources/note-typo-012/note-typo-012.docx`（13,737B）；flow 内 verify-styles 步完成（docx-styles 逐段断言）+ 独立复跑 `verify-file --kind meta` verified:true；Word 优雅关闭（close 步 verify-closed 过、进程清单归零）。如实边界同 009：ownership/save-disk/verify-styles 三步 v=false 为语义缺省非失败；handoff 全程无待决弹层（疑似显示端常驻预授权 Standing 生效，本轮未代点）。
 

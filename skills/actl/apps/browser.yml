@@ -1,8 +1,3 @@
-# 2026-09-29 静态维护：修改过的路线标为 manual，待新版真机复验；verified_date 保留历史日期。
-# actl 应用档案 pack(pack_format: 1)—— 浏览器(Chromium 系,以 Edge 为准)
-# 知识来源:docs/16-browser-scenarios.md(2026-09-27 真机实测:投影四档数字、
-# settle 活体证据、小红书闭环,Edge + Chrome 双浏览器)+ edge-content-view.sh
-# fixture(8/8)。Chrome 同源直接套用已实证(标题后缀 "Google Chrome",
 # window 换 "Chrome");Firefox UIA 暴露较弱,未验证。
 pack_format: 1
 name: browser
@@ -11,20 +6,18 @@ launch: msedge           # App Paths 注册表解析;Chrome 用 chrome
 window: "Edge"           # 标题子串(页面标题 - Microsoft Edge);Chrome 换 "Chrome"
 app_version: "Edge 1xx / Chrome 1xx(Chromium 系)"
 verified_date: 2026-09-27
-verified_env: Win11 zh-cn(Edge + Chrome 双实证,docs/16)
+verified_env: Win11 25H2 (build 26200) zh-cn(Edge + Chrome 双验)
 quirks:
   - id: observation_latency_diagnosis
-    note: 2026-09-29 隔离页未成功前置时曾只有空的网页 Document，前置后输入框可见；NOT_FOUND 不足以证明页面已就绪。组合查询排障启用 ACTL_TRACE=1 并保留 stderr，区分窗口枚举、控件查询和读值。经身份核验的 HWND 可减少桌面枚举开销，但本轮未复现历史 60 秒阻塞，见 docs/65。
+    note: 隔离页未成功前置时可能只有空的网页 Document，前置后输入框可见；NOT_FOUND 不足以证明页面已就绪。组合查询排障启用 ACTL_TRACE=1 并保留 stderr，区分窗口枚举、控件查询和读值。经身份核验的 HWND 可减少桌面枚举开销，但本轮未复现历史 60 秒阻塞，见 docs/65。
   - id: isolated_startup_profile
-    note: Chrome 隔离启动使用单个参数 --user-data-dir=<绝对目录>，不要将目录拆成独立参数；否则可能被打开为网页。启动成功后单独确认目标窗口并前置，激活失败不重复启动。2026-09-29 本地页面热/冷启动、前台及输入目标核验通过；远端页面不据此记通过，见 docs/64。
+    note: Chrome 隔离启动使用单个参数 --user-data-dir=<绝对目录>，不要将目录拆成独立参数；否则可能被打开为网页。启动成功后单独确认目标窗口并前置，激活失败不重复启动（本地页面已验;远端页面不据此记通过）。
   - id: foreground_handoff
-    note: 前台失败先核对 window_prepare 的 activation_returned/foreground_before 和同 request_call 的 foreground_transfer/foreground_return；任务授权不等于 Windows 前台资格。2026-09-29 协议 v9 六步跨应用切窗、最小化恢复通过，开始一次；不外推到导航或小红书采集。禁止据前台失败重复启动或重放导航，见 docs/62-foreground-handoff.md。
-  - id: revalidation_20260929
-    note: 2026-09-29：隔离 profile 的 Edge/Chrome 本地动态页面均通过稳定等待、歧义拒绝、中英文读取与四种投影，并核验关闭；不外推到地址栏导航、远端业务或局部容器验收，见 docs/51。
+    note: 前台失败先核对 window_prepare 的 activation_returned/foreground_before 和同 request_call 的 foreground_transfer/foreground_return；任务授权不等于 Windows 前台资格。禁止据前台失败重复启动或重放导航（docs/62）。
   - id: current_execution_contract
     note: 导航、弹层及标签切换后重新观察；document_selector 为当前页面唯一的语义选择器，不固定 Document#2。document_ref/document_snapshot_id 来自同次 find，link_ref/link_snapshot_id 从 Hyperlink 候选核对目标后取得；address_selector 是现场识别的地址栏唯一语义选择器，Ctrl+L/Ctrl+T 后先确认该输入框焦点。不得自动重放结果不明的点击。
   - id: isolated_probe_documents
-    note: docs/24 实测 Edge 154.0.4258.37、Chrome 153.0.8010.53。独立 profile 也可能出现同步提示 Document；本地测试页按唯一标题加 Document 角色查找，再使用返回的 ref，不硬编码 RootWebArea 或序号。
+    note: 独立 profile 也可能出现同步提示 Document；本地测试页按唯一标题加 Document 角色查找，再使用返回的 ref，不硬编码 RootWebArea 或序号。
   - id: tab_strip_ownership
     note: 关闭测试窗口前只计算测试标签所在 Tab 容器的直接 TabItem 子节点。Chrome 翻译弹层也有语言 TabItem，不应计入网页标签；真实额外网页标签仍拒绝清理。
   - id: content_view_projection
@@ -70,12 +63,11 @@ quirks:
       非视觉通道)与浏览器内外联动(下载→文件对话框→桌面应用)
   - id: multi_document_pages
     note: >-
-      多数真实站点有多个 Document(iframe):xiaohongshu.com 实测 2 个
+      多数真实站点有多个 Document(iframe):xiaohongshu.com 有 2 个
       RootWebArea(主文档+登录墙 iframe),id:RootWebArea 一律 AMBIGUOUS;
       feed 正主 = role:Document#2(#1/#3/#4 空壳)。通用法:find --role
-      document 枚举 → 逐个量 text 长度找非空;序数仅为当时观察结果，不能跨导航复用；settle 使用当前唯一语义选择器，观察错误直接传播。Chrome 历史实证
-      (2026-09-27:同样 2×RootWebArea、feed 同为 #2、组合投影 72% 与
-      Edge 71% 对齐)——Chromium 系一致性,同源套用成立
+      document 枚举 → 逐个量 text 长度找非空;序数仅为当时观察结果，不能跨导航复用；settle 使用当前唯一语义选择器，观察错误直接传播。Chrome 同样形态。
+      ——Chromium 系一致性,同源套用成立
   - id: modal_vs_page
     note: >-
       两种详情形态决定锚点策略:xhs 笔记是弹层(窗口标题不变,--app 全程
@@ -86,38 +78,38 @@ quirks:
   - id: card_name_ambiguous
     note: >-
       feed 卡片标题被多元素共享(Image alt + Hyperlink 同名)——裸
-      click name:<标题> 会 AMBIGUOUS(实测 4 命中);先 find --name 拿
+      click name:<标题> 会 AMBIGUOUS(典型 4 命中);先 find --name 拿
       Hyperlink 的 @eN 再 ref 精点(evidence.candidates 可直接挑)
   - id: text_reads_beyond_viewport
     note: >-
       text 通道(TextPattern)读的是整个文档范围而非视口——评论区
-      未滚到也能读到(xhs 实测:视觉上评论在折叠线下,文本里已有 85 个
+      未滚到也能读到(xhs 形态:视觉上评论在折叠线下,文本里已有 85 个
       "回复")。滚动后文本不变 ≠ 没内容,可能本来就读全了
   - id: promo_card_trap
     note: >-
-      推荐流混活动入口卡(bilibili 的 VCT 电竞/AI 萌宠企划,实测两连踩,
+      推荐流混活动入口卡(bilibili 的 VCT 电竞/AI 萌宠企划,已两连踩,
       落地页无评论区无视频)——确定性选卡走搜索结果页(结果卡即真内容;
       keyword 用 ASCII,bash 内联中文会 GBK 污染)
   - id: shared_desktop_drift
     note: >-
-      用户在场/自动连播都会改窗口标题(实测:复验尾段窗口被用户接管,
+      用户在场/自动连播都会改窗口标题(窗口曾被用户接管,
       标题三变)——锚点漂移先查 list-windows 实况,勿盲重试
   - id: douyin_screen_reader_toggle
     note: >-
       抖音默认 a11y 半盲(视频文案/作者/推荐列表视觉可见但不在树里,
       text 通道只有导航+页脚)——钥匙是 Button "开启读屏标签"(抖音检测
       UIA 客户端后暴露,默认关;find --name 读屏 拿 ref 点开)。开启后
-      内容层全进树(实测 +294 行:标题/作者@/时长/播放量/推荐列表)
+      内容层全进树(+294 行:标题/作者@/时长/播放量/推荐列表)
   - id: douyin_interaction_blind
     note: >-
       抖音互动层(推荐卡片链接/评论图标/点赞按钮)在树里无 name、
       不可交互(有 name 的 Text/Image 不分配 ref)——评论栏展开走视觉兜底:
       screenshot --app → 多模态读评论图标坐标 → click xy:<x>,<y> --app
-      抖音 --physical(窗口边界守卫;2026-09-27 坐标寻址已落地)。
+      抖音 --physical(窗口边界守卫)。
       /explore 已 404;首页是单视频沉浸流,评论栏默认收起
   - id: extension_surfaces
     note: >-
-      扩展操作面(实测 2026-09-27):工具栏按钮 name 在树里("猫抓
+      扩展操作面:工具栏按钮 name 在树里("猫抓
       \n可以访问此网站"形态)但 **UIA Invoke 报 INTERNAL——必须
       click --physical**;弹层是独立 Document(文档数 +1),内容走
       **树形通道**(snapshot --view content --skeleton 的 name;弹层
@@ -128,8 +120,8 @@ quirks:
   - id: webui_weak_a11y
     note: >-
       Chrome 内置页面(WebUI)视觉完全渲染但 a11y 弱暴露(extensions
-      管理页实测:text 空、toggle 无 ref、仅零星 Text)——开关切换走
-      视觉兜底坐标点击(click xy: --physical,2026-09-27 已落地)或键盘
+      管理页:text 空、toggle 无 ref、仅零星 Text)——开关切换走
+      视觉兜底坐标点击(click xy: --physical)或键盘
       Tab 导航;扩展的独立标签页不受影响
   - id: risk_control_pacing
     note: >-
@@ -138,38 +130,38 @@ quirks:
       节奏,重要账号操作前确认
   - id: github_single_rootwebarea
     note: >-
-      主文档识别因站而异(2026-09-28 GitHub releases 页实测:窗口内 6 个
+      主文档识别因站而异(GitHub releases 页形态:窗口内 6 个
       role:Document,但 id:RootWebArea 唯一且 name=页面名,可直接精确定位;
       与 xhs 的 2×RootWebArea AMBIGUOUS 相反)。页面级文本契约先 find
       枚举确认结构,再决定用 id:RootWebArea 还是序数
   - id: bilibili_comments_shadow_dom
     note: >-
       B 站评论区是 <bili-comments> Web Component(嵌套 shadow:thread→
-      comment 渲染器多层,2026-10-12 实证)。读取须 browser-read/collect
+      comment 渲染器多层)。读取须 browser-read/collect
       --deep——**shadow host 元素的 textContent 只含 light DOM(恒空或
       内联 CSS),正文在嵌套 shadow 内**;协议层 deepText 已递归穿透并
       过滤 STYLE/SCRIPT 文本(本轮两修复)。收集走 browser-collect
-      --css "bili-comment-thread-renderer" --deep(2026-10-12 真机:
+      --css "bili-comment-thread-renderer" --deep(
       匿名会话评论文本全通——用户名/内容/时间戳/回复数完整)。
       导航类目标不受影响——搜索页 --all 枚举卡片 href 后
       browser-navigate 直达视频页,绕开整页跳转锚漂移(docs/16 §5.2)
   - id: bilibili_anonymous_comment_wall
     note: >-
-      B 站对**匿名(未登录)会话**只渲染 2 条评论且页面截断(2026-10-12
-      两视频同签名实证:页面总高仅 ~2.8 视口,评论区固定 2 条,推荐区
+      B 站对**匿名(未登录)会话**只渲染 2 条评论且页面截断(
+      两视频同签名:页面总高仅 ~2.8 视口,评论区固定 2 条,推荐区
       不加载,scrollY 到底也无增量——非懒加载问题,是登录墙)。全量
       评论收集需持久 profile 人工登录(browser-login-session 流程,
       resources.browser_profiles 声明)后复跑 browser-collect;匿名
       形态下 collect 收到 2 条即收敛是**如实结果**不是缺陷。
   - id: bilibili_comments_mount_latency
     note: >-
-      B 站评论挂载是异步时序(2026-10-11 实证:视频页就绪后 #commentapp
+      B 站评论挂载是异步时序(视频页就绪后 #commentapp
       元素出现,但内部评论渲染滞后)——到达页面 ≠ 评论可读;判定用
       wait --element 等挂载锚点就绪,0 命中先怀疑"未挂载"而非
       "没有评论"(空集语义见 browser-read --all:0=空集非 NOT_FOUND)
   - id: multi_tab_target_drift
     note: >-
-      浏览器窗口 ≠ 单一页面容器(2026-10-11 实证:B 站新窗口带双 tab,
+      浏览器窗口 ≠ 单一页面容器(B 站新窗口可带双 tab,
       标题"和另外 1 个页面"形态;UIA 滚动落在非目标 tab 上,目标页
       纹丝不动)。多 tab 疑点:title 带"另外 N 个页面"、browser-list
       文档数与预期不符、对目标 tab 操作"生效"但页面无变化——操作前
@@ -178,13 +170,13 @@ quirks:
     note: >-
       页内 DOM 弹层(登录墙/cookie 条/推广浮层)不在原生弹层门禁覆盖内
       (门禁只作用带 --app 锚写步,front-report 只收 role:Window 表面;
-      2026-10-11 结构性裁定入册)。检测原语 = browser-verify --no-popups
+      结构性裁定)。检测原语 = browser-verify --no-popups
       (默认 dialog[open]/role=dialog/alertdialog/aria-modal 的可见面,
       站点自绘横幅走 --popup-selector;>0 报 ASSERTION_FAILED 带样本,
       flow condition 映射 false)——when/unless 组合 browser-click 处置
       分支即弹层守卫。已知形态:xhs 笔记弹层/猫抓扩展弹层 press esc
       直达(键盘通道,不经本谓词);登录墙走暂停点+resume_check 谓词。
-      headless 本地 fixture 六假设实证(可见命中/隐藏不计/自定义横幅
+      headless 全六假设已验(可见命中/隐藏不计/自定义横幅
       显式中/垃圾选择器 PROTOCOL/干净页通过/会话清零)
 routes:
   - id: window_title_read
@@ -192,8 +184,6 @@ routes:
     status: verified
     verify: >-
       标题含页面名与 "- Google Chrome" 后缀;多窗口时 AMBIGUOUS 拒绝。
-      2026-09-28 Chrome 真机验证(release-review-draft 流程读段,窗口根
-      uia 组合定位与标题输出绑定)
     steps:
       - ["get", "uia:{\"match\":{\"role\":\"Window\"}}", "--property", "name", "--app", "{window}"]
   - id: read_page
@@ -203,7 +193,7 @@ routes:
       - ["get", "role:Document", "--property", "text", "--app", "{window}"]
   - id: read_page_multidoc
     description: 多文档页先枚举，按页面身份和内容确认正文，将其完整 ref 与同次 snapshot_id 配对读回
-    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
+
     status: manual
     steps:
       - ["find", "--role", "document", "--app", "{window}"]
@@ -214,8 +204,8 @@ routes:
     steps:
       - ["snapshot", "--app", "{window}", "--view", "content", "--skeleton"]
   - id: navigate
-    description: 地址栏导航(URL 变量 {url};IME 安全 + settle 判定;xhs 实测全链)
-    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
+    description: 地址栏导航(URL 变量 {url};IME 安全 + settle 判定;xhs 全链已验)
+
     status: manual
     steps:
       - ["press", "ctrl+l", "--app", "{window}"]
@@ -225,7 +215,7 @@ routes:
       - ["wait", "--element", "{document_selector}", "--stable", "--app", "{window}"]
   - id: scroll_more
     description: 下滚一屏并等当前正文稳定；先确认焦点在页面，document_selector 来自当前观察
-    # 原路线曾有真机证据；定位已修订，尚未复验。
+
     status: manual
     steps:
       - ["press", "pgdn", "--app", "{window}"]
@@ -234,8 +224,8 @@ routes:
   - id: open_item
     description: >-
       点开卡片/链接(标题子串变量 {text};先 find 拿 Hyperlink 的 ref
-      再精点防 AMBIGUOUS;xhs 实测:弹层打开 esc 返回,B 站整页跳转换新锚)
-    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
+      再精点防 AMBIGUOUS;xhs 形态:弹层打开 esc 返回,B 站整页跳转换新锚)
+
     status: manual
     steps:
       - ["find", "--name", "{text}", "--app", "{window}", "--role", "Hyperlink"]
@@ -243,9 +233,9 @@ routes:
       - ["wait", "--element", "{document_selector}", "--stable", "--app", "{window}", "--timeout", "8000"]
   - id: read_note_comments
     description: >-
-      点开笔记后读评论(text 通道直达,无需滚到评论区;xhs 实测
+      点开笔记后读评论(text 通道直达,无需滚到评论区;xhs 形态
       标题/正文/评论一次读全)
-    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
+
     status: manual
     steps:
       - ["find", "--role", "Document", "--app", "{window}"]

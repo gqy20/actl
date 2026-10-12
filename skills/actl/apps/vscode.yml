@@ -1,6 +1,3 @@
-# 2026-10-07：子树物化真机验证轮——Electron/Chromium provider 支持 Subtree 缓存物化(两模式 snapshot 输出逐字节一致),物化 ~1.4-1.5x(372 节点交错 A/B 中位);ACTL_WALK_LEGACY=1 为逐节点对照/回落。空 profile+资源管理器树约 372 节点,automation id 集中在 workbench.parts.*/status.*(与 within:id 路线吻合)。
-# 2026-09-29：新版 vscode-edit workflow 26/26 通过；未按原样执行的通用路线仍为 manual，verified_date 保留档案历史日期。
-# 来源: docs/24-application-adaptation-round1.md；docs/25-deep-edit-search-tests.md；docs/27-batch1-deep-tests.md。
 pack_format: 1
 name: vscode
 display: Visual Studio Code
@@ -8,93 +5,74 @@ launch: "{installed_executable}"
 window: "hwnd:{hwnd}"
 app_version: "1.139.0"
 verified_date: 2026-09-28
-verified_env: Windows 10.0.26200.0 zh-cn; independent user-data-dir; extensions disabled; force-renderer-accessibility
+verified_env: Win11 25H2 (build 26200) zh-cn; independent user-data-dir; extensions disabled; force-renderer-accessibility
 quirks:
-  - id: semantic_actions_20260929
-    note: 新隔离英文 profile 的 vscode-edit workflow 已通过 26/26，含跳转行、数字替换、两次文件切换、精确正文与正常关闭核验，见 docs/67。布局移动不应拒绝 UIA 语义动作；动作仍校验组件和原生宿主身份、enabled 并重新获取 Pattern。wait --stable 只比较内容，Invoke 后仍等业务结果。此验收不替代以下通用 ref 路线逐条实测。
+  - id: semantic_actions_verified
+    note: 隔离英文 profile 的 vscode-edit workflow 26/26 通过（跳转行、数字替换、两次文件切换、精确正文与正常关闭核验）。布局移动不拒绝 UIA 语义动作;动作仍校验组件和原生宿主身份、enabled 并重新获取 Pattern。wait --stable 只比较内容,Invoke 后仍等业务结果。
   - id: explicit_locale
-    note: 独立 profile 默认语言可能为英文。vscode-edit 首次打开和重开均传 --locale en，并在正文写入前核验 File 菜单就绪，固定使用内置英文控件；不能用旧中文窗口推定新 profile 的语言。
+    note: 独立 profile 默认语言可能为英文。首开与重开均传 --locale en，并在正文写入前核验 File 菜单就绪，固定使用内置英文控件；不能用旧中文窗口推定新 profile 的语言。
   - id: navigation_without_shortcuts
-    note: 跳转行点击 status.editor.selection 内部 Button，不能点击外层 Group 后假定生效；输入框和结果项等待稳定，Invoke 后等待状态栏目标行列出现，再精确核验。打开文件使用“打开快速访问”按钮；保存/撤消/恢复/替换使用菜单。菜单标签中的快捷键只是名称，不注入对应按键。组件连续四轮通过，完整流程结果见 docs/67。
+    note: 跳转行点击 status.editor.selection 内部 Button，不能点击外层 Group 后假定生效；输入框和结果项等待稳定，Invoke 后等待状态栏目标行列出现，再精确核验。打开文件用「打开快速访问」按钮;保存/撤消/恢复/替换用菜单。菜单标签中的快捷键只是名称，不注入对应按键。
   - id: explicit_editor_readiness
-    note: vscode-edit 首次打开与重开分别先等原生窗口、核对归属、确认前台，再等待具体文件的 Edit 内容稳定并核验完整 TextPattern。原 22 步扩展为 26 步，组合模板同步为 68 步；窗口标题出现不代表编辑器可输入，焦点仍由动作护栏逐次核验。实测见 docs/66。
+    note: 首开与重开分别先等原生窗口、核对归属、确认前台，再等具体文件的 Edit 内容稳定并核验完整 TextPattern。窗口标题出现不代表编辑器可输入，焦点仍由动作护栏逐次核验。
   - id: quick_open_and_replace_readiness
-    note: 文件切换通过“打开快速访问”按钮，等待文件输入框稳定后 ValuePattern 写入并读回，再在 quickInput_list 内激活唯一文件结果。查找/替换按容器 Window 精确名称限定两个 Edit 和按钮，等待输入框稳定、写值后精确核验。历史路线修订与恢复验收见 docs/66，本轮见 docs/67。
-  - id: workflow_live_20260929
-    note: 新 workflow 首轮完成 17/22；关闭后首次核验 NOT_ACTIONABLE，恢复后通过；转到行输入在 type 阶段失败并停在待核对，未重放写入。不能视为整轮通过，见 docs/58。
-  - id: workflow_migration_20260929
-    note: 业务步骤及隔离资源声明均在 workflows；直接 flow-run --file 对应模板 --id 新任务ID，无需准备脚本或输入文件。独立文件及进程归属核验已接入；新资源入口真机待复验，历史证据保留，见 docs/60。
+    note: 文件切换走「打开快速访问」按钮，等文件输入框稳定后 ValuePattern 写入并读回，再在 quickInput_list 内激活唯一文件结果。查找/替换按容器 Window 精确名称限定两个 Edit 和按钮，等输入框稳定、写值后精确核验。
   - id: resumable_verification
-    note: 2026-09-29，VS Code 1.139.1 的 scenarios/vscode-resume.ps1 持久化任务通过打开、单次输入与完整 TextPattern 读回；暂停后使用同一 flow ID 继续，不重跑准备脚本。此结论不覆盖磁盘保存和关闭，见 docs/55。workflows/vscode-resume.yml 现已承接桌面步骤和资源初始化，旧 PS 已删除；通用 verify-text.yml 本轮只读全文核验通过，新模板写入复验另见 docs/56。
+    note: 持久化任务支持暂停后同一 flow ID 继续，不重跑准备脚本（打开、单次输入与完整 TextPattern 读回已验;磁盘保存和关闭不在此结论内）。workflows/vscode-resume.yml 承接桌面步骤和资源初始化。
   - id: empty_text_pattern
-    note: 本机空编辑器 TextPattern 返回一个换行；不能据此推断非空文本也有附加换行。核验应先观察实际通道行为并精确比较完整结果，不使用包含匹配掩盖部分输入。
-  - id: revalidation_20260929
-    note: 2026-09-29：10 项编辑磁盘核验通过，但完整场景在关闭重开阶段中断；用户报告手动关闭。另用全新 profile 独立验证单次 close-window 后窗口与进程退出通过。命令面板等后半程未验收，见 docs/51。
+    note: 空编辑器 TextPattern 返回一个换行；不能据此推断非空文本也有附加换行。核验先观察实际通道行为并精确比较完整结果，不用包含匹配掩盖部分输入。
   - id: current_execution_contract
     note: command_input、command、input、find、replace、editor 的 ref/snapshot_id 分别来自各自 find，禁止互用；set-value 后精确比对 value。编辑器 type 是插入，不用 --verify-value 将整篇内容误当插入片段；保存仍按磁盘全文验收。输入后控件变化则重新观察，不重放写入。
   - id: multiple_edit_surfaces
     note: 文件编辑器与 Chat Input 都是 Edit。必须按文件名加角色定位，再取唯一 ref，不能对裸 role:Edit 输入。
   - id: insertion_not_replacement
-    note: type --paste 在当前选区或光标位置插入，不能假设覆盖全文。本轮在新打开临时文件的开头插入后保存，磁盘全文核验通过；会使用剪贴板。
+    note: type --paste 在当前选区或光标位置插入，不能假设覆盖全文;保存后以磁盘全文核验。会使用剪贴板。
   - id: edit_regression
     note: workflows/vscode-edit.yml 使用独立 profile 和临时文件，覆盖三轮中英文/符号输入、菜单撤销和重做、Ctrl+A 全文替换和关闭重开。每次保存均核验磁盘全文，重开另验编辑器 TextPattern；不能用文件标题作为保存证据。
   - id: v1141_extensions_disabled_notification
     note: >-
-      VS Code 1.141 隔离 profile + --disable-extensions 启动时弹 INFO 通知
-      "All installed extensions are temporarily disabled."（1.139 时代无此
-      通知，2026-10-11 模板轮实证；**reopen 后第二次实证——每次 launch 必
-      现，不是首次行为**）。**notice handler 自动处置已真机验收（2026-10-11
-      探针轮 vscode-notice-probe-01）**：声明 classification:notice +
-      name_contains "All installed extensions are temporarily disabled" +
-      click 'uia:{"match":{"role":"Button","name":"Clear Notification (Del)"}}'
-      ——门禁匹配→自动点击→复查清层→写步执行，全链 completed+verified。
-      实测处置面板按钮：Reload and Enable Extensions、Clear Notification
-      (Del)。**模板级声明受静态锚局限**：popup_handlers.app
-      是静态子串而模板 app 锚=${run.id}（每轮不同）——派生计划内声明需
-      run id 含约定前缀（探针用 vscode-notice），模板直挂待 spec（handler
-      支持输入引用，ROADMAP 在案）。
+      1.141 隔离 profile + --disable-extensions 启动必弹 INFO 通知
+      "All installed extensions are temporarily disabled."（每次 launch
+      必现,非仅首次）。处置面板按钮：Reload and Enable Extensions、
+      Clear Notification (Del)。notice handler 自动处置可用：声明
+      classification:notice + name_contains "All installed extensions
+      are temporarily disabled" + click 'uia:{"match":{"role":"Button",
+      "name":"Clear Notification (Del)"}}'——门禁匹配→自动点击→复查
+      清层→写步执行。popup_handlers.app 支持输入引用（`{input: ...}`）
+      可锚定 ${run.id} 动态窗锚。
   - id: find_widget_permanent_uia_surface
     note: >-
-      Find/Replace 面板是**常驻 UIA 表面**（2026-10-11 真机否证修正：
-      早先以为是暂时滞留——Close 点击后数分钟表面仍在树；ctrl+f 开关
-      周期后表面 text 从 "No results" 变 "1 of 1"——表面活着且永驻，
-      关闭只是视觉折叠）。三个后果：① `wait --gone` 对该表面必败
-      （曾被误加进 vscode-edit.yml find-replace 步，真机否证后撤销）；
-      ② 表面带 5 按钮 → front-report 报 unknown actionable 弹层 →
-      **弹层门禁挡住后续一切写步**（结构性死锁——与 Word 停靠导航窗格
-      误判同族，门禁降噪缺口第二实例，ROADMAP 升级在案）；③ 面板
-      关闭态下 Close 按钮报 target_disabled、set-value 同拒——但面板
-      active 时（ctrl+f 刚打开）控件可用。键盘通道（ctrl+f→esc）是
-      面板操作的正道；残面挡门禁的**声明通道已落地（2026-10-11 降噪
-      第二轮 popup_ignores，VS Code 主轮 v4 同现场 A/B 验收）**：flow
-      计划声明 popup_ignores [{app, name_contains:"Find / Replace"}]
-      即认领放行——词不符的其他弹层不受豁免。窗口重建仅在无声明通道
-      的旧二进制场景需要。
-  - id: companion_slowday_lease_expiration
+      Find/Replace 面板是**常驻 UIA 表面**（Close 点击后表面仍在树且
+      text 随开关在 "No results"/"1 of 1" 间变化——表面活着,关闭只是
+      视觉折叠）。三个后果：① `wait --gone` 对该表面必败;② 表面带
+      5 按钮 → front-report 报 unknown actionable 弹层 → 弹层门禁挡
+      后续一切写步（结构性死锁）——flow 计划声明 popup_ignores
+      [{app, name_contains:"Find / Replace"}] 即认领放行;③ 面板关闭
+      态下 Close 按钮报 target_disabled、set-value 同拒——面板 active
+      时（ctrl+f 刚打开）控件可用。键盘通道（ctrl+f→esc）是面板操作
+      的正道。
+  - id: companion_unresponsive_pollution_era
     note: >-
-      慢 UIA 日（每步调用 2-5.5s）放大一个模式：单次 flow-resume 的
-      累计执行时长超过 handoff companion lease 窗口 → companion_unresponsive
-      fail-closed 瞬断（2026-10-11 一轮 4 次，均在连续执行多步后发生，
-      非每步必断；每次显示端自恢复 responsive）。恢复路径稳定：核验
+      companion_unresponsive fail-closed 瞬断的恢复路径稳定：核验
       uncertain 现场（读磁盘/编辑器值）→ 幂等步直接 --retry-step 推进。
-      根因（lease 窗口 vs 慢日步长的适配）留专项，登记 ROADMAP。
+      机制是显示端消息泵 500ms SendMessageTimeout 往返（CHECK 类+1
+      重试）超时——不是"resume 累计时长超 lease 窗口"。历史事件全落
+      在僵尸污染期;干净现场复发才重新立项,方向=显示端 UI 线程被合法
+      工作阻塞（ROADMAP 工具链缺口③）。
   - id: keyboard_escape_channel
     note: >-
       press 的键名是 esc 不是 escape（PROTOCOL 会给别名提示）；全局键盘
       通道（press esc --app，不带 --target）走系统焦点不校验元素，VS Code
       编辑器聚焦时 esc 关 find 面板可靠；带 --target 的 press 严格断言
-      焦点元素——焦点在编辑器时对 find 输入框的定向 press 会被如实拒绝
-      （expected/current 证据），先用点击/键盘建立焦点再用。**focus 原语
-      真机验收（2026-10-11 探针轮）**：ctrl+f→esc（面板绕行）后
-      `focus <editor> --app`（UIA SetFocus+读回核验）建立编辑器焦点，
-      随后 `press ctrl+end --target <editor>` 断言式通过 + verify
-      focused:Edit ✓——建立（focus）与断言（press --target/focused:）
-      的分工链真机走通，正是 Find 面板滞留场景的补面。
+      焦点元素——焦点在编辑器时对 find 输入框的定向 press 会被如实拒绝,
+      先建立焦点再用。focus 原语（UIA SetFocus+读回核验,零键注入）建立
+      编辑器焦点后,press --target 断言式通过——建立（focus）与断言
+      （press --target）的分工链正是 Find 面板滞留场景的补面。
 routes:
   - id: navigate_by_controls
     description: 状态栏内部按钮打开行号框；快速访问按钮打开文件框；ValuePattern 写值并激活容器内唯一结果
     status: manual
-    verify: 行号 1、2、1、2 连续组件验证通过；完整业务验收见 docs/67。Invoke 后须等待目标行列，不立即将旧状态判为失败。
+    verify: Invoke 后须等待目标行列，不立即将旧状态判为失败。
     steps:
       - ["click", "uia:{\"match\":{\"role\":\"Button\"},\"within\":{\"id\":\"status.editor.selection\"}}", "--app", "{window}"]
       - ["wait", "--element", "{quick_input_selector}", "--stable", "--app", "{window}"]
@@ -105,9 +83,8 @@ routes:
       - ["wait", "--element", "{expected_caret_selector}", "--stable", "--app", "{window}"]
   - id: replace_owned_text
     description: 仅在归属明确的测试文件中替换；Ctrl+F 后 Esc 未能可靠返回待替换选区，改用显式替换面板
-    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
     status: manual
-    verify: 保存后磁盘全文精确等于预期；本轮验证数字替换。两个 ref 分别在各自写入前重新定位。
+    verify: 保存后磁盘全文精确等于预期;两个 ref 分别在各自写入前重新定位。
     steps:
       - ["click", 'uia:{"match":{"role":"MenuItem","name":"Edit"}}', "--app", "{window}"]
       - ["wait", "--element", 'uia:{"match":{"role":"MenuItem","name":"Replace Ctrl+H"}}', "--app", "{window}"]
@@ -130,7 +107,6 @@ routes:
       - ["snapshot", "--app", "{window}"]
   - id: edit_owned_file
     description: 仅用于已确认归属的临时文本文件；将 find 的唯一 ref 填入 editor_ref，并确认插入位置
-    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
     status: manual
     verify: 菜单保存后从磁盘读取临时文件，与预期全文精确比较（仅规范化换行）；失败保留证据
     steps:

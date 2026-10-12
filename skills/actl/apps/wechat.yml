@@ -1,7 +1,3 @@
-# 2026-09-29 静态维护：修改过的路线标为 manual，待新版真机复验；verified_date 保留历史日期。
-# actl 应用档案 pack(pack_format: 1)—— 微信 4.x(Windows 桌面版,Qt/mmui 界面体系)
-# 知识来源:wechat-ui-collector 项目(同作者)的 weixin-4x profile + 本机真机
-# 验证(2026-09-27:会话物理点击切换 ✓ 消息区物化 ✓ 输入草稿闭环 ✓,未测发送)
 pack_format: 1
 name: wechat
 display: 微信
@@ -14,7 +10,7 @@ quirks:
     note: 发送前核对明确授权、会话身份和完整草稿；发送后核对新消息及发送状态，输入框清空不是成功凭据。所有 *_ref 为完整 @eN，与对应 *_snapshot_id 成对；moments 来自发现页快照。bubble_selector/target 为现场唯一语义选择器；不支持快照绑定的命令执行前重新观察。physical 点击仍须显式参数，失败先核验是否送达。
   - id: physical_click_required
     note: >-
-      会话条目 UIA Invoke 返回 ok 但不触发导航(mmui/Qt 特性,实测)。范式(v2)——
+      会话条目 UIA Invoke 返回 ok 但不触发导航(mmui/Qt 特性)。范式(v2)——
       UIA 优先 + 物化验证 + 受控降级:先 click --expect element:id:chat_message_list
       (假成功会以 ASSERTION_FAILED 暴露,evidence.cause 区分"假成功"与"目标错误"),
       失败后先核对是否已切换会话及送达情况；只有确认未生效才评估显式 physical 路线(见 open_conversation_uia_first / open_conversation_physical)
@@ -27,7 +23,7 @@ quirks:
   - id: virtualized_messages
     note: 消息列表 mmui::RecyclerListView 虚拟化,4.1.x 无 Scroll pattern——滚动用物理滚轮兜底
   - id: input_value_readback
-    note: 输入框(id:chat_input_field)暴露 ValuePattern——paste 后 get --property value 读回逐字可用(实测);清草稿 = press ctrl+a + press delete(切勿回车,回车即发送)
+    note: 输入框(id:chat_input_field)暴露 ValuePattern——paste 后 get --property value 读回逐字可用;清草稿 = press ctrl+a + press delete(切勿回车,回车即发送)
   - id: moments_quirks
     note: >-
       朋友圈入口在发现页(快照后按 ref 精点,如 @e16);帖子 name=「作者 来源 正文 时间 类型·来源」复合文本;
@@ -44,7 +40,7 @@ quirks:
     note: >-
       右键菜单是 mmui 自绘,UIA 树不可见(find MenuItem 空)——菜单操作走视觉兜底:
       right-click 后 screenshot --app → 多模态读菜单项坐标 → click xy:<x>,<y>
-      --app 微信 --physical(窗口边界守卫;2026-09-27 坐标寻址已落地);
+      --app 微信 --physical(窗口边界守卫);
       自己消息的菜单无"引用"项(复制/转发/收藏/提醒/删除)
   - id: mention_object
     note: >-
@@ -58,7 +54,7 @@ quirks:
     note: 真实聊天应用——发送前必须读回输入框 value 并核对会话标题;严禁盲发
   - id: background_ops
     note: >-
-      两件套已产品化(2026-09-28)——wait --idle <ms>(输入空闲门，不证明人不在或已授权；查询失败为未知)+
+      两件套——wait --idle <ms>(输入空闲门，不证明人不在或已授权；查询失败为未知)+
       指针族 --no-activate(WS_EX_NOACTIVATE 后台点击,不抢前台,光标送回;
       键盘仍需前台)。采集/扫描类长任务 = wait --idle + --no-activate 点击;
       UI 驱动段与 wechat-ui-collector 并存时按 docs/09 §6.2 共享
@@ -76,7 +72,7 @@ routes:
     steps:
       - ["click", "id:session_item_{name}", "--app", "{window}", "--expect", "element:id:chat_message_list", "--timeout", "4000"]
   - id: open_conversation_physical
-    description: 打开指定会话(受控物理降级:UIA 假成功实证路线;打开后消息区才物化)
+    description: 打开指定会话(受控物理降级:UIA 假成功路线;打开后消息区才物化)
     status: verified
     steps:
       - ["click", "id:session_item_{name}", "--app", "{window}", "--physical"]
@@ -88,7 +84,7 @@ routes:
       - ["snapshot", "--app", "{window}"]
   - id: draft_message
     description: 输入框草稿 + 读回(不发送;发送前的人工核对材料)
-    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
+
     status: manual
     steps:
       - ["set-clipboard", "{text}"]
@@ -97,7 +93,7 @@ routes:
       - ["get", "id:chat_input_field", "--app", "{window}", "--property", "value"]
   - id: clear_draft
     description: 清空输入框草稿(ctrl+a + delete;绝不用回车——回车即发送)
-    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
+
     status: manual
     steps:
       - ["press", "ctrl+a", "--app", "{window}", "--target", "id:chat_input_field"]
@@ -110,7 +106,7 @@ routes:
       - ["click", "name:发送", "--app", "{window}", "--physical"]
   - id: moments
     description: 刷朋友圈(发现页中转;读取=快照 name 解析;滚动=物理滚轮,虚拟化懒加载需大步长)
-    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
+
     status: manual
     steps:
       - ["click", "name:发现", "--app", "{window}", "--physical"]
@@ -128,7 +124,7 @@ routes:
       - ["find", "--id", "session_list", "--app", "{window}"]
   - id: send_verified
     description: 发送前读回核对，再按绑定 ref 精点发送按钮并核验新消息；修订路线待复验
-    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
+
     status: manual
     verify: 发送前完整草稿与授权文本一致，确认目标会话；发送后核对该会话新增的目标消息和发送状态，不能仅凭输入框清空判成功。结果不明先观察，禁止重发。
     steps:
@@ -142,7 +138,7 @@ routes:
       - ["snapshot", "--app", "{window}"]
   - id: search_conversation
     description: 会话搜索(搜索框 Edit 聚焦后 paste;esc 退出)
-    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
+
     status: manual
     steps:
       - ["set-clipboard", "{query}"]
@@ -153,7 +149,7 @@ routes:
       - ["press", "escape", "--app", "{window}"]
   - id: send_file
     description: 发送文件(选择文件对话框:文件名 ComboBox 子 Edit paste 全路径 → Alt+O 确认)
-    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
+
     status: manual
     verify: Alt+O 前核对文件路径读回、文件归属与目标会话；之后核对本次文件消息、文件名/大小与发送状态。失败或不确定时保留现场，不重发。
     steps:
@@ -179,7 +175,7 @@ routes:
   - id: mention_member
     description: >-
       @人(群输入 @ → 选择器 UIA 可见按名点选;@引用是 U+FFFC 内嵌对象,Value 读回非纯文本;不发送)
-    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
+
     status: manual
     steps:
       - ["click", "id:chat_input_field", "--app", "{window}"]
@@ -189,7 +185,7 @@ routes:
       - ["click", "name:{member}", "--app", "{window}", "--physical"]
   - id: group_info
     description: 群信息面板(群名+成员数;深读成员列表用 wechat-ui-collector)
-    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
+
     status: manual
     steps:
       - ["find", "--name", "聊天信息", "--app", "{window}"]
@@ -198,7 +194,7 @@ routes:
       - ["press", "escape", "--app", "{window}"]
   - id: read_image_message
     description: 图片消息内容读取(UIA 失明兜底:截图+视觉模型;须先打开含图会话)
-    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
+
     status: manual
     steps:
       - ["snapshot", "--app", "{window}", "--skeleton"]

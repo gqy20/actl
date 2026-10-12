@@ -1,5 +1,3 @@
-# 2026-10-05 首建：记事本(Store 版)应用档案。来源:探索轮 explore-l2-notepad-input-zh
-# (中文 texts 走引擎自动 --paste 通道的真机首验)+ 本轮夹具清场的会话复活实证。
 pack_format: 1
 name: notepad
 display: 记事本(Windows 11 Store)
@@ -7,21 +5,21 @@ launch: notepad.exe
 window: "Notepad"
 app_version: "11.2607.14.0"
 verified_date: 2026-10-05
-verified_env: Windows 10.0.26200.0 zh-cn（2026-10-05 探索轮 goal_met + 重放证据见路线 verify 注）
+verified_env: Win11 25H2 (build 26200) zh-cn
 quirks:
   - id: launch_resolution
-    note: System32\notepad.exe 不存在(26200 移除),Store 版注册在 HKCU App Paths——`actl launch notepad.exe` 已可解析(2026-10-05 修复真机验证);bash 会话裸名 `notepad`(无 .exe)仍会被 Git usr/bin 存根抢解析(os error 193)。launch 选项必须写在程序名之前(trailing token 原样转发子进程,`--wait-window` 后置会被 PROTOCOL 守卫拒绝带指引);窗口就绪用 `wait --window` 分离确认。
+    note: System32\notepad.exe 不存在(26200 移除),Store 版注册在 HKCU App Paths——`actl launch notepad.exe` 可解析;bash 会话裸名 `notepad`(无 .exe)仍会被 Git usr/bin 存根抢解析(os error 193)。launch 选项必须写在程序名之前(后置 token 原样转发子进程,`--wait-window` 后置会被 PROTOCOL 守卫拒绝带指引);窗口就绪用 `wait --window` 分离确认。
   - id: session_restore_revival
-    note: 关窗 ≠ 清会话:窗口级 close 后重启会把 TabState/云同步的脏标签逐个复活(marker4/5/anchor-save/marker3/marker 链,文件已删仍复活)。破环 = 标签级 `ctrl+w` → 「不保存」(白名单清理动词)逐标签废弃,末标签后应用自然退出;勿 taskkill(AGENTS 禁令,会话复活更糟)。
+    note: 关窗 ≠ 清会话:窗口级 close 后重启会把 TabState/云同步的脏标签逐个复活(文件已删仍复活)。破环 = 标签级 `ctrl+w` → 「不保存」(白名单清理动词)逐标签废弃,末标签后应用自然退出;勿 taskkill(AGENTS 禁令,会话复活更糟)。
   - id: title_shape
-    note: 标题「无标题 - Notepad」,输入后「*<内容前缀> - Notepad」(脏星号+内容随输入变——hwnd 提取按 class "Notepad" 匹配,勿按标题精确匹配,同 docs/80 发现 #11)。稳定锚 = "Notepad" 后缀。
+    note: 标题「无标题 - Notepad」,输入后「*<内容前缀> - Notepad」(脏星号+内容随输入变)——hwnd 提取按 class "Notepad" 匹配,勿按标题精确匹配。稳定锚 = "Notepad" 后缀。
   - id: edit_area_channel
-    note: 编辑区 = `name:文本编辑器` role:Document,值读回走 `--property value`;中文输入必须 --paste 剪贴板通道(键盘通道中文 IME 不可靠,docs/09)——引擎 texts 原语已按内容判据自动注入(2026-10-05),手写步骤显式带 --paste。
+    note: 编辑区 = `name:文本编辑器` role:Document,值读回走 `--property value`;中文输入必须 --paste 剪贴板通道(键盘通道中文 IME 不可靠)——探索引擎 texts 原语已按内容判据自动注入,手写步骤显式带 --paste。
 routes:
   - id: explore_explore_l2_notepad_input_zh
-    description: 在记事本输入中文验收文本——探索回写(run explore-l2-notepad-input-zh)
+    description: 在记事本输入中文文本（探索回写）
     status: verified
-    verify: "目标断言:verify --value name:文本编辑器 探索验收中文 --property value --contains --app {window};人工复核通过(2026-10-11 用户授权):探索轮 goal_met 三重物理证据(值断言/标题送达/剪贴板残留)+重放 replay-notepad-input-01 全步 verified attempts=1"
+    verify: "目标断言:verify --value name:文本编辑器 探索验收中文 --property value --contains --app {window}"
     steps:
       - ["type", "name:文本编辑器", "探索验收中文", "--paste", "--app", "{window}"]
       - ["verify", "--value", "name:文本编辑器", "探索验收中文", "--property", "value", "--contains", "--app", "{window}"]

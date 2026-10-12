@@ -1,4 +1,3 @@
-# 来源：docs/50-deep-container-query.md，2026-09-29 当前已加载页面只读验证。
 pack_format: 1
 name: zcode
 display: ZCode
@@ -6,21 +5,21 @@ launch: "{installed_executable}"
 window: "hwnd:{hwnd}"
 app_version: "3.14.3.7762"
 verified_date: 2026-09-29
-verified_env: Windows 10.0.26200.0; existing user profile; stable depth-36 page and restored conversation exceeding depth 40
+verified_env: Win11 25H2 (build 26200); existing user profile; stable depth-36 page and restored conversation exceeding depth 40
 quirks:
   - id: startup_observation_changes
-    note: 启动过程完整树曾从 14 变为 605 节点；等待页面稳定并复查，不把加载中的输出差异当作削减证据。
+    note: 启动过程完整树可从 14 涨到 600+ 节点;等待页面稳定并复查,不把加载中的输出差异当作削减证据。
   - id: sidebar_scope
-    note: sidebar 是验证过的精确 AutomationId。局部 ref 独立编号，sidebar_ref 与 sidebar_snapshot_id 必须取同次局部快照。恢复历史超深会话后旧版仍预算拒绝，修复版前后局部 507 节点完整、身份与内容一致且 3 个绑定读回通过；完整树仍深度截断。虚拟化与 provider 重建仍待验证。
+    note: sidebar 是稳定的 AutomationId。局部 ref 独立编号,sidebar_ref 与 sidebar_snapshot_id 必须取同次局部快照;超深会话完整树仍会深度截断,用局部快照(修复版 507 节点完整、绑定读回通过)。虚拟化与 provider 重建未验证。
   - id: transient_observation_failure
-    note: 恢复会话首轮曾在 automation_id 读取时返回 STALE_REF，保留该轮失败；重新观察第二轮通过不改写第一轮结论。不能把观察失败当成元素不存在或盲目重放写操作。
+    note: 恢复会话首轮可在 automation_id 读取时返回 STALE_REF——保留失败结论,重新观察后再判;不能把观察失败当成元素不存在或盲目重放写操作。
   - id: output_measurement
-    note: 稳定页面完整 envelope 46023→39670 UTF-8 字节，减少约 13.8%；不是 token 数，也未观察到耗时改善。不能外推到其他页面。
+    note: 局部快照对稳定页面约省 14% envelope 字节(46023→39670)——是字节数不是 token 数,未观察到耗时改善,不外推到其他页面。
 routes:
   - id: observe_sidebar
     description: 读取已加载页面的侧栏并核验其中一个快照绑定引用
     status: verified
-    verify: 检查无截断；sidebar_ref 从本次元素列表选择，读回 name 与所选元素一致。实测前三个引用均通过。
+    verify: 检查无截断；sidebar_ref 从本次元素列表选择，读回 name 与所选元素一致。
     steps:
       - ["snapshot", "--app", "{window}", "--within", 'uia:{"match":{"id":"sidebar"}}', "--depth", "20", "--limit", "1000"]
       - ["get", "{sidebar_ref}", "--app", "{window}", "--snapshot", "{sidebar_snapshot_id}", "--property", "name"]

@@ -76,4 +76,4 @@ r1 运行保持 paused 于检查点(30 分钟时效届满后该 run 无法继续
 
 **读段联测通过（run release-review-07/08 前四步）**：launch(headless)→browser-list 产出会话句柄→`browser-read --css 'div[data-hpc] h2' --all --wait-for 2` 读最新 release 标题（elements[1]，探针实证：hpc 列表 CSR 异步渲染约 3s，索引 0=列表头 1=首个版本）→browser-close 会话治理。**两处模板修正入册**：GitHub 新版布局无 h1（标题=section 内 h1/h2 分层，latest 卡 h2）；open_word 的 launch 补 `/n`（无参数启动=开始屏幕，Document 不存在实证）；resume_check 反语义修正（缺席类前置不可用 verify 表达，删除）。
 
-**写段联测受阻（慢 provider 日，如实）**：write_header 注入未落地+验证断言失败——Word MSAA 桥物化拒答回落+14.8s 慢扫（docs/81 已知同族）。写段在 v1 时代即未跑通（§4 悬置），非改造点；模板已全修正，正常速度日重跑。探针教训入册：读源探测应先一次会话收齐时序与选择器再改模板（用户指正"先探索再改"——本轮前四轮 run 即违反此序，逐轮失败）。
+**写段联测受阻（慢现场,当时称"慢 provider 日",2026-10-12 重定性:主嫌为污染期残留,见 AGENTS 失败处置协议;Word 冷启 provider 慢属应用特定状态,如实）**：write_header 注入未落地+验证断言失败——Word MSAA 桥物化拒答回落+14.8s 慢扫（docs/81 已知同族）。写段在 v1 时代即未跑通（§4 悬置），非改造点；模板已全修正，干净现场重跑（后于 §4 通过）。探针教训入册：读源探测应先一次会话收齐时序与选择器再改模板（用户指正"先探索再改"——本轮前四轮 run 即违反此序，逐轮失败）。

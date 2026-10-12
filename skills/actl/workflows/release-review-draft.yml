@@ -1,17 +1,6 @@
 # yaml-language-server: $schema=../../schemas/flow-v1.schema.json
-# 业务流程:CDP 自有 headless 会话读公开仓库 Releases 页,在 Word 新文档
-# 生成核对草稿并落盘。
-# 改造史(2026-10-11,用户授权+两轮实证修正):
-#   v1=UIA 读用户已开 Chrome 页(私有仓库前置:用户登录态窗口);
-#   v2=持久 profile+登录暂停点——被两实证否决:actl 仓库私有(无登录态
-#   404)+Edge 新 profile 首启向导弹窗链(同步数据/翻译询问)污染现场;
-#   v3(本版)=公开仓库(gqy20/zotero_cli)+ephemeral+headless——零窗口
-#   零弹窗零登录,桌面只出现 Word;读源不依赖用户浏览器状态。
-#   v4(2026-10-11,release-review-09 实证):本机 Word「启动时显示开始屏幕」
-#   优先于命令行 /n——裸 /n 停在开始屏幕(深色主题下呈灰色,UIA 无
-#   Document),写步必然 NOT_FOUND。修复:resources 复制 seed.docx,launch
-#   /n 带文件参数结构性绕过开始屏幕,verify 收紧为 wait Document 物化门;
-#   文档已带路径,ctrl+s 变原地保存,另存为改 F12。
+# 业务流程:CDP 自有 headless 会话读公开仓库 Releases 页,在 Word 种子文档
+# 写入核对草稿并另存为落盘。全链记录见 docs/43。
 # 前置条件:
 #   1. 本机未打开其他 Word 窗口(launch 的窗口核验按标题子串匹配)
 #   2. 网络可达 github.com
@@ -19,25 +8,23 @@
 #   - type --paste 使用系统剪贴板,会覆盖当前剪贴板内容
 #   - 草稿保存为 actl-release-draft.docx:另存为对话框默认目录跟随被打开
 #     文档(即任务资源目录 ${run.dir}),同名覆盖——它是"当前核对状态",
-#     不是历史留痕,需要留痕请自行改名归档(release-review-10 实证)
+#     不是历史留痕,需要留痕请自行改名归档
 #   - 读段(前四步)只读且 headless 无窗口;写段从 open_word 检查点开始,
 #     需要 actl 显示端的人工开始授权
-#   - 私有仓库形态需要持久 profile+登录(v2 教训在案,真实需求出现再立)
+#   - 私有仓库形态需要持久 profile+登录(真实需求出现再立)
 version: 1
 name: 生成 zotero_cli 发布页核对草稿
 popup_handlers:
-  # 本机 Word 每开文档必弹「目录名无效 (N:\)」(word.yml quirk 实证)
-  # ——error 分类声明处置,引擎自动点 OK (id:2)
+  # Word 每开文档弹「目录名无效 (N:\)」(word.yml quirk)——error 处置,点 OK
   - app: Word
     classification: error
     name_contains: 目录名无效
     click: id:2
 popup_ignores:
   # F12 另存为对话框是 open_save_as 的产物、type_filename/confirm_save 的
-  # 输入目标——声明已认领表面,弹层门禁跳过(handlers 必须带 click 处置,
-  # 自产目标表面走 ignores 放行;release-review-10 popup_pending 实证)。
-  # 对话框锚步(--app 另存为)的门禁定位也用本声明认领(owned #32770 对话
-  # 框是独立标题窗口,Word 锚的 ignore 匹配不到它)
+  # 输入目标——自产目标表面走 ignores 放行(handlers 必须带 click 处置);
+  # 对话框锚步(--app 另存为)的门禁定位也用它认领(owned 32770 对话框是
+  # 独立标题窗口,Word 锚的 ignore 匹配不到它)
   - app: Word
     name_contains: 另存为
   - app: 另存为
@@ -126,7 +113,7 @@ steps:
   - id: open_save_as
     title: 打开另存为对话框(文档已带任务目录路径,ctrl+s 会原地保存,用 F12;
       锚定对话框自身标题——owned 32770 类对话框是独立前台窗口,Word 主窗锚的
-      type 前台守卫结构上无法对齐,release-review-10 实证)
+      type 前台守卫结构上无法对齐)
     run:
       command: press
       args: ['f12', '--app', 'Word']

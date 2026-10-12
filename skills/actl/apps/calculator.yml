@@ -1,5 +1,3 @@
-# 2026-09-29 静态维护：修改过的路线标为 manual，待新版真机复验；verified_date 保留历史日期。
-# 来源：docs/21-workflow-evaluation.md；docs/22-adaptation-test-infrastructure.md 输入方式对照。
 pack_format: 1
 name: calculator
 display: Windows 计算器
@@ -7,25 +5,25 @@ launch: calc.exe
 window: 计算器
 app_version: "11.2607.0.0"
 verified_date: 2026-10-03
-verified_env: Windows 10.0.26200.0 zh-cn
+verified_env: Win11 25H2 (build 26200) zh-cn
 quirks:
   - id: current_execution_contract
-    note: 按标题出现歧义或 provider 错误时保留原错误，重新观察并绑定已确认 HWND；不要把窗口清单失败当作计算器未启动。算式输入仅在标准模式及获准清空的实例运行，结果仍从 CalculatorResults 的 Name 通道核验；历史性能数字不代表新版指标。
+    note: 按标题出现歧义或 provider 错误时保留原错误，重新观察并绑定已确认 HWND；不要把窗口清单失败当作计算器未启动。算式输入仅在标准模式及获准清空的实例运行，结果仍从 CalculatorResults 的 Name 通道核验。
   - id: minimized_result_unavailable
-    note: 2026-09-28 恢复护栏验收时，原生窗口确认计算器已最小化，精确 HWND 下 CalculatorResults 返回 NOT_FOUND。resume_check 因条件不满足阻止后续 run；不将该结果视为计算器进程退出，也不自动抢焦点。局部证据见 docs/39-flow-observation-recovery.md。
+    note: 计算器最小化时，精确 HWND 下 CalculatorResults 返回 NOT_FOUND，resume_check 会因条件不满足阻止后续 run；不将该结果视为计算器进程退出，也不自动抢焦点。
   - id: flow_title_lookup_stale
-    note: 2026-09-28 输出绑定真机验收中，按窗口标题恢复 verify 遇到 STALE_REF（children）；同现场重新观察并限定 HWND 后 get/verify 与流程恢复通过。桌面根整批枚举竞态已复现并修复，显示端扰动下的元素级瞬态 NOT_FOUND 仍待局部观察验收；原失败记录保留，不能吞掉错误或将其视为目标消失。精确句柄只用于当次已核实窗口，不硬编码到公共流程。证据见 docs/38-flow-output-bindings.md。
+    note: 按窗口标题恢复 verify 可能遇 STALE_REF（children），显示端扰动下也会出现元素级瞬态 NOT_FOUND——同现场重新观察并限定 HWND 后恢复；不能吞掉错误或将其视为目标消失。精确句柄只用于当次已核实窗口，不硬编码到公共流程。
   - id: packaged_activation
-    note: 直接执行包内 CalculatorApp.exe 可返回 PID 但不出现窗口；fixture 使用 AppsFolder 激活。list-windows 会同时列出宿主、标题栏和应用窗口，按包内程序路径、新 HWND 和进程启动时间确认测试实例。
+    note: 直接执行包内 CalculatorApp.exe 可返回 PID 但不出现窗口；用 AppsFolder 激活。list-windows 会同时列出宿主、标题栏和应用窗口，按包内程序路径、新 HWND 和进程启动时间确认测试实例。
   - id: result_name_channel
-    note: CalculatorResults 的结果在 Name 通道，实测 verify --value 返回 actual=null。使用 verify --property name、get --property name 或 wait 的 name 谓词；中文界面的值为“显示为 5”等。
+    note: CalculatorResults 的结果在 Name 通道，verify --value 返回 actual=null。使用 verify --property name、get --property name 或 wait 的 name 谓词；中文界面的值为“显示为 5”等。
   - id: nested_output_not_resolved
-    note: 本次快照包含 NormalOutput，但 get/wait 的语义定位返回 NOT_FOUND。优先使用 CalculatorResults，不把快照出现等同于选择器可定位。
+    note: 快照里出现的 NormalOutput 不保证 get/wait 语义定位可解析。优先使用 CalculatorResults，不把快照出现等同于选择器可定位。
 routes:
   - id: keyboard_arithmetic_example
     description: 在中文标准模式下整段输入已验证算式，输入前清空当前计算
     status: verified
-    verify: 同环境 3/3 次得到显示为 56,877；键盘 type 输入中位 913 ms。需使用独立测试实例或获准清空的计算器；其他算式及输入法状态需另验。
+    verify: 结果显示为 56,877。需使用独立测试实例或获准清空的计算器；其他算式及输入法状态需另验。
     steps:
       - ["click", "id:clearButton", "--app", "{window}"]
       - ["type", "id:num1Button", "123*456+789=", "--app", "{window}"]
@@ -33,37 +31,32 @@ routes:
   - id: read_result
     description: 读取标准计算器的当前显示结果
     status: verified
-    verify: 将名称中的结果与实际窗口截图核对；本次核对 2 与 5。
+    verify: name 通道读回即当前显示值。
     steps:
       - ["get", "id:CalculatorResults", "--app", "{window}", "--property", "name"]
   - id: wait_expected_result
     description: 等待中文标准计算器显示预期结果
     status: verified
-    verify: name 谓词精确匹配，超时表示结果未满足；本次未满足与满足分支均已验证。
+    verify: name 谓词精确匹配，超时表示结果未满足。
     steps:
       - ["wait", "--element", "id:CalculatorResults", "--property", "name=显示为 {expected}", "--app", "{window}", "--timeout", "1000"]
-
   - id: assert_expected_result
     description: 立即核对中文标准计算器结果
     status: verified
-    verify: Computer Use 点击 2 并截图确认后，Name 断言成功；显式 Value/Text 返回 actual=null。
+    verify: Name 断言可用；显式 Value/Text 通道返回 actual=null。
     steps:
       - ["verify", "--value", "id:CalculatorResults", "显示为 {expected}", "--property", "name", "--app", "{window}"]
-  # ---- 探索回写(S3,2026-10-03) ----
-  # 2026-10-03 S3 真机验收:两条探索路线经人工复核迁移 verified(重放证据
-  # replay-s1-01/replay-s2-01 全步 verified,fixtures/flows/replay-explore-*.yml
-  # 可复现;docs/77 S3 增补)。
   - id: explore_explore_s1_calc_auto
-    description: 让计算器显示包含数字七——探索回写(run explore-s1-calc-auto)
+    description: 让计算器显示包含数字七（探索回写）
     status: verified
-    verify: "目标断言:verify --value id:CalculatorResults 显示为 7 --property name --app {window};2026-10-03 重放 replay-s1-01 全步通过(人工复核)"
+    verify: "目标断言:verify --value id:CalculatorResults 显示为 7 --property name --app {window}"
     steps:
       - ["click", "id:num7Button", "--app", "{window}"]
       - ["verify", "--value", "id:CalculatorResults", "显示为 7", "--property", "name", "--app", "{window}"]
   - id: explore_explore_s2_calc_tie
-    description: 让计算器显示包含数字七——探索回写(run explore-s2-calc-tie)
+    description: 让计算器显示包含数字七（探索回写，两步点击）
     status: verified
-    verify: "目标断言:verify --value id:CalculatorResults 7 --property name --contains --app {window};2026-10-03 重放 replay-s2-01 全步通过(人工复核)"
+    verify: "目标断言:verify --value id:CalculatorResults 7 --property name --contains --app {window}"
     steps:
       - ["click", "id:num8Button", "--app", "{window}"]
       - ["click", "id:num7Button", "--app", "{window}"]

@@ -28,7 +28,7 @@ pack 是"给 agent 读的应用知识"——路线(routes)+ 怪癖(quirks)+ 信�
 顶层必填:`pack_format`(固定 `1`)· `name` · `launch` · `window` ·
 `app_version`(适配的应用版本范围,如 `"4.1.x"`)· `verified_date`(YYYY-MM-DD,
 全 pack 最近一次系统验证)· `routes`。
-顶层可选:`display` · `verified_env`(验证环境,如 `Win11 24H2 zh-cn`)·
+顶层可选:`display` · `verified_env`(验证环境,规范形态 `Win11 25H2 (build 26200) zh-cn`——营销名+build 号。**勿写内核 10.0 前缀**(Win11 永远报 10.0,无判别力)也勿信注册表 ProductName(微软遗留字段,Win11 仍写 "Windows 10");build 号才是行为判别器)·
 `verify`(全 pack 通用的核对方法)。
 
 `quirks[]`(可选,应用怪癖):`id`(snake_case,全文件唯一)+ `note`;
@@ -77,7 +77,7 @@ launch: MyApp            # 进程名;裸名走 App Paths 解析
 window: "我的应用"        # 窗口标题子串
 app_version: "1.0"
 verified_date: 2026-01-01
-verified_env: Win11 zh-cn   # 可选
+verified_env: Win11 25H2 (build 26200) zh-cn   # 可选
 # verify: 全 pack 通用核对方法(可选)
 quirks:
   - id: some_quirk

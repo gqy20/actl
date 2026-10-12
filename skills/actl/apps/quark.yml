@@ -1,6 +1,3 @@
-# 2026-09-29：关联 PS 已迁入 workflow；新模板协议预检通过，真实写入复验待完成。
-# 2026-09-29 静态维护：修改过的路线标为 manual，待新版真机复验；verified_date 保留历史日期。
-# 来源: docs/27-batch1-deep-tests.md、docs/28-meeting-quark-visual-deep.md；输入身份与焦点更新见 docs/31。
 pack_format: 1
 name: quark
 display: 夸克浏览器与网盘
@@ -8,22 +5,24 @@ launch: "{installed_executable}"
 window: "hwnd:{hwnd}"
 app_version: "7.2.2.1003"
 verified_date: 2026-09-28
-verified_env: Windows 10.0.26200.0 zh-cn; existing signed-in profile
+verified_env: Win11 25H2 (build 26200) zh-cn; existing signed-in profile
 quirks:
   - id: current_execution_contract
     note: search_drive 已使用快照绑定；同次 find 的完整 ref 与 snapshot_id 必须配对。文件菜单的 menu_ref/menu_snapshot_id 来自打开菜单后的 find；file_selector 使用当场核对唯一的语义选择器，不把旧 ref 传给不支持快照绑定的双击/右键。窗口或观察错误时保留现场。
   - id: invoke_without_navigation
-    note: 浏览器工具栏夸克网盘 Button 的 Invoke 返回成功但未进入网盘；新标签页左侧可见网盘入口通过截图定位及显式 physical 点击走通。不可只凭 ok 或标题验收。
+    note: 浏览器工具栏夸克网盘 Button 的 Invoke 返回成功但不导航（UIA 几何退化:bounds 零、clickable point (0,0),用户激活缺失）;新标签页左侧的网盘入口走视觉路线——快照找页面渲染的 Text 节点"网盘"(几何完整)→ preview 读 bounds → 中心 --physical 点击（视觉估坐标偏差 ~350px 不可用;传统 RPA 能定位是走 MSAA/IA2 legacy 树,与 UIA 是两套桥）。不可只凭 ok 或标题验收。
   - id: duplicate_names
     note: 夸克网盘、上传文件同时匹配文本与按钮，文件名也可能重名；find 限定角色后读取当次 ref，不跨状态复用。
   - id: two_search_surfaces
-    note: 网页的搜网盘 Edit 与原生地址栏 view_1012 是不同输入面。docs/31 本轮 Ctrl+F 实际聚焦网页 Edit，原生目标被新护栏拒绝；网页绑定 ref 输入、读回和提交已走通。不能把下述早期观察写成固定路由。sky 实测点击搜索框或 Ctrl+F 后焦点落到原生地址栏且出现建议层，再输入并 Enter 才完成换词搜索；上轮对网页 Edit 写值后结果不变。提交后核对 Document 路由 keyword、范围与实际结果，不能只验输入值。
+    note: 网页的搜网盘 Edit（name 呈"搜网盘、搜全网或输入网址(Ctrl + F)"形态,用 name_contains 匹配）与原生地址栏 view_1012 是不同输入面;Ctrl+F 后焦点可能落到原生地址栏并出现建议层,须核对实际焦点再输入。对网页 Edit 写值后可能结果不变——提交后核对 Document 路由 keyword、范围与实际结果,不能只验输入值。
   - id: search_scope
-    note: 目录中 Ctrl+F 后 Tab 可切换网盘全部文件/当前目录；sky 实测通过。结果支持部分匹配，后台备份也会改变数量，不得固定匹配数。文档筛选后 Document 路由 searchType=doc；目录范围另看标签，不能只看 URL。
+    note: 目录中 Ctrl+F 后 Tab 可切换网盘全部文件/当前目录。结果支持部分匹配，后台备份也会改变数量，不得固定匹配数。文档筛选后 Document 路由 searchType=doc;当前版本结果走 uccd 内部页路由,URL 不再携带 keyword——内容断言,不用 URL query 断言。
   - id: delayed_observation
-    note: 动作后首个 UIA 快照可能仍旧，稍后只读刷新可见新状态。等待内容收敛，不重复点击或提交。详情与预览是独立窗口；下载目录框在 sky 中出现过节点不可操作和目标窗口绑定拒绝，已取消，未完成下载。
+    note: 动作后首个 UIA 快照可能仍旧，稍后只读刷新可见新状态（empty-count 存在渲染竞态同族）;等待内容收敛，不重复点击或提交。详情与预览是独立窗口。
   - id: existing_backup
-    note: 本轮正常配置进入网盘后显示已有自动备份任务运行；不要将其当作本次手动上传，也不要擅改用户备份配置。
+    note: 正常配置进入网盘后可能已有自动备份任务运行；不要将其当作本次手动上传，也不要擅改用户备份配置。
+  - id: screenshot_rundir_gap
+    note: screenshot 输出指向 ${run.dir} 形态路径曾报 ERROR_PATH_NOT_FOUND——run.dir 展开待查;证据截图退回默认输出目录。
 routes:
   - id: launch_browser
     description: list-windows 核对没有现有夸克窗口后启动已安装程序；有窗口则观察复用
@@ -34,7 +33,7 @@ routes:
       - ["launch", "{installed_executable}"]
       - ["list-windows"]
   - id: open_drive_visual
-    description: 在已观察的新标签页，按当前截图定位左侧网盘入口；每次重新确定坐标并核对 hover 图
+    description: 在已观察的新标签页，按当前快照的网盘 Text 几何定位入口；每次重新读 bounds 并核对 hover
     status: verified
     verify: 网盘 Document、唯一上传文件 Button、Table 和文件行同时出现，截图确认首页；登录页不能算通过。
     steps:
@@ -53,7 +52,7 @@ routes:
       - ["snapshot", "--app", "{window}"]
       - ["find", "--role", "Table", "--app", "{window}"]
   - id: search_drive
-    description: Ctrl+F 后按 Edit 角色查找搜网盘，用当次 snapshot_id 绑定 ref；本轮网页输入路径通过，其他状态若焦点不符应重新观察
+    description: Ctrl+F 后按 Edit 角色与 name_contains 查找搜网盘，用当次 snapshot_id 绑定 ref；若焦点不符应重新观察
     status: verified
     verify: type 完整值读回、Document 路由 keyword 和实际结果三者一致；空结果场景 workflows/quark-search.yml 同时核对 0 项及暂无搜索内容。部分匹配存在，不能由查询词外观推断结果数。
     steps:
@@ -67,7 +66,7 @@ routes:
       - ["get", "id:RootWebArea", "--property", "text", "--app", "{window}"]
       - ["screenshot", "--app", "{window}"]
   - id: inspect_file_menu
-    description: sky 已验证文件行右键菜单及详情、打开文件位置；actl 迁移待复验。先核对唯一文件行名称和大小，再从当前菜单选择操作
+    description: 文件行右键菜单及详情、打开文件位置（迁移待复验）。先核对唯一文件行名称和大小，再从当前菜单选择操作
     status: manual
     verify: 详情核对文件名/大小/目录；打开文件位置核对面包屑与选中文件。不得将菜单出现算作文件操作完成。
     steps:
@@ -80,30 +79,17 @@ routes:
       - ["list-windows"]
       - ["screenshot", "--app", "hwnd:{result_hwnd}"]
   - id: preview_text
-    description: sky 已验证双击测试 TXT 后独立预览正文；actl 迁移待复验
+    description: 双击测试 TXT 后独立预览正文（迁移待复验）
     status: manual
-    verify: 重新选取预览窗口，核对标题和正文；本轮2B测试文件正文ss，不能只靠标题。
+    verify: 重新选取预览窗口，核对标题和正文；不能只靠标题。
     steps:
       - ["double-click", "{file_selector}", "--app", "{window}"]
       - ["list-windows"]
       - ["snapshot", "--app", "hwnd:{preview_hwnd}"]
       - ["screenshot", "--app", "hwnd:{preview_hwnd}"]
   - id: download_file
-    description: 仅走到下载目录选择框，尚未落盘；需要专项验证独立宿主窗口绑定后才能继续
+    description: 仅走到下载目录选择框，尚未落盘；需专项验证独立宿主窗口绑定后才能继续
     status: unverified
     verify: 实际文件在指定隔离目录落盘，大小/内容/哈希验证，不能凭下载按钮成功。
     steps:
       - ["list-windows"]
-
-# 2026-10-01 复验更新:
-# - 新标签页侧栏入口:桥接 Button(夸克网盘)的 UIA 几何退化(bounds 零、
-#   clickable point (0,0))、Invoke ok 不导航(用户激活缺失)。可靠路线:
-#   快照找页面渲染的 Text 节点"网盘"(几何完整)→ preview 读 bounds →
-#   中心 --physical 点击;视觉估坐标实测偏差 ~350px,不可用。传统 RPA 能
-#   定位是走 MSAA/IA2 legacy 树(Chrome Legacy Window),与 UIA 是两套桥。
-# - 选择器漂移两处已修模板:搜网盘 Edit 精确名 → name_contains(现名
-#   "搜网盘、搜全网或输入网址(Ctrl + F)");URL query 断言 → 结果页内容
-#   断言(当前版本路由 uccd 内部页路由,URL 不再携带 keyword)。
-# - empty-count 存在渲染竞态(delayed_observation 同族),resume 重试通过。
-# - 已知问题:${run.dir}/result.png 作 screenshot 输出报 ERROR_PATH_NOT_FOUND,
-#   待查 run.dir 展开路径;证据以手工截图补齐。

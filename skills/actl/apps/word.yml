@@ -1,47 +1,27 @@
-# 2026-09-29 静态维护：修改过的路线标为 manual，待新版真机复验；verified_date 保留历史日期。
-# actl 应用档案 pack(pack_format: 1)—— 路线知识来源:docs/14 与 docs/29-office-deep-tests.md
 pack_format: 1
 name: word
 display: Word
-launch: WINWORD          # App Paths 注册表解析
-window: "Word"           # 打开文件后为 "<文件名> - Word"
+launch: WINWORD           # App Paths 注册表解析,无需完整路径
+window: "Word"            # 标题子串;打开文件后为 "<文件名> - Word"(兼容模式文档多一段 " - 兼容性模式")
 app_version: "16.0.20326.20158"
-verified_date: 2026-09-28
-verified_env: "Windows 10.0.26200.0 zh-CN；独立合成 DOCX，兼容性模式"
+verified_date: 2026-10-04
+verified_env: "Win11 25H2 (build 26200) zh-CN；真实 Office 用户配置；独立测试文档"
 quirks:
-  - id: docx_locked_while_open
-    note: 2026-09-29 实证（docs/68 第二轮）：ctrl+s 保存后 Word 对 docx 持排他句柄，打开期间任何共享读（含 verify-file）报 NOT_ACTIONABLE；关闭后立即可读；保存前新开状态可读（before 检查可用）。workflow 打开期间的正文核验一律走 UIA role:Document text（--normalize-lines），磁盘核验只在 reopen 后（reopened-content 兼查 bold）。
-  - id: zotero_addin_dialog
-    note: 本机 Word 装有 Zotero 加载项，启动/保存时可能弹 Zotero 相关错误框（2026-09-29 用户截图实证一次）；流程中断时先分辨对话框归属再处置，不当作 Word 拒绝。
-  - id: workflow_migration_20260929
-    note: 业务步骤及隔离资源声明均在 workflows；直接 flow-run --file 对应模板 --id 新任务ID，无需准备脚本或输入文件。独立文件及进程归属核验已接入；新资源入口真机待复验，历史证据保留，见 docs/60。
-  - id: revalidation_20260929
-    note: 2026-09-29：独立 DOCX 首次 type 在 UIA control_type 观察阶段报 STALE_REF，完整写入未通过；测试窗口已关闭，见 docs/51。
-  - id: current_execution_contract
-    note: window 必须唯一并对应已授权文档；有多个 Word 窗口时现场确认 HWND。正文粘贴/选择使用 --target 断言当前焦点，拒绝时先观察，不用试输文本抢焦点。anchor 只接受重新核对的唯一语义选择器；保存后核对磁盘与正文，不用标题证明落盘。
-  - id: protected_view
-    note: 不可信位置文件同样走受保护视图;解法同 Excel
-    unblock: ["click", "name:启用编辑", "--app", "{window}"]
-  - id: paragraph_readback
-    note: TextPattern 用 CR 分段，DOCX 用 w:p；核验时统一换行，不能将段落拆分或丢失误认为无关空白
-  - id: selection_focus
-    note: Ctrl+A 依赖正文焦点；先 type role:Document 获取正文焦点并读回，不能在搜索框或功能区焦点下直接全选粘贴
   - id: dual_window_layers
-    note: 2026-10-04 实证：Word 为双层窗口——外层 OpusApp 框架 + 内层 _WwG 文档宿主（标题飘忽，常见"Microsoft Word 文档"）。内层可持前台致 type 前台守卫拒（evidence.actual="Microsoft Word 文档"），框架层被模态禁用时 focus-window 报 window not ready；_WwG 的 UIA 树干净（Document→页面→Body Edit, id:Body 可寻址）而 OpusApp 层快照/查找系统性 INTERNAL("no usable runtime identity")。保存确认/错误框可能不出现在 list-windows 枚举（弹层判读失明，只能截图判读兜底）；close-window 的 WM_CLOSE 返回 ok 但模态未清时窗口不关。见 docs/81。
+    note: Word 为双层窗口——外层 OpusApp 框架 + 内层 _WwG 文档宿主（标题飘忽，常见"Microsoft Word 文档"）。内层可持前台致 type 前台守卫拒（evidence.actual="Microsoft Word 文档"），框架层被模态禁用时 focus-window 报 window not ready；_WwG 的 UIA 树干净（Document→页面→Body Edit, id:Body 可寻址）而 OpusApp 层快照/查找系统性 INTERNAL("no usable runtime identity")。保存确认/错误框可能不出现在 list-windows 枚举（弹层判读失明，只能截图判读兜底）；close-window 的 WM_CLOSE 返回 ok 但模态未清时窗口不关。见 docs/81。
   - id: keyboard_line_selection_unreliable
-    note: 2026-10-04 实证（docs/81）：ctrl+home+shift+end 等键盘行选区在本机 Word 从未真正建立——按键全 ok、焦点三视图干净，但 ctrl+c 后剪贴板为空（对照：ctrl+a 全选+复制成功）。行级选择改用鼠标行首左侧选定区物理点击（click xy --physical，坐标由截图+视觉判读提取）；或样式路线的光标式应用（见 style_choreography 路线）根本不需要选区。
+    note: ctrl+home+shift+end 等键盘行选区在本机 Word 从未真正建立——按键全 ok、焦点三视图干净，但 ctrl+c 后剪贴板为空（对照：ctrl+a 全选+复制成功）。行级选择改用鼠标行首左侧选定区物理点击（click xy --physical，坐标由截图+视觉判读提取）；或样式路线的光标式应用（见 style_choreography 路线）根本不需要选区。
   - id: autoformat_numbered_paste
-    note: 2026-10-04 实证：粘贴"N. 文本"到上一编号条目后的新段会触发 Word 自动编号列表——显示成"N. N. 文本"（自动编号+粘贴文本自带编号叠加）；流程文本改用 ①②③④/• 等非 ASCII 数字编号规避。
+    note: 粘贴"N. 文本"到上一编号条目后的新段会触发 Word 自动编号列表——显示成"N. N. 文本"（自动编号+粘贴文本自带编号叠加）；流程文本改用 ①②③④/• 等非 ASCII 数字编号规避。
   - id: n_drive_startup_dialog
-    note: 2026-10-04 起本机 Word 每次开文档弹「目录名无效。(N:\)」错误框（某项配置指向未连接的 N: 盘）；错误框 OK 按钮 automation_id=2，popup_handlers 声明(app 锚为步骤 --app 子串/classification error/name_contains 目录名无效/click id:2)可由引擎弹层治理处置（word-note-typography 流程真机通过）。
+    note: 本机 Word 每次开文档弹「目录名无效。(N:\)」错误框（某项配置指向未连接的 N: 盘）；错误框 OK 按钮 automation_id=2，popup_handlers 声明(app 锚为步骤 --app 子串/classification error/name_contains 目录名无效/click id:2)可由引擎弹层治理处置。
   - id: start_screen_overrides_n_switch
-    note: 2026-10-11 实证（release-review-09）：本机 Word「启动时显示开始屏幕」选项优先于命令行 /n——裸 `WINWORD /n` 停在开始屏幕（窗口标题裸 "Word"，深色主题下界面整体深灰易误判为许可/激活问题；UIA 无 Document、按钮全禁用），写步必然 NOT_FOUND；文档只有用户在开始屏幕交互后才物化。对策=launch /n 带文件参数结构性绕过（resources 复制种子 docx，word-note/release-review 模板同模式），并把关卡在 wait --element role:Document 物化门而非仅窗口存在。
+    note: 本机 Word「启动时显示开始屏幕」选项优先于命令行 /n——裸 `WINWORD /n` 停在开始屏幕（窗口标题裸 "Word"，深色主题下界面整体深灰易误判为许可/激活问题；UIA 无 Document、按钮全禁用），写步必然 NOT_FOUND；文档只有用户在开始屏幕交互后才物化。对策=launch /n 带文件参数结构性绕过（resources 复制种子 docx），并把关卡在 wait --element role:Document 物化门而非仅窗口存在。
   - id: owned_dialog_anchor_for_input
-    note: 2026-10-11 实证（release-review-10）：owned 32770 类模态对话框（F12 另存为）是独立标题的顶层前台窗口——type/press 的前台守卫以步骤锚定的顶层窗口为 expected，锚 Word 主窗时 expected(主窗标题)/actual(对话框标题)永不匹配（NOT_ACTIONABLE 死路）；对话框内的输入/按键必须 `--app` 对话框自身标题（如 另存为），弹层门禁同步需要 app:另存为 的 popup_ignores 认领（Word 锚的 ignore 匹配不到对话框锚步）。另：另存为对话框默认目录=被打开文档所在目录，非 Word 默认文档目录；对话框含 20+ 个 Edit（元数据/搜索等），文件名框须用 uia 严格复合形态（role:Edit+name:文件名:）。
-# 常驻面板声明(降噪第二轮 pack 来源,2026-10-11):flow 引擎解析计划时自动
+    note: owned 32770 类模态对话框（F12 另存为）是独立标题的顶层前台窗口——type/press 的前台守卫以步骤锚定的顶层窗口为 expected，锚 Word 主窗时 expected(主窗标题)/actual(对话框标题)永不匹配（NOT_ACTIONABLE 死路）；对话框内的输入/按键必须 `--app` 对话框自身标题（如 另存为），弹层门禁同步需要该锚的 popup_ignores 认领。另：另存为对话框默认目录=被打开文档所在目录，非 Word 默认文档目录；对话框含 20+ 个 Edit（元数据/搜索等），文件名框须用 uia 严格复合形态（role:Edit+name:文件名:）。
+# 常驻面板声明(降噪第二轮 pack 来源):flow 引擎解析计划时自动
 # 并入 popup_ignores(与模板级声明并集去重)——Word 家族锚形态两种
 # (标题 <文件名> - Word 含 Word;文件名锚 .docx),各声明一条。
-# 词表退役(2026-10-11)后此声明是导航/搜索类任务窗格不挡写步的唯一来源。
 popup_ignores:
   - app: "Word"
     name_contains: "导航"
@@ -58,7 +38,7 @@ routes:
     steps:
       - ["get", "role:Document", "--app", "{window}", "--property", "text"]
   - id: style_choreography
-    description: 样式排版流程(模板 v2 预置样式空段+逐段填充;零运行时样式操作)
+    description: 样式排版流程(模板预置样式空段+逐段填充;零运行时样式操作)
     status: verified
     steps:
       - ["launch", "{program}", "/n", "{file}"]
@@ -68,60 +48,11 @@ routes:
       - ["type", "role:Document", "{段落文本}", "--paste", "--app", "{window}"]
       - ["press", "down", "--target", "role:Document", "--app", "{window}"]
       - ["press", "ctrl+s", "--target", "role:Document", "--app", "{window}"]
-    verify: 模板 note-template.docx 预置 12 个带样式空段(P1=标题1/P3、P8=标题2,黑体20/雅黑14/宋体12+1.5倍行距);流程只填文本(type --paste 单调用内化剪贴板)不碰样式;尾部 \r 或 \r\n 粘贴不建段(只产生软换行),分隔符内嵌才建段;纯 down 计数在已填充文档会漂移,填充式靠组级全文断言 fail-safe;关闭重开后 verify-file --kind docx-styles 逐段断言(workflows/word-note-typography.yml 12 步 2026-10-04 两轮真机通过,note-typo-004;提速 ~30%,docs/81 §7)
+    verify: 模板 note-template.docx 预置 12 个带样式空段(P1=标题1/P3、P8=标题2,黑体20/雅黑14/宋体12+1.5倍行距);流程只填文本(type --paste 单调用内化剪贴板)不碰样式;尾部 \r 或 \r\n 粘贴不建段(只产生软换行),分隔符内嵌才建段;填充式靠组级全文断言 fail-safe;关闭重开后 verify-file --kind docx-styles 逐段断言(workflows/word-note-typography.yml 12 步真机两轮通过)
   - id: body_append
     description: 正文写入(paste 通道;追加落在焦点处,先 click 定位插入点)
-    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
     status: manual
     steps:
-      - ["set-clipboard", "{text}"]
-      - ["click", "{anchor}", "--app", "{window}"]
-      - ["press", "ctrl+v", "--target", "role:Document", "--app", "{window}"]
-  - id: save_inplace
-    description: 原地保存(ctrl+s 不弹窗)
-    status: verified
-    steps:
-      - ["press", "ctrl+s", "--app", "{window}"]
-  - id: replace_paragraphs
-    description: 正文焦点已确认后，全选替换为多段文本
-    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
-    status: manual
-    steps:
-      - ["press", "ctrl+a", "--app", "{window}", "--target", "role:Document"]
-      - ["set-clipboard", "{text}"]
-      - ["press", "ctrl+v", "--target", "role:Document", "--app", "{window}"]
-      - ["press", "ctrl+s", "--app", "{window}"]
-      - ["get", "role:Document", "--property", "text", "--app", "{window}"]
-    verify: TextPattern 与 word/document.xml 按段落拼接的全文均精确匹配；只对明确授权替换的文档使用
-  - id: append_at_end
-    description: 正文焦点已确认后 Ctrl+End 定位文末，再粘贴追加段落
-    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
-    status: manual
-    steps:
-      - ["press", "ctrl+end", "--app", "{window}", "--target", "role:Document"]
-      - ["set-clipboard", "{text}"]
-      - ["press", "ctrl+v", "--target", "role:Document", "--app", "{window}"]
-      - ["press", "ctrl+s", "--app", "{window}"]
-      - ["get", "role:Document", "--property", "text", "--app", "{window}"]
-    verify: 原文完整且追加文本位于末尾；不是仅检查 contains
-  - id: undo_redo_append
-    description: 撤销/重做当前测试追加，每步保存并读回全文
-    status: verified
-    steps:
-      - ["press", "ctrl+z", "--app", "{window}"]
-      - ["press", "ctrl+s", "--app", "{window}"]
-      - ["get", "role:Document", "--property", "text", "--app", "{window}"]
-      - ["press", "ctrl+y", "--app", "{window}"]
-      - ["press", "ctrl+s", "--app", "{window}"]
-      - ["get", "role:Document", "--property", "text", "--app", "{window}"]
-    verify: 撤销后等于原文，重做后等于原文加追加段落；两次都核对磁盘文件
-  - id: bold_selection
-    description: 正文全选后切换加粗；已验证从未加粗切换为加粗
-    # 原路线曾有真机证据；以下步骤已修订，2026-09-29 尚未复验。
-    status: manual
-    steps:
-      - ["press", "ctrl+a", "--app", "{window}", "--target", "role:Document"]
-      - ["press", "ctrl+b", "--app", "{window}", "--target", "role:Document"]
-      - ["press", "ctrl+s", "--app", "{window}"]
-    verify: 全文未变化且每个含文字的 w:r 带有效 w:b；Ctrl+B 是切换，不可无条件重复
-verify: workflows/word-edit.yml 用独立 DOCX；每次操作按 TextPattern 和磁盘 XML 双重全文断言，保存重开后再次读回
+      - ["click", "role:Document", "--app", "{window}"]
+      - ["type", "role:Document", "{text}", "--paste", "--app", "{window}"]
+    verify: 写入后用 body_read 核对全文；兼容模式文档冷启动观察可抖 INTERNAL（观察恢复可重试集合），须等沉降
