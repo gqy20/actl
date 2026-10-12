@@ -14,7 +14,7 @@
 
 ### 高优先（用户标记）
 
-- [ ] **探索模式（用户标记关键）**：S1–S3/L2/先验飞轮全链真机通过（[77](77-exploration-s2-acceptance.md),已收口部分见 CHANGELOG）。§7 路线积累 5 条目标已达成（S1/S2+#3 记事本+#4 资源管理器 verified;#5 计算器以形态边界实证计入贡献,两改进候选在案）。**UCB 统计剪枝 v2 已落地**（2026-10-12:机制+冷启动回落,样本随应用轮积累自动生效,docs/42 §11.4）——剩余验证项=真实统计数据下的真机对照轮（死候选自动压后/预算下降,对比无统计基线;待 quirks 计数积累）。剩余观察项=**跨进程 picker 形态**：Store 记事本另存为+Store 画图打开**双双证否**（均同进程 32770 经典对话框,2026-10-12 轮,docs/77）,待其他 Store 应用出现 FileOpenPicker 类真跨进程形态时验证 RuntimeBroker 放宽判据
+（当前无——完成项按文件头纪律直接删除,条件触发残留归长期观察项;用户新标记时在此登记）
 
 ### 流程与集成
 
@@ -39,22 +39,13 @@
 ### 遗留验收
 
 - [ ] 非开发机 US3 复现（用户裁定 2026-10-02 搁置——作为已知限制已记录于 0.2.0 CHANGELOG；机器到位后补验）
-- [ ] Phase 2 人工/专用环境验收子集（[44](44-phase2-acceptance.md) 表格聚合）：观察故障注入五类（空值/截断/控件重建/虚拟化/provider 故障——[50](50-deep-container-query.md) 的 provider 重建待验收同族）、监听冗余 hook 失效现场验收（[39](39-flow-observation-recovery.md)）、外部对照 Blender/Photoshop/Minecraft 可用环境。注：provider 故障路径已有物化回落真机实证（Word MSAA 拒答自动降级,CHANGELOG）,正式表格对照仍待
-- [ ] 浏览器场景实测余项聚合：持久 profile 真实站点登录验收待用户选站（[72](72-browser-cdp-integration.md)）；settle 噪声鲁棒（[16](16-browser-scenarios.md) 登记 M3 候选未动）；WebView CUA 检查流程重跑（[71](71-signal-webview-details.md)——那次 CDP 连接超时的**孤立性已由后续多轮 headless/fixture CDP 全链成功间接核验**,剩检查流程本身）；xhs「展开更多评论」低优先附带
-- [ ] 浏览器页内弹层声明式处置（pack 级 browser 弹层 allow 清单注入,与 popup_ignores 对称——引擎级自动门禁已落地,真实站点误报面出现再立项,不为猜测建基建）
-- [ ] **浏览器 CDP 工程余量（[72 §13](72-browser-cdp-integration.md) 聚合）**：`--remote-debugging-pipe` 实现形态 spike（当前 port+127.0.0.1，pipe 消除端口暴露面）；写入 uncertain 跨进程持久化（对齐 [47](47-execution-recovery.md) 恢复语义）；UIA 轨路线固化（browser.yml 10 条中 3 verified/5 manual/2 unverified——随应用轮渐进，pack 治理日常非协议项）
-- [ ] **flow 工具链缺口聚合（①revise 模板形态/②handlers 锚引用已收口,见 CHANGELOG）——剩余③④**：③ **companion_unresponsive 复发观察（暂缓;机制已实测澄清,2026-10-12）**——真实机制是**显示端消息泵 500ms SendMessageTimeout 往返**（CHECK 类+1 重试,历史事件均先记 handoff_query_retry 再失败）+ lease 心跳 1500ms 新鲜度,**不存在**"resume 累计时长超 lease 窗口"（原始登记与首次重写均误述,数据修正）。历史 20+ 事件全落在污染期（09-29→10-11 上午）;根杀后唯一一次（ts 1791713306）已归因=display-stop 轮对显示端的 close-window 被正确 fail-closed,非复发。归因维持:污染期系统饱和饿死显示端 UI 线程。**复发条件**：干净现场再现 companion_unresponsive——届时怀疑方向=显示端 UI 线程被合法工作（绘制/消息处理）阻塞>1s,非污染;500ms 泵窗口为固定常量,不为猜测调参。④ word-note-typography 的 popup_ignores（导航）声明路径重验随下次 Word 轮顺带（不专跑）
-- [ ] Zotero 导入导出（2026-10-11 轮让行未跑——用户桌面活跃，GUI 启动让行）
+- [ ] Phase 2 人工/专用环境验收子集（[44](44-phase2-acceptance.md) 表格聚合）：观察故障注入五类（空值/截断/控件重建/虚拟化/provider 故障）、监听冗余 hook 失效现场验收（[39](39-flow-observation-recovery.md)）、外部对照 Blender/Photoshop/Minecraft 可用环境
+- [ ] 浏览器场景实测余项：①持久 profile 真实站点登录验收待用户选站（[72](72-browser-cdp-integration.md)）；②settle 噪声鲁棒（[16](16-browser-scenarios.md)）；③WebView CUA 检查流程重跑（[71](71-signal-webview-details.md)）；④xhs「展开更多评论」低优先附带
+- [ ] 浏览器页内弹层声明式处置（pack 级 allow 清单注入,与 popup_ignores 对称——真实站点误报面出现再立项）
+- [ ] 浏览器 CDP 工程余量（[72 §13](72-browser-cdp-integration.md)）：①`--remote-debugging-pipe` spike（消除端口暴露面）；②写入 uncertain 跨进程持久化（对齐 [47](47-execution-recovery.md)）；③UIA 轨路线固化（browser.yml 3 verified/5 manual/2 unverified,随应用轮渐进）
+- [ ] word-note-typography 的 popup_ignores 声明路径重验（随下次 Word 轮顺带,不专跑）
 - [ ] preview-choice computer-use 真机鼠标点击验收（[46](46-target-preview.md)：两轮 "window is not a usable app window" 失败如实保留）
 
-<!-- 2026-10-05 收口移出：录制值读回 #4 双轨收口（rec-ma-12 证据二进制轮，[80](80-record-acceptance.md)）；健壮性基建 009 轮 10 步 155s 全链通过（[81 §9](81-word-style-flow.md)）；网易云收起方向识图证实（pack 同步，Table 树滞留非未收起）——见 CHANGELOG Unreleased。 -->
-<!-- 2026-10-08 收口移出：Word 流程 evidence 二进制补跑（note-typo-012 干净轮 10 步全链 completed，fnv128=19f4b6a8，五层修复合力验证通过，[81 §10](81-word-style-flow.md)）；虚拟化列表全量收集动词（`collect` spec 落地+资源管理器 600 文件 fixture 真机验收通过，[06 §3.4](06-design-blueprint.md)）；flow 歧义候选串联（`--pick` 运行时候选纠正 spec 落地，[06 AMBIGUOUS 目标串联](06-design-blueprint.md)/[63 收口](63-simple-workflow-conditions.md)；自动缩小查询裁定不做入册）；选区读取原语（`get-selection` spec 落地+记事本真机验收通过：Text/Selection 双通道、caret 退化范围诚实 no_selection，[06 系统组](06-design-blueprint.md)）——见 CHANGELOG Unreleased。 -->
-<!-- 2026-10-11 收口移出：执行器错误原文保留（metadata 证据附有界 message，[68 待办](68-combined-batch-first-round.md)勾销）；flow 锚点标题插值（**降格收口**为 verify-owner `hwnd_anchor` 就绪字符串+bind 惯用法——HWND 不随标题变，不做插值 spec，[06 verify-owner](06-design-blueprint.md)；真机部分验收：改名失配后 hwnd 锚仍寻址同窗，完整链待桌面空闲轮）——见 CHANGELOG Unreleased。 -->
-<!-- 2026-10-11 收口移出：流程扩展循环（`for_each` 数据驱动有界迭代 spec 落地，[06 for_each](06-design-blueprint.md)/[63 收口](63-simple-workflow-conditions.md)；通用 while/嵌套分支缓办入册）；真机验收待首个消费场景（机制层验收=纯函数 7 用例+flow-validate 契约）——见 CHANGELOG Unreleased。 -->
-<!-- 2026-10-11 收口移出：browser-read --all 列表枚举形态（spec 落地+本地 fixture 真机复验+B 站首个真实场景消费，原待办行删除线清理）——见 CHANGELOG Unreleased。 -->
-<!-- 2026-10-11 收口移出：popup notice 词表裁定（**最窄形态落地**——popup_handlers `classification:notice`，name_contains 必填按名认领 INFO 级 unknown 表面，未声明的 unknown 仍永远上抛、已分类面板不被吞并；[06 运行时治理③](06-design-blueprint.md)；机制层验收=popup_gate 13 用例，真机验收待 VS Code 轮探测通知文本+按钮 name 回填模板声明）；浏览器页内弹层检测原语（`browser-verify --no-popups` v1 落地，headless fixture 六假设实证；引擎级自动门禁留候选待事故）——见 CHANGELOG Unreleased。 -->
-<!-- 2026-10-11 收口移出：VS Code 关闭重开完整链（第四轮 22/26→降噪第二轮 v4 认领后尾段 A/B 收口,run 25/26——close 步 bind 陈旧系操作者清窗连锁非机制缺陷；focus 原语与 notice handler 自动处置同轮探针真机验收；Find 面板常驻表面死锁=门禁降噪第二实例,直接驱动 popup_ignores spec 同日落地；应用深化区旧版重复条目一并删除）；尾段挂起族（06 定位→06 主修复(Drop 家族收编)→08 新签名(flow-resume 成功路径楔死)→11 根杀收口——envelope flush 后 TerminateProcess 直调绕过一切析构阻塞面+signal worker detach,真机实证 403 窗僵尸清零;长期观察项整条移出）——见 CHANGELOG Unreleased。 -->
-<!-- 2026-10-11 收口移出：探索模式高优先条目（**docs/42 §7 验收目标 5 条全部达成**——S1/S2+#3 记事本中文+#4 资源管理器后退导航均经人工复核转 verified;#5 计算器形态边界实证计入贡献;轮 C 判据落地+复现轮否定性数据;三条引擎改进候选+UCB+RuntimeBroker 观察转长期观察项——[77](77-exploration-s2-acceptance.md)）——见 CHANGELOG Unreleased。 -->
 
 
 ## 长期观察项
@@ -64,7 +55,9 @@
 
 - [ ] Word 新文档物化拒答边界（2026-10-11 release-review-08 实证）：五层修复治的是兼容模式文档（012 场景），**全新空白文档**上 MSAA 桥仍报 Malformed Cacheresponse→自动回落逐节点（不挂但慢，14.8s 慢扫）——回落兜底是设计的，根因（cache-only 元素边界）诊断轮待正常速度日
 
-- [ ] 探索引擎形态边界与改进候选（2026-10-11 轮 C/#4/#5 实证,[77](77-exploration-s2-acceptance.md)）:①差分前沿语义×无增量应用（XAML 计算器按钮序列点击无 added 元素——前沿语义扩展候选）;②texts 原语无全局键盘形态（focused: 不收,而 CLI type focused: 已验证——texts focused 键支持候选）;③automation_id 歧义场景（对话框文件名框与地址栏共用 id:1001/TextBox——引擎候选歧义收紧策略）;④RuntimeBroker 跨进程 picker 形态待其他 Store 应用场景（另存为=同 pid #32770 已证否）;⑤UCB 统计剪枝（待 quirks 样本量,沿 42 §7 挂起）
+- [ ] 探索引擎形态边界与改进候选（[77](77-exploration-s2-acceptance.md)）:①差分前沿语义×无增量应用（XAML 计算器按钮序列点击无 added 元素——前沿语义扩展候选）;②texts 原语无全局键盘形态（focused: 不收,而 CLI type focused: 已验证——texts focused 键支持候选）;③automation_id 歧义场景（对话框控件 id 随宿主变异——记事本 1001 双命中/画图 1148,稳健定位 role+name;引擎歧义收紧策略候选）;④跨进程 picker 形态（记事本另存为+画图打开双证否=同进程 32770,待照片类 Store 应用场景验证 RuntimeBroker 放宽判据）;⑤UCB 真机对照轮（v2 机制已落地冷启动回落,待 quirks 计数积累后对比无统计基线:死候选自动压后/预算下降）
+
+- [ ] companion_unresponsive 复发观察（机制已实测澄清:显示端消息泵 500ms 往返+lease 心跳,历史事件全落污染期——诊断详情见 git 历史与 [41](41-logging-metadata.md)）。复发条件=干净现场再现;届时怀疑方向=显示端 UI 线程被合法工作阻塞 >1s,500ms 泵窗口为固定常量不为猜测调参
 
 - [ ] UIA 观察长阻塞的**根因定位**（防护已落地：进程级看门狗 + UIA 区段看门狗双保险；根因——60s NOT_FOUND 未复现、故障提供程序未确认，见 [41](41-logging-metadata.md)、[65](65-observation-blocking-diagnosis.md)）
 - [ ] UWP 挂起恢复（类配对后疑似绕开，更长放置待证）
@@ -88,4 +81,3 @@
 1. 完成的实现从本文件移出，写入 CHANGELOG
 2. 新增范围先核对 PRD 非目标
 3. 优先修可靠性与补验收，不以铺命令数量代替业务结果
-<!-- 2026-10-06~08 攻坚实录段整体移出（本文件只维护剩余工作——七段 Word 物化/010-012 攻坚链/fill-3 判读/collect 落地的过程实录删除；最终态见 CHANGELOG 对应条目与 [81](81-word-style-flow.md)；Word 物化交互根因诊断（cache-only 元素边界）降为可选——消费分轨+物化回落已工程化、默认模式 012 全链实证；微信/网易云列表兜底待后续应用轮见 CHANGELOG collect 条目）。 -->
