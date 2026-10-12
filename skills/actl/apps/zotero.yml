@@ -29,6 +29,14 @@ quirks:
     note: 通知栏会插入 Edit，连 find 与 get 之间 ref 都可能漂移。写入用 --snapshot 绑定 ref、type 加 --verify-value、提交/清空用 press --target;读回须核对 name=快速搜索、role=Edit 和文本，必要时重新 find。不能把旧 ref 当作持久 ID；本 pack 的写入仅在独立测试库验证。
   - id: reader_text_scope
     note: Zotero Reader 的 text 是阅读器工具栏和页码信息，不能当作 PDF 正文提取能力。
+  - id: uia_tree_exposure_good
+    note: Zotero 7(Firefox 系)UIA 暴露良好——PDF 阅读页 711 元素全树物化(页码跳转 pageNumber/缩略图列表/条目详情/标签条 tab-bar-container 全可定位);不是盲区,可直接 snapshot 探面。
+  - id: pdf_reader_focus_trap
+    note: **PDF 阅读页焦点陷阱**:pdf.js 内嵌文档劫持键盘焦点——文库工具栏元素(快速搜索 Edit)的 UIA SetFocus 读回不符(focus 原语 NOT_ACTIONABLE focus_readback_mismatch 实证,焦点仍在 PDF Page 元素)。文库视图切回后恢复。UIA Invoke 也不转移键盘焦点(click ok 焦点不变,Firefox a11y 特性)——需要键盘焦点的动作先走 focus 原语并核验读回。
+  - id: quick_search_dual_match_and_setvalue
+    note: 快速搜索双命中:name:快速搜索 同时匹配「快速搜索模式」Button(zotero-tb-search-menu-button)与搜索 Edit——复合选择器 `uia:{"match":{"role":"Edit","name":"快速搜索"}}` 精确锁定。搜索框写入走 **set-value**(ValuePattern 可写、无需键盘焦点,读回确认;type 键盘通道依赖焦点——见 pdf_reader_focus_trap);esc 清空恢复。
+  - id: tabs_menu_navigation
+    note: 顶部标签条:主 TabItem name 随文档变化不定位;**「列出所有标签页」按钮(zotero-tb-tabs-menu)点开下拉,标签 ListItems 全带名称可点**(含「关闭标签页」后缀);左侧栏「我的文库」Button(ref 需新快照)切回文库视图。注意:PDF 标签页聚焦时 esc 会关闭论文标签页(库数据不受影响)。
 routes:
   - id: observe
     description: 确认 HWND 后读取文献库及阅读器界面结构
