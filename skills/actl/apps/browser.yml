@@ -116,7 +116,16 @@ quirks:
       text 通道为空,与普通页面相反);press esc 直达并关闭弹层;
       观察命令期间弹层存活。战略路线:猫抓(嗅探列表→"复制"按钮
       name 就绪)、沉浸式翻译(触发→text 读译文)。凭据类扩展
-      (Cookie-Editor)不碰——白名单归上层 agent 策略
+      (Cookie-Editor)不碰——白名单归上层 agent 策略。
+      **CDP 自有会话扩展存活+操作面补充(2026-10-12 探测)**:
+      ①persistent profile 的扩展在 **headless 会话同样存活**(CDP
+      target 枚举见 chrome-extension:// service_worker 在场)——
+      CDP 层扩展逻辑无需可见窗即运行;②**chrome 层"扩展"按钮
+      (id:view_1010)在自有会话 UIA 树可读可 Invoke**,面板展开后
+      305 元素全物化:扩展清单完整名称(沉浸式翻译/控制你的音乐、
+      视频等内容)、每扩展"希望访问此站点"权限项(id:view_1013)
+      均可定位——扩展管理/启用操作走此面,与页面内扩展弹层
+      (须 physical)是两个不同表面
   - id: webui_weak_a11y
     note: >-
       Chrome 内置页面(WebUI)视觉完全渲染但 a11y 弱暴露(extensions

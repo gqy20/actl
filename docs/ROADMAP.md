@@ -37,7 +37,7 @@
 - [ ] Excel 写入闭环（**2026-10-12 探针发现疑似回归,与 pack verified 记录矛盾待复验**:起始页树健康——launch 后 56 元素稳定物化(NavBarMenu/msotcid 族,Backstage 可导航);但**新建空白工作簿**后主窗 provider 观察连续 3×20s UIA 看门狗击杀+单点定位 12.7s 失败,等 45s 不恢复(进程健康 92MB)——「UIA 树空」旧登记或即此形态表象。**矛盾**:excel.yml table_extract/undo_redo 2026-09-28 verified(名称框 id:1001 路线),说明当时工作簿态 UIA 可用——疑 Office 更新回归或「新建空白簿」与「打开既有簿」初始化路径差异。复验轮=用既有合成 XLSX 打开路线重测 UIA 树;若打开路径健康则写入闭环被解锁、仅「新建」路径需绕行（打开模板文件替代新建）
 - [ ] Zotero 导入导出
 - [ ] 腾讯会议 draft-date 键盘路线（ctrl+a+paste+tab，QDateEdit set-value 无效）——实装于 `D:\tools\Tecent\WeMeet\`（非标准盘符,App Paths 未注册;2026-10-12 经开始菜单 .lnk 找到并注册别名 wemeet,launch+窗口冒烟通过）;路线已解锁,待桌面空闲轮
-- [ ] 浏览器扩展操作面余量（UIA 轨三批已沉淀 [16 §5.5](16-browser-scenarios.md) / browser.yml `extension_surfaces`）：①右键菜单扩展项复验（机制在，两次被用户桌面并发占用护栏正确拒绝，待空闲）；②CDP 自有会话扩展操作实测（persistent profile 保留扩展策略已定 [72](72-browser-cdp-integration.md)，chrome 层归 UIA 的路径无实测证据，chrome 层 Invoke E_FAIL 同款风险预期）；③扩展弹层内写动作成链（现存证据只覆盖「读」）
+- [ ] 浏览器扩展操作面余量（UIA 轨三批已沉淀 [16 §5.5](16-browser-scenarios.md) / browser.yml `extension_surfaces`）：①右键菜单扩展项复验（机制在，两次被用户桌面并发占用护栏正确拒绝，待空闲）；②扩展弹层内写动作成链（现存证据只覆盖「读」）。②原「CDP 自有会话扩展操作实测」已收（2026-10-12 探测:扩展 headless 存活+chrome 层扩展按钮/面板 UIA 全物化可 Invoke,「chrome 层无实测证据」空档闭合,余量并入①③——写动作成链仍待轮）
 - [ ] 应用 pack 长尾维护
 
 ### 遗留验收
@@ -73,10 +73,10 @@
 - [ ] **键盘/IME 编码语义余量**（[09 §3.5](09-input-backends-review.md)）：VK/扫描码/扩展键/左右修饰键/目标线程布局未成完整模型；中文输入刚需已由 `--paste` 剪贴板通道覆盖，余量是编码完备性边界（方向键/数字键盘/代理对等）——按真实失败案例收口，不预防性铺
 - [ ] **无人值守调度（定位裁定：当前不立项）**：触发层归上层（agent 侧调度），actl 不做 scheduler/常驻（PRD 非目标：触发面板/热键、常驻 agent）；出现真实需求时按 PRD §1.3 另行评审
 - [ ] **评测基建提案在案（待裁定，不承诺实施）**：[40](40-automated-testing-evaluation.md) 自动化测试评估系统与 [78](78-comparative-benchmark-suite.md) 三方对比测试集均自述「调研+提案，未实施」（78 含六个待用户裁定开放问题）——与「无人值守调度」同款定位裁定形态，裁定期满未启动再明确关闭
-- [ ] **显示层 spec 小项**：device 字段设备粒度折叠（[11 §15.4](11-desktop-interaction-and-display-research.md)「随下一个 spec 批次」）、演示速度配置（[19](19-history-and-user-experience.md) 未实现）
+- [ ] **显示层 spec 小项**：device 字段设备粒度折叠——**数据面已落地**(2026-10-12 判定:ActionState.effects 即单一事实来源,随 SessionState 持久化+跨会话聚合;详情面已分列「影响:键盘/鼠标/读写剪贴板/焦点」,docs/11 §15.4 路线 B 实质完成);剩**主行 glyph**(琥珀态一行加设备字形)——显示层渲染决策:emoji 码位(U+1F5B1 等)在 DirectWrite 有豆腐块风险,字形选择+像素预算属显示端排版裁定,与演示速度配置([19](19-history-and-user-experience.md) 未实现)同款待裁定点
 
 ## 维护
 
-- [ ] 显示端按钮触发的暂停/继续 request_id 核对
-- [ ] 非 UIA 观察阶段的耗时诊断表达
-- [ ] 存储目录不可写/磁盘耗尽/进程中断验收
+- [ ] 显示端 resume 的 control_log 对称（2026-10-12 核对轮收敛:pause 链完整——CLI/显示端均 Request record requested→accepted/failed+引擎 flow_pause_observed 消费 request_id;显示端 resume 侧 requested/dispatching/child_returned 在位,request_id 经 env 同源;**剩=CLI flow-resume 分支无 control_log record**——子进程段只记 flow_event;补 accepted/failed 需包住多 return 分支体,非顺手量级,待下轮）
+- [ ] 非 UIA 观察阶段耗时诊断（2026-10-12 核对轮收敛:trace::scope+actl-slow 慢段机制已在位,覆盖=uia 轨 8 文件;**非 UIA 段（browser CDP 网络/spawn/文件 IO）无 scope**——真实慢诊断需求出现时按同款 scope 补,不预防性铺）
+- [ ] 存储目录不可写/磁盘耗尽/进程中断验收（**2026-10-12 首块收口**:不可写注入契约落地并拆出真 bug——存储不可用时 list-windows 曾误报 NOT_ACTIONABLE"requires repair"误导修复路径,stop.rs 错误构造已三分 corrupt/infra/json 修,见 CHANGELOG;**剩=进程中断(断电/杀进程)中段验收**——WAL 已有引擎落盘与恢复语义,缺专测）
