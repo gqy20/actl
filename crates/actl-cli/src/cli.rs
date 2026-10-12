@@ -48,6 +48,8 @@ pub(crate) enum DesktopCommand {
         /// Target window by title substring or hwnd:<n>
         app: String,
     },
+    /// Report crash-dialog residue across the desktop (WER family, app-agnostic); read-only
+    ResidueReport,
     /// Read recent local call events, newest calls first
     History {
         /// Filter by the caller-provided ACTL_TASK_ID
@@ -1197,6 +1199,7 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
         Command::Desktop(DesktopCommand::FocusReport) => "focus-report",
         Command::Desktop(DesktopCommand::GetSelection { .. }) => "get-selection",
         Command::Desktop(DesktopCommand::FrontReport { .. }) => "front-report",
+        Command::Desktop(DesktopCommand::ResidueReport) => "residue-report",
         Command::Desktop(DesktopCommand::ExecutionRecover) => "execution-recover",
         Command::Desktop(DesktopCommand::TaskArchive { .. }) => "task-archive",
         Command::Flow(FlowCommand::Validate { .. }) => "flow-validate",

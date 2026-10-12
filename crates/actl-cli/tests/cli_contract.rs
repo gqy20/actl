@@ -1042,3 +1042,32 @@ fn unwritable_storage_fails_gracefully() {
         }
     }
 }
+
+/// desktop residue-report 契约(2026-10-12 两起 WMExternal 崩溃框滞留后工具化):
+/// help 四要素+清态诚实零样本(全桌面扫描,离线机器上干净环境=空)。
+#[test]
+fn residue_report_contract() {
+    use serde_json::Value;
+    let out = support::IsolatedCommand::new()
+        .command
+        .args(["residue-report"])
+        .output()
+        .expect("spawn actl");
+    assert_eq!(out.status.code(), Some(0));
+    let v: Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert_eq!(
+        v["data"]["total"], 0,
+        "clean test env must have no residue: {v}"
+    );
+    assert!(v["data"]["residues"].is_array());
+    let out = support::IsolatedCommand::new()
+        .command
+        .args(["residue-report", "--help"])
+        .output()
+        .expect("spawn actl");
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.contains("Usage:"), "help lacks Usage");
+    assert!(text.contains("Example:"), "help lacks Example");
+    assert!(text.contains("Errors:"), "help lacks Errors");
+    assert!(text.contains("WER"), "help lacks WER signature surface");
+}

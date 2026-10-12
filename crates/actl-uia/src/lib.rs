@@ -62,6 +62,7 @@ pub use table::{TableResult, extract_table};
 pub mod watchdog;
 mod window;
 pub use window::front_report;
+pub use window::residue_report;
 pub mod window_check;
 mod window_metadata;
 mod window_observation;

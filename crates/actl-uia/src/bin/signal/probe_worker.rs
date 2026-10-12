@@ -172,24 +172,38 @@ mod tests {
     }
     /// 退避序列:完成次数推进间隔翻倍(5→10→…封顶 60s),键切换重置回 base
     /// ——10 分钟窗口内 ~13 次探测(旧固定 5s = 120 次冷启)。
+    /// settle 用轮询等待完成(固定 sleep 在并行测试负载下会丢完成事件)。
     #[test]
     fn probe_interval_backs_off_and_resets_on_key_change() {
         let interval = Duration::from_secs(5);
-        let settle = Duration::from_millis(5);
         let mut worker = Worker::<u8, u8>::default();
+        // 完成当前在飞的 job:轮询到 latest 时间戳前进为止(有界防死循环);
+        // 必须携带当前 key——异键轮询会触发键切换重置,毁掉退避断言。
+        let settle_complete = |worker: &mut Worker<u8, u8>, key: u8| {
+            let before = worker.latest.as_ref().map(|(_, at, _)| *at);
+            for _ in 0..500 {
+                worker.poll(key, interval, || panic!("not due")).unwrap();
+                let advanced = worker
+                    .latest
+                    .as_ref()
+                    .is_some_and(|(k, at, _)| *k == key && before.is_none_or(|b| *at > b));
+                if advanced {
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            panic!("probe job never completed");
+        };
         worker.poll(1, interval, || 7).unwrap(); // 首个探测立即派发
-        std::thread::sleep(settle);
-        worker.poll(1, interval, || panic!("not due")).unwrap(); // 完成,不派发
+        settle_complete(&mut worker, 1);
         assert_eq!(worker.interval_now, interval);
         worker.next = None; // 时间前进到下一轮
         worker.poll(1, interval, || 8).unwrap();
-        std::thread::sleep(settle);
-        worker.poll(1, interval, || panic!("not due")).unwrap();
+        settle_complete(&mut worker, 1);
         assert_eq!(worker.interval_now, interval * 2); // 翻倍
         worker.next = None;
         worker.poll(2, interval, || 9).unwrap(); // 键切换
-        std::thread::sleep(settle);
-        worker.poll(2, interval, || panic!("not due")).unwrap();
+        settle_complete(&mut worker, 2);
         assert_eq!(worker.interval_now, interval); // 重置回 base
         // 封顶序列:从 base 连续完成,10→20→40→80 封顶 60→60
         for expected in [
@@ -201,8 +215,7 @@ mod tests {
         ] {
             worker.next = None;
             worker.poll(2, interval, || 1).unwrap();
-            std::thread::sleep(settle);
-            worker.poll(2, interval, || panic!("not due")).unwrap();
+            settle_complete(&mut worker, 2);
             assert_eq!(worker.interval_now, expected);
         }
     }

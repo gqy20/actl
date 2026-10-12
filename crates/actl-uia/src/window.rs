@@ -1191,6 +1191,54 @@ fn classify_front_text(text: &str) -> &'static str {
     }
 }
 
+/// WER 崩溃框标题签名(应用无关,2026-10-12 两起 WMExternal 事故后工具化):
+/// 崩溃框族的进程/标题/owner 与被崩溃应用**无所属关系**——标题过滤按
+/// 「应用名+pid」必然漏(实证:「WMExternal.exe - Fail Fast Exception」
+/// 不含 wemeet、对话框 pid 独立),只认 WER 自身的标题特征。
+pub fn crash_signature(title: &str) -> Option<&'static str> {
+    const SIGNATURES: &[(&str, &str)] = &[
+        ("Fail Fast Exception", "fail_fast"),
+        ("应用程序错误", "app_error"),
+        ("已停止工作", "stopped_working"),
+        ("已停止响应", "stopped_responding"),
+        ("Windows 错误报告", "wer"),
+        ("Windows Error Reporting", "wer"),
+    ];
+    SIGNATURES
+        .iter()
+        .find(|(needle, _)| title.contains(needle))
+        .map(|&(_, sig)| sig)
+}
+
+/// 崩溃框残留报告(只读,全桌面扫描):辅助进程在主窗关闭、收尾核对通过
+/// **之后**才崩溃弹窗滞留(时序错位,时点判定结构性覆盖不了)——本谓词
+/// 是延迟复查纪律(AGENTS「残留延迟复查」)的机器眼。命中带全文样本与
+/// 签名分类,调用方判读处置(错误框「确定」属白名单清理动词)。
+pub fn residue_report() -> Result<serde_json::Value, CtlError> {
+    let windows = crate::native_windows()?;
+    let residues: Vec<serde_json::Value> = windows
+        .iter()
+        .filter_map(|w| {
+            let title = w.title.as_str();
+            let signature = crash_signature(title)?;
+            Some(serde_json::json!({
+                "hwnd": w.hwnd, "title": title, "class": w.class,
+                "pid": w.pid, "visible": w.visible, "foreground": w.foreground,
+                "signature": signature,
+            }))
+        })
+        .collect();
+    let total = residues.len();
+    Ok(serde_json::json!({
+        "residues": residues, "total": total,
+        "hint": if total > 0 {
+            "crash-dialog residue present: read the title, dismiss via its OK button (whitelisted cleanup verb), then re-run to confirm zero"
+        } else {
+            "no crash-dialog residue on the desktop"
+        },
+    }))
+}
+
 /// 前台弹层报告(只读,docs/31 前台优先纪律):应用用最前方的弹窗引导用户
 /// ——错误框、确认框、保存提示、向导。自动化动手前必须先听它说。汇聚两层
 /// 证据:原生 owned 弹窗(标题/可见/前台)与树内子窗(文本全文+按钮清单),
@@ -1355,5 +1403,43 @@ mod app_paths_tests {
             Some(expected.as_str()),
             "HKCU-only registration must resolve"
         );
+    }
+}
+
+#[cfg(test)]
+mod crash_signature_tests {
+    use super::crash_signature;
+
+    /// WER 崩溃框族签名:两起真机事故形态+本地化变体全命中。
+    #[test]
+    fn wcrash_family_titles_match() {
+        assert_eq!(
+            crash_signature("WMExternal.exe - Fail Fast Exception"),
+            Some("fail_fast"),
+            "2026-10-12 两起真机事故的原始标题"
+        );
+        assert_eq!(crash_signature("Foo.exe - 应用程序错误"), Some("app_error"));
+        assert_eq!(crash_signature("Bar 已停止工作"), Some("stopped_working"));
+        assert_eq!(
+            crash_signature("Bar 已停止响应"),
+            Some("stopped_responding")
+        );
+        assert_eq!(crash_signature("Windows 错误报告"), Some("wer"));
+    }
+
+    /// 非崩溃窗口不命中(签名必须应用无关且宁缺勿滥——正常窗口误报会
+    /// 把 residue-report 变噪音):业务确认框/保存框/普通标题全过。
+    #[test]
+    fn normal_titles_do_not_match() {
+        for clean in [
+            "腾讯会议",
+            "另存为",
+            "确认另存为",
+            "WMExternal", // 签名要求标题含崩溃短语,仅进程名不算
+            "失败",       // 单字"失败"不是 WER 标题形态
+            "无标题 - Notepad",
+        ] {
+            assert_eq!(crash_signature(clean), None, "{clean:?} must not match");
+        }
     }
 }

@@ -121,6 +121,9 @@ pub(crate) fn after_help_for(name: &str) -> Option<&'static str> {
         "front-report" => {
             "Example:\n  actl front-report --app 记事本\n  actl front-report --app hwnd:12345\nRead-only: reports the app's front guidance layer — owned native popups (title/visible/foreground) and in-tree dialog surfaces with full text and button labels, plus a naive classification hint (error/save/confirm/update/unknown; judgement stays with the caller). Apps guide the user through front popups: read this BEFORE acting; front_clear=true means no guidance layer. Never clicks anything.\nErrors: NOT_FOUND no window | INTERNAL observation failure"
         }
+        "residue-report" => {
+            "Example:\n  actl desktop residue-report\nRead-only: scans the whole desktop for crash-dialog residue (WER family signatures: Fail Fast Exception / 应用程序错误 / 已停止工作 / 已停止响应 / Windows Error Reporting — app-agnostic). Helper processes can crash AFTER the main window closed and the cleanup check passed (timing skew), so point-in-time closes cannot catch these; run this as the delayed re-check after any app round. Hits carry title/class/pid/visible/foreground + signature; disposition: read the title, dismiss via its OK button (whitelisted cleanup verb), re-run to confirm zero. Never clicks anything.\nErrors: INTERNAL native enumeration failure"
+        }
         "display-start" => {
             "Example:\n  actl display-start\nStarts sibling actl-signal.exe if missing; restores a hidden/offscreen matching display; waits up to 4s for a matching visible frame. Does not clear stop.\nErrors: NOT_ACTIONABLE missing/hidden/incompatible display | INTERNAL launch failure"
         }

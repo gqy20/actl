@@ -266,6 +266,9 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
         Command::Desktop(DesktopCommand::FrontReport { app }) => {
             actl_uia::front_report(app).map(Into::into)
         }
+        Command::Desktop(DesktopCommand::ResidueReport) => {
+            actl_uia::residue_report().map(Into::into)
+        }
         Command::Desktop(DesktopCommand::ExecutionRecover) => {
             actl_uia::display_gate::recover_execution().map(Into::into)
         }
