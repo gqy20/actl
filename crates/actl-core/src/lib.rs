@@ -106,6 +106,9 @@ pub struct CtlError {
     /// 结构化证据(如 AMBIGUOUS 的候选列表,docs/12 §4 协议评审项):
     /// agent 可免重取 snapshot 直接裁决。
     pub evidence: Option<serde_json::Value>,
+    /// 显式覆盖错误码缺省 recovery_hint(上下文更准的恢复路径);
+    /// None = 沿用错误码缺省。
+    pub hint: Option<String>,
 }
 
 impl CtlError {
@@ -114,6 +117,7 @@ impl CtlError {
             code,
             message: message.into(),
             evidence: None,
+            hint: None,
         }
     }
 
@@ -126,6 +130,23 @@ impl CtlError {
             code,
             message: message.into(),
             evidence: Some(evidence),
+            hint: None,
+        }
+    }
+
+    /// evidence + 上下文恢复路径:同类错误码在不同通道的恢复动作不同时
+    /// (如 NOT_ACTIONABLE 在浏览器弹层门禁 vs UIA 离屏元素),显式给出。
+    pub fn with_evidence_hint(
+        code: ErrorCode,
+        message: impl Into<String>,
+        evidence: serde_json::Value,
+        hint: impl Into<String>,
+    ) -> Self {
+        Self {
+            code,
+            message: message.into(),
+            evidence: Some(evidence),
+            hint: Some(hint.into()),
         }
     }
 
@@ -194,6 +215,13 @@ pub struct ErrorBody {
 
 impl ErrorEnvelope {
     pub fn new(command: impl Into<String>, err: &CtlError, duration_ms: u64) -> Self {
+        let hint = match &err.hint {
+            Some(h) => h.clone(),
+            None if err.evidence.as_ref().is_some_and(|e| e["stage"] == "handoff") => {
+                "wait for explicit user handoff; inspect partial results before retrying; never clear emergency stop automatically".to_owned()
+            }
+            None => err.code.recovery_hint().to_owned(),
+        };
         Self {
             version: ENVELOPE_VERSION.to_owned(),
             ok: false,
@@ -201,9 +229,7 @@ impl ErrorEnvelope {
             error: ErrorBody {
                 code: err.code,
                 message: err.message.clone(),
-                hint: Some(if err.evidence.as_ref().is_some_and(|e| e["stage"] == "handoff") {
-                    "wait for explicit user handoff; inspect partial results before retrying; never clear emergency stop automatically"
-                } else { err.code.recovery_hint() }.to_owned()),
+                hint: Some(hint),
                 evidence: err.evidence.clone(),
             },
             duration_ms,

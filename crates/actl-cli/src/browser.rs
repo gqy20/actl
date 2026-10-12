@@ -126,9 +126,20 @@ pub(crate) fn type_cmd(
     text: &str,
     iframe: bool,
     timeout: Option<u64>,
+    allow_popups: bool,
 ) -> Result<CommandOutput, CtlError> {
     let (kind, value) = selector_of(css, xpath)?;
-    ops::type_text(&paths(), session, kind, value, text, iframe, timeout).map(Into::into)
+    ops::type_text(
+        &paths(),
+        session,
+        kind,
+        value,
+        text,
+        iframe,
+        timeout,
+        allow_popups,
+    )
+    .map(Into::into)
 }
 
 pub(crate) fn click_cmd(
@@ -138,9 +149,20 @@ pub(crate) fn click_cmd(
     iframe: bool,
     expect_text: Option<&str>,
     timeout: Option<u64>,
+    allow_popups: bool,
 ) -> Result<CommandOutput, CtlError> {
     let (kind, value) = selector_of(css, xpath)?;
-    ops::click(&paths(), session, kind, value, iframe, expect_text, timeout).map(Into::into)
+    ops::click(
+        &paths(),
+        session,
+        kind,
+        value,
+        iframe,
+        expect_text,
+        timeout,
+        allow_popups,
+    )
+    .map(Into::into)
 }
 
 pub(crate) fn close_cmd(session: &str, timeout: Option<u64>) -> Result<CommandOutput, CtlError> {

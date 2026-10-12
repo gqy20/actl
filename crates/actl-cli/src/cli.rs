@@ -967,11 +967,14 @@ pub(crate) enum Command {
         /// Locate inside the (cross-origin) child iframe instead of the main frame
         #[arg(long)]
         iframe: bool,
+        /// Skip the pre-action in-page popup gate (only after judging popup samples)
+        #[arg(long)]
+        allow_popups: bool,
         /// Timeout in milliseconds (default 10000)
         #[arg(long)]
         timeout: Option<u64>,
     },
-    /// Click a unique element — guarded write: stop check, target re-verify, unique match, dispatch, read-back
+    /// Click a unique element — guarded write: stop check, target re-verify, popup gate, unique match, dispatch, read-back
     BrowserClick {
         /// Session id from browser-launch
         #[arg(long)]
@@ -988,6 +991,9 @@ pub(crate) enum Command {
         /// Assert the element text contains this substring after the click (post-write verification)
         #[arg(long)]
         expect_text: Option<String>,
+        /// Skip the pre-action in-page popup gate (only after judging popup samples)
+        #[arg(long)]
+        allow_popups: bool,
         /// Timeout in milliseconds (default 10000)
         #[arg(long)]
         timeout: Option<u64>,

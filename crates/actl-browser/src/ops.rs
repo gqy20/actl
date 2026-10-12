@@ -901,6 +901,8 @@ pub fn read(paths: &Paths, spec: ReadSpec<'_>) -> Result<Value, CtlError> {
 // click(守卫写:停止核验 → 绑定重核 → 唯一匹配 → 派发 → 读回)
 // ---------------------------------------------------------------------------
 
+// clap 变体字段直转链路上的函数,参数即命令面(与 actl-cli 薄适配层同豁免)
+#[allow(clippy::too_many_arguments)]
 pub fn click(
     paths: &Paths,
     session_id: &str,
@@ -909,6 +911,7 @@ pub fn click(
     iframe: bool,
     expect_text: Option<&str>,
     timeout_ms: Option<u64>,
+    allow_popups: bool,
 ) -> Result<Value, CtlError> {
     validate_selector(kind, value)?;
     if expect_text.is_some_and(str::is_empty) {
@@ -928,6 +931,9 @@ pub fn click(
     };
     let mut action = declare_action("browser-click", &format!("cdp:{session_id}"));
     action.executing();
+    if !allow_popups {
+        pre_action_popup_gate(&conn, &cdp_session, timeout)?;
+    }
 
     let located = eval_json(
         &conn,
@@ -1020,7 +1026,8 @@ pub fn click(
 
 /// 守卫输入写:input/textarea 赋值(native setter + input/change 事件,React 受控组件
 /// 兼容),读回 value 必须与请求一致(不一致=ASSERTION_FAILED,受控组件改写了值)。
-/// 与 click 同纪律:停止核验→绑定重核→唯一匹配→派发→读回。
+/// 与 click 同纪律:停止核验→绑定重核→弹层门禁→唯一匹配→派发→读回。
+#[allow(clippy::too_many_arguments)]
 pub fn type_text(
     paths: &Paths,
     session_id: &str,
@@ -1029,6 +1036,7 @@ pub fn type_text(
     text: &str,
     iframe: bool,
     timeout_ms: Option<u64>,
+    allow_popups: bool,
 ) -> Result<Value, CtlError> {
     validate_selector(kind, value)?;
     if text.is_empty() || text.len() > TEXT_LIMIT {
@@ -1047,6 +1055,9 @@ pub fn type_text(
     };
     let mut action = declare_action("browser-type", &format!("cdp:{session_id}"));
     action.executing();
+    if !allow_popups {
+        pre_action_popup_gate(&conn, &cdp_session, timeout)?;
+    }
     let located = eval_json(
         &conn,
         &cdp_session,
@@ -1206,6 +1217,51 @@ pub enum VerifyMode {
 /// 调用方收窄选择器)。
 pub const DEFAULT_POPUP_SELECTOR: &str =
     "dialog[open],[role=dialog],[role=alertdialog],[aria-modal=true]";
+
+/// 写步弹层门禁(browser-click/type 前置,与 front-report「停下判读」同纪律):
+/// 动作派发前扫页内可见弹层(默认标准 dialog 语义面)。站点模态态下点击/输入
+/// 会被静默吞——派发成功 ≠ 语义生效,与其让动作空放后靠读回兜底,不如拒发
+/// 并附样本。NOT_ACTIONABLE(非断言失败:动作还没发生,是护栏拒绝);
+/// --allow-popups 显式放行(流内静态 role=dialog 的误报面,调用方拿样本证据决策)。
+pub(crate) fn pre_action_popup_gate(
+    conn: &Connection,
+    cdp_session: &str,
+    timeout: Duration,
+) -> Result<(), CtlError> {
+    let scanned = eval_json(
+        conn,
+        cdp_session,
+        &popup_scan_script(DEFAULT_POPUP_SELECTOR),
+        None,
+        timeout,
+    )?;
+    // 选择器语法错误如实 PROTOCOL——吞错成 total=0 等于门禁自废
+    if let Some(err) = scanned.get("error").and_then(Value::as_str) {
+        return Err(CtlError::protocol(format!(
+            "popup gate selector is not valid CSS: {err}"
+        )));
+    }
+    let total = scanned.get("total").and_then(Value::as_u64).unwrap_or(0);
+    if total > 0 {
+        return Err(CtlError::with_evidence_hint(
+            ErrorCode::NotActionable,
+            format!(
+                "{total} visible in-page popup surface(s) block this write action \
+                 (dismiss them, or pass --allow-popups after judging the samples)"
+            ),
+            json!({
+                "gate": "popup",
+                "selector": DEFAULT_POPUP_SELECTOR,
+                "total": total,
+                "samples": scanned.get("samples").cloned().unwrap_or(Value::Null),
+            }),
+            "judge the samples: click the popup's own dismiss/close control with \
+             --allow-popups, then re-check with browser-verify --no-popups; pass \
+             --allow-popups on the original target only for judged false positives",
+        ));
+    }
+    Ok(())
+}
 
 /// 只读断言动词(flow 的 verify 位只认断言族;浏览器步骤的副作用核验入口)。
 pub fn verify(paths: &Paths, mode: VerifyMode, timeout_ms: Option<u64>) -> Result<Value, CtlError> {

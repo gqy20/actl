@@ -253,6 +253,7 @@ impl Invocation {
                 code,
                 message,
                 evidence,
+                hint: None,
             })
     }
     pub fn check(&self, paths: &SignalPaths) -> Result<(), CtlError> {

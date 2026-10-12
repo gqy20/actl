@@ -717,6 +717,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             xpath,
             text,
             iframe,
+            allow_popups,
             timeout,
         } => browser::type_cmd(
             session,
@@ -725,6 +726,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             text,
             *iframe,
             *timeout,
+            *allow_popups,
         ),
         Command::BrowserClick {
             session,
@@ -732,6 +734,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             xpath,
             iframe,
             expect_text,
+            allow_popups,
             timeout,
         } => browser::click_cmd(
             session,
@@ -740,6 +743,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             *iframe,
             expect_text.as_deref(),
             *timeout,
+            *allow_popups,
         ),
         Command::BrowserClose { session, timeout } => browser::close_cmd(session, *timeout),
         Command::BrowserList => browser::list_cmd(),

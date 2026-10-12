@@ -344,15 +344,21 @@ browser-read ... [--deep] [--wait-for N]
                                      # traversal_capped=true 如实上报;payload 附 deep:true
                                      # --wait-for N:沉降谓词——命中数 ≥N 才返回,内建 500ms
                                      # 轮询共用药洞超时,超时 TIMEOUT 附实测命中数
-browser-type --session <id> (--css S | --xpath X) --text T [--iframe]
+browser-type --session <id> (--css S | --xpath X) --text T [--iframe] [--allow-popups]
                                      # 守卫输入写:input/textarea 唯一匹配→native setter 赋值
                                      # +input/change 事件(React 兼容)→读回 value 必须与请求一致
                                      # (受控组件改写→ASSERTION_FAILED);输入内容不回显 envelope/
-                                     # evidence(长度核验),自证用 browser-read --property value
-browser-click --session <id> (--css S | --xpath X) [--iframe] [--expect-text substr]
-                                     # 守卫写:停止代次核验→绑定重核→唯一匹配→派发→读回;
-                                     # --expect-text 断言被点击元素自身文本(ASSERTION_FAILED);
-                                     # 效果断言用 browser-read;失败不盲重放
+                                     # evidence(长度核验),自证用 browser-read --property value。
+                                     # **弹层门禁(默认开)**:派发前扫页内可见弹层(默认选择器
+                                     # 同 --no-popups),命中→NOT_ACTIONABLE 拒发附样本与专用 hint
+                                     # ——模态态会静默吞输入,派发成功≠语义生效;--allow-popups
+                                     # 是判读样本后的显式放行(流内静态 role=dialog 误报面)
+browser-click --session <id> (--css S | --xpath X) [--iframe] [--expect-text substr] [--allow-popups]
+                                     # 守卫写:停止代次核验→绑定重核→弹层门禁(默认开,同上)
+                                     # →唯一匹配→派发→读回;--expect-text 断言被点击元素自身文本
+                                     # (ASSERTION_FAILED);效果断言用 browser-read;失败不盲重放。
+                                     # dismiss 路径:点弹层自身关闭键需 --allow-popups(门禁对
+                                     # 弹层内控件同样拒发),关后 browser-verify --no-popups 复核
 browser-close --session <id>     # CDP Browser.close 优雅关闭自有浏览器+注销会话文件;
                                      # ephemeral profile 删除、persistent 保留;幂等(端点已死→如实行)
 browser-list                      # 只读枚举活跃会话(新→旧):session_id/target/url/pid/mode
@@ -367,8 +373,9 @@ browser-verify [--newest-alive | --none | --session <id> --alive|--gone | --sess
                                      # 站点自绘浮层走 --popup-selector 显式声明),0=通过、
                                      # >0=ASSERTION_FAILED 带 total+样本(≤5 条、text≤200
                                      # 字符)——flow condition 位映射 false,when/unless 弹层
-                                     # 分支可组合(原生弹层门禁结构性不覆盖页内 DOM 弹层,
-                                     # 本谓词是那个空档的检测原语);选择器真语法错误
+                                     # 分支可组合(原生弹层门禁结构性不覆盖页内 DOM 弹层;
+                                     # 写步的弹层门禁默认拒发,本谓词是复核/分支判据——
+                                     # dismiss 后收口、登录墙 when 分支等);选择器真语法错误
                                      # PROTOCOL(浏览器 tokenizer 对未闭合 [ 按 EOF 闭合
                                      # 是如实语义)
 browser-collect --session <id> (--css S | --xpath X) [--property P] [--deep]

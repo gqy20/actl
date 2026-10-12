@@ -341,6 +341,44 @@ fn all_flag_documents_list_semantics_in_help() {
 }
 
 #[test]
+fn write_popup_gate_documented_and_flag_parses() {
+    // 写步弹层门禁(2026-10-11 spec):browser-click/type 派发前扫页内可见
+    // 弹层,命中 NOT_ACTIONABLE 拒发;--allow-popups 是唯一显式放行。
+    // 离线可锁的契约面:help 宣告门禁语义 + flag 进解析(未知会话走到
+    // session 加载即证明 flag 被接受,门禁本身在 attach 之后需真机)。
+    for cmd in ["browser-click", "browser-type"] {
+        let (code, stdout) = actl(&[cmd, "--help"]);
+        assert_eq!(code, 0);
+        assert!(stdout.contains("popup gate"), "{cmd} help lacks gate");
+        assert!(stdout.contains("--allow-popups"), "{cmd} help lacks flag");
+    }
+    let (code, stdout) = actl(&[
+        "browser-click",
+        "--session",
+        "nope123",
+        "--css",
+        "#x",
+        "--allow-popups",
+    ]);
+    assert_eq!(code, 1, "{stdout}");
+    let v: Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(v["error"]["code"], "NOT_FOUND");
+    let (code, stdout) = actl(&[
+        "browser-type",
+        "--session",
+        "nope123",
+        "--css",
+        "#x",
+        "--text",
+        "t",
+        "--allow-popups",
+    ]);
+    assert_eq!(code, 1, "{stdout}");
+    let v: Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(v["error"]["code"], "NOT_FOUND");
+}
+
+#[test]
 fn limit_requires_all_is_clap_rejected() {
     // --limit 是 --all 的从属参数:单独出现走 clap usage error(exit 2)
     assert_eq!(
