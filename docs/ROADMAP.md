@@ -2,6 +2,10 @@
 
 关联：[PRD](PRD.md) · [设计蓝图](06-design-blueprint.md) · [技术选型](TECH_STACK.md)
 
+1. 完成的实现从本文件移出，写入 CHANGELOG
+2. 新增范围先核对 PRD 非目标
+3. 优先修可靠性与补验收，不以铺命令数量代替业务结果
+
 本文件只维护剩余工作与优先级。**完成项直接删除整条**（含子项）,不留划线/[x] 收口记录——完成实现的证据归 [CHANGELOG](../CHANGELOG.md),验收细节归 docs/ 与应用 pack,ROADMAP 不承担历史。
 
 ## 里程碑
@@ -30,7 +34,7 @@
 
 ### 应用深化
 
-- [ ] Excel 写入闭环（当前：UIA 树空属 Office 慢启动，需 MSAA 路线或等待）
+- [ ] Excel 写入闭环（**2026-10-12 探针发现疑似回归,与 pack verified 记录矛盾待复验**:起始页树健康——launch 后 56 元素稳定物化(NavBarMenu/msotcid 族,Backstage 可导航);但**新建空白工作簿**后主窗 provider 观察连续 3×20s UIA 看门狗击杀+单点定位 12.7s 失败,等 45s 不恢复(进程健康 92MB)——「UIA 树空」旧登记或即此形态表象。**矛盾**:excel.yml table_extract/undo_redo 2026-09-28 verified(名称框 id:1001 路线),说明当时工作簿态 UIA 可用——疑 Office 更新回归或「新建空白簿」与「打开既有簿」初始化路径差异。复验轮=用既有合成 XLSX 打开路线重测 UIA 树;若打开路径健康则写入闭环被解锁、仅「新建」路径需绕行（打开模板文件替代新建）
 - [ ] Zotero 导入导出
 - [ ] 腾讯会议 draft-date 键盘路线（ctrl+a+paste+tab，QDateEdit set-value 无效）——实装于 `D:\tools\Tecent\WeMeet\`（非标准盘符,App Paths 未注册;2026-10-12 经开始菜单 .lnk 找到并注册别名 wemeet,launch+窗口冒烟通过）;路线已解锁,待桌面空闲轮
 - [ ] 浏览器扩展操作面余量（UIA 轨三批已沉淀 [16 §5.5](16-browser-scenarios.md) / browser.yml `extension_surfaces`）：①右键菜单扩展项复验（机制在，两次被用户桌面并发占用护栏正确拒绝，待空闲）；②CDP 自有会话扩展操作实测（persistent profile 保留扩展策略已定 [72](72-browser-cdp-integration.md)，chrome 层归 UIA 的路径无实测证据，chrome 层 Invoke E_FAIL 同款风险预期）；③扩展弹层内写动作成链（现存证据只覆盖「读」）
@@ -42,7 +46,7 @@
 - [ ] Phase 2 人工/专用环境验收子集（[44](44-phase2-acceptance.md) 表格聚合）：观察故障注入五类（空值/截断/控件重建/虚拟化/provider 故障）、监听冗余 hook 失效现场验收（[39](39-flow-observation-recovery.md)）、外部对照 Blender/Photoshop/Minecraft 可用环境
 - [ ] 浏览器场景实测余项：①持久 profile 真实站点登录验收待用户选站（[72](72-browser-cdp-integration.md)）；②settle 噪声鲁棒（[16](16-browser-scenarios.md)）；③WebView CUA 检查流程重跑（[71](71-signal-webview-details.md)）；④xhs「展开更多评论」低优先附带
 - [ ] 浏览器页内弹层声明式处置（pack 级 allow 清单注入,与 popup_ignores 对称——真实站点误报面出现再立项）
-- [ ] 浏览器 CDP 工程余量（[72 §13](72-browser-cdp-integration.md)）：①`--remote-debugging-pipe` spike（消除端口暴露面）；②写入 uncertain 跨进程持久化（对齐 [47](47-execution-recovery.md)）；③UIA 轨路线固化（browser.yml 3 verified/5 manual/2 unverified,随应用轮渐进）
+- [ ] 浏览器 CDP 工程余量（[72 §13](72-browser-cdp-integration.md)）：①写入 uncertain 跨进程持久化（对齐 [47](47-execution-recovery.md)）;②UIA 轨路线固化（browser.yml 3 verified/5 manual/2 unverified,随应用轮渐进）
 - [ ] word-note-typography 的 popup_ignores 声明路径重验（随下次 Word 轮顺带,不专跑）
 - [ ] preview-choice computer-use 真机鼠标点击验收（[46](46-target-preview.md)：两轮 "window is not a usable app window" 失败如实保留）
 
@@ -76,9 +80,3 @@
 - [ ] 显示端按钮触发的暂停/继续 request_id 核对
 - [ ] 非 UIA 观察阶段的耗时诊断表达
 - [ ] 存储目录不可写/磁盘耗尽/进程中断验收
-
----
-
-1. 完成的实现从本文件移出，写入 CHANGELOG
-2. 新增范围先核对 PRD 非目标
-3. 优先修可靠性与补验收，不以铺命令数量代替业务结果

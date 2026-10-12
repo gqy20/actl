@@ -7,6 +7,11 @@
 
 ## [Unreleased]
 
+### Documentation and validation
+
+- **`--remote-debugging-pipe` spike 判死（2026-10-12,ROADMAP CDP 工程余量子项关闭）**：实测 Windows Edge 155 的 pipe 模式进程即退（exit 13）,同环境 `--remote-debugging-port=0` 对照存活——**pipe 是 Chromium 的 POSIX-only 实现,Windows 无端口消除通道**。风险如实降级:devtools 端口本就只绑 127.0.0.1 本地回环（launch 层硬编码）,非 LAN 暴露面;CDP 工程余量收敛为 uncertain 持久化+UIA 轨路线固化两项。
+- **Excel 两态探针（2026-10-12,疑似回归入档待复验）**：起始页 UIA 树健康（56 元素稳定物化,NavBarMenu/msotcid 族可导航,Backstage 新建页 92 元素）,原「UIA 树空属 Office 慢启动」登记**只在工作簿态成立**：新建空白工作簿后主窗 provider 观察连续 3×20s UIA 看门狗击杀+单点定位 12.7s 失败,等 45s 不恢复（进程健康 92MB）——非慢启动,是「新建空白簿」路径的结构性楔死。**与 pack verified 记录矛盾如实并存**:excel.yml table_extract/undo_redo（2026-09-28 verified,打开既有 XLSX 路线）当时 UIA 可用——疑 Office 更新回归或「新建空白簿」vs「打开既有簿」初始化路径差异;复验轮=既有合成 XLSX 打开路线重测,若打开路径健康则写入闭环解锁、新建场景以打开种子文件替代。附带三 quirks 入 pack:两态楔死探针/新建首日欢迎面板（UIA 读不到但自退）/close 保存确认延迟（2s 窗内 NOT_ACTIONABLE,窗外实际关净）。
+
 ### Added
 
 - **`app-locate` 软件位置五通道探测(spec,[06 §3 启动组](docs/06-design-blueprint.md)——2026-10-12 腾讯会议误判教训的机制化收口:非标准盘符安装+App Paths 未注册,曾因探测漏开始菜单通道误判「本机未安装」)**:`app-locate <名> [--register]` 只读探测,通道优先序=①app-registry 别名→②App Paths 注册表→③常见安装目录(Program Files×2/%LOCALAPPDATA%\Programs)→④**开始菜单 .lnk 递归 ≤3 层含中文名**(IShellLink/COM 解析 TargetPath,MTA 公寓纪律同 capture——非标准盘符安装的唯一系统入口)→⑤PATH;去重后按序返回存在的候选+first,**卸载类快捷方式与可执行永不入列**(`Uninstall uTools.exe`/「卸载 腾讯会议.lnk」同样匹配应用名,first 指向卸载器=注册事故);有界(≤800 .lnk/每目录 ≤64);零候选如实 NOT_FOUND。`--register` 把 first 写入 apps.json(探测不启动应用);**manual 保护——用户显式指定(app-register)自动发现永不覆盖**:同名 manual 条目在场时 locate 照常返回候选但注记 `kept_manual`+现有路径,别名继续解析;register() 层第二道防线拒绝 auto 覆盖;改用户指定必须走显式 app-register/app-remove;**手改 JSON 省略字段按 manual 解析**(人手写的条目就是显式意志,天然受保护);pattern 条目的运行时重解析只动 resolved 缓存,永不改 path/pattern 本体(用户指定的软件不会被运行时维护漂移)。**架构落点(pack 可移植性)**:机器路径只存 apps.json(机器本地),pack 的 `launch:` 字段统一收敛为**逻辑别名**(原 `{installed_executable}` 占位符四件 vscode/quark/zcode/tencent_meeting 全部换别名+注释)——其他用户拿到技能包后跑一次 `app-locate <名> --register` 即完成本地化。真机验证:腾讯会议(中文开始菜单→D 盘)/utools(program-dirs,卸载器已滤)/quark(App Paths→D 盘)/zcode/visual studio code(显示名查询)/垃圾名 NOT_FOUND 六形态+manual 保护双向(wemeet manual 条目 kept_manual 不覆盖/utools auto 条目可刷新)。AGENTS「先探测再写死」条目更新(探测动词=app-locate,别手工拼 reg/ls/find)。测试:契约(垃圾名 NOT_FOUND envelope+help 四要素)+手改 JSON 缺省 manual 解析/auto 覆盖防线单测。

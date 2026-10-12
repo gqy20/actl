@@ -26,6 +26,8 @@ quirks:
     note: ctrl+s 返回不代表保存结束；文件可能短暂被独占或替换，读回需允许共享读写并有界等待，不重复保存动作
   - id: hidden_empty_host
     note: 关闭工作簿后可能保留不可见的 Excel 空宿主；只有文件释放且控件树无工作簿内容时才记录文档关闭，不宣称进程退出
+  - id: new_blank_book_provider_wedge_probe
+    note: 2026-10-12 探针(与 2026-09-28 verified 路线记录矛盾,待复验):起始页树健康(56 元素稳定),但**新建空白工作簿**后主窗 UIA 观察连续撞 20s 看门狗、单点定位 12.7s 失败,等 45s 不恢复——「打开既有 XLSX」路线(table_extract/undo_redo verified 时所走)是否同楔死待复验;若打开路径健康,「新建空白簿」场景以打开模板/种子文件替代。新建首个工作簿弹的 owner 欢迎面板(WindowsForms10 无标题)UIA 读不到(0x80010121)但数秒自退,勿阻塞。
 routes:
   - id: cell_write        # 变量 {cell} {value} {window} 由调用方替换
     description: 写入单元格(剪贴板直灌 + 名称框导航 + paste)
