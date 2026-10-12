@@ -115,3 +115,28 @@ fn parse_waypoints_unit() {
     assert_eq!(out.status.code(), Some(2));
     assert!(stdout.contains("--app"), "{stdout}");
 }
+
+#[test]
+fn set_value_verify_value_and_verify_file_discover_are_documented() {
+    // spec:set-value 读回核验与 type 对齐(空白读回诚实失败——provider 背书
+    // 对话框读不回,走 type --verify-value);verify-file 目录发现形态按过滤器
+    // 补扩展名的产物断言(docs/06;2026-10-12 Zotero 导出轮实证)。
+    for (command, flag, needle) in [
+        (
+            "set-value",
+            "--verify-value",
+            "blank readback fails honestly",
+        ),
+        ("verify-file", "--discover", "type-filter extension"),
+    ] {
+        let out = support::IsolatedCommand::new()
+            .command
+            .args([command, "--help"])
+            .output()
+            .unwrap();
+        let help = String::from_utf8_lossy(&out.stdout);
+        assert!(out.status.success());
+        assert!(help.contains(flag), "help: {help}");
+        assert!(help.contains(needle), "help: {help}");
+    }
+}

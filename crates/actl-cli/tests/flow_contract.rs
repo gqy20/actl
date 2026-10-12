@@ -129,6 +129,61 @@ fn file_check_contract_and_mismatch_are_read_only() {
 }
 
 #[test]
+fn file_discover_picks_newest_match_reports_name_and_catches_late_arrival() {
+    let s = Sandbox::new();
+    // 发现形态:同 glob 两个文件取 mtime 最新者断言,信封带 discovered 实名
+    let dir = s.root.join("exports");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("stale.csl.json.bib"), "old").unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(60));
+    std::fs::write(dir.join("fresh.csl.json.bib"), "new").unwrap();
+    let args = [
+        "verify-file",
+        "--path",
+        dir.to_str().unwrap(),
+        "--kind",
+        "text",
+        "--discover",
+        "*.csl.json*",
+        "--expected",
+        "\"new\"",
+    ];
+    let (code, mut result) = s.invoke(&args);
+    assert_eq!(code, 0, "{result}");
+    result.as_object_mut().unwrap().remove("duration_ms");
+    assert_eq!(result["data"]["kind"], "text");
+    assert_eq!(result["data"]["comparison"], "exact", "{result}");
+    assert!(
+        result["data"]["discovered"]
+            .as_str()
+            .unwrap()
+            .ends_with("fresh.csl.json.bib"),
+        "{result}"
+    );
+    // 晚到文件:首轮无匹配(ASSERTION_FAILED 触发 settle 重试),300ms 后落盘被等到
+    let late_dir = s.root.join("late");
+    std::fs::create_dir_all(&late_dir).unwrap();
+    let spawn_dir = late_dir.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        std::fs::write(spawn_dir.join("late-export.csl.json.bib"), "late").unwrap();
+    });
+    let args = [
+        "verify-file",
+        "--path",
+        late_dir.to_str().unwrap(),
+        "--kind",
+        "text",
+        "--discover",
+        "*.csl.json*",
+        "--expected",
+        "\"late\"",
+    ];
+    let (code, result) = s.invoke(&args);
+    assert_eq!(code, 0, "{result}");
+}
+
+#[test]
 fn reusable_workflows_preflight_without_desktop_actions() {
     let s = Sandbox::new();
     for (name, values) in [

@@ -466,6 +466,7 @@ pub fn set_value(
     target: &Target,
     value: &str,
     near: Option<&str>,
+    verify_value: Option<&str>,
 ) -> Result<InputResult, CtlError> {
     let loc = locate(app, target, near)?;
     // Value pattern 调用同进 UIA 看门狗(click pattern 派发同理由)。
@@ -489,6 +490,19 @@ pub fn set_value(
                 .set_value(value)
                 .map_err(internal)
         })?;
+        // 可选读回核验与 type --verify-value 同通道(input_verify):同实例身份
+        // 复核 + 2s 轮询 + 换行折叠;读回失败/不符都诚实报错,绝不重放写入。
+        // 读回恒空的 provider 背书对话框(如系统另存文件名 Edit)会如实失败——
+        // 那类目标走 type --verify-value(2026-10-12 Zotero 导出轮实证)。
+        if let Some(expected) = verify_value {
+            let identity = crate::identity::identity(&loc.element);
+            crate::input_verify::verify_value(
+                &loc.element,
+                &identity,
+                Some(expected),
+                value.chars().count(),
+            )?;
+        }
         Ok(InputResult::from(&loc))
     })();
     drop(loc);

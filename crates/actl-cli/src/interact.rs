@@ -283,13 +283,15 @@ pub(crate) fn set_value_cmd(
     app: Option<&str>,
     near: Option<&str>,
     snapshot: Option<&str>,
+    verify_value: Option<&str>,
 ) -> Result<CommandOutput, CtlError> {
     let target = actl_core::parse_target(target_raw)?;
     let _replay = replay_guard(snapshot, app)?;
-    let res = actl_uia::set_value(app, &target, value, near)?;
+    let res = actl_uia::set_value(app, &target, value, near, verify_value)?;
     Ok(json!({
         "action": "set-value",
         "target": target.describe(),
+        "value_verified": verify_value.is_some().then_some(true),
         "resolved": { "role": res.role, "name": res.name },
     })
     .into())

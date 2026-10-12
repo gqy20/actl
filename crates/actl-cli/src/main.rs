@@ -205,6 +205,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             expected,
             expected_file,
             subset,
+            discover,
         } => {
             // --expected-file:期望从 UTF-8 文件读——长/中文 JSON 经 shell 传参
             // 的引号/编码坑类消灭(docs/81 §8);与 --expected 互斥。
@@ -230,7 +231,8 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
                     ));
                 }
             };
-            file_check::verify(path, kind, &expectation, *subset).map(Into::into)
+            file_check::verify(path, kind, &expectation, *subset, discover.as_deref())
+                .map(Into::into)
         }
         Command::Commands => commands().map(Into::into),
         Command::Status => status().map(Into::into),
@@ -463,12 +465,14 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             app,
             near,
             snapshot,
+            verify_value,
         } => set_value_cmd(
             target,
             value,
             app.as_deref(),
             near.as_deref(),
             snapshot.as_deref(),
+            verify_value.as_deref(),
         ),
         Command::RightClick {
             target,

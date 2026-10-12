@@ -635,6 +635,12 @@ L2  actl commands     机器 schema:全命令+参数的 JSON(agent 自发现入�
   前台复核)。目标歧义遵循 `AMBIGUOUS`;`--snapshot` 走 ref 身份校验链;成功 envelope 含
   `focus_verified:true` 与 resolved_by。flow 中定位为**写步**(改变焦点状态,非只读),verify 伴随
   要求与 click 同规。
+- `set-value <target> <value> --app X [--near <sel>] [--snapshot ID] [--verify-value <expected>]`：
+  Value pattern 直写（无键盘、无前台门）。可选 `--verify-value` 在原控件上读回核验（与 type 同通道：
+  同实例身份复核、最多 2000ms 轮询、换行折叠精确比较；不符/不可读返回 `ASSERTION_FAILED`，实例改变返回
+  `STALE_REF`，绝不重放写入；成功 envelope 带 `value_verified:true`，未要求时为 null）。**已知边界（2026-10-12
+  Zotero 导出轮实证）**：provider 背书的系统对话框 Edit（如公共另存对话框文件名框）读回恒空——`--verify-value`
+  会诚实失败而非假通过，那类目标改走 `type --verify-value`（键盘路径读回可达）；勿以 get 读回空判"写入丢失"。
 - 键盘沿用 §2 的显式 `--app` 授权；鼠标物理路径仍要求 `--physical`。
 
 ### 5.3 语义动作的执行前复核
@@ -1057,7 +1063,7 @@ actl flow-resume --id readback-001
 
 只读断言（可用于 before/verify/resume_check，以及只读 run）：
 
-- `verify-file --path <path> --kind text|json|docx|docx-styles|meta|xlsx (--expected <JSON> | --expected-file <utf8文件>) [--subset]`：文本按 CRLF→LF 读取；JSON 按类型比较；docx 返回正文 text 与显式加粗 bold；docx-styles 返回逐段 `{"paragraphs":[{text,style,bold}]}`（style 为 w:pStyle 的 OOXML styleId，无显式样式为空串即 Normal；bold 为段内"有文本 run 且全部显式加粗"，不推断样式继承）；**meta 返回 `{"size","mtime_unix_ms"}`（元数据读取不受 Office 排他锁影响，是文档打开期间"保存确实落盘"的唯一断言通道），expected 支持关系键 `size_min`/`mtime_min`（unix 毫秒，单调下界断言；关系键不参与通用比较，剔除后空对象+subset=纯关系形态）**；xlsx 返回 sheet1 单元格的 value/formula。**--expected-file 从 UTF-8 文件读期望（与 --expected 互斥，二选一必填）——长/中文 JSON 经 shell 传参的引号/编码坑类消灭（docs/81 §8）**。subset 仅忽略未声明的对象键，数组长度及顺序仍须一致。流程中的路径必须为绝对路径。docx 的 bold 指每个含文本 run 均显式声明加粗，不推断样式继承。
+- `verify-file --path <path> --kind text|json|docx|docx-styles|meta|xlsx (--expected <JSON> | --expected-file <utf8文件>) [--subset]`：文本按 CRLF→LF 读取；JSON 按类型比较；docx 返回正文 text 与显式加粗 bold；docx-styles 返回逐段 `{"paragraphs":[{text,style,bold}]}`（style 为 w:pStyle 的 OOXML styleId，无显式样式为空串即 Normal；bold 为段内"有文本 run 且全部显式加粗"，不推断样式继承）；**meta 返回 `{"size","mtime_unix_ms"}`（元数据读取不受 Office 排他锁影响，是文档打开期间"保存确实落盘"的唯一断言通道），expected 支持关系键 `size_min`/`mtime_min`（unix 毫秒，单调下界断言；关系键不参与通用比较，剔除后空对象+subset=纯关系形态）**；xlsx 返回 sheet1 单元格的 value/formula。**--expected-file 从 UTF-8 文件读期望（与 --expected 互斥，二选一必填）——长/中文 JSON 经 shell 传参的引号/编码坑类消灭（docs/81 §8）**。subset 仅忽略未声明的对象键，数组长度及顺序仍须一致。流程中的路径必须为绝对路径。docx 的 bold 指每个含文本 run 均显式声明加粗，不推断样式继承。**--discover <通配>（2026-10-12 增补）**：--path 为目录时，取其中匹配锚定通配（仅 `*`、大小写不敏感、跨点号）的 mtime 最新文件断言，envelope 带 `discovered` 实名——保存对话框按类型过滤器补扩展名（输入 `.csl.json` 落盘 `.csl.json.bib`），按预设精确名断言会静默落空（Zotero 导出轮实证），产物断言走发现形态；无匹配报 `ASSERTION_FAILED`（io_kind=no_match），与"文件可能稍后出现"同语义、参与 5s settle 窗。
 - `verify-rows --app ... --prefix <parent-id>-row- --expected <JSON string array>`：完整快照中必须有唯一父树，比较 TreeItem 行名集合（排序后保留重复项），截断或父树缺失拒绝。
 - `verify-owner --app ... --program <absolute exe> --token <absolute task path> [--instance ... --hwnd ... --pid ...]`：核对唯一可见原生窗口、进程可执行路径、命令行中的完整任务路径参数，并返回 HWND、PID、进程创建时间。可选身份字段必须全部匹配；不把标题匹配单独当归属证据。返回含 `hwnd_anchor`（`hwnd:<n>` 就绪字符串）——outputs/bind 直填后续任意 `--app` 参数槽,动态标题窗口（标题随曲目/脏标记变）静态计划锚定无须标题插值：**归属步产锚 → 后续步绑锚**的惯用法。
 - `verify-closed --hwnd ... --pid ... --instance ...`：观察原窗口和原进程实例；窗口消失但进程仍在不算通过，PID 复用也不对新进程执行操作，状态矛盾/查询失败保留未知。

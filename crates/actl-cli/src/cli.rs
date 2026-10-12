@@ -500,6 +500,9 @@ pub(crate) enum Command {
         /// Validate window and ref element identities against this snapshot id
         #[arg(long)]
         snapshot: Option<String>,
+        /// Read back the complete value on the same element within 2s; never repeats the write (a blank readback fails honestly — some provider-backed dialogs cannot read back; use `type --verify-value` there)
+        #[arg(long)]
+        verify_value: Option<String>,
     },
     /// Focus an element for subsequent keyboard input (UIA SetFocus + readback verification; no keys injected)
     Focus {
@@ -675,6 +678,12 @@ pub(crate) enum Command {
         /// Compare only declared object keys (array lengths remain exact)
         #[arg(long)]
         subset: bool,
+        /// With --path as a DIRECTORY: verify the newest file matching this wildcard
+        /// pattern (only `*`, case-insensitive) instead — save dialogs append the
+        /// type-filter extension (typed .csl.json lands as .csl.json.bib), so assert
+        /// by discovery; envelope reports the discovered path under "discovered"
+        #[arg(long)]
+        discover: Option<String>,
     },
     /// Assert the exact named rows of a complete UIA snapshot
     VerifyRows {
