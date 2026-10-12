@@ -23,7 +23,6 @@
 ### 流程与集成
 
 - [ ] 流程扩展（嵌套分支——**缓办**，无真实场景，出现再立项；循环已落地 for_each 形态，2026-10-11）
-- [ ] 浏览器通道余量：flow 级 uncertain 持久化、pipe 传输 spike（`--remote-debugging-pipe`）、batch 组合验收
 - [ ] WebView2 专项验收（键盘跨原生/网页、屏幕阅读器、多屏 DPI、缺失运行时回退）
 - [ ] 中央任务提示专项验收：真实失败/停止/接管暂停、跨屏 DPI 与减少动态设置（[75](75-action-start-notification.md)）；并轨补入：急停真实按钮 + 跨进程解除完整交互（[35](35-stop-lifecycle.md)/[39](39-flow-observation-recovery.md) 尾自 2026-09-28 悬置——真实按钮路径待验收，与真实停止项同轮收口）。**已完成子项（2026-10-12,disp-restart-01）**：显示端重启后旧流程恢复——旧代次 paused run 经 display-stop→display-start（新 pid/epoch）后 flow-resume 正常走完 completed 零拒绝
 - [ ] agent 自驱授权白名单通道（仅真实需求时立项，[32](32-desktop-handoff.md)）

@@ -125,7 +125,13 @@ quirks:
       305 元素全物化:扩展清单完整名称(沉浸式翻译/控制你的音乐、
       视频等内容)、每扩展"希望访问此站点"权限项(id:view_1013)
       均可定位——扩展管理/启用操作走此面,与页面内扩展弹层
-      (须 physical)是两个不同表面
+      (须 physical)是两个不同表面;③**chrome 层菜单项 Invoke
+      = INTERNAL 实证**(E_FAIL 预期风险坐实)——菜单项点击走
+      --physical;④**find-image 定位扩展浮动图标一发命中**
+      (score 1.0/473ms,裁当前截图 60x60 模板)+物理点击触发
+      扩展动作实证(沉浸式翻译图标点击=页面翻译切换)——
+      shadow DOM 浮动图标(name/id 均不可靠,深度枚举 button
+      零命中)的标准定位通道
   - id: webui_weak_a11y
     note: >-
       Chrome 内置页面(WebUI)视觉完全渲染但 a11y 弱暴露(extensions
