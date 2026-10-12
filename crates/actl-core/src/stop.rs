@@ -20,7 +20,8 @@ pub struct StopRecord {
     pub pid: u32,
     pub display_epoch: Option<String>,
 }
-fn invalid(detail: impl ToString) -> CtlError {
+/// 损坏态(坏格式/版本不匹配):execution-recover 修复路径——原语义。
+fn corrupt(detail: impl ToString) -> CtlError {
     CtlError::with_evidence(
         ErrorCode::NotActionable,
         "execution state requires repair",
@@ -29,6 +30,26 @@ fn invalid(detail: impl ToString) -> CtlError {
             "recovery":"execution-recover", "retry_input":false
         }),
     )
+}
+/// 基础设施 IO 故障(存储目录不可写/磁盘耗尽/锁不可得):INTERNAL——
+/// 修复路径不适用(修 execution-recover 修不了磁盘),按硬规则 3 如实
+/// 归基础设施故障码(2026-10-12 故障注入实证:不可写存储曾把
+/// list-windows 误导成 NOT_ACTIONABLE"requires repair")。
+fn infra(detail: impl ToString) -> CtlError {
+    CtlError::with_evidence(
+        ErrorCode::Internal,
+        "execution state storage unavailable",
+        serde_json::json!({
+            "reason":"execution_state_io", "detail":detail.to_string(),
+            "retry_input":false
+        }),
+    )
+}
+
+/// StopRecord 序列化失败是进程内逻辑错误(数据结构自产)——纯 INTERNAL,
+/// 与存储 IO 故障(infra)和损坏态(corrupt)三分。
+fn stop_record_json(error: serde_json::Error) -> CtlError {
+    CtlError::internal(format!("stop record serialize: {error}"))
 }
 fn cancelled() -> CtlError {
     CtlError::with_evidence(
@@ -76,15 +97,15 @@ impl SignalPaths {
         self.dir.join("stop-generation")
     }
     fn control_lock(&self) -> Result<fs::File, CtlError> {
-        fs::create_dir_all(&self.dir).map_err(invalid)?;
+        fs::create_dir_all(&self.dir).map_err(infra)?;
         let file = fs::OpenOptions::new()
             .create(true)
             .truncate(false)
             .read(true)
             .write(true)
             .open(self.dir.join("stop-control.lock"))
-            .map_err(invalid)?;
-        file.lock().map_err(invalid)?;
+            .map_err(infra)?;
+        file.lock().map_err(infra)?;
         Ok(file)
     }
     fn read_generation(&self) -> Result<String, CtlError> {
@@ -96,20 +117,20 @@ impl SignalPaths {
             {
                 Ok(s)
             }
-            Ok(_) => Err(invalid("invalid generation")),
+            Ok(_) => Err(corrupt("invalid generation")),
             Err(e) if e.kind() == ErrorKind::NotFound => Ok("initial".into()),
-            Err(e) => Err(invalid(e)),
+            Err(e) => Err(infra(e)),
         }
     }
     fn read_stop(&self, generation: &str) -> Result<Option<StopRecord>, CtlError> {
         let data = match fs::read(self.stop_file()) {
             Ok(data) => data,
             Err(e) if e.kind() == ErrorKind::NotFound => return Ok(None),
-            Err(e) => return Err(invalid(e)),
+            Err(e) => return Err(infra(e)),
         };
-        let r: StopRecord = serde_json::from_slice(&data).map_err(invalid)?;
+        let r: StopRecord = serde_json::from_slice(&data).map_err(corrupt)?;
         if r.version != 2 || r.generation != generation {
-            return Err(invalid("unsupported stop record or generation mismatch"));
+            return Err(corrupt("unsupported stop record or generation mismatch"));
         }
         Ok(Some(r))
     }
@@ -132,11 +153,11 @@ impl SignalPaths {
                 .write(true)
                 .create_new(true)
                 .open(&tmp)
-                .map_err(invalid)?;
+                .map_err(infra)?;
             f.write_all(data)
                 .and_then(|_| f.sync_all())
-                .map_err(invalid)?;
-            fs::rename(&tmp, path).map_err(invalid)
+                .map_err(infra)?;
+            fs::rename(&tmp, path).map_err(infra)
         })();
         if result.is_err() {
             let _ = fs::remove_file(tmp);
@@ -160,10 +181,10 @@ impl SignalPaths {
         };
         self.write_control(
             &self.stop_file(),
-            &serde_json::to_vec(&record).map_err(invalid)?,
+            &serde_json::to_vec(&record).map_err(stop_record_json)?,
         )
     }
-    /// Only an explicit user's Start for this generation may acknowledge the stop.
+    /// Explicit recovery: invalidate callers and archive raw state; no consent or resume.
     pub fn acknowledge_stop(&self, expected: &str) -> Result<(), CtlError> {
         let _lock = self.control_lock()?;
         let generation = self.read_generation()?;
@@ -173,13 +194,13 @@ impl SignalPaths {
         self.read_stop(&generation)?;
         if self.stop_requested() {
             let archive = self.dir.join("stop-history").join(&generation);
-            fs::create_dir_all(&archive).map_err(invalid)?;
-            fs::copy(self.stop_file(), archive.join("stop-requested")).map_err(invalid)?;
+            fs::create_dir_all(&archive).map_err(infra)?;
+            fs::copy(self.stop_file(), archive.join("stop-requested")).map_err(infra)?;
         }
         match fs::remove_file(self.stop_file()) {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == ErrorKind::NotFound => Ok(()),
-            Err(e) => Err(invalid(e)),
+            Err(e) => Err(infra(e)),
         }
     }
     /// Explicit recovery: invalidate callers and archive raw state; no consent or resume.
@@ -191,28 +212,28 @@ impl SignalPaths {
         for path in [self.stop_file(), self.generation_file()] {
             match fs::symlink_metadata(&path) {
                 Ok(meta) if meta.is_file() && !meta.file_type().is_symlink() => {
-                    fs::create_dir_all(&archive).map_err(invalid)?;
+                    fs::create_dir_all(&archive).map_err(infra)?;
                     let name = path
                         .file_name()
-                        .ok_or_else(|| invalid("missing filename"))?;
+                        .ok_or_else(|| corrupt("missing filename"))?;
                     let dest = archive.join(name);
-                    fs::copy(&path, &dest).map_err(invalid)?;
+                    fs::copy(&path, &dest).map_err(infra)?;
                     archived.push(dest.to_string_lossy().into_owned());
                 }
                 Ok(_) => {
-                    return Err(invalid(
+                    return Err(corrupt(
                         "state path is not a regular file; no automatic removal",
                     ));
                 }
                 Err(e) if e.kind() == ErrorKind::NotFound => {}
-                Err(e) => return Err(invalid(e)),
+                Err(e) => return Err(infra(e)),
             }
         }
         self.write_control(&self.generation_file(), generation.as_bytes())?;
         match fs::remove_file(self.stop_file()) {
             Ok(()) => {}
             Err(e) if e.kind() == ErrorKind::NotFound => {}
-            Err(e) => return Err(invalid(e)),
+            Err(e) => return Err(infra(e)),
         }
         Ok(
             serde_json::json!({"recovered":true,"generation":generation,"permission_granted":false,"resumed":false,"archived":archived}),

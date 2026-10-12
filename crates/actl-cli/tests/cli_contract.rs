@@ -1006,3 +1006,39 @@ fn app_locate_contract() {
     assert!(text.contains("Errors:"), "help lacks Errors");
     assert!(text.contains("Start Menu"), "help lacks channel surface");
 }
+
+/// 存储目录不可写故障注入(2026-10-12 维护区收口):LOCALAPPDATA 指向
+/// 不存在/不可写路径时,命令族必须走 INTERNAL 错误契约(如实报因),
+/// 不得 panic/死循环/静默。set-dir 只读命令覆盖(status/list-windows);
+/// 写命令(status 心跳落盘失败路径)核心面在 SignalPaths——CLI 层验证
+/// envelope 仍完整。磁盘耗尽(E(handle))与不可写(EACCES)同族,
+/// 注入手法同款。
+#[test]
+fn unwritable_storage_fails_gracefully() {
+    for command in ["status", "list-windows", "app-list", "browser-list"] {
+        let dir = std::env::temp_dir().join("actl-unwritable-probe");
+        let _ = std::fs::remove_dir_all(&dir);
+        // 目录占位一个同名【文件】→ create_dir_all 失败 → 全部落盘路径不可写
+        std::fs::write(&dir, b"occupied").expect("occupy");
+        let out = std::process::Command::new(env!("CARGO_BIN_EXE_actl"))
+            .env("LOCALAPPDATA", &dir)
+            .args([command])
+            .output()
+            .expect("spawn actl");
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let _ = std::fs::remove_file(&dir);
+        // 两种可接受终态:0 退 + 合法 envelope(纯读命令可能无需存储),
+        // 或 1 退 + INTERNAL envelope。禁止:panic(非 0/1 退出码)或无 envelope。
+        let code = out.status.code().unwrap_or(-1);
+        assert!(
+            code == 0 || code == 1,
+            "{command} must exit 0/1 under unwritable storage, got {code}"
+        );
+        if code == 1 {
+            let v: serde_json::Value = serde_json::from_str(&stdout).unwrap_or_else(|_| {
+                panic!("{command} error output must be a JSON envelope: {stdout}")
+            });
+            assert_eq!(v["error"]["code"], "INTERNAL", "{command}: {stdout}");
+        }
+    }
+}
