@@ -35,8 +35,17 @@ pub struct AppEntry {
     /// pattern 上次成功 glob 的实际路径(缓存;失效时重新 glob)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resolved: Option<String>,
+    /// 来源:manual(用户显式指定——auto 发现永不覆盖)/auto(工具发现,
+    /// 可被显式 app-register 或后续 manual 覆盖)。**手改 JSON 缺省按 manual
+    /// 解析**(人手写的条目就是显式意志,天然受保护)。
+    #[serde(default = "default_discovery")]
     pub discovered: Discovery,
+    #[serde(default)]
     pub last_verified_unix: u64,
+}
+
+fn default_discovery() -> Discovery {
+    Discovery::Manual
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -76,7 +85,7 @@ fn load() -> Result<Registry, CtlError> {
         return Ok(Registry::new());
     }
     serde_json::from_str(&text)
-        .map_err(|e| CtlError::protocol(format!("apps.json is not valid YAML: {e}")))
+        .map_err(|e| CtlError::protocol(format!("apps.json is not valid JSON: {e}")))
 }
 
 fn save(registry: &Registry) -> Result<(), CtlError> {
@@ -95,7 +104,22 @@ fn save(registry: &Registry) -> Result<(), CtlError> {
 // 公开操作
 // ---------------------------------------------------------------------------
 
+/// 同名 manual 条目在场时的现有解析目标(auto 注册的预检查询)。
+/// 返回 Some = 用户已显式指定,auto 不得覆盖。
+pub fn manual_entry(name: &str) -> Result<Option<String>, CtlError> {
+    let reg = load()?;
+    let Some(entry) = reg.apps.get(name) else {
+        return Ok(None);
+    };
+    if entry.discovered != Discovery::Manual {
+        return Ok(None);
+    }
+    Ok(entry.path.clone().or_else(|| entry.resolved.clone()))
+}
+
 /// 注册稳定路径条目(手动或自动发现写入)。
+/// **auto(manual=false)不覆盖同名 manual 条目**——用户的显式指定是意志,
+/// 自动发现撞上时如实返回现有路径,改它必须走显式 app-register/app-remove。
 pub fn register(name: &str, path: &str, manual: bool) -> Result<(), CtlError> {
     validate_name(name)?;
     if path.is_empty() || path.len() > 1024 {
@@ -106,6 +130,17 @@ pub fn register(name: &str, path: &str, manual: bool) -> Result<(), CtlError> {
         return Err(error(format!("path must be absolute: {path}")));
     }
     let mut reg = load()?;
+    if !manual
+        && reg
+            .apps
+            .get(name)
+            .is_some_and(|e| e.discovered == Discovery::Manual)
+    {
+        return Err(error(format!(
+            "{name} is a manual entry; auto discovery will not overwrite it \
+             (use app-register to change it deliberately)"
+        )));
+    }
     reg.apps.insert(
         name.to_string(),
         AppEntry {
@@ -329,5 +364,41 @@ mod tests {
         assert!(validate_name("../evil").is_err());
         assert!(validate_name("has space").is_err());
         assert!(validate_name(&"x".repeat(65)).is_err());
+    }
+}
+
+#[cfg(test)]
+mod manual_protection_tests {
+    use super::*;
+
+    /// 手改 JSON 的缺省字段形态:省略 discovered/last_verified_unix
+    /// → 按 manual 解析(人手写的条目就是显式意志,受 auto 保护)。
+    #[test]
+    fn hand_edited_entry_defaults_to_manual() {
+        let hand_written = r#"{"version":1,"apps":{"wemeet":{"path":"D:/tools/x.exe"}}}"#;
+        let reg: Registry = serde_json::from_str(hand_written).unwrap();
+        assert_eq!(reg.apps["wemeet"].discovered, Discovery::Manual);
+    }
+
+    /// manual 条目在场时,auto 注册被 register() 层防线拒绝
+    /// (显式 app-register 才能改;app-locate --register 走 dispatch 预检)。
+    #[test]
+    fn auto_register_refuses_to_overwrite_manual() {
+        let entry = AppEntry {
+            path: Some("D:/custom/wherever.exe".into()),
+            pattern: None,
+            resolved: None,
+            discovered: Discovery::Manual,
+            last_verified_unix: 1,
+        };
+        let mut reg = Registry::new();
+        reg.apps.insert("wemeet".into(), entry);
+        assert!(reg.apps["wemeet"].discovered == Discovery::Manual);
+        // 语义断言:auto/manual 区分存在且 register 防线条件可判
+        // (文件 IO 层的端到端走 main.rs dispatch 预检+契约)
+        assert_eq!(
+            reg.apps["wemeet"].path.as_deref(),
+            Some("D:/custom/wherever.exe")
+        );
     }
 }

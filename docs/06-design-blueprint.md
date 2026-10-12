@@ -268,6 +268,13 @@ app-locate <名> [--register]:软件位置五通道只读探测(①别名→②A
   可执行永不入列**(first 候选指向卸载器是注册事故);有界(≤800 .lnk、
   每目录 ≤64 条目);零候选 NOT_FOUND。--register 把 first 写入 apps.json
   (探测本身不启动应用);绿色软件/无开始菜单入口的怪形态走显式 app-register。
+**manual 保护(用户显式指定 vs 自动发现)**:`app-register` 写 manual 条目,
+  `app-locate --register` 写 auto 条目——**auto 永不覆盖 manual**(同名 manual
+  在场时 locate 照常返回候选但注记 `kept_manual`+现有路径,别名继续解析;
+  register() 层第二道防线拒绝 auto 覆盖)。改用户指定必须走显式 app-register
+  /app-remove;手改 JSON 省略 discovered 字段按 manual 解析(人手写的条目
+  就是显式意志,天然受保护);pattern 条目的运行时重解析只动 resolved 缓存,
+  永不改 path/pattern 本体。
 list-windows 前台兜底:UIA 桌面子树在 provider 楔死时漏窗(无标题保存框实证),
   前台窗缺失时用 Win32 直读回填——枚举不失明于"当前正挡着什么"
 UIA 看门狗(引擎行为):定位/树观察/焦点查询区段超过 ACTL_UIA_WATCHDOG_MS

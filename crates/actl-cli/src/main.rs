@@ -765,16 +765,27 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
         Command::AppLocate { name, register } => {
             let mut result = actl_uia::app_locate::locate(name)?;
             if *register {
-                let first = result
-                    .get("first")
-                    .and_then(serde_json::Value::as_str)
-                    .ok_or_else(|| CtlError::internal("locate returned no candidate to register"))?
-                    .to_string();
-                actl_uia::app_registry::register(name, &first, false)?;
-                result
-                    .as_object_mut()
-                    .expect("locate result is an object")
-                    .insert("registered".into(), serde_json::json!(name));
+                // manual 保护:用户显式指定过的条目,自动发现不覆盖——
+                // 别名仍解析(指向用户路径),envelope 如实注记 kept_manual
+                if let Ok(Some(existing)) = actl_uia::app_registry::manual_entry(name) {
+                    result
+                        .as_object_mut()
+                        .expect("locate result is an object")
+                        .insert("kept_manual".into(), serde_json::json!(existing));
+                } else {
+                    let first = result
+                        .get("first")
+                        .and_then(serde_json::Value::as_str)
+                        .ok_or_else(|| {
+                            CtlError::internal("locate returned no candidate to register")
+                        })?
+                        .to_string();
+                    actl_uia::app_registry::register(name, &first, false)?;
+                    result
+                        .as_object_mut()
+                        .expect("locate result is an object")
+                        .insert("registered".into(), serde_json::json!(name));
+                }
             }
             Ok(result.into())
         }
