@@ -33,8 +33,6 @@
 - [ ] 游戏场景（Minecraft 命令通道）——含指针原语缺口（[17 §3](17-game-scenarios.md) M3 候选，「手工搭」路线才需要）：`mouse-move dx,dy` 增量移动（前置 GLFW raw-input spike）、鼠标按键 down/up 拆分带时长（按住挖掘）、节奏敏感动作时窗参数
 
 ### 应用深化
-
-- [ ] Excel 写入闭环（**2026-10-12 探针发现疑似回归,与 pack verified 记录矛盾待复验**:起始页树健康——launch 后 56 元素稳定物化(NavBarMenu/msotcid 族,Backstage 可导航);但**新建空白工作簿**后主窗 provider 观察连续 3×20s UIA 看门狗击杀+单点定位 12.7s 失败,等 45s 不恢复(进程健康 92MB)——「UIA 树空」旧登记或即此形态表象。**矛盾**:excel.yml table_extract/undo_redo 2026-09-28 verified(名称框 id:1001 路线),说明当时工作簿态 UIA 可用——疑 Office 更新回归或「新建空白簿」与「打开既有簿」初始化路径差异。复验轮=用既有合成 XLSX 打开路线重测 UIA 树;若打开路径健康则写入闭环被解锁、仅「新建」路径需绕行（打开模板文件替代新建）
 - [ ] Zotero 导入导出
 - [ ] 腾讯会议 draft-date 键盘路线（ctrl+a+paste+tab，QDateEdit set-value 无效）——实装于 `D:\tools\Tecent\WeMeet\`（非标准盘符,App Paths 未注册;2026-10-12 经开始菜单 .lnk 找到并注册别名 wemeet,launch+窗口冒烟通过）;路线已解锁,待桌面空闲轮
 - [ ] 浏览器扩展操作面余量（UIA 轨三批已沉淀 [16 §5.5](16-browser-scenarios.md) / browser.yml `extension_surfaces`）：①右键菜单扩展项复验（机制在，两次被用户桌面并发占用护栏正确拒绝，待空闲）；②扩展弹层内写动作成链（现存证据只覆盖「读」）。②原「CDP 自有会话扩展操作实测」已收（2026-10-12 探测:扩展 headless 存活+chrome 层扩展按钮/面板 UIA 全物化可 Invoke,「chrome 层无实测证据」空档闭合,余量并入①③——写动作成链仍待轮）

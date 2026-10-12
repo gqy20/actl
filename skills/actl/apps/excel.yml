@@ -27,17 +27,22 @@ quirks:
   - id: hidden_empty_host
     note: 关闭工作簿后可能保留不可见的 Excel 空宿主；只有文件释放且控件树无工作簿内容时才记录文档关闭，不宣称进程退出
   - id: new_blank_book_provider_wedge_probe
-    note: 2026-10-12 探针(与 2026-09-28 verified 路线记录矛盾,待复验):起始页树健康(56 元素稳定),但**新建空白工作簿**后主窗 UIA 观察连续撞 20s 看门狗、单点定位 12.7s 失败,等 45s 不恢复——「打开既有 XLSX」路线(table_extract/undo_redo verified 时所走)是否同楔死待复验;若打开路径健康,「新建空白簿」场景以打开模板/种子文件替代。新建首个工作簿弹的 owner 欢迎面板(WindowsForms10 无标题)UIA 读不到(0x80010121)但数秒自退,勿阻塞。
+    note: 2026-10-12 根因判定:楔死仅「新建空白簿」路径(主窗观察连撞 20s 看门狗不恢复)——**「打开既有 XLSX」路径 UIA 全健康**(180 元素稳定物化,名称框/编辑栏/Grid 全在场)。写入一律走 `launch EXCEL <文件>` 打开路线,新建场景用种子文件替代,不走 Backstage 新建。附带:Excel 是 Word cache-only 边界的镜像——物化树 find 可见(DataItem id=坐标 B2 稳定),但 id: 单点 locate/set-value 通道失明、DataItem 无 ref 编号;单元格写走键盘链(F5 定位→粘贴)。
+  - id: f5_goto_cell_route
+    note: 单元格寻址正道=**F5 定位对话框**(2026-10-12 E2E 实证:B2 写入 verify-file 权威确认):press f5 → 对话框「定位」(bosa_sdm_XL9,owned XLMAIN)→ 键盘焦点在对话框壳层 RichEdit(**id:1027**,引用位置 Edit 无 id 不可定位——同记事本另存为 id:1001 双命中族)→ type id:1027 "<单元格>" --app 定位 → enter 跳转 → 粘贴(ctrl+v)+enter 提交+ctrl+s 保存 → verify-file 核验。**Ctrl+G 不可用**(全局快捷键被他软件抢占,注入静默失效);对话框期键盘步锚「定位」对话框窗,不锚主窗(前台守卫)。
 routes:
   - id: cell_write        # 变量 {cell} {value} {window} 由调用方替换
-    description: 写入单元格(剪贴板直灌 + 名称框导航 + paste)
-    status: manual
+    description: 写入单元格(F5 定位对话框导航 + 剪贴板粘贴;打开既有文件路线——新建空白簿走种子文件替代,见 new_blank_book_provider_wedge_probe)
+    status: verified
+    verify: verify-file --path <文件> --kind xlsx --subset 核验目标单元格落盘
     steps:
       - ["set-clipboard", "{value}"]
-      - ["type", "id:1001", "{cell}", "--app", "{window}"]
-      - ["press", "enter", "--app", "{window}", "--target", "id:1001"]
-      - ["press", "ctrl+v", "--target", "{cell_input_selector}", "--app", "{window}"]
-      - ["press", "enter", "--app", "{window}", "--target", "{cell_input_selector}"]
+      - ["press", "f5", "--app", "{window}"]
+      - ["type", "id:1027", "{cell}", "--app", "定位", "--verify-value", "{cell}"]
+      - ["press", "enter", "--app", "定位"]
+      - ["press", "ctrl+v", "--app", "{window}"]
+      - ["press", "enter", "--app", "{window}"]
+      - ["press", "ctrl+s", "--app", "{window}"]
   - id: cell_read
     description: 读单元格(名称框往返 + ctrl+c + 剪贴板读回)
     status: manual
