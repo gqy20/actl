@@ -3,7 +3,7 @@ name: word
 display: Word
 launch: WINWORD           # App Paths 注册表解析,无需完整路径
 window: "Word"            # 标题子串;打开文件后为 "<文件名> - Word"(兼容模式文档多一段 " - 兼容性模式")
-app_version: "16.0.20326.20158"
+app_version: "16.0.20430.20092"
 verified_date: 2026-10-04
 verified_env: "Win11 25H2 (build 26200) zh-CN；真实 Office 用户配置；独立测试文档"
 quirks:
@@ -15,6 +15,8 @@ quirks:
     note: 粘贴"N. 文本"到上一编号条目后的新段会触发 Word 自动编号列表——显示成"N. N. 文本"（自动编号+粘贴文本自带编号叠加）；流程文本改用 ①②③④/• 等非 ASCII 数字编号规避。
   - id: n_drive_startup_dialog
     note: 本机 Word 每次开文档弹「目录名无效。(N:\)」错误框（某项配置指向未连接的 N: 盘）；错误框 OK 按钮 automation_id=2，popup_handlers 声明(app 锚为步骤 --app 子串/classification error/name_contains 目录名无效/click id:2)可由引擎弹层治理处置。
+  - id: a11y_cache_malformed_regression
+    note: **疑 Office 更新回归(2026-10-12 定性)**:16.0.20430 起 Malformed Cacheresponse pTreeStructure 跨文档类全量触发(原生模板/外部最小 OOXML/新空白文档三证;body_read 2026-10-04 verified 于 16.0.20326)。后果三件:①Document text 通道空——body_read 路线当前失效(已降 manual);②物化被拒答→自动回落逐节点遍历(设计兜底,诚实不挂;143 页 walk 6.9s);③树结构=chrome+「页面 N」(Custom,id=UIA_AutomationId_Word_Page_N)+「页面 N 内容」(Edit,**所有页共享 id=Body**——id:Body 返回全页匹配,寻址用 name:页面 N 内容 或序数)。树随页数缩放不随段数:4000 段文档全量快照 481 元素(143 页×2+chrome),段落从不作为元素出现,逐段寻址不存在;双模式身份一致性保持(skeleton⊆full)。复验条件=Office 修复版本;复验内容=body_read 恢复+回落消失。
   - id: start_screen_overrides_n_switch
     note: 本机 Word「启动时显示开始屏幕」选项优先于命令行 /n——裸 `WINWORD /n` 停在开始屏幕（窗口标题裸 "Word"，深色主题下界面整体深灰易误判为许可/激活问题；UIA 无 Document、按钮全禁用），写步必然 NOT_FOUND；文档只有用户在开始屏幕交互后才物化。对策=launch /n 带文件参数结构性绕过（resources 复制种子 docx），并把关卡在 wait --element role:Document 物化门而非仅窗口存在。
   - id: owned_dialog_anchor_for_input
@@ -34,7 +36,8 @@ popup_ignores:
 routes:
   - id: body_read
     description: 正文读取(TextPattern 文档通道;中英文皆逐字)
-    status: verified
+    status: manual
+    verify: 16.0.20430 疑更新回归期 Document text 返回空(a11y_cache_malformed_regression);恢复后按实际结果复验转 verified
     steps:
       - ["get", "role:Document", "--app", "{window}", "--property", "text"]
   - id: style_choreography
