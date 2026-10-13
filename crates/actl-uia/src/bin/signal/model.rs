@@ -288,6 +288,7 @@ pub fn view(states: &[SessionState], now: u64, stop_ms: Option<u64>, busy: Optio
             _ => {}
         }
     }
+
     let elapsed = s
         .finished_ms
         .unwrap_or(now)
@@ -500,7 +501,23 @@ pub fn view(states: &[SessionState], now: u64, stop_ms: Option<u64>, busy: Optio
             });
             if desktop || busy == Some(true) {
                 mode = Mode::Desktop;
-                text = "桌面操作 · 暂勿操作".into();
+                // 设备字形(2026-10-12 显示层 spec 小项收口):琥珀态主行前缀
+                // 设备指示——键盘 U+2328(export 探针实证 DirectWrite 回退链
+                // 出字形);鼠标 emoji(U+1F5B1)实锤豆腐块,改文字「鼠标」;
+                // 剪贴板/焦点维持详情行不占主行。聚合口径与 details 影响行
+                // 一致:多调用并发时不遮蔽任一输入影响。
+                let mut glyph = String::new();
+                if effects.keyboard {
+                    glyph.push_str("\u{2328} ");
+                }
+                if effects.pointer {
+                    glyph.push_str("鼠标 ");
+                }
+                text = if glyph.is_empty() {
+                    "桌面操作 · 暂勿操作".into()
+                } else {
+                    format!("{glyph}桌面操作 · 暂勿操作")
+                };
                 compact = true;
             } else if busy == Some(false)
                 && matches!(
@@ -652,6 +669,62 @@ mod tests {
         assert_eq!(view(&[], 0, None, None).mode, Mode::Unknown);
         assert_eq!(view(&[], 0, None, Some(true)).mode, Mode::Unknown);
     }
+    #[test]
+    fn amber_main_line_carries_device_glyph() {
+        // ① 显示层 spec 小项收口(2026-10-12):主行设备字形——键盘 U+2328
+        // (export 探针实证可渲染),鼠标 emoji 豆腐改文字;观察调用无前缀。
+        use actl_core::activity::*;
+        let mut st = SessionState::now(1, "type", None, None, Phase::Running);
+        let now = st.ts_ms;
+        st.action = Some(ActionState {
+            id: 1,
+            seq: 1,
+            kind: "type".into(),
+            phase: ActionPhase::Executing,
+            effects: InputEffects {
+                keyboard: true,
+                ..Default::default()
+            },
+            target: Default::default(),
+            ts_ms: now,
+            expires_ms: now + 2000,
+        });
+        let shown = view(&[st.clone()], now, None, None);
+        assert!(
+            shown.label.contains('\u{2328}'),
+            "keyboard glyph on main line: {:?}",
+            shown.label
+        );
+        let mut pt = SessionState::now(2, "click", None, None, Phase::Running);
+        pt.action = Some(ActionState {
+            id: 2,
+            seq: 1,
+            kind: "click".into(),
+            phase: ActionPhase::Executing,
+            effects: InputEffects {
+                pointer: true,
+                ..Default::default()
+            },
+            target: Default::default(),
+            ts_ms: now,
+            expires_ms: now + 2000,
+        });
+        let shown2 = view(&[pt], now, None, None);
+        assert!(
+            shown2.label.contains("鼠标"),
+            "pointer uses text form (U+1F5B1 tofu): {:?}",
+            shown2.label
+        );
+        let mut obs = SessionState::now(3, "status", None, None, Phase::Running);
+        obs.action = None;
+        let shown3 = view(&[obs], now, None, None);
+        assert!(
+            !shown3.label.contains('\u{2328}') && !shown3.label.contains("鼠标 "),
+            "observation carries no glyph: {:?}",
+            shown3.label
+        );
+    }
+
     #[test]
     fn concurrent_effects_are_combined() {
         use actl_core::activity::*;

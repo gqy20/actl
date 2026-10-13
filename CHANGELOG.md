@@ -14,6 +14,8 @@
 
 ### Documentation and validation
 
+- **主行设备字形实现——显示层 spec 小项全项收口(2026-10-12,ROADMAP 条目删除)**:琥珀态主行(Desktop 分支)前缀设备指示——键盘 U+2328(export 探针实证 DirectWrite 回退链出字形)、鼠标用文字「鼠标」(U+1F5B1 实锤豆腐块弃 emoji),剪贴板/焦点维持详情行不占主行;聚合口径与 details 影响行一致(多调用并发不遮蔽)。与 device 字段数据面(details 影响分列,§15.4 路线 B)合璧,显示层 spec 小项两条均收;glyph 探针测试 `export_device_glyph_candidates` 与主行断言 `amber_main_line_carries_device_glyph` 入库。glyph 渲染证据 target/glyph-probe/。
+
 - **快照 materialization 回落态标注 + 显示层 glyph 前置实证(2026-10-12,长期观察项两项收口)**:①snapshot/find 信封新增 `materialization` 字段(subtree_cache/node_by_node_fallback/node_by_node_legacy)——Word a11y 缓存回归轮的需求现场:回落态下文本通道天生为空,此前调用方无法从信封自查(实测 text_len=0 困惑轮);live 验证 4000 段 Word 文档报 node_by_node_fallback。②主行 glyph 裁定前置实证:export 探针渲染候选码位目视判定——U+2328 ⌨ DirectWrite 回退链出字形干净(VS16 可选,与 CJK 同行无挤压),U+1F5B1 🖱 实锤豆腐块;**待裁定提案入 ROADMAP:键盘用 U+2328,鼠标弃 emoji 改文字或 paint.rs 几何绘制**;探针测试 `export_device_glyph_candidates` 入库(产物即证据,与 export_flash_previews 同款先例)。
 
 - **前台交接 v9 真机矩阵收口（2026-10-12,用户协同三场景——ROADMAP 长期观察项删除）**:S1 嵌套租约:flow 两步写动作审计 foreground_transfer/return 各×2,每动作一租一还;**首次转交被 Windows 拒绝(0x80070005)→授权落账 3ms 后重试 accepted=true**——「可拒绝合法请求」边界活体发生且被正确处理(拒绝入档+授权重试,无误报通过)。S2 人工接管:三步键入中用户物理抢键鼠——type_c completed/type_d uncertain+NOT_ACTIONABLE(注入打断如实报不确定)/type_e pending(闸门挡下)/run paused reason=human_takeover_or_grant_expired;input_monitor 外部输入增量入档。S3 接管恢复:面板继续→consent 重签→uncertain 步恢复核查失败→**needs_review/result_unconfirmed 禁止盲目重放**(docs/39 语义活体);同轮首证 control_log 对称修复的 source=cli 记录真机在位。fixtures v9-nested-lease/v9-takeover 入库;docs/62 矩阵补全,ROADMAP 条目删除。
