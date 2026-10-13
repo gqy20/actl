@@ -124,6 +124,7 @@ fn record(id: &str, status: StepStatus, verified: bool) -> StepRecord {
         started_ms: None,
         finished_ms: None,
         ambiguous: None,
+        background_result: None,
     }
 }
 

@@ -1,0 +1,90 @@
+version: 1
+name: browser-netlog-collect-probe
+resources:
+  browser_profiles:
+    - name: bilibili
+inputs:
+  browser_executable:
+    default: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'
+  search_url:
+    default: 'https://search.bilibili.com/all?keyword=music'
+steps:
+  - id: launch_browser
+    title: launch persistent bilibili profile (login + extension world)
+    run:
+      command: browser-launch
+      args: ['--browser-executable', {input: browser_executable}, '--profile', 'bilibili', '--timeout', '20000']
+    verify:
+      command: browser-verify
+      args: ['--newest-alive']
+  - id: observe_session
+    title: read-only discovery of the session handle
+    run:
+      command: browser-list
+      args: []
+    outputs:
+      session_id:
+        type: string
+        pointer: /sessions/0/session_id
+  - id: go_search
+    title: navigate to search page
+    run:
+      command: browser-navigate
+      args: ['--session', 'placeholder', '--url', {input: search_url}, '--timeout', '20000']
+      bind: {'1': observe_session.session_id}
+    verify:
+      command: browser-verify
+      args: ['--session', 'placeholder', '--alive']
+      bind: {'1': observe_session.session_id}
+  - id: pick_video
+    title: settle then read first video card href (async-rendered cards)
+    run:
+      command: browser-read
+      args: ['--session', 'placeholder', '--css', "a[href*='/video/BV']", '--all', '--limit', '1', '--property', 'href', '--wait-for', '1', '--timeout', '20000']
+      bind: {'1': observe_session.session_id}
+    outputs:
+      video_href:
+        type: string
+        pointer: /elements/0/value
+  - id: go_video
+    title: navigate to the picked video page
+    run:
+      command: browser-navigate
+      args: ['--session', 'placeholder', '--url', 'placeholder', '--timeout', '25000']
+      bind: {'1': observe_session.session_id, '3': pick_video.video_href}
+    verify:
+      command: browser-verify
+      args: ['--session', 'placeholder', '--alive']
+      bind: {'1': observe_session.session_id}
+  - id: wait_comment_mount
+    title: settle until the comment app mounts (async mount latency quirk)
+    run:
+      command: browser-read
+      args: ['--session', 'placeholder', '--css', '#commentapp', '--wait-for', '1', '--timeout', '25000']
+      bind: {'1': observe_session.session_id}
+  - id: netlog_window
+    title: background 60s network census overlapping the collect rounds
+    background: true
+    run:
+      command: browser-netlog
+      args: ['--session', 'placeholder', '--window', '60000', '--max-entries', '2000']
+      bind: {'1': observe_session.session_id}
+  - id: collect_comments
+    title: deep shadow-DOM collect while netlog runs in background
+    run:
+      command: browser-collect
+      args: ['--session', 'placeholder', '--css', 'bili-comment-thread-renderer', '--deep', '--max-rounds', '40', '--interval-ms', '500', '--timeout', '20000']
+      bind: {'1': observe_session.session_id}
+    verify:
+      command: browser-verify
+      args: ['--session', 'placeholder', '--alive']
+      bind: {'1': observe_session.session_id}
+  - id: close_browser
+    title: graceful close (persistent profile kept)
+    run:
+      command: browser-close
+      args: ['--session', 'placeholder']
+      bind: {'1': observe_session.session_id}
+    verify:
+      command: browser-verify
+      args: ['--none']

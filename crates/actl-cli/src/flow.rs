@@ -535,6 +535,35 @@ impl Host for Adapter<'_> {
     fn read_only(&self, call: &Invocation) -> bool {
         parse(call).is_ok_and(|c| read_only(&c))
     }
+    /// 背景观察派发(方案 a):spawn 即在线程内启动 dispatch(netlog 开窗
+    /// 与流程后续步真正并发),返回收割凭据;join 只收割结果。观察命令
+    /// 有界自终(netlog 窗口 ≤75s),不设暂停观察点——停止语义在引擎
+    /// 步边界生效,收割前流程不退出。
+    fn spawn_background(
+        &mut self,
+        call: &Invocation,
+    ) -> Result<Box<dyn actl_flow::engine::BackgroundCall + Send>, CtlError> {
+        let command = parse(call)?;
+        let invocation = call.clone();
+        let handle = std::thread::spawn(move || {
+            crate::dispatch(&command).map(|output| {
+                serde_json::json!({
+                    "command": invocation.command,
+                    "args": invocation.args,
+                    "result": output.data,
+                })
+            })
+        });
+        struct Ticket(std::thread::JoinHandle<Result<serde_json::Value, CtlError>>);
+        impl actl_flow::engine::BackgroundCall for Ticket {
+            fn join(self: Box<Self>) -> Result<serde_json::Value, CtlError> {
+                self.0
+                    .join()
+                    .map_err(|_| CtlError::internal("background observation thread panicked"))?
+            }
+        }
+        Ok(Box::new(Ticket(handle)))
+    }
     fn stopped(&self) -> bool {
         actl_core::stop::check_current().is_err()
     }
@@ -1323,6 +1352,7 @@ mod failure_evidence_tests {
             started_ms: None,
             finished_ms: None,
             ambiguous: None,
+            background_result: None,
         }
     }
 

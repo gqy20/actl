@@ -445,6 +445,7 @@ browser-netlog --session <id> [--filter S] [--window ms] [--max-entries N]
 ```
 **显示层协同**:browser 的写与生命周期命令(launch/navigate/click/type/collect/close)在信号流声明动作卡(kind/effects/target)——**不经显示租约门**(CDP 写非桌面物理输入,展示是透明性而非权限门;急停仍经停止代次核验压过一切写);`InputEffects` 全空如实申报;target 只带 `cdp:<session>` 标记,不含选择器/URL/文本(动作日志内容省略纪律)。观察命令(read/list/verify/netlog)不声明动作,与 UIA 轨观察同规。
 **YAML 流程接入**:browser 命令进 flow 的治理模型走三件套——① `browser-launch` 是生命周期命令,不能带 outputs(outputs 只允许只读生产者);② 会话句柄经 `browser-list` 以观察者身份产出(outputs.pointer=/sessions/0/session_id),后续步骤 `bind` 注入 `--session` 值位(下标须指向值字面量,不能指到旗标上);③ 有副作用的步骤必须带 verify——`browser-verify` 族即为此而生(launch→--newest-alive,click→--session X --alive,close→--none)。
+**背景观察步**(`background: true`,2026-10-13):只读观察命令(如 `browser-netlog` 的窗口期)与后续步骤**并发**的流程一等形态——引擎派发后不等待,流程退出前统一收割(join),结果入 StepRecord.background_result(状态文件可查,bind 结构性不可用)。语义边界:run 必须只读,禁 verify/outputs/pause_before/ensure/resume_check/otherwise/recovery/retry(观察者不是流程控制点),违反即 PROTOCOL;收割失败=步骤失败,Completed 改判 Failed(`background_failed:<step>`)。背景观察不受暂停观察点约束(有界自终),中断恢复时重派发即重开窗。
 **持久 profile 治理**:flow 中 `browser-launch --profile <name>` 必须在
 `resources.browser_profiles` 声明(未声明即 PROTOCOL 拒绝)——凭据资产显式归属;该资源创建幂等、永不随任务删除。**登录暂停点**:`pause_before: true` + `resume_check: browser-verify --session X --css <登录标记>`(用户在可见窗口完成登录后恢复;谓词不满足则保持 paused,`reason: resume_check_failed`)。示例流程 `skills/actl/workflows/browser-login-session.yml`。
 会话状态落 `%LOCALAPPDATA%\actl\browser\`(sessions/*.json + profiles/);错误码复用全集,无新增码。

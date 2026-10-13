@@ -63,6 +63,11 @@ pub struct StepRecord {
     /// `--pick` 应答后 picked 置位,派发参数以 ref+snapshot 重写。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ambiguous: Option<crate::AmbiguousTarget>,
+    /// 背景观察步的收割产物(background: true 专属;观测全量入档供
+    /// flow-evidence/状态文件判读——bind 结构性不可用,消费方是收割后的
+    /// 人/agent,不是后续步骤)。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub background_result: Option<serde_json::Value>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -110,6 +115,7 @@ impl Run {
                     started_ms: None,
                     finished_ms: None,
                     ambiguous: None,
+                    background_result: None,
                 })
                 .collect(),
         }
@@ -349,6 +355,29 @@ pub trait Host {
     fn read_only(&self, call: &Invocation) -> bool;
     fn stopped(&self) -> bool;
     fn publish(&mut self, run: &Run);
+    /// 背景观察步的派发通道(background: true,只读调用):实现方异步执行
+    /// (线程/进程),立即返回收割凭据;引擎在流程退出前 join 收割。
+    /// 默认实现 = 同步执行(离线测试 Host 无并发需求,语义等价)。
+    fn spawn_background(
+        &mut self,
+        call: &Invocation,
+    ) -> Result<Box<dyn BackgroundCall + Send>, CtlError> {
+        let result = self.execute_output(call);
+        struct Sync(Option<Result<serde_json::Value, CtlError>>);
+        impl BackgroundCall for Sync {
+            fn join(self: Box<Self>) -> Result<serde_json::Value, CtlError> {
+                self.0
+                    .ok_or_else(|| CtlError::internal("background observation produced no result"))?
+                    .map(|v| serde_json::json!({ "value": v }))
+            }
+        }
+        Ok(Box::new(Sync(Some(result))))
+    }
+}
+
+/// 背景观察的收割凭据:spawn_background 返回,流程退出前 join 取结果。
+pub trait BackgroundCall: Send {
+    fn join(self: Box<Self>) -> Result<serde_json::Value, CtlError>;
 }
 fn boundary(run: &mut Run, store: &Store, host: &mut impl Host) -> Result<bool, CtlError> {
     if host.stopped() {
@@ -418,6 +447,76 @@ pub fn execute(
     retry_step: Option<&str>,
     pick: Option<&str>,
 ) -> Result<(), CtlError> {
+    let mut background: Vec<(usize, Box<dyn BackgroundCall + Send>)> = Vec::new();
+    let result = execute_inner(plan, run, store, host, retry_step, pick, &mut background);
+    // 收割无条件执行:即使 inner 中适数据错误退出,已派发的观察线程也必须
+    // join 收口(不留无主线程、状态文件如实反映观察结局)
+    let harvested = harvest_background(plan, run, store, host, &mut background);
+    result?;
+    harvested
+}
+
+/// 背景观察步收割(background: true):join 全部在飞的观察调用,结果入
+/// StepRecord.background_result;失败=步骤失败(观察者不豁免错误契约)。
+/// 流程已 Completed 时背景失败→如实改判 Failed;其余终态保持(用户暂停
+/// 优先,不因观察失败覆盖)。join 阻塞受观察自身预算约束(netlog 窗口
+/// ≤60s+余量),watchdog 默认 120s 内安全,逐票续命。
+fn harvest_background(
+    plan: &Plan,
+    run: &mut Run,
+    store: &Store,
+    host: &mut impl Host,
+    tickets: &mut Vec<(usize, Box<dyn BackgroundCall + Send>)>,
+) -> Result<(), CtlError> {
+    if tickets.is_empty() {
+        return Ok(());
+    }
+    let mut failed: Option<(usize, CtlError)> = None;
+    for (i, ticket) in tickets.drain(..) {
+        actl_core::watchdog::reset();
+        match ticket.join() {
+            Ok(value) => {
+                host.observation_event("background", 1, "completed", None);
+                run.steps[i].status = StepStatus::Completed;
+                run.steps[i].background_result = Some(value);
+            }
+            Err(error) => {
+                host.observation_event("background", 1, "failed", Some(error.code));
+                run.steps[i].status = StepStatus::Failed;
+                run.steps[i].error_code = Some(error.code);
+                run.steps[i].error_evidence = crate::step_failure_evidence(
+                    &plan.steps[i],
+                    &error,
+                    "background",
+                    &plan.steps[i].run.command,
+                );
+                failed = Some((i, error));
+            }
+        }
+    }
+    if let Some((i, _)) = &failed
+        && run.status == Status::Completed
+    {
+        let i = *i;
+        run.status = Status::Failed;
+        run.reason = Some(failure_reason(
+            &format!("background_failed:{}", plan.steps[i].id),
+            run,
+            i,
+        ));
+    }
+    run.save(store, host)
+}
+
+pub(crate) fn execute_inner(
+    plan: &Plan,
+    run: &mut Run,
+    store: &Store,
+    host: &mut impl Host,
+    retry_step: Option<&str>,
+    pick: Option<&str>,
+    background: &mut Vec<(usize, Box<dyn BackgroundCall + Send>)>,
+) -> Result<(), CtlError> {
     crate::data::validate(plan)?;
     crate::data::check_saved(plan, run)?;
     if plan.steps.iter().any(|s| {
@@ -438,6 +537,34 @@ pub fn execute(
         .any(|s| !s.outputs.is_empty() && !host.read_only(&s.run))
     {
         return Err(CtlError::protocol("outputs require a read-only producer"));
+    }
+    // 背景观察步语义边界(方案 a):观察者不是流程控制点——只读 run,
+    // 禁一切控制/产物组合;产物走 background_result,bind 结构性不可用。
+    if let Some(bad) = plan.steps.iter().find(|s| {
+        s.background
+            && (s.verify.is_some()
+                || !s.outputs.is_empty()
+                || s.pause_before
+                || s.ensure.is_some()
+                || s.resume_check.is_some()
+                || s.otherwise.is_some()
+                || s.recovery.is_some()
+                || s.retry != Retry::Never)
+    }) {
+        return Err(CtlError::protocol(format!(
+            "background steps are bare observers: verify/outputs/pause_before/ensure/resume_check/otherwise/recovery/retry are not allowed on '{}'",
+            bad.id
+        )));
+    }
+    if let Some(bad) = plan
+        .steps
+        .iter()
+        .find(|s| s.background && !host.read_only(&s.run))
+    {
+        return Err(CtlError::protocol(format!(
+            "background steps require a read-only run command ('{}')",
+            bad.id
+        )));
     }
     if run.status == Status::Completed {
         host.publish(run);
@@ -759,6 +886,22 @@ pub fn execute(
                 run.save(store, host)?;
                 host.publish(run);
                 return Ok(());
+            }
+            // 背景观察步派发(方案 a):WAL 置 Running 后异步 spawn 即返——
+            // 流程不等窗口;收割在 execute() 退出前统一 join(harvest_background)。
+            // 中断恢复时旧观察随进程消亡,重派发即重开窗(观察语义,幂等)。
+            if step.background {
+                run.steps[i].plan_version = Some(run.plan_version);
+                run.steps[i].status = StepStatus::Running;
+                run.steps[i].started_ms = Some(actl_core::state::unix_ms());
+                run.steps[i].attempts = run.steps[i]
+                    .attempts
+                    .checked_add(1)
+                    .ok_or_else(|| CtlError::protocol("step attempt count overflow"))?;
+                run.save(store, host)?;
+                let ticket = host.spawn_background(&step.run)?;
+                background.push((i, ticket));
+                continue 'steps;
             }
             run.steps[i].plan_version = Some(run.plan_version);
             run.steps[i].status = StepStatus::Running;

@@ -176,6 +176,13 @@ pub struct Step {
     /// 与 outputs 互斥(满足路径不产出绑定值)。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ensure: Option<EnsureSpec>,
+    /// 背景观察步(用户裁定 2026-10-13「方案 a」):派发后不等待,流程继续
+    /// 走后续步,退出前收割(阻塞 join)结果入 StepRecord.background_result。
+    /// 语义边界(引擎 PROTOCOL 强制):run 必须只读、禁 verify/outputs/
+    /// pause_before/ensure/resume_check/otherwise/recovery——观察者不是
+    /// 流程控制点,产物只在收割后可读(bind 结构性不可用)。
+    #[serde(default)]
+    pub background: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub section: Option<String>,
     #[serde(default)]

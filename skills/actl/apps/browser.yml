@@ -169,6 +169,19 @@ quirks:
       匿名会话评论文本全通——用户名/内容/时间戳/回复数完整)。
       导航类目标不受影响——搜索页 --all 枚举卡片 href 后
       browser-navigate 直达视频页,绕开整页跳转锚漂移(docs/16 §5.2)
+  - id: bilibili_comments_xhr_shape
+    note: >-
+      B 站评论分页 XHR 形态(2026-10-13 netlog 背景步实测):端点
+      api.bilibili.com/x/v2/reply/wbi/main?oid=<aid>&type=1&mode=3&
+      pagination_str={"offset":"<cursor>"},offset 逐页推进;评论组件
+      脚本 hdslb.com/bfs/seed/jinkela/commentpc/bili-comments.<hash>.js。
+      诊断用法:browser-netlog(建议 flow 背景步与 collect 并发)里
+      该端点出现=评论拉取已开始(比 #commentapp DOM 挂载锚更早的
+      信号);滚动后无新 reply/main 请求=无更多评论——空连轮收敛
+      判定的网络层旁证。采集仍走 DOM(collect --deep),不直连
+      API(cookie 誓言,docs/72 §8)。示例流程
+      workflows/browser-netlog-collect-probe.yml(9 步真机全绿,
+      158 请求窗含全部评论 API)
   - id: bilibili_anonymous_comment_wall
     note: >-
       B 站对**匿名(未登录)会话**只渲染 2 条评论且页面截断(

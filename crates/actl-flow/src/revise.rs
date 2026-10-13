@@ -129,8 +129,10 @@ pub fn apply_to_run(
             started_ms: None,
             finished_ms: None,
             // 修订重置步骤:旧的 AMBIGUOUS 暂停记录不迁移——新规格是新目标,
-            // 旧候选快照已过期,重新观察定夺。
+            // 旧候选快照已过期,重新观察定夺。背景产物同样不迁移(旧观察随
+            // 旧规格消亡,重派发自开新窗)。
             ambiguous: None,
+            background_result: None,
         });
     }
     if !rerun_required.is_empty() {

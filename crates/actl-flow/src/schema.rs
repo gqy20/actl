@@ -44,6 +44,7 @@ pub fn decode(raw: Value) -> Result<super::Plan, CtlError> {
                 "on_failure",
                 "evidence",
                 "outputs",
+                "background",
             ]
             .contains(&key.as_str())
             {
