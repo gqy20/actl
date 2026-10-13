@@ -8,6 +8,7 @@
 mod browser;
 mod cli;
 mod condition;
+mod decide;
 mod file_check;
 mod file_discover;
 mod flow;
@@ -83,6 +84,7 @@ fn main() {
                 | crate::cli::FlowCommand::Pause { .. }
                 | crate::cli::FlowCommand::Writeback { .. },
         ) | Command::Preview { .. }
+            | Command::Decide { .. }
             | Command::Desktop(DesktopCommand::ExecutionStatus | DesktopCommand::ExecutionRecover)
             | Command::Record(
                 crate::cli::RecordCommand::Status { .. } | crate::cli::RecordCommand::Stop { .. },
@@ -237,6 +239,22 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
         }
         Command::Commands => commands().map(Into::into),
         Command::Status => status().map(Into::into),
+        Command::Decide {
+            card,
+            config,
+            endpoint,
+            min_confidence,
+            timeout_ms,
+            dry_run,
+        } => decide::run(decide::DecideArgs {
+            card: card.clone(),
+            config: config.clone(),
+            endpoint: endpoint.clone(),
+            min_confidence: *min_confidence,
+            timeout_ms: *timeout_ms,
+            dry_run: *dry_run,
+        })
+        .map(Into::into),
         Command::Desktop(DesktopCommand::ExecutionStatus) => {
             Ok(actl_core::state::SignalPaths::default()
                 .execution_status()

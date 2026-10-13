@@ -278,6 +278,27 @@ pub(crate) enum Command {
     Commands,
     /// Report version, protocol version and platform info
     Status,
+    /// Answer a pending decision card by asking a configured decision model (read-only, no desktop action)
+    Decide {
+        /// Decision card JSON file (bare card or flow-status envelope); omit to read stdin
+        #[arg(long)]
+        card: Option<String>,
+        /// Config file override (default: %LOCALAPPDATA%/actl/decision.json)
+        #[arg(long)]
+        config: Option<String>,
+        /// Decision endpoint URL override for this call (System One /v1/systemone form)
+        #[arg(long)]
+        endpoint: Option<String>,
+        /// Minimum confidence to auto-answer (below -> abstain; default from config, else 0.5)
+        #[arg(long, value_name = "F64")]
+        min_confidence: Option<f64>,
+        /// HTTP timeout in milliseconds (default from config, else 10000)
+        #[arg(long)]
+        timeout_ms: Option<u64>,
+        /// Print the request that would be sent, without calling the provider
+        #[arg(long)]
+        dry_run: bool,
+    },
     #[command(flatten)]
     Desktop(DesktopCommand),
     #[command(flatten)]
@@ -1258,6 +1279,7 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
     match cmd {
         Command::Commands => "commands",
         Command::Status => "status",
+        Command::Decide { .. } => "decide",
         Command::Preview { .. } => "preview",
         Command::Desktop(DesktopCommand::DisplayStatus) => "display-status",
         Command::Desktop(DesktopCommand::ExecutionStatus) => "execution-status",

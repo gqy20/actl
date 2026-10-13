@@ -66,6 +66,9 @@ pub enum ErrorCode {
     Internal,
     /// 用户主动停止：显式解除后仍须核验结果，禁止盲目重放。
     Aborted,
+    /// 决策 provider 不可达/超时/返回不合规负载(decide 专属)→ 检查
+    /// decision.json 端点与服务可用性;原子命令不受影响。
+    ProviderUnavailable,
 }
 
 impl ErrorCode {
@@ -91,6 +94,9 @@ impl ErrorCode {
             }
             Self::Aborted => {
                 "this invocation was stopped; inspect prior results, then start a new invocation or explicitly resume the saved flow; new desktop writes require Start/Continue; never replay automatically"
+            }
+            Self::ProviderUnavailable => {
+                "check the decision endpoint in decision.json and the provider service; atomic commands are unaffected"
             }
         }
     }

@@ -16,7 +16,10 @@ actl-core = { path = "../actl-core", version = "0.2.1" }
 actl-flow = { path = "../actl-flow", version = "0.2.1" }
 actl-uia = { path = "../actl-uia", version = "0.2.1" }
 clap = { version = "4.6.7", features = ["derive"] }
+serde.workspace = true
 serde_json.workspace = true
+# decide 决策通道(仅该命令触达;同步阻塞 HTTP,ADR-001 兼容)
+ureq.workspace = true
 
 # bin 名 = actl(crate 名 actl-cli 仅用于 crates.io 发布,避免与被占的裸名冲突)
 [[bin]]

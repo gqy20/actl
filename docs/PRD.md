@@ -80,6 +80,18 @@ click 全护栏）；第二轮 = `flow-revise` 版本化修订续跑 + `ensure:`
 `actl://commands` 资源自发现；安全红线：子进程派发模型（本地信号条/急停权威
 不可绕过）+ 危险动词排除表 + `ACTL_TASK_ID` 审计。
 
+2026-10-13 用户授权决策模型应答命令 `actl decide`（对话定向三轮：外置应答器→
+actl 内子命令→cli 位置）：actl-cli 新增 decide 动词，读决策卡（裸卡/flow-status
+管道）后向显式配置的 System One 端点（判别式决策模型协议，Jev/Kev/laya 族，
+`/v1/systemone`）提问并返回应答或弃权。边界：**判别式决策模型非生成式 LLM**
+（「不内置 LLM 客户端」非目标不变）；危险候选构造前结构性剥离（模型物理不可见），
+弃权回 needs_review 裁决权不移动，回填仍走 flow-resume --decision；命令面唯一
+出站网络触点，配置/密钥归 `%LOCALAPPDATA%\actl\decision.json`，审计 JSONL 落
+本地；新依赖 ureq=2（native-tls，同步阻塞，预算内 TECH_STACK §3 登记）。
+协议见 [06 §7.9 decide 节](06-design-blueprint.md)；能力尽调=target/kev-probe
+两轮 18 载荷（本地 Kev-4B）。flow 内环自动应答（--auto-decide）与任务模式闭环
+不在本授权内，另行评审。
+
 ---
 
 ## 2. 用户与场景

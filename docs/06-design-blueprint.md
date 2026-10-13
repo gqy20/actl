@@ -1218,6 +1218,16 @@ goal 核验的查询类故障（INTERNAL）**不判死运行**：计 errors 如�
 
 **动作经快照 ref 身份绑定**：引擎的动作用帧内 ref 走捕获身份解析,不再经选择器重定位——`click/type @eN --snapshot <snapshot_id> --app <锚点>`(docs/31 身份纪律:跨调用使用 ref 必须绑定 snapshot_id)。机制:①Host 的 `execute_snapshot` 快照通道(返回 snapshot_id + data);②引擎观察时把快照 id 与帧同轮记录(explore.json 的 `snapshot_id`);③act() 对帧内元素构造 ref 绑定动作——身份来自**看见它的那条通道**(快照捕获身份+RuntimeId 核对+窗口新鲜度检查),绕开间歇失明的 item-container 定位通道。无 ref/无快照 id(历史语义)回退选择器路径;应答回退队列中的陈旧 ref 自然失效(STALE_REF),按帧内候选的有界重试语义下轮重新观察取新 ref。STALE_REF(元素重建)不计死亡、计一次动作预算——与"控件重建后重新观察"纪律同构。
 
+### decide:决策卡的模型应答（System One provider）
+
+`actl decide [--card <文件>] [--config <文件>] [--endpoint <URL>] [--min-confidence F64] [--timeout-ms N] [--dry-run]`（只读，不做任何桌面动作）。actl 命令面上唯一的出站网络触点：读入决策卡（裸卡 JSON 或管道传入的 flow-status envelope，`actl flow-status --id <run> | actl decide` 一线直连），向显式配置的 System One 决策端点提问，返回应答或弃权。**判别式决策模型协议**（choice/confidence 类型化问答，Jev/Kev/laya/openjev 族 `/v1/systemone`）——非生成式 LLM，「不内置 LLM 客户端」的 PRD 非目标边界不变；出站载荷=决策卡本身的判别性字段（截断名/无全树/无窗口标题之外的额外数据），防注入固定行随 state 携带。
+
+安全不变量（结构性，非提示词约定）：**危险候选在请求构造前剥离**——模型物理不可见，dangerous_only 卡直接 abstain 不触网；`none` 强制入选项（模型有真实弃权出口）；provider 返回非 offering 集的 choice → PROVIDER_UNAVAILABLE（`choice_not_offered`，模型不能幻觉出目标）；confidence < 门槛（默认 0.5）→ abstain `low_confidence` 附 top_choice，**弃权不是错误**——run 保持 needs_review，裁决权交回人/上层 agent。decide 永不代答危险候选、永不 auto-resume：回填仍走 `flow-resume --decision`，授权语义一寸不移动。
+
+配置 `%LOCALAPPDATA%\actl\decision.json`：`{endpoint, api_key?, api_key_env?, timeout_ms?(10000), min_confidence?(0.5)}`（与 apps.json 同目录同治理）；`--endpoint` 显式给出且无配置文件时免配置直答（本地 llama-server/LM Studio 无鉴权场景）。key 解析序 env > 明文。审计 JSONL 追加于同目录 `decision-audit.jsonl`（>4 MiB 轮换 .old）：卡 id/choice 或 abstain/confidence/provider_ms/model/被剥危险数——置信度阈值校准的数据沉淀（docs/08 §7 立场的数据源）。`--dry-run` 打印请求不触网。
+
+输出 envelope data：`{card_id, choice?, abstain?, confidence?, top_choice?, candidates_sent, dangerous_filtered, provider_ms?, model?, endpoint}`。abstain 值域 `dangerous_only | provider_none | low_confidence`。错误：PROTOCOL（卡/config 不可读、参数坏，退出码 2）| PROVIDER_UNAVAILABLE（不可达/超时/HTTP 非 200/负载不合规/幻觉 choice，退出码 1，hint 指向端点检查；原子命令与流程引擎不受影响）。测试：契约 decide_contract（本地 std 桩 HTTP 全离线，危险剥离/none 强制/门槛/幻觉拒绝/envelope 双形态均 golden）；真网行为属真机验收轮，不进 CI。
+
 ## 7.10 GUI 操作录制
 
 录制 = "人演示 → YAML"入口，与探索模式（agent 自主 → YAML）在回写层汇合。R1 = 捕获 + trace 证据 + 机械编译初版 YAML（"录完即可跑"下限）；R2 编译增强（延迟分析/泛化）、R3 agent 改写轮（skill 层）、R4 显示端菜单（[79 §8](79-quicker-recording-research.md) 触发面）。会话有界：显式 start/stop + 时长上限，**非常驻**。设计 docs/76 + 调研 docs/79。

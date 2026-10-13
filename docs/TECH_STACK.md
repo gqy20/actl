@@ -36,7 +36,7 @@ serde-saphyr 与标准文件锁要求的 MSRV 已同步根 Cargo.toml；实际�
 
 本表是新增依赖的**唯一登记处**(AGENTS 硬规则 6)。预算口径与授权边界:
 
-- **核心执行路径**(core/uia/flow/cli/browser)直依赖 ≤9(actl-browser 现为 7:core/uia/serde/serde_json + chromiumoxide/tokio/futures——Phase 2 吸收后 tungstenite 退役,预算内);边界适配 crate 的协议依赖单独登记,传递依赖不腐蚀核心。
+- **核心执行路径**(core/uia/flow/cli/browser)直依赖 ≤9(actl-browser 现为 7:core/uia/serde/serde_json + chromiumoxide/tokio/futures——Phase 2 吸收后 tungstenite 退役,预算内;actl-cli 现为 8:core/uia/flow/browser + clap/serde/serde_json/ureq——ureq 为 decide 决策通道,2026-10-13 用户授权,预算内);边界适配 crate 的协议依赖单独登记,传递依赖不腐蚀核心。
 - **用户已授权的预算例外**:①WebView2 显示层(+`webview2-com`,仅 actl-uia 详情窗口;TS/pnpm 仅构建期,发布嵌入本地静态页面);②MCP 适配 crate(+`rmcp`/`axum`/`tokio`/`getrandom`,**仅 actl-mcp**——不依赖任何 workspace crate,crate 边界编译器强制;协议层不手写=用户裁定:依赖数量不构成手写协议的理由)。
 - **浏览器 CDP 通道**(用户已授权):`actl-browser` 全部动词承载于 `chromiumoxide` 骨干(Phase 2 终态吸收,2026-10-13:浅层手写客户端与 tungstenite 退役,双栈过渡态收束为单骨干);**命令面**守 cookie 誓言(负面 golden 钉死,docs/72 §8)。
 - 前台交接 unsafe 限于:查询并持有执行进程句柄、核对同目录 actl.exe 路径与请求 PID、调用 AllowSetForegroundWindow(RAII 关闭,不用 ASFW_ANY、不注入 Alt、不改前台锁);动作租约核验显示端 PID/版本/租约并在动作退出时归还资格。
@@ -54,6 +54,7 @@ serde-saphyr 与标准文件锁要求的 MSRV 已同步根 Cargo.toml；实际�
 | MCP 协议 | `rmcp`(官方) | =3.5 | **仅 actl-mcp**(边界适配,ADR-001 修订)；server+streamable-http-server 最小 feature；协议层不手写(用户裁定,docs/82) |
 | MCP HTTP 壳 | `axum` | 跟 0.8 stable | 仅 actl-mcp:承载 StreamableHttpService + Bearer/Origin 中间件 |
 | MCP 熵源 | `getrandom` | 跟 stable | 仅 actl-mcp:256-bit 配对 token(纯安全 API 无 unsafe) |
+| 决策 provider HTTP | `ureq` | =2(native-tls) | 仅 actl-cli decide:同步阻塞 HTTP,schannel 系统栈(不拖 rustls 树);System One 端点(Jev/Kev 族,docs/06 §7.9);命令面唯一出站网络触点,危险候选构造前剥离 |
 | 序列化 | `serde` + `serde_json` | 跟 stable | envelope 唯一出口 |
 | 流程 YAML | `serde-saphyr` | =1.3.0 | actl-flow；预算限制、重复键拒绝；不启用 include/robotics；实际外部直接依赖去重为 7（含 UIA 开发依赖） |
 | ZIP/OOXML | `zip` | =8.2.0 | 仅 deflate-flate2-zlib-rs；运行时检查与开发打包共用 |
