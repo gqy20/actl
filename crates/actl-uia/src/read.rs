@@ -201,7 +201,27 @@ pub fn read_property(
 }
 
 fn read_value_via(elem: &UIElement) -> Result<(Option<String>, Option<&'static str>), CtlError> {
-    crate::read_channel::choose(crate::read_channel::value(elem), || read_text(elem))
+    let (value, channel) =
+        crate::read_channel::choose(crate::read_channel::value(elem), || read_text(elem))?;
+    if value.is_some() || channel.is_some() {
+        return Ok((value, channel));
+    }
+    // RangeValue 三级回退(2026-10-14 Slider 轮真机实证:ms-settings 主音量
+    // 滑块 set-value 走 RangeValue 写入成功,get --property value 却报
+    // "read channel unsupported"——写能进读不出的一致性缺陷)。Slider/
+    // 进度条类控件只暴露 RangeValue;数值按显示语义格式化(整数无小数尾,
+    // 30.0 → "30",与 UI 显示一致;小数保留原值)。
+    if let Ok(p) = elem.get_pattern::<uiautomation::patterns::UIRangeValuePattern>()
+        && let Ok(v) = p.get_value()
+    {
+        let shown = if v.fract() == 0.0 {
+            format!("{}", v as i64)
+        } else {
+            format!("{v}")
+        };
+        return Ok((Some(shown), Some("range-value")));
+    }
+    Ok((None, None))
 }
 
 pub(crate) fn read_value(elem: &UIElement) -> Result<Option<String>, CtlError> {

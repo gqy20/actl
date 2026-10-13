@@ -28,6 +28,10 @@ pub struct InputResult {
     /// 上报 Some("ComboBox") 让 agent 在值未生效时先 dispatch focus out
     /// (`press tab`)或改用 `select`;None = 直写控件本体(写入即生效)。
     pub host_control: Option<&'static str>,
+    /// RangeValue 写入的值域元数据(2026-10-14 Slider 轮):
+    /// `{value, minimum, maximum, readonly}` —— Slider/进度条类控件
+    /// 的写后回读面;None = 走了 ValuePattern 文本路径(无值域概念)。
+    pub range: Option<serde_json::Value>,
 }
 
 impl From<&Located> for InputResult {
@@ -37,6 +41,7 @@ impl From<&Located> for InputResult {
             role: loc.role.clone(),
             name: loc.name.clone(),
             host_control: None,
+            range: None,
         }
     }
 }
@@ -495,16 +500,12 @@ pub fn set_value(
     // 2026-10-06 增补:单出口 + 显式 drop,Release 留在区内(见 into_info 契约)。
     let _watchdog = crate::watchdog::enter();
     let result = (|| {
-        loc.element.get_pattern::<UIValuePattern>().map_err(|_| {
-            CtlError::new(
-                ErrorCode::NotActionable,
-                format!(
-                    "{} ({}) exposes no Value pattern; try `type` (keyboard path) instead",
-                    target.describe(),
-                    loc.role
-                ),
-            )
-        })?;
+        // 双 pattern 分派(2026-10-14 Slider 轮):Value 失败时落
+        // RangeValue——Slider/进度条类控件暴露 RangeValue 而非 Value
+        // (交互角色白名单在册但此前无写通道,文档矩阵核对发现的缺口)。
+        if loc.element.get_pattern::<UIValuePattern>().is_err() {
+            return set_value_range(&loc, target, value, verify_value);
+        }
         crate::feedback::semantic("set-value", &loc.element, &loc.window_title, || {
             loc.element
                 .get_pattern::<UIValuePattern>()
@@ -536,6 +537,90 @@ pub fn set_value(
     })();
     drop(loc);
     result
+}
+
+/// RangeValue 写入分支(Slider/进度条;2026-10-14 Slider 轮)。数值语义:
+/// 字符串解析 f64,非数值 PROTOCOL(参数层错误);只读控件 NOT_ACTIONABLE
+/// (如实,绝不猜可以写);越界钳到 [minimum,maximum](UIA SetValue 官方
+/// 语义即钳制,提前报出实际写入值);写后自带 2s 轮询读回(滑块设值常带
+/// 动画,首读可能未到位),verify 语义=精确 f64 比对,step 粒度场景
+/// (SetValue(52) 落 step=5 网格变 50)如实报 mismatch 附 actual,agent
+/// 自判。envelope 带值域元数据 {value,minimum,maximum} 供判读。
+fn set_value_range(
+    loc: &Located,
+    target: &Target,
+    value: &str,
+    verify_value: Option<&str>,
+) -> Result<InputResult, CtlError> {
+    use uiautomation::patterns::UIRangeValuePattern;
+    let Ok(pattern) = loc.element.get_pattern::<UIRangeValuePattern>() else {
+        return Err(CtlError::new(
+            ErrorCode::NotActionable,
+            format!(
+                "{} ({}) exposes neither Value nor RangeValue pattern; try `type` (keyboard path) instead",
+                target.describe(),
+                loc.role
+            ),
+        ));
+    };
+    let number: f64 = value.trim().parse().map_err(|_| {
+        CtlError::protocol(format!(
+            "RangeValue targets take a number, got {value:?} (Slider/progress semantics)"
+        ))
+    })?;
+    if pattern.is_readonly().unwrap_or(false) {
+        return Err(CtlError::new(
+            ErrorCode::NotActionable,
+            format!("{} is read-only (RangeValue.IsReadOnly)", target.describe()),
+        ));
+    }
+    let minimum = pattern.get_minimum().unwrap_or(0.0);
+    let maximum = pattern.get_maximum().unwrap_or(100.0);
+    let clamped = number.clamp(minimum, maximum);
+    crate::feedback::semantic("set-value", &loc.element, &loc.window_title, || {
+        pattern.set_value(clamped).map_err(internal)
+    })?;
+    // 写后读回(自带轮询,不复用 input_verify 的 Value/Text 通道——Slider
+    // 不暴露那些 pattern);expected 与 actual 都是 f64 精确比对
+    if let Some(expected) = verify_value {
+        let expected: f64 = expected.trim().parse().map_err(|_| {
+            CtlError::protocol(format!(
+                "--verify-value for RangeValue must be a number, got {expected:?}"
+            ))
+        })?;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(2000);
+        loop {
+            crate::feedback::check_stop()?;
+            let actual = pattern.get_value().map_err(internal)?;
+            if actual == expected {
+                break;
+            }
+            if std::time::Instant::now() >= deadline {
+                return Err(CtlError::with_evidence(
+                    ErrorCode::AssertionFailed,
+                    "RangeValue readback did not match within 2000ms; the step grid may have snapped the value — inspect expected/actual",
+                    serde_json::json!({
+                        "readback": "mismatch",
+                        "expected": expected,
+                        "actual": actual,
+                        "minimum": minimum,
+                        "maximum": maximum,
+                    }),
+                ));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(
+                crate::timing().fast_poll_ms,
+            ));
+        }
+    }
+    let actual = pattern.get_value().unwrap_or(clamped);
+    let mut result = InputResult::from(loc);
+    result.range = Some(serde_json::json!({
+        "value": actual,
+        "minimum": minimum,
+        "maximum": maximum,
+    }));
+    Ok(result)
 }
 
 /// select:在容器内按选项名选中一项(SelectionItem pattern;06 §3.6 与

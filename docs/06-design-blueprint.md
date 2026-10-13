@@ -708,7 +708,12 @@ L2  actl commands     机器 schema:全命令+参数的 JSON(agent 自发现入�
   `focus_verified:true` 与 resolved_by。flow 中定位为**写步**(改变焦点状态,非只读),verify 伴随
   要求与 click 同规。
 - `set-value <target> <value> --app X [--near <sel>] [--snapshot ID] [--verify-value <expected>]`：
-  Value pattern 直写（无键盘、无前台门）。可选 `--verify-value` 在原控件上读回核验（与 type 同通道：
+  Value pattern 直写（无键盘、无前台门）。**RangeValue 回退（2026-10-14 Slider 轮）**：Value pattern
+  不可用时落 RangeValue——Slider/进度条类控件（交互角色白名单在册但此前无写通道）的数值语义写入：
+  非数值 PROTOCOL、只读诚实拒绝、越界钳到 [min,max]（envelope 附 `range:{value,minimum,maximum}`，
+  实际写入值可判读 step 网格钳制）；`--verify-value` 走精确 f64 比对（step 落差如实 mismatch 附
+  expected/actual）；`get --property value` 同步三级回退 RangeValue（`value_via:"range-value"`，
+  ms-settings 主音量滑块真机实证：此前写能进读不出的一致性缺陷）。可选 `--verify-value` 在原控件上读回核验（与 type 同通道：
   同实例身份复核、最多 2000ms 轮询、换行折叠精确比较；不符/不可读返回 `ASSERTION_FAILED`，实例改变返回
   `STALE_REF`，绝不重放写入；成功 envelope 带 `value_verified:true`，未要求时为 null）。**已知边界（2026-10-12
   Zotero 导出轮实证）**：provider 背书的系统对话框 Edit（如公共另存对话框文件名框）读回恒空——`--verify-value`

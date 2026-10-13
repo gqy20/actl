@@ -300,7 +300,7 @@ pub(crate) fn set_value_cmd(
     let target = actl_core::parse_target(target_raw)?;
     let _replay = replay_guard(snapshot, app)?;
     let res = actl_uia::set_value(app, &target, value, near, verify_value)?;
-    Ok(json!({
+    let mut entry = json!({
         "action": "set-value",
         "target": target.describe(),
         "value_verified": verify_value.is_some().then_some(true),
@@ -308,8 +308,13 @@ pub(crate) fn set_value_cmd(
         // 宿主容器信号(docs/83 Phase 2):目标是 ComboBox 子 Edit 时直写
         // 不一定被宿主采纳——值未生效先 press tab(焦点离开提交)或改 select。
         "host_control": res.host_control,
-    })
-    .into())
+    });
+    // RangeValue 值域元数据(2026-10-14 Slider 轮):Slider/进度条写入后的
+    // 实际值+值域,agent 判读 step 网格钳制;None = 文本路径无值域概念
+    if let Some(range) = res.range {
+        entry["range"] = range;
+    }
+    Ok(entry.into())
 }
 
 /// --expect 谓词 v2:`window:<substr>` | `element:<target>`。
@@ -971,6 +976,7 @@ mod input_contract_tests {
                 role: "Edit".into(),
                 name: Some("Search".into()),
                 host_control: None,
+                range: None,
             },
             total: 5,
             delivered: 5,
