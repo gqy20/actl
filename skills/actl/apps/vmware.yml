@@ -1,0 +1,80 @@
+pack_format: 1
+name: vmware
+display: VMware Workstation(评测 VM 宿主)
+launch: vmware            # App Paths 注册表解析;已 app-locate --register
+window: "VMware Workstation"
+app_version: "Workstation Pro 26H1u1 (build 25688693) / vmrun 1.17.0"
+verified_date: 2026-10-13
+verified_env: Win11 25H2 (build 26200) zh-cn
+quirks:
+  - id: vmrun_is_the_channel
+    note: >-
+      自动化主通道是 vmrun CLI 不是 UIA 点界面:`-T ws list`(运行清单)/
+      `snapshot|revertToSnapshot <vmx> <name>`(秒级快照复位,revert 后挂起态
+      需 start 接力)/`runScriptInGuest`(guest 内执行,需 Tools+凭据)/
+      `captureScreen <vmx> <png>`(guest 截图直接落宿主)/`clone full|linked`
+      (链接克隆多 lane)。vmrun 位于安装目录,无参调用打印版本。
+  - id: version_probe_no_gui
+    note: >-
+      查版本不要用 `vmware.exe --version`——GUI 二进制不打印退出,会拉起
+      主程序实例;用 `vmrun`(无参输出版本行)或安装目录只读探测。
+  - id: toolbar_buttons_nameless
+    note: >-
+      主窗 UIA 树:菜单栏(File/Edit/View/VM/Tabs/Help)可达可 Invoke;
+      工具栏 20+ 按钮全部无 name(自绘)——工具栏操作走 find-image 模板
+      或菜单等价路径,不硬点。
+  - id: service_family_resident
+    note: >-
+      vmware-authd/vmware-tray/vmware-usbarbitrator64 服务族是安装自启的
+      正常常驻,收尾判定不按残留处理;清理只针对本任务开的 VM 窗口/实例。
+  - id: guest_network_bridged
+    note: >-
+      Win11 guest 安装期 NAT 网络会卡"让我们连接到网络"且无法跳过——
+      装 guest 时网卡选 Bridged;装完再按需改回 NAT(官方 workaround)。
+  - id: whp_mode_host
+    note: >-
+      宿主 WSL2 常驻(HypervisorPresent=true)→ VMware 走 Host VBS Mode
+      (WHP):嵌套虚拟化对 guest 不可用(guest 内不能再开 Hyper-V/WSL2);
+      WHP 与原生模式间切换会使旧快照恢复失败(启动时 CPU 特性校验)——
+      评测周期内不关 WSL2,切过就重建快照。
+  - id: vmcli_permission_and_registration
+    note: >-
+      vmcli 非交互脚本面有双限制:`Power Start` 要求 __vmware__ 组或管理员;
+      `ConfigParams SetEntry` 在 VM 有 vTPM 加密时报"getting password from
+      stdin"失败(凭据只在 GUI 会话)。且 vmcli VM Create 产物**不进 GUI 库**
+      (库树无条目、vmrun start 报通信中断)——建 VM 走 GUI 向导,vmcli 只
+      用于读状态。
+  - id: wizard_vtpm_encryption_step
+    note: >-
+      Win11 guest 引导向导在磁盘页后强制插"Configure Encryption"(vTPM 状态
+      必须加密)。选 "Only the files needed to support a virtual TPM"(
+      磁盘保持明文可被 harness 读写,仅 .nvram 加密);密码框 ValuePattern
+      读回恒空属控件边界——用 set-value 写入(verify 会 ASSERTION_FAILED 但
+      写入有效)或 type 后 tab 触发提交;两框长度须一致,不等则报
+      "password cannot be empty"/不匹配。两处密码框 id 相同(9024/9025 在
+      Configure Encryption 页,9024/9025 名字是 Password:/Confirm:)。
+  - id: combo_value_needs_tab_commit
+    note: >-
+      Hardware 页的 "Number of processors"/"Number of cores" 是 ComboBox:
+      对内部 Edit set-value 会返回 host_control:"ComboBox" 信号——直写
+      不一定被宿主采纳(摘要栏不刷新);生效通道=type 值到内部 Edit 再
+      press tab(焦点离开才提交),或点开 ComboBox 走 select。
+      左侧 Device 摘要栏随之刷新方为生效。
+  - id: selfdrawn_home_cards
+    note: >-
+      Home 页 "Create a New Virtual Machine"/"Open a Virtual Machine" 卡片
+      是自绘:菜单栏的 Invoke 静默无效(画面零变化),必须 find-image 模板
+      + click xy: --physical 兜底(模板裁剪注意窗口物理面≠渲染图,按
+      find-image 回报的 window.width 换算,截图 --out 传 /tmp 会被 Windows
+      解析到盘根,用默认落盘目录)。
+  - id: bridged_is_default_no_key
+    note: >-
+      vmx 里没有 ethernet0.connectionType 键 = **bridged**(默认值不落键);
+      只有非默认(NAT/custom)才显式写。核验网络模式看 GUI 的 Device 摘要
+      栏或 vmrun,别以"键缺失"判 NAT。
+routes:
+  - id: main_window_observe
+    description: 主窗 UIA 观察(菜单路径操作;工具栏见 toolbar_buttons_nameless)
+    status: manual
+    steps:
+      - ["snapshot", "--app", "{window}"]

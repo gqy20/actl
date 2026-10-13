@@ -687,6 +687,10 @@ L2  actl commands     机器 schema:全命令+参数的 JSON(agent 自发现入�
   `STALE_REF`，绝不重放写入；成功 envelope 带 `value_verified:true`，未要求时为 null）。**已知边界（2026-10-12
   Zotero 导出轮实证）**：provider 背书的系统对话框 Edit（如公共另存对话框文件名框）读回恒空——`--verify-value`
   会诚实失败而非假通过，那类目标改走 `type --verify-value`（键盘路径读回可达）；勿以 get 读回空判"写入丢失"。
+  **宿主容器信号 `host_control`（2026-10-13 docs/83 Phase 2，VMware 硬件页实证）**：目标是 ComboBox 的子 Edit
+  时 envelope 附 `host_control:"ComboBox"`——直写子 Edit 不一定被宿主采纳（Win32 形态焦点离开才提交
+  ValuePattern）；值未生效先 `press tab`（焦点离开触发提交）或改用 `select`。非 ComboBox 子 Edit 时
+  字段缺省（写入即生效）。
 - 键盘沿用 §2 的显式 `--app` 授权；鼠标物理路径仍要求 `--physical`。
 
 ### 5.3 语义动作的执行前复核

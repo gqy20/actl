@@ -22,6 +22,12 @@ pub struct InputResult {
     pub window_title: String,
     pub role: String,
     pub name: Option<String>,
+    /// 宿主容器形态信号(docs/83 Phase 2,2026-10-13 VMware 硬件页实证):
+    /// 目标是 ComboBox 的子 Edit 时,set-value 写入子 Edit **不一定被
+    /// ComboBox 采纳**(Win32 形态需焦点离开才提交 ValuePattern)——
+    /// 上报 Some("ComboBox") 让 agent 在值未生效时先 dispatch focus out
+    /// (`press tab`)或改用 `select`;None = 直写控件本体(写入即生效)。
+    pub host_control: Option<&'static str>,
 }
 
 impl From<&Located> for InputResult {
@@ -30,6 +36,7 @@ impl From<&Located> for InputResult {
             window_title: loc.window_title.clone(),
             role: loc.role.clone(),
             name: loc.name.clone(),
+            host_control: None,
         }
     }
 }
@@ -461,6 +468,21 @@ fn find_editable_element(pattern: &str) -> Option<UIElement> {
 }
 
 /// set-value:UIValue pattern 直写,不经键盘(与 type 的分工见 06 §3.6)。
+/// 宿主容器探测(docs/83 Phase 2):目标是 ComboBox 子 Edit 时,直写子 Edit
+/// 不一定被 ComboBox 采纳(Win32 需焦点离开提交)——结果上报 host_control
+/// 信号,agent 据此在值未生效时 dispatch `press tab` 或改 `select`。
+/// 两次 COM 往返,探测失败静默降级 None(不阻断写结果——信号是建议非判定)。
+fn host_combo(element: &UIElement) -> Option<&'static str> {
+    let auto = UIAutomation::new().ok()?;
+    let walker = auto.get_raw_view_walker().ok()?;
+    let parent = crate::observation::parent(&walker, element).ok()??;
+    let is_combo = matches!(
+        format!("{:?}", parent.get_control_type().ok()?),
+        s if s.contains("ComboBox")
+    );
+    is_combo.then_some("ComboBox")
+}
+
 pub fn set_value(
     app: Option<&str>,
     target: &Target,
@@ -503,7 +525,14 @@ pub fn set_value(
                 value.chars().count(),
             )?;
         }
-        Ok(InputResult::from(&loc))
+        let mut result = InputResult::from(&loc);
+        // 宿主容器探测(直系 parent):ComboBox 下挂子 Edit 是 Win32 传统应用
+        // 与 web select 的共同形态,两次 COM 往返换一个"值未生效去哪查"的
+        // 信号(docs/83 Phase 2);walker 失败静默降级 None,不阻断写结果。
+        if let Some(host) = host_combo(&loc.element) {
+            result.host_control = Some(host);
+        }
+        Ok(result)
     })();
     drop(loc);
     result

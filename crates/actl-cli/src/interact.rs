@@ -293,6 +293,9 @@ pub(crate) fn set_value_cmd(
         "target": target.describe(),
         "value_verified": verify_value.is_some().then_some(true),
         "resolved": { "role": res.role, "name": res.name },
+        // 宿主容器信号(docs/83 Phase 2):目标是 ComboBox 子 Edit 时直写
+        // 不一定被宿主采纳——值未生效先 press tab(焦点离开提交)或改 select。
+        "host_control": res.host_control,
     })
     .into())
 }
@@ -878,6 +881,7 @@ mod input_contract_tests {
                 window_title: "fixture".into(),
                 role: "Edit".into(),
                 name: Some("Search".into()),
+                host_control: None,
             },
             total: 5,
             delivered: 5,
