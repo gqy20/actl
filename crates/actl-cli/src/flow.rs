@@ -57,6 +57,7 @@ fn read_only(cmd: &Command) -> bool {
             | Command::FindImage { .. }
             | Command::BrowserList
             | Command::BrowserRead { .. }
+            | Command::BrowserNetlog { .. }
             | Command::BrowserVerify { .. }
     )
 }

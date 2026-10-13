@@ -36,9 +36,9 @@ serde-saphyr 与标准文件锁要求的 MSRV 已同步根 Cargo.toml；实际�
 
 本表是新增依赖的**唯一登记处**(AGENTS 硬规则 6)。预算口径与授权边界:
 
-- **核心执行路径**(core/uia/flow/cli/browser)直依赖 ≤9(现 9,见下表);边界适配 crate 的协议依赖单独登记,传递依赖不腐蚀核心。
+- **核心执行路径**(core/uia/flow/cli/browser)直依赖 ≤9(现 9,见下表;actl-browser 现为 8:core/uia/serde/serde_json/tungstenite + chromiumoxide/tokio/futures,预算内);边界适配 crate 的协议依赖单独登记,传递依赖不腐蚀核心。
 - **用户已授权的预算例外**:①WebView2 显示层(+`webview2-com`,仅 actl-uia 详情窗口;TS/pnpm 仅构建期,发布嵌入本地静态页面);②MCP 适配 crate(+`rmcp`/`axum`/`tokio`/`getrandom`,**仅 actl-mcp**——不依赖任何 workspace crate,crate 边界编译器强制;协议层不手写=用户裁定:依赖数量不构成手写协议的理由)。
-- **浏览器 CDP 通道**(用户已授权):`actl-browser`+`tungstenite`(仅 handshake,同步阻塞 IO);只实现 Target/Runtime/Page/Browser 白名单域,cookie 读取域构造性不可达(安全边界非功能取舍,docs/72 §8)。
+- **浏览器 CDP 通道**(用户已授权):`actl-browser`+`tungstenite`(仅 handshake,同步阻塞 IO)为浅层;浅层只实现 Target/Runtime/Page/Browser 白名单域。**深水层**(用户授权 2026-10-13):`chromiumoxide` 同步门面桥(bridge 模块),类型面全域可达、**命令面**守 cookie 誓言(负面 golden 钉死,docs/72 §8)。
 - 前台交接 unsafe 限于:查询并持有执行进程句柄、核对同目录 actl.exe 路径与请求 PID、调用 AllowSetForegroundWindow(RAII 关闭,不用 ASFW_ANY、不注入 Alt、不改前台锁);动作租约核验显示端 PID/版本/租约并在动作退出时归还资格。
 - 原型 `prototypes/browser`(Python/Playwright,uv 项目单独管理)不入 workspace/发布包。
 
@@ -48,7 +48,10 @@ serde-saphyr 与标准文件锁要求的 MSRV 已同步根 Cargo.toml；实际�
 | 详情内容宿主 | `webview2-com` | =0.39.1 | 仅 actl-signal 的按需详情窗口；共享 Evergreen 运行时，失败回退原生内容；新增 1 个直接 Rust 依赖 |
 | UIA 高层封装 | `uiautomation`(**0.25,M0 评估期**:actl-uia 的 dev-dep,供 examples/probe 使用) | 评估结论(M1 采用或自写薄封装)写入 [spike-findings](spike-findings.md) |
 | CLI | `clap`(derive) | 4.6 | 子命令即契约;help 文本与 `commands` schema 从 doc comment 同源生成(06 §3.5) |
-| CDP websocket | `tungstenite` | =0.29(仅 handshake) | actl-browser 专用；同步阻塞 IO 无 tokio(ADR-001 兼容)；白名单域外不实现(安全边界,docs/72 §8) |
+| CDP websocket | `tungstenite` | =0.30(仅 handshake) | actl-browser 浅层专用；同步阻塞 IO 无 tokio(ADR-001 兼容)；白名单域外不实现(安全边界,docs/72 §8) |
+| 深水层 CDP | `chromiumoxide` | 跟 0.9 stable | 仅 actl-browser(deep.rs):类型化全协议域;async 圈在 bridge 同步门面后(ADR-001 修订);全树许可宽松(spike 实证,prototypes/browser-lib-probe);候选对比证据见同目录 DECISION-BRIEF.md |
+| 深水层 runtime | `tokio` | 跟 1 stable(rt-multi-thread/time/sync 最小面) | 仅 actl-browser bridge:受控单 worker runtime,公共 API 保持同步 |
+| 深水层 stream | `futures` | 跟 0.3 stable | 仅 actl-browser bridge:handler 泵(StreamExt) |
 | MCP 协议 | `rmcp`(官方) | =3.5 | **仅 actl-mcp**(边界适配,ADR-001 修订)；server+streamable-http-server 最小 feature；协议层不手写(用户裁定,docs/82) |
 | MCP HTTP 壳 | `axum` | 跟 0.8 stable | 仅 actl-mcp:承载 StreamableHttpService + Bearer/Origin 中间件 |
 | MCP 熵源 | `getrandom` | 跟 stable | 仅 actl-mcp:256-bit 配对 token(纯安全 API 无 unsafe) |
@@ -67,7 +70,7 @@ OOXML 只读检查与发布归档共用 `zip`(禁默认特性,仅 deflate-flate2
 
 | # | 决策 | 理由 |
 |---|---|---|
-| ADR-001 | **桌面命令路径同步（core/uia/flow/cli/browser 不引入 async/tokio）；async 仅允许出现在边界适配 crate（actl-mcp），crate 边界由编译器强制**（修订自原文「同步代码,不引入 async/tokio」） | 原理由对本修订依然成立:COM/UIA 同步模型、CLI 毫秒级生命周期——修订护的是桌面命令路径,不是给网络服务上锁;边界 crate 定界见 docs/82 §3.3 |
+| ADR-001 | **桌面命令路径同步(core/uia/flow/cli/browser 的对外 API 与命令派发链不引入 async/tokio);async 仅允许出现在边界适配 crate(actl-mcp,crate 边界编译器强制)与 actl-browser 的 bridge 同步门面之后**(受控单 worker runtime,crate 对外 API 保持同步) | 原理由依然成立:COM/UIA 同步模型、CLI 毫秒级生命周期。修订护的是桌面命令路径的同步形态,不是给网络服务上锁;bridge 定界=async 不进 crate 公共 API/CLI 派发链;深水层动机与选型证据见 prototypes/browser-lib-probe(用户授权 2026-10-13) |
 | ADR-002 | **stdout 只输出 JSON envelope,一切日志/诊断走 stderr**(例外条款:`--help/--version` 元命令走人类文本,见 docs/06 §3.5) | stdout 是机器契约,必须零污染;agent 与测试可放心管道 |
 | ADR-003 | **`windows` crate 全依赖锁同一版本** | 该 crate 版本间类型不互通,是 Rust Windows 生态头号坑;用 workspace 统一版本 + CI 检查 |
 | ADR-004 | **单一 `CtlError` 枚举,thiserror 派生,`code()` 映射错误码表** | 错误码是协议的一部分(PRD FR6),映射必须集中一处、可测试 |

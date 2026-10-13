@@ -90,10 +90,11 @@ actl CLI / flow(统一 envelope、错误码、人工交接、急停)
 
 ## 8. 安全护栏
 
-1. **cookie 不可读出**:最小客户端按域白名单实现(Target/Runtime/Page/Browser),`Network/Storage.getCookies` 等域**不在实现面内**(构造性不可达);命令面禁止任何 cookie 导出/转储动词;cookie 读取域永久列入负面清单。
-2. **port vs pipe**:`--remote-debugging-port` 是本地无鉴权端口,同机任意进程可连(等于可读该 profile 全部凭据)。pipe(`--remote-debugging-pipe`,句柄继承、无网络面)安全性显著更优;**Windows + Rust std 句柄继承可行性未验证,列为下一 spike**(失败退路:port + 127.0.0.1 + 短生命周期会话)。
+1. **cookie 不可读出**:浅层手写客户端按域白名单实现(Target/Runtime/Page/Browser),cookie 读取域不在其实现面内(构造性不可达)。深水层(chromiumoxide,2026-10-13)类型面覆盖全协议域、Network/Storage 类型**可达**——安全誓言转移到**命令面**:CLI 永不提供 cookie 导出/转储动词,由负面契约测试 `browser_command_surface_has_no_cookie_verbs` 钉死;cookie 读取域永久列入负面清单。
+2. **port vs pipe**:`--remote-debugging-port` 是本地无鉴权端口,同机任意进程可连(等于可读该 profile 全部凭据)。pipe(`--remote-debugging-pipe`)为 Chromium 的 POSIX-only 实现,**Windows 上进程即退(exit 13),已判死**——风险缓解为 launch 层硬编码 127.0.0.1 回环绑定 + 短生命周期会话。
 3. 不附着用户已有浏览器会话;仅操作 actl 启动的实例(与原型边界一致)。
 4. 急停/人工交接:CDP 写操作接入既有停止代次与显示协议,语义与物理输入一致(正式实现项)。
+5. **深水层 attach 边界**:bridge 仅连接 actl 自有会话的端点(会话文件导出),不提供任意 URL attach;错误面沿既有映射(端点死=NOT_FOUND)。
 
 ## 9. 协议面草案(spec PR 时定稿,本节仅为范围)
 
@@ -148,8 +149,7 @@ iframe 守卫写+核验→iframe 读"1"→navigate(标题+计数归零证明新�
 
 ## 13. 开放项
 
-- [ ] spike:Windows + Rust std 句柄继承实现 `--remote-debugging-pipe`(失败退路 port+127.0.0.1;§8.2)
-- [x] **flow/YAML 通道接入(2026-10-02 实测通过)**:browser 命令可入 YAML 流程,治理三件套
+- [x] flow/YAML 通道接入(2026-10-02 实测通过):browser 命令可入 YAML 流程,治理三件套
   各就各位——① outputs 只允许只读生产者→补 `browser-list`(只读枚举,新→旧)承载会话句柄
   产出(pointer /sessions/0/session_id),`browser-launch` 保持生命周期命令不带 outputs;
   ② 副作用步骤必须带 verify→补 `browser-verify` 断言族(--newest-alive/--none/
@@ -180,5 +180,6 @@ iframe 守卫写+核验→iframe 读"1"→navigate(标题+计数归零证明新�
   命令声明信号动作卡(launch/navigate/click/type/close,kind+cdp 会话标记 target,
   InputEffects 全空,无租约门——展示透明性而非权限门;动作日志验证 preparing/executing/
   delivered/failed 全周期在场)。真机 13 步验收 `target/browser-p1p2-accept/`。
-- [ ] batch 组合验收;headless 的 `--user-agent` 覆盖(UA 壁垒站点);选择器索引消歧助手;close 后 ephemeral profile 延迟重删(7 轮 2 次竞争失败);显示端会话卡(常驻浏览器会话 UI,非动作流)
+- [ ] 显示端会话卡(常驻浏览器会话 UI,非动作流);close 后 ephemeral profile 延迟重删的残余竞争(7 轮 2 次失败后已收口,复发再议)
+- [ ] **深水层终态吸收**:现有动词迁移到 chromiumoxide 骨干、退役手写传输层(cdp.rs)与 tungstenite 依赖——双栈过渡态是显式接受的中间态,吸收时机由 ROADMAP 裁定;进一步深水层动词(协议级输入/下载管理/Fetch 拦截改写)按真实场景逐个 spec
 - [ ] WebView2 内嵌形态评估(并入 M3 WebView2 专项验收后)

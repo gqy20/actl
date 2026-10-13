@@ -16,6 +16,12 @@ serde_json = "1"
 thiserror = "2"
 zip = { version = "=8.6.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
+# 浏览器深水层(用户授权 2026-10-13;spike 证据 prototypes/browser-lib-probe):
+# chromiumoxide 全域类型化 CDP,许可面干净(MIT OR Apache-2.0 全树);
+# async 圈在 actl-browser 的 bridge 同步门面之后(ADR-001 修订,TECH_STACK §4)
+chromiumoxide = "0.9"
+tokio = { version = "1", features = ["rt-multi-thread", "time", "sync"] }
+futures = "0.3"
 uiautomation = "0.25.1"
 windows = { version = "0.62.2", features = ["Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging", "Win32_System_DataExchange", "Win32_System_Memory", "Win32_System_Threading", "Win32_System_Com_StructuredStorage", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Pipes", "Win32_UI_Shell"] }
 webview2-com = "=0.39.1"

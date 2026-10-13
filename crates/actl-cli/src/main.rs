@@ -885,6 +885,12 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             *max_items,
             *timeout,
         ),
+        Command::BrowserNetlog {
+            session,
+            filter,
+            window,
+            max_entries,
+        } => browser::netlog_cmd(session, filter.as_deref(), *window, *max_entries),
     }
 }
 

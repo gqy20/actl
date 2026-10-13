@@ -7,9 +7,9 @@
 1. **stdout 只输出 actl-core 的 JSON envelope**,日志/诊断只进 stderr(ADR-002;唯一例外 `--help/--version` 走人类文本,见 docs/06 §3.5);
 2. **`windows` crate 只在根 Cargo.toml 声明一次**,全 workspace 同版本(ADR-003);
 3. **失败必须有错误码**:统一走 actl-core 的 Error → ErrorCode 映射,运行路径禁 `unwrap/expect`(ADR-004);
-4. **桌面命令路径不引入 async/tokio**(core/uia/flow/cli/browser;ADR-001 修订——async 仅允许出现在边界适配 crate `actl-mcp`,crate 边界由编译器强制);
+4. **桌面命令路径的对外 API 与派发链不引入 async/tokio**(core/uia/flow/cli/browser;ADR-001 修订——async 仅允许出现在边界适配 crate `actl-mcp`,以及 `actl-browser` 内部 bridge 同步门面之后的受控 runtime;crate 公共 API 保持同步,编译器+代码评审强制);
 5. **`actl-core` 禁止依赖 windows 相关 crate;`unsafe` 只允许出现在 `actl-uia`**(workspace 已 deny,仅该 crate 豁免并登记理由);
-6. **核心执行路径(core/uia/flow/cli/browser)直接依赖 ≤ 9**,新增先登记 docs/TECH_STACK.md §3;边界适配 crate 的协议依赖在 §3 单独登记(用户已授权:WebView2 显示层 webview2-com、MCP rmcp 族、浏览器 tungstenite),传递依赖不腐蚀核心;
+6. **核心执行路径(core/uia/flow/cli/browser)直接依赖 ≤ 9**,新增先登记 docs/TECH_STACK.md §3;边界适配 crate 的协议依赖在 §3 单独登记(用户已授权:WebView2 显示层 webview2-com、MCP rmcp 族、浏览器 tungstenite+深水层 chromiumoxide/tokio/futures),传递依赖不腐蚀核心;
 7. **默认 UIA,物理鼠标兜底必须显式 `--physical`**(ADR-007);键盘按 docs/06 使用显式 `--app` 绑定与输入护栏,人工交接不替代命令参数要求;
 8. **协议/命令语义变更(spec 提交)必须同 PR 完成**:契约 golden 测试 + docs/06 + CHANGELOG,三者同步。
 

@@ -988,6 +988,21 @@ pub(crate) enum Command {
         #[arg(long)]
         timeout: Option<u64>,
     },
+    /// Snapshot the session tab's network requests over a bounded window (deep lane, read-only)
+    BrowserNetlog {
+        /// Session id from browser-launch
+        #[arg(long)]
+        session: String,
+        /// Only keep requests whose URL contains this substring (1-2048 bytes)
+        #[arg(long)]
+        filter: Option<String>,
+        /// Capture window in milliseconds (100..=60000, default 5000)
+        #[arg(long)]
+        window: Option<u64>,
+        /// Max entries returned (1..=2000, default 500; hitting it reports truncated)
+        #[arg(long)]
+        max_entries: Option<u64>,
+    },
     /// Type text into a unique input/textarea — guarded write with value read-back
     BrowserType {
         /// Session id from browser-launch
@@ -1294,6 +1309,7 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
         Command::BrowserNavigate { .. } => "browser-navigate",
         Command::BrowserRead { .. } => "browser-read",
         Command::BrowserCollect { .. } => "browser-collect",
+        Command::BrowserNetlog { .. } => "browser-netlog",
         Command::BrowserType { .. } => "browser-type",
         Command::BrowserClick { .. } => "browser-click",
         Command::BrowserClose { .. } => "browser-close",

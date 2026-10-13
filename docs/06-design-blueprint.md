@@ -429,13 +429,26 @@ browser-collect --session <id> (--css S | --xpath X) [--property P] [--deep]
                                      # evaluate 失败=软截断);读失败原样上抛(导航离开
                                      # 是调用方现场);items 逐条 64KiB 截断同 read,
                                      # new_items_per_round 逐轮留痕
+browser-netlog --session <id> [--filter S] [--window ms] [--max-entries N]
+                                     # 有界网络请求快照(深水层首动词,只读;Network
+                                     # 域经 chromiumoxide 同步门面桥,docs/72):
+                                     # enable→等窗口(100..=60000ms,默认 5000,含
+                                     # 300ms 订阅沉降)→逐事件上报 url/method/
+                                     # resource_type;--filter URL 子串过滤(≤2048
+                                     # 字节),--max-entries(1..=2000,默认 500)触顶
+                                     # truncated:true 诚实截断;会话侧 enable 收尾
+                                     # 必 disable;**无响应体/头捕获**——URL 清查面
+                                     # (懒加载/XHR 端点/资源风暴定位),不是内容转储;
+                                     # read_only 分类(可作 flow 观察步);错误面:
+                                     # PROTOCOL 预算 | NOT_FOUND 会话/目标失效 |
+                                     # TIMEOUT 窗口或 attach 超预算
 ```
-**显示层协同**:browser 的写与生命周期命令(launch/navigate/click/type/collect/close)在信号流声明动作卡(kind/effects/target)——**不经显示租约门**(CDP 写非桌面物理输入,展示是透明性而非权限门;急停仍经停止代次核验压过一切写);`InputEffects` 全空如实申报;target 只带 `cdp:<session>` 标记,不含选择器/URL/文本(动作日志内容省略纪律)。观察命令(read/list/verify)不声明动作,与 UIA 轨观察同规。
+**显示层协同**:browser 的写与生命周期命令(launch/navigate/click/type/collect/close)在信号流声明动作卡(kind/effects/target)——**不经显示租约门**(CDP 写非桌面物理输入,展示是透明性而非权限门;急停仍经停止代次核验压过一切写);`InputEffects` 全空如实申报;target 只带 `cdp:<session>` 标记,不含选择器/URL/文本(动作日志内容省略纪律)。观察命令(read/list/verify/netlog)不声明动作,与 UIA 轨观察同规。
 **YAML 流程接入**:browser 命令进 flow 的治理模型走三件套——① `browser-launch` 是生命周期命令,不能带 outputs(outputs 只允许只读生产者);② 会话句柄经 `browser-list` 以观察者身份产出(outputs.pointer=/sessions/0/session_id),后续步骤 `bind` 注入 `--session` 值位(下标须指向值字面量,不能指到旗标上);③ 有副作用的步骤必须带 verify——`browser-verify` 族即为此而生(launch→--newest-alive,click→--session X --alive,close→--none)。
 **持久 profile 治理**:flow 中 `browser-launch --profile <name>` 必须在
 `resources.browser_profiles` 声明(未声明即 PROTOCOL 拒绝)——凭据资产显式归属;该资源创建幂等、永不随任务删除。**登录暂停点**:`pause_before: true` + `resume_check: browser-verify --session X --css <登录标记>`(用户在可见窗口完成登录后恢复;谓词不满足则保持 paused,`reason: resume_check_failed`)。示例流程 `skills/actl/workflows/browser-login-session.yml`。
 会话状态落 `%LOCALAPPDATA%\actl\browser\`(sessions/*.json + profiles/);错误码复用全集,无新增码。
-安全边界(docs/72 §8):客户端只实现 Target/Runtime/Page/Browser 白名单域,cookie 读取域构造性不可达,命令面无 cookie 导出动词;不附着用户已有浏览器。stdio 继承守卫保证调用方管道在 actl 退出后正常 EOF。已知边界(v1):写入的 uncertain 状态不跨进程持久化(崩溃后由调用方 browser-read 裁决);值级断言动词扩展、batch 组合、pipe 传输待后续 spec。
+安全边界(docs/72 §8):浅层客户端只实现 Target/Runtime/Page/Browser 白名单域;深水层(chromiumoxide 同步门面,2026-10-13)类型面全域可达,**命令面**守 cookie 誓言——无 cookie 导出/转储动词,负面契约测试钉死;不附着用户已有浏览器。stdio 继承守卫保证调用方管道在 actl 退出后正常 EOF。已知边界(v1):写入的 uncertain 状态不跨进程持久化(崩溃后由调用方 browser-read 裁决);值级断言动词扩展、batch 组合待后续 spec。
 设计全文见 [72](72-browser-cdp-integration.md)。
 
 #### 可靠性(reliability,RPA 借鉴)

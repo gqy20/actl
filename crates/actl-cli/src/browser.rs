@@ -123,6 +123,24 @@ pub(crate) fn collect_cmd(
     .map(Into::into)
 }
 
+pub(crate) fn netlog_cmd(
+    session: &str,
+    filter: Option<&str>,
+    window: Option<u64>,
+    max_entries: Option<u64>,
+) -> Result<CommandOutput, CtlError> {
+    actl_browser::deep::netlog(
+        &paths(),
+        actl_browser::deep::NetlogSpec {
+            session_id: session,
+            filter,
+            window_ms: window,
+            max_entries,
+        },
+    )
+    .map(Into::into)
+}
+
 pub(crate) fn type_cmd(
     session: &str,
     css: Option<&str>,

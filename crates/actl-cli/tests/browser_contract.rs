@@ -30,6 +30,7 @@ fn help_has_four_elements() {
         "browser-read",
         "browser-click",
         "browser-close",
+        "browser-netlog",
     ] {
         let out = support::IsolatedCommand::new()
             .command
@@ -63,6 +64,7 @@ fn commands_schema_contains_browser_family() {
         "browser-close",
         "browser-list",
         "browser-verify",
+        "browser-netlog",
     ] {
         assert!(names.contains(&cmd), "commands schema lacks {cmd}");
     }
@@ -539,4 +541,51 @@ fn browser_collect_arg_surface_contract() {
     assert_eq!(code, 2, "mutually exclusive selectors rejected by clap");
     let (code, _) = actl(&["browser-collect", "--session", "s"]);
     assert_eq!(code, 2, "missing selector rejected by clap");
+}
+
+#[test]
+fn browser_netlog_budget_validation_is_protocol() {
+    // 预算面:window/max-entries 越界 → PROTOCOL(参数先于会话校验)
+    let (code, stdout) = actl(&["browser-netlog", "--session", "abc123", "--window", "50"]);
+    assert_eq!(code, 2);
+    let v: Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(v["error"]["code"], "PROTOCOL");
+    let (code, stdout) = actl(&[
+        "browser-netlog",
+        "--session",
+        "abc123",
+        "--max-entries",
+        "9999",
+    ]);
+    assert_eq!(code, 2);
+    let v: Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(v["error"]["code"], "PROTOCOL");
+}
+
+#[test]
+fn browser_netlog_unknown_session_maps_to_not_found() {
+    // 走到 deep 层之前的会话校验与浅层同判
+    let (code, stdout) = actl(&["browser-netlog", "--session", "nope123"]);
+    assert_eq!(code, 1);
+    let v: Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(v["error"]["code"], "NOT_FOUND");
+}
+
+#[test]
+fn browser_command_surface_has_no_cookie_verbs() {
+    // docs/72 §8 负面契约:命令面永不提供 cookie 导出/转储动词——
+    // 深水层(chromiumoxide 类型面可达 Network/Storage)不改变命令面誓言。
+    let (code, stdout) = actl(&["commands"]);
+    assert_eq!(code, 0);
+    let v: Value = serde_json::from_str(&stdout).unwrap();
+    let names: Vec<String> = v["data"]["commands"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["name"].as_str().unwrap().to_string())
+        .collect();
+    assert!(
+        !names.iter().any(|n| n.contains("cookie")),
+        "cookie verbs must never appear in the command surface: {names:?}"
+    );
 }

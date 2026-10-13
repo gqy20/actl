@@ -13,6 +13,10 @@ actl-uia = { path = "../actl-uia", version = "0.2.1" }
 serde.workspace = true
 serde_json.workspace = true
 tungstenite.workspace = true
+# 深水层:async 圈在 bridge 同步门面之后(ADR-001 修订,docs/TECH_STACK.md §4)
+chromiumoxide.workspace = true
+tokio.workspace = true
+futures.workspace = true
 
 [lints]
 workspace = true
