@@ -100,6 +100,12 @@ reason 为 output_freshness_failed。不要修改时间或从头重跑；先核�
 - 已完成步骤跳过；running/verifying/uncertain 先核验结果，核验成功则不重做动作。
 - resume_check 用于恢复时检查会话、接收人、当前页面等业务上下文；首次运行不执行它，首次必要条件放 before。
 - needs_review 时先观察。只有明确需要重复、后置核验返回 ASSERTION_FAILED，且用户授权后，才使用 `flow-resume --id report-01 --retry-step step-id`。
+- 探索运行的 `reason=decision_pending`（悬挂决策卡）有两类应答方式，回填通道唯一：
+  人/agent 读 `flow-status` 的 `data.decision_card` 自选，或经 `actl decide`（`--run <id>` 直读悬挂卡，
+  或管道 `actl flow-status --id <run> | actl decide`）问配置的决策端点拿 `{choice, confidence}`——
+  危险候选构造前已剥离、低于置信门槛即弃权（弃权=裁决权交回人）。
+  应答统一经 `flow-resume --id <run> --decision <choice_id>` 回填；decide 只生成应答，不执行、不续跑。
+  配套流程：`workflows/explore-decide-answer.yml`（decide 步+输出保存，回填仍归编排层）。
 - 核验本身失败或结果未知（result_observation_failed）时，即使 --retry-step 也不重放。断言失败也不能单独证明原写入未发生。
 - status 返回 interrupted=true 时，旧 running 状态不能证明进程仍在执行。恢复以最新状态和执行器锁为准。
 
@@ -108,17 +114,21 @@ reason 为 output_freshness_failed。不要修改时间或从头重跑；先核�
 completed 只表示步骤按所给断言完成；verified 只表示该步断言通过，断言充分性由作者负责。
 运行 ID 自动关联任务历史。查询与归档方法见 [任务记录](task-records.md)。
 
-## 可复用流程输入（2026-09-29）
+## 可复用流程输入（2026-09-29；--set 2026-10-13）
 
-`flow-validate` 和 `flow-run` 支持 `--inputs values.yml`（UTF-8 YAML 或 JSON 字符串映射）。
+`flow-validate` / `flow-run` / `flow-revise` 支持 `--inputs values.yml`（UTF-8 YAML 或 JSON 字符串映射）
+与可重复 `--set key=value` 内联覆盖（**set 优先于 --inputs 同名键**——换词重跑免值文件；
+在第一个 `=` 处切分；`--set` 自身同键给两次、缺等号、空键返回 PROTOCOL）。
 流程顶层 `inputs: {app: {}, text: {default: hello}}` 声明必填参数或字符串默认值。
 四种调用阶段的 args 可用 `{input: app}` 替换一个完整参数，不做 shell 求值、拼接或环境变量展开。
-缺少必填值、未知参数、重复键、非字符串、NUL、超过 16 KiB 或以 `-` 开头的输入返回 PROTOCOL。
-最多 128 个声明；名称沿用 1–80 位 ASCII ID。所有解析后的命令仍须通过 CLI 和流程策略预检。
+缺少必填值、未知参数、重复键、非字符串、NUL、超过 16 KiB 或以 `-` 开头的输入返回 PROTOCOL
+（--set 的值与键沿用同一裁决）。最多 128 个声明；名称沿用 1–80 位 ASCII ID。
+所有解析后的命令仍须通过 CLI 和流程策略预检。
 仅参数值可绑定，command、策略、步骤 ID 等不可参数化；命令选项应明确写在流程中。
 
 ```powershell
 actl flow-validate --file skills/actl/workflows/verify-text.yml --inputs target/readback-inputs.yml
+actl flow-run --file skills/actl/workflows/quark-search.yml --id search-01 --set app=夸克网盘 --set query=今日天气
 actl flow-run --file skills/actl/workflows/verify-text.yml --inputs target/readback-inputs.yml --id readback-001 --paused
 actl flow-resume --id readback-001
 ```

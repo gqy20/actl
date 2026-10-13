@@ -71,6 +71,10 @@ pack 是"给 agent 读的应用知识"——路线(routes)+ 怪癖(quirks)+ 信�
 
 **双轨分工,不统一**:引擎轨(`explore-writeback`)从 goal_met 的探索运行抽取路线片段(status 恒 unverified),调用方合并进 pack;**自由探索轨(agent 直接驱动 CLI 原语)的回写就是 agent 手工编辑 pack**——quirks 给 agent 读、stats/priors 给引擎用,两种知识形态不同,不互相格式化,不建自动写入通道(verified 迁移=人工复核+PR,红线)。
 
+**模型应答不改变回写纪律**(2026-10-13):探索决策卡可经 `actl decide` 模型辅助应答
+(危险候选构造前剥离、低置信弃权交回人)——运行可能无人工卡裁决即达 goal_met;
+回写 status **仍恒 unverified**,人工复核与 PR 红线不因此移动。
+
 **隔离策略前置声明**:探索开工前先读 pack 的隔离声明,不现场试错。quirk 形式登记(不新增结构字段):
 
 ```yaml

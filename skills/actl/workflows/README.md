@@ -27,7 +27,7 @@
 - 新增文件时，在下方索引登记用途、必需信息、应用前提、校验状态和真机证据链接。协议校验成功与业务验收成功分别记录。
 - agent 先读索引及相关应用档案，核对用户授权、接收人等关键条件，再准备执行计划；控件身份需在执行现场重新观察。
 - 公共文件不写真实联系人、账号、私人路径、固定 HWND/ref 或本次运行的坐标。个人任务的具体计划和输入留在本地，不提交到技能目录。
-- 当前 v1 支持只读步骤的显式输出保存和后续完整参数绑定；绑定无法解析时停止，不执行占位值。支持即时只读条件 when/unless/otherwise；未知结果停止，已派发路线恢复先核验。不支持参数插值、嵌套分支、循环或子流程调用。任务输入通过 inputs 声明及 --inputs 文件传入，args 中使用 {input: name} 绑定完整参数；解析后统一预检，恢复读取保存的具体计划。
+- 当前 v1 支持只读步骤的显式输出保存和后续完整参数绑定；绑定无法解析时停止，不执行占位值。支持即时只读条件 when/unless/otherwise；未知结果停止，已派发路线恢复先核验。不支持参数插值、嵌套分支、循环或子流程调用。任务输入通过 inputs 声明传入——`--inputs` 值文件或可重复 `--set key=value` 内联覆盖（语义权威见 [references/flows.md](../references/flows.md)），args 中使用 {input: name} 绑定完整参数；解析后统一预检，恢复读取保存的具体计划。
 - 应用档案供 agent 参考，当前引擎不支持 YAML 自动引用 pack 路线。未来加入复用能力前须先修订协议、测试和文档。
 - 对会过期的业务输出设置 `max_age_ms`。恢复报告 `output_freshness_failed` 时，先核对已完成动作，再准备后续计划；不要修改保存时间或盲目从头重跑。时间未过期仍需 before/verify 核验目标身份和业务状态。
 - **写步幂等先检后写**：可读回当前值的写步（type/set-value/编辑类）按"前置检查 → 派发 → 读回收口"三段组织——`ensure:`（或 before）断言现值**未达**目标才派发，已达标直接短路跳过（防重放/续跑把文本注入两遍）；写后用 `verify --value` / `verify-file` 收口。注意 `type --verify-value` 只做事后读回，不构成前置检查；已发送未确认的写步是 uncertain，恢复走 resume_check 重核，不是重放。范例见 [edit-value.yml](edit-value.yml)（previous 前置核对 + value 后核验）。
@@ -48,7 +48,8 @@
 | [inspect-desktop-native.yml](inspect-desktop-native.yml) | 只读系统状态与 Win32 原生窗口清单；无需应用、输入或资源准备，输出窗口数量；清单不代表任务资源归属 | 预检与两步只读现场执行通过（2026-10-02）；用于桌面检查和显示层起止演示，不证明 UIA 查询正常 |
 | [release-review-draft.yml](release-review-draft.yml) | 读取已打开的 actl Releases 页(Chrome),在 Word 新文档生成核对草稿并落盘 | 协议预检通过;读段与时效拒绝路径真机验证;写段联测待执行。验证记录见开发仓库 docs/43(技能包不含 docs) |
 | [notepad-save-handoff.yml](notepad-save-handoff.yml) | 记事本另存为路径交接:点加号新建空标签,录入内容后文件名框直填完整绝对路径保存并磁盘核验;输入 save_path | 干净现场全链真机通过(2026-10-12 handoff-03:8 步零重试 40s,文件逐字节一致);前置纪律与 TabState 治理见文件头注释与 apps/notepad.yml |
-| [explore-decide-answer.yml](explore-decide-answer.yml) | 探索运行决策卡的模型应答步:decide --run 直读悬挂卡(危险候选构造前剥离、低置信弃权即本步诚实失败),choice/confidence 保存为输出;输入 run_id/min_confidence | 协议预检通过(2026-10-13);decide 链路真机已实证(探索平局卡 556B→Kev c1/0.848→回填 goal_met completed,先经管道验收);回填 `flow-resume --decision` 属编排层(nested-flow 守卫,流程只做应答) |
+| [explore-decide-answer.yml](explore-decide-answer.yml) | 探索运行决策卡的模型应答步(decide --run + choice/confidence 输出保存);输入 run_id/min_confidence;协议细节见 SKILL.md 探索节与文件头注释 | 协议预检通过(2026-10-13);decide 链路真机已实证(探索平局卡→Kev 应答→回填 goal_met completed);workflow 级真机验收待桌面空闲 |
+| [word-note-typography.yml](word-note-typography.yml) | Word 笔记样式排版:独立 DOCX 内按笔记样式逐段排版核验;输入 program 等(见文件 inputs);popup_handlers 声明「目录名无效」error 处置 | 随 Word 轮渐进验收;popup_ignores/handler 声明路径重验挂 ROADMAP(随下次 Word 轮顺带,不专跑) |
 
 ### release-review-draft.yml
 

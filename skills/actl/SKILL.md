@@ -17,12 +17,13 @@ actl 通过系统无障碍树(UIA)精确定位控件,像 Playwright 操作 DOM �
 
 actl 是统一技能入口。收到包含多步决策或跨应用操作的任务时，先查
 [workflows/README.md](workflows/README.md) 的流程索引，再按需读取 `apps/` 中的应用知识。
-可复用业务 YAML 放在 `workflows/`，不为每个业务任务新建独立 skill。声明式输入用 `--inputs values.yml` 传入 flow-validate / flow-run；恢复沿用保存的具体计划，不重新生成任务。
+可复用业务 YAML 放在 `workflows/`，不为每个业务任务新建独立 skill。声明式输入用 `--inputs values.yml` 或可重复 `--set key=value`（内联覆盖,set 优先）传入 flow-validate / flow-run / flow-revise；恢复沿用保存的具体计划，不重新生成任务。
 应用档案描述软件的操作特点，流程描述完整业务目标的步骤、核验与恢复。
 
 先核对流程适用条件、必需信息、用户授权和验证状态，再按现行协议准备计划并运行
 `actl flow-validate --file <计划文件>`；校验通过不代表真实应用验收通过。
-当前没有已交付的业务流程。只读步骤支持显式 `outputs` 导出和后续完整参数 `bind`，
+已交付流程与各流程的验收状态见流程索引（校验通过不代表真实应用验收通过,
+索引的"校验状态"列才是验收事实）。只读步骤支持显式 `outputs` 导出和后续完整参数 `bind`，
 用法见 [流程使用说明](references/flows.md)；变量插值和子流程调用仍未实现。
 个人任务值和运行状态不回写技能文件，测试计划仍放 `fixtures/flows/`。
 
@@ -121,7 +122,8 @@ actl verify --value <target> "<期望>" --app <app> # 确认:立即断言
 桌面:minimize-window restore-window desktop-prepare desktop-restore display-start display-status execution-status execution-recover
 验证:verify(--exists/--value/--contains/--checked) extract(--table)
 系统:app-register(--pattern) app-list app-remove get-clipboard set-clipboard
-流程:flow-validate flow-run(--paused) flow-status flow-pause flow-resume(--retry-step/--decision) flow-revise(--accept-rerun/--resume,修订续跑) flow-evidence(--step,失败采集包) flow-clean
+流程:flow-validate(--set) flow-run(--paused/--set) flow-status flow-pause flow-resume(--retry-step/--decision) flow-revise(--accept-rerun/--resume/--set,修订续跑) flow-evidence(--step,失败采集包) flow-clean
+决策:decide(--run/--card/--task/--dry-run,只读;读决策卡/AMBIGUOUS/front-report 信封问配置的决策模型,唯一出网命令) explore-writeback
 录制:record-start(--id/--max-seconds) record-worker record-stop(--id) record-status(--id)——草稿改写见 references/record-rewrite.md
 
 ## 外部 UIA 对照诊断
@@ -233,8 +235,13 @@ uncertain 步变更即重试授权，谱系经 flow-status 的 revisions 可见�
    如实核对,失败不静默重试。
 2. **只有 unverified 或无路线** → 不得直接执行,走探索引擎:flow 文件写 `explore:`
    段(task/app/keywords/goal 四要素,见 docs/06 探索节),`flow-run` 启动;决策卡
-   经 flow-status 的 `data.decision_card` 读取,`flow-resume --id <run> --decision
-   <choice_id>` 应答。完成后 `explore-writeback --id <run>` 抽路线片段,合并进
+   经 flow-status 的 `data.decision_card` 读取(或 `actl decide --run <id>` 直读
+   悬挂卡)。应答两条路:**人/agent 自答**(读卡选 id);或**模型辅助**——
+   `actl flow-status --id <run> | actl decide` / `actl decide --run <id>` 问配置的
+   决策端点(decision.json),返回 `{choice, confidence}` 或弃权(危险候选构造前
+   已剥离、低于置信门槛即弃权,弃权=裁决权交回人)。回填统一走
+   `flow-resume --id <run> --decision <choice_id>`——decide 只生成应答,不执行
+   不续跑。完成后 `explore-writeback --id <run>` 抽路线片段,合并进
    pack(恒 unverified,人工复核转 verified)——下次同类任务即走分岔 1,闭环。
 
 操作 Excel/Word/微信前先读对应档案:`apps/excel.yml`、`apps/word.yml`、`apps/wechat.yml`(含路线

@@ -12,7 +12,9 @@ actl-mcp --listen 0.0.0.0:7600 --token 预共享密钥
 ```
 
 - 默认绑定 `127.0.0.1`（fail-safe：不联网）；**要被其他设备调用必须显式
-  `0.0.0.0`**；
+  `0.0.0.0`**。注：MCP 是**入站**监听；actl CLI 的唯一**出站**网络命令是
+  `decide`（判别式决策端点，见 references/error-codes.md 与 SKILL.md），显式
+  配置 `%LOCALAPPDATA%/actl/decision.json` 后才可达——远端 agent 侧应知悉；
 - `--token` 省略时生成 256-bit 随机 token 并打印配对横幅（stderr）：token、
   客户端 `.mcp.json` 一行、局域网警告——**人工抄到控制端 = 你知情授权这台设备
   被远端调用**（配对仪式本体）；

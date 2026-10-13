@@ -26,7 +26,7 @@
 - [ ] WebView2 专项验收（键盘跨原生/网页、屏幕阅读器、多屏 DPI、缺失运行时回退）
 - [ ] 中央任务提示余项：接管暂停（人工接管→继续→业务核验）、跨屏 DPI 与真实减少动态设置（[75](75-action-start-notification.md)）；急停余量：急停落于 resume 重查窗口内的严格时点、飞行中调用 ABORTED 实测、OS 重启后急停语义保持（[35](35-stop-lifecycle.md)/[39](39-flow-observation-recovery.md)，2026-10-12 真按钮轮已收主链：菜单路径停止记录五字段/暂停期不完成/旧代次 35ms ABORTED/修复解除/失败通知含中文名目视两验）；显示层 UX：详情窗「继续/急停」视觉权重差与修复操作无可见反馈（2026-10-12 观察，两起实证同源于该窗）
 - [ ] agent 自驱授权白名单通道（仅真实需求时立项，[32](32-desktop-handoff.md)）
-- [ ] Jev 任务模式闭环（仅真实需求时立项，[08 §13 增补](08-agent-cli-jev-design-proposal.md)——third-hand 实证对照、弱完成证据不采纳的立场与切入点修正：增量在探索决策步/AMBIGUOUS 消歧/任务闭环，不在 grounding；前置零件 AMBIGUOUS context 与 `find --capable` 已落地，候选工程先于模型）
+- [ ] 决策模型内环与任务模式（[08 §13 增补](08-agent-cli-jev-design-proposal.md)）——**外置应答层已落地**（2026-10-13:`actl decide` 五输入通道:探索卡 flow-status/`--run`、AMBIGUOUS 消歧、front-report 判读咨询;危险候选构造前剥离、conf 门槛弃权、PROVIDER_UNAVAILABLE;System One 协议 Jev/Kev/laya 族通吃;真机端到端+飞轮实证已完成,证据见 CHANGELOG/06 §7.9 decide 节）。剩余两级:**① flow 内环 `--auto-decide`**（引擎决策点直调 decide,冷启动建 pack 陪跑的兑现——PRD §1.3 登记为授权外,**待用户拍板立项**;`answer_card` 函数边界已预留）;**②任务模式闭环**（仅真实需求时立项,08 §3.2——外置层积累的应答数据是立项/否决的依据;弱完成证据不采纳立场不变）
 - [ ] MCP 远程访问适配——剩余：**跨设备真实客户端接入验收**（等用户场景）+ 模式 B（SSH/stdio）与 tasks 扩展（可选轮 3）;已建成部分见 [82](82-mcp-adapter-research.md) / [06 §7.8](06-design-blueprint.md)
 - [ ] 本地 serve 与增量观察
 - [ ] 游戏场景（Minecraft 命令通道）——含指针原语缺口（[17 §3](17-game-scenarios.md) M3 候选，「手工搭」路线才需要）：`mouse-move dx,dy` 增量移动（前置 GLFW raw-input spike）、鼠标按键 down/up 拆分带时长（按住挖掘）、节奏敏感动作时窗参数
@@ -44,6 +44,9 @@
 - [ ] 浏览器 CDP 工程余量（[72 §13](72-browser-cdp-integration.md)）：UIA 轨路线固化（browser.yml 3 verified/5 manual/2 unverified,随应用轮渐进）；深水层终态吸收已完成（2026-10-13:全动词上骨干,cdp.rs/tungstenite 退役,证据 docs/72 §13）
 - [ ] word-note-typography 的 popup_ignores 声明路径重验（随下次 Word 轮顺带,不专跑）
 - [ ] preview-choice computer-use 真机鼠标点击验收（[46](46-target-preview.md)：两轮 "window is not a usable app window" 失败如实保留）
+- [ ] decide 真机收口轮（2026-10-13 登记需桌面空闲,约 10 分钟一批）:①AMBIGUOUS 实机烟雾（前台化计算器→`click name:清除` 触发真信封→`decide --task` 消歧→resolved 重放;此前被计算器 UWP 后台挂起+NVIDIA Overlay 压信号条→写门禁全闸阻塞）;②explore-decide-answer.yml workflow 真机验收（协议预检已过,decide 链路已单独实证,差 flow 步级端到端）
+- [ ] popup 门禁 XAML 常驻表面误报裁定（2026-10-13 计算器轮实证:标题栏窗+主窗在 in_tree 是 unknown+带按钮的常驻表面,前台态确定性拦截 `popup_pending:clear`;首过纯因锚窗非前台走原生快门——前台态相关的间歇行为。候选:calc pack 加 popup_ignores 声明或门禁 spec 化收紧;Word 轮 popup_ignores 同族）
+- [ ] decide front 判读真实信封低置信形态的使用观察（2026-10-13 无桌面烟雾:常驻表面/崩溃框方向全对但 conf 0.32-0.37<0.5 门槛,日常形态=弃权+top_choice 照报——owned 层只带标题无全文的信号差;若实际使用过保守,考虑判读咨询位局部降门槛或带 in_tree 全文的调用形态,不动全局阈值）
 
 
 
