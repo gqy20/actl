@@ -437,3 +437,51 @@ fn task_on_plain_card_is_rejected() {
         "error names the misused flag: {envelope}"
     );
 }
+
+/// --run:从 run 状态直读悬挂卡(flow 步无 stdin 管道,应答循环 YAML 化的卡源)。
+#[test]
+fn run_source_reads_pending_card_and_answers() {
+    let sandbox = Sandbox::new();
+    let addr = stub_once(Box::leak(ok_pick("c1", 0.86).into_boxed_str()));
+    sandbox.write_config(&format!("http://{addr}/v1/systemone"));
+    // 构造探索 run 状态:flows/decide-run-1/explore.json 带 pending.card
+    let run_dir = sandbox.root.join("actl").join("flows").join("decide-run-1");
+    std::fs::create_dir_all(&run_dir).unwrap();
+    std::fs::write(
+        run_dir.join("explore.json"),
+        json!({"pending": {"card": serde_json::from_str::<Value>(&card_json()).unwrap()}})
+            .to_string(),
+    )
+    .unwrap();
+    let (code, envelope) = sandbox.invoke(&["decide", "--run", "decide-run-1"]);
+    assert_eq!(code, 0, "{envelope}");
+    assert_eq!(envelope["data"]["choice"], "c1");
+    assert_eq!(envelope["data"]["card_id"], "d-contract");
+    // 危险剥离照常(c3 score 9 dangerous)
+    assert_eq!(envelope["data"]["dangerous_filtered"], 1);
+}
+
+#[test]
+fn run_source_unknown_or_cardless_is_protocol() {
+    let sandbox = Sandbox::new();
+    sandbox.write_config("http://127.0.0.1:9/v1/systemone");
+    // 未知 run:PROTOCOL 附 run_state_missing 证据
+    let (code, envelope) = sandbox.invoke(&["decide", "--run", "no-such-run"]);
+    assert_eq!(code, 2, "{envelope}");
+    assert_eq!(envelope["error"]["code"], "PROTOCOL");
+    assert_eq!(envelope["error"]["evidence"]["reason"], "run_state_missing");
+    // 状态存在但无悬挂卡(已被应答/完成):PROTOCOL 如实
+    let run_dir = sandbox.root.join("actl").join("flows").join("done-run");
+    std::fs::create_dir_all(&run_dir).unwrap();
+    std::fs::write(
+        run_dir.join("explore.json"),
+        json!({"pending": null}).to_string(),
+    )
+    .unwrap();
+    let (code, envelope) = sandbox.invoke(&["decide", "--run", "done-run"]);
+    assert_eq!(code, 2, "{envelope}");
+    assert_eq!(envelope["error"]["code"], "PROTOCOL");
+    // 路径白名单:注入 ../ 的 id 拒绝
+    let (code, _) = sandbox.invoke(&["decide", "--run", "../escape"]);
+    assert_eq!(code, 2, "path-injection id rejected");
+}

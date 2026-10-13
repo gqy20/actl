@@ -239,6 +239,41 @@ fn provider_unavailable(message: &str, detail: Option<&str>, hint: Option<&str>)
     }
 }
 
+/// `--run <id>`:从 run 状态文件直读悬挂决策卡(flows/<id>/explore.json 的
+/// pending.card)——flow 步没有 stdin 管道,这是应答循环 YAML 化的卡源通道
+/// (decide 读自己的 run 状态,与 flow-status 同源)。run id 白名单字符集,
+/// 防路径拼接逃逸。
+fn load_pending_card(run_id: &str) -> Result<DecisionCard, CtlError> {
+    let valid_id = !run_id.is_empty()
+        && run_id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+    if !valid_id {
+        return Err(CtlError::protocol(format!(
+            "--run expects an id of [A-Za-z0-9_-], got {run_id:?}"
+        )));
+    }
+    let root = actl_core::state::SignalPaths::default().dir;
+    let path = root.join("flows").join(run_id).join("explore.json");
+    let text = std::fs::read_to_string(&path).map_err(|_| {
+        CtlError::with_evidence_hint(
+            ErrorCode::Protocol,
+            format!("run {run_id:?} has no exploration state; only exploration runs carry decision cards"),
+            serde_json::json!({"reason":"run_state_missing","run_id":run_id}),
+            "check the run id via flow-status; --run answers exploration runs waiting on a decision",
+        )
+    })?;
+    let value: serde_json::Value = serde_json::from_str(&text)
+        .map_err(|e| CtlError::protocol(format!("run {run_id:?} state is not valid JSON: {e}")))?;
+    let card_value = value.pointer("/pending/card").ok_or_else(|| {
+        CtlError::protocol(format!(
+            "run {run_id:?} has no pending decision card to answer"
+        ))
+    })?;
+    serde_json::from_value(card_value.clone())
+        .map_err(|e| CtlError::protocol(format!("pending decision card invalid: {e}")))
+}
+
 /// 解析输入三种形态(docs/06 decide):裸 DecisionCard / flow-status envelope
 /// (data.decision_card)/ AMBIGUOUS 错误信封(须配 --task 意图)。管道形态支持
 /// `actl flow-status .. | actl decide` 与 `actl click .. | actl decide --task ..`。
@@ -590,6 +625,9 @@ fn append_audit(dir: &std::path::Path, decision: &Decision, error: Option<&CtlEr
 /// CLI 入口。
 pub(crate) struct DecideArgs {
     pub card: Option<String>,
+    /// 从 run 状态直读悬挂卡(flows/<id>/explore.json 的 pending.card)——
+    /// 与 --card/stdin 互斥;应答循环 YAML 化的卡源通道。
+    pub run: Option<String>,
     /// AMBIGUOUS 错误信封形态必填:任务意图(错误信封不带意图,消歧判据)。
     pub task: Option<String>,
     pub config: Option<String>,
@@ -600,20 +638,31 @@ pub(crate) struct DecideArgs {
 }
 
 pub(crate) fn run(args: DecideArgs) -> Result<serde_json::Value, CtlError> {
-    let text = match &args.card {
-        Some(path) => std::fs::read_to_string(path)
-            .map_err(|e| CtlError::protocol(format!("cannot read --card {path:?}: {e}")))?,
-        None => {
-            let mut buffer = String::new();
-            std::io::stdin()
-                .read_to_string(&mut buffer)
-                .map_err(|e| CtlError::protocol(format!("cannot read card from stdin: {e}")))?;
-            buffer
+    // 卡源三选一:--run(run 状态直读,不碰 stdin——无管道时会阻塞)/
+    // --card(文件)/ stdin(管道)。--run 与 --task 互斥(意图只对消歧形态)。
+    let (card, metas) = if let Some(run_id) = &args.run {
+        if args.task.is_some() {
+            return Err(CtlError::protocol(
+                "--task is only valid for AMBIGUOUS error envelopes",
+            ));
         }
-    };
-    let (card, metas) = match parse_input(&text, args.task.as_deref())? {
-        InputForm::Card(card) => (card, None),
-        InputForm::Ambiguous(card, metas) => (card, Some(metas)),
+        (load_pending_card(run_id)?, None)
+    } else {
+        let text = match &args.card {
+            Some(path) => std::fs::read_to_string(path)
+                .map_err(|e| CtlError::protocol(format!("cannot read --card {path:?}: {e}")))?,
+            None => {
+                let mut buffer = String::new();
+                std::io::stdin()
+                    .read_to_string(&mut buffer)
+                    .map_err(|e| CtlError::protocol(format!("cannot read card from stdin: {e}")))?;
+                buffer
+            }
+        };
+        match parse_input(&text, args.task.as_deref())? {
+            InputForm::Card(card) => (card, None),
+            InputForm::Ambiguous(card, metas) => (card, Some(metas)),
+        }
     };
     let dir = std::env::var_os("LOCALAPPDATA")
         .map(std::path::PathBuf::from)

@@ -241,6 +241,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
         Command::Status => status().map(Into::into),
         Command::Decide {
             card,
+            run,
             task,
             config,
             endpoint,
@@ -249,6 +250,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             dry_run,
         } => decide::run(decide::DecideArgs {
             card: card.clone(),
+            run: run.clone(),
             task: task.clone(),
             config: config.clone(),
             endpoint: endpoint.clone(),

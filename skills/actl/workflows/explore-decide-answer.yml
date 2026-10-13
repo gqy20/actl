@@ -1,0 +1,24 @@
+version: 1
+name: 决策卡模型应答
+# 探索运行外抛决策卡后的模型应答步:从 run 状态直读悬挂卡(decide --run,
+# 免管道/免快照重取),应答保存为输出(choice/confidence)。
+# 边界(协议设计,非流程限制):flow-resume 属流程生命周期治理,nested-flow
+# 守卫禁入步骤(与 batch/preview/management 同族)——回填由编排层执行
+# `actl flow-resume --id <run_id> --decision <choice>`,不在本流程内。
+# decide 只读、危险候选构造前剥离、置信度低于门槛即弃权——弃权时 choice
+# 输出缺失,本步诚实失败(output field missing),裁决权回到人/上层 agent。
+# 前置:run 处于 needs_review/decision_pending(悬挂卡存在);决策端点已配置
+# (%LOCALAPPDATA%/actl/decision.json)。
+# 输入:run_id=等待裁决的探索运行 id;min_confidence=自动应答置信门槛。
+inputs:
+  run_id: {}
+  min_confidence: {default: "0.5"}
+steps:
+  - id: decide
+    title: 模型应答悬挂决策卡
+    run:
+      command: decide
+      args: [--run, {input: run_id}, --min-confidence, {input: min_confidence}]
+    outputs:
+      choice: {pointer: /data/choice, type: string}
+      confidence: {pointer: /data/confidence, type: number}

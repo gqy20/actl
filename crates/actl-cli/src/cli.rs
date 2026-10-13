@@ -283,6 +283,9 @@ pub(crate) enum Command {
         /// Decision card JSON file (bare card or flow-status envelope); omit to read stdin
         #[arg(long)]
         card: Option<String>,
+        /// Read the pending card from a flow run's state (exploration runs; conflicts with --card)
+        #[arg(long, conflicts_with_all = ["card", "task"])]
+        run: Option<String>,
         /// Task intent for AMBIGUOUS error-envelope disambiguation (required for that form)
         #[arg(long)]
         task: Option<String>,
