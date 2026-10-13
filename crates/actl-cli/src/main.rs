@@ -9,6 +9,7 @@ mod browser;
 mod cli;
 mod condition;
 mod file_check;
+mod file_discover;
 mod flow;
 mod help_text;
 mod interact;
