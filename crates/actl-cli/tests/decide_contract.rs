@@ -485,3 +485,125 @@ fn run_source_unknown_or_cardless_is_protocol() {
     let (code, _) = sandbox.invoke(&["decide", "--run", "../escape"]);
     assert_eq!(code, 2, "path-injection id rejected");
 }
+
+fn front_pick(family: &str, confidence: f64, blocking: f64) -> String {
+    json!({
+        "model": "kev-test",
+        "answers": {
+            "family": {"type": "choice", "choice": family, "confidence": confidence},
+            "blocking": {"type": "noul", "noul": blocking}
+        },
+        "usage": {"input_tokens": 120, "output_tokens": 0}
+    })
+    .to_string()
+}
+
+/// 真实形态 front-report 信封固件:一个 owned 崩溃框 + 一个 in_tree 常驻表面
+/// (计算器门禁误报轮 2026-10-13 的实测形态)。
+fn front_envelope_json(front_clear: bool) -> String {
+    json!({
+        "version": "1", "ok": true, "command": "front-report",
+        "data": {
+            "anchor_foreground": true,
+            "front_clear": front_clear,
+            "owned": if front_clear { json!([]) } else { json!([
+                {"title": "wmexternal.exe - 应用程序错误", "class": "#32770", "pid": 4888,
+                 "hwnd": 654321, "visible": true, "foreground": true}
+            ])},
+            "in_tree": if front_clear { json!([]) } else { json!([
+                {"name": "计算器", "classification": "unknown",
+                 "buttons": ["最小化 计算器", "关闭 计算器"],
+                 "text": "计算器 计算器 表达式为 显示为 7"}
+            ])},
+            "window": {"class": "ApplicationFrameWindow", "foreground": true}
+        }
+    })
+    .to_string()
+}
+
+#[test]
+fn front_envelope_without_task_is_protocol() {
+    let sandbox = Sandbox::new();
+    sandbox.write_config("http://127.0.0.1:9/v1/systemone");
+    let envelope = sandbox.write("front.json", &front_envelope_json(false));
+    let (code, out) = sandbox.invoke(&["decide", "--card", envelope.to_str().unwrap()]);
+    assert_eq!(code, 2, "{out}");
+    assert_eq!(out["error"]["code"], "PROTOCOL");
+    assert_eq!(out["error"]["evidence"]["reason"], "task_missing");
+    assert!(
+        out["error"]["hint"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("--task"),
+        "hint points at --task: {out}"
+    );
+}
+
+#[test]
+fn front_clear_envelope_short_circuits_without_provider() {
+    let sandbox = Sandbox::new();
+    // 端口 1 不可达:front_clear 若触网会 PROVIDER_UNAVAILABLE——短路必须免网。
+    sandbox.write_config("http://127.0.0.1:1/v1/systemone");
+    let envelope = sandbox.write("front.json", &front_envelope_json(true));
+    let (code, out) = sandbox.invoke(&[
+        "decide",
+        "--card",
+        envelope.to_str().unwrap(),
+        "--task",
+        "export the worksheet as CSV",
+    ]);
+    assert_eq!(
+        code, 0,
+        "front_clear is honest absence, not a provider call: {out}"
+    );
+    assert_eq!(out["data"]["family"], "front_clear");
+    assert_eq!(out["data"]["blocking"], 0.0);
+    assert_eq!(out["data"]["provider_ms"], Value::Null);
+}
+
+#[test]
+fn front_envelope_answers_family_and_blocking() {
+    let sandbox = Sandbox::new();
+    let addr = stub_once(Box::leak(front_pick("crash", 0.93, 0.9).into_boxed_str()));
+    sandbox.write_config(&format!("http://{addr}/v1/systemone"));
+    let envelope = sandbox.write("front.json", &front_envelope_json(false));
+    let (code, out) = sandbox.invoke(&[
+        "decide",
+        "--card",
+        envelope.to_str().unwrap(),
+        "--task",
+        "continue the export flow; the dialog was not opened by this flow",
+    ]);
+    assert_eq!(code, 0, "{out}");
+    assert_eq!(
+        out["data"]["family"], "crash",
+        "classification is advisory: {out}"
+    );
+    assert_eq!(out["data"]["blocking"], 0.9);
+    assert_eq!(out["data"]["abstain"], Value::Null);
+    assert_eq!(
+        out["data"]["candidates_sent"], 8,
+        "family choice set size: {out}"
+    );
+    assert!(out["data"]["provider_ms"].is_number());
+}
+
+#[test]
+fn front_hallucinated_family_is_rejected_as_provider_fault() {
+    let sandbox = Sandbox::new();
+    let addr = stub_once(Box::leak(
+        front_pick("not_a_real_family", 0.99, 0.5).into_boxed_str(),
+    ));
+    sandbox.write_config(&format!("http://{addr}/v1/systemone"));
+    let envelope = sandbox.write("front.json", &front_envelope_json(false));
+    let (code, out) = sandbox.invoke(&[
+        "decide",
+        "--card",
+        envelope.to_str().unwrap(),
+        "--task",
+        "continue the flow",
+    ]);
+    assert_eq!(code, 1, "{out}");
+    assert_eq!(out["error"]["code"], "PROVIDER_UNAVAILABLE");
+    assert_eq!(out["error"]["evidence"]["reason"], "choice_not_offered");
+}

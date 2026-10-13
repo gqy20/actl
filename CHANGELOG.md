@@ -9,6 +9,8 @@
 
 ### Added
 
+- **decide 弹窗判读咨询形态(front-report 信封,2026-10-13)**:popup 门禁判读辅助的第五输入通道——`actl front-report --app X | actl decide --task '<流程意图>'`,owned/in_tree 表面渲染为有界 state 行后 **family 分类+blocking 概率并行一问**(System One 多问题原生形态,wire 从单 pick 问题泛化为问题映射)。家族集与门禁 handler 词表同义(crash/error_notice/save/confirm/update/notice)+benign_surface(常驻部件,计算器门禁误报轮的判读形态)+unknown(交回人)。**纯咨询**:family 是判读建议,处置仍归白名单与 unknown 上抛纪律;conf<门槛 abstain 而 top_choice/blocking 照报;front_clear 短路免网;幻觉家族 PROVIDER_UNAVAILABLE。无桌面实机烟雾(本地 Kev-4B):常驻表面→benign_surface、Fail Fast 崩溃框→crash 方向均正确,真实信封 conf 0.32-0.37 低于门槛——弃权+倾向照报,门槛在嘈杂真实载荷上拒绝自动断言(合成载荷同题 0.95:全文 vs 只带标题的信号差)。测试:单测 14+契约 20(front 形态 5 新例:短路免网/分类/blocking/幻觉拒绝/task 缺省)。docs/06 decide 节同步。
+
 - **flow `--set key=value` 内联输入覆盖(2026-10-13,可重复)**:flow-run/flow-validate/flow-revise 三命令新增——换词重跑免值文件(`actl flow-run --file search.yml --id search-02 --set query=天气`);与 `--inputs` 值文件合并后 **set 优先**(同名键覆盖,重复只针对 --set 自身同键给两次);缺等号/空键 PROTOCOL,未声明键与值约束(16 KiB/NUL/`-` 前缀)沿用 inputs 统一裁决;覆盖值不落盘随 run 计划冻结。overlay 纯函数落 actl-flow/inputs.rs(与 resolve 同解析器消费)。契约 +1(换词/文件+set 并存优先序/重复键/无等号/未声明键,顺带钉"文件值无 --set 照常生效");实测 quark-search 换词换 app 全通。docs/06 可复用流程输入节同步。
 - **decide 应答回路 YAML 化(2026-10-13)**:①`decide --run <id>` 第四输入通道——从 run 状态直读悬挂卡(`flows/<id>/explore.json` 的 `pending.card`),flow 步无 stdin 管道,这是应答步流程化的卡源;id 白名单 `[A-Za-z0-9_-]`(防路径拼接),与 --card/--task 互斥;②decide 入 flow `read_only` 分类(观察步,无写语义);③`skills/actl/workflows/explore-decide-answer.yml`——决策卡模型应答步(decide --run + choice/confidence 输出保存),回填 `flow-resume --decision` 属流程生命周期治理,nested-flow 守卫禁入步骤(与 batch/preview 同族,协议边界非流程限制),由编排层执行;④工作流 README 索引登记。契约 16 用例(--run 成功/未知 run/无悬挂卡/路径注入拒绝)。零模型重放不新增 fixture(同应用同 goal 已有 `replay-explore-s1.yml` 先例,本轮临时 batch 重放与之同构即废弃)。
 
