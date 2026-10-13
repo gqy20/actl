@@ -482,7 +482,14 @@ fn lint_packs(dir_arg: Option<&str>) -> ExitCode {
     if !run(&["build", "-p", "actl-cli"]) {
         return ExitCode::FAILURE;
     }
-    let actl = ws_root.join("target/debug/actl.exe");
+    // 走 CARGO_TARGET_DIR(2026-10-13 僵尸实证修复):主 target 的 actl.exe
+    // 被挂死进程锁住镜像时(delete-pending 挂起,cargo 换不了产物),隔离
+    // target 目录是开发循环的标准逃生通道——lint-packs 硬编码主路径会
+    // 让整轮 gate 在此形态下结构性失败。子 cargo build 同环境变量,同目录。
+    let target_dir = std::env::var_os("CARGO_TARGET_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| ws_root.join("target"));
+    let actl = target_dir.join("debug/actl.exe");
     // 命令全集(单一事实来源)
     let known: Vec<String> = match std::process::Command::new(&actl).arg("commands").output() {
         Ok(o) if o.status.success() => {
