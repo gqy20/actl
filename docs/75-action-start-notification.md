@@ -55,3 +55,4 @@
 - Win32 原生清单观察成功（`ribbon-native-inventory.json`），执行状态与正常前台窗口均可读取。为了完成视觉演示，新增可复用只读原生查询 YAML，记录路线变更原因而不把 UIA 超时当作修复。校验成功（`ribbon-native-validate.json`）；新任务 `ribbon-native-20261002-01` 两步各执行一次、completed、runner_active=false、window_count=574、模板未变化（`ribbon-native-run.json`）。
 - 用户要求再试原 UIA 路线后，复用未修改的 `fixtures/flows/inspect.yml` 新建任务 `ribbon-uia-retry-20261002-01`。同一被测显示端与 CLI、无重启或修复执行状态；checkpoint 后继续，system/windows 各执行一次，最终 completed、runner_active=false、模板未变化（`ribbon-uia-retry-run.json` / `ribbon-uia-retry-resume.json`）。本次未复现超时，不据此判定原超时根因已修复；原失败任务和证据继续保留。
 - 当前真实桌面验证涵盖正常启动/完成与一次 UIA 查询导致的异常暂停；屏幕中部提示仍排除截图，视觉观感由用户现场查看。完整失败/急停/接管恢复、多屏 DPI 与真实减少动态设置矩阵仍待验收，不能由本轮结果推断全部通过。
+- 2026-10-12 增补：异常 paused（action_failed,确定性 NOT_FOUND 演示 `fixtures/flows/notice-fail.yml`）的中央提示经用户目视确认出现,ASCII 与中文任务名各一轮,中文名「中央失败通知演示」渲染正常无乱码;首轮同构造未目击,复跑即现,归因时机错过不立 bug。急停/停止路径的显示语义随真按钮轮收口（[35](35-stop-lifecycle.md) 2026-10-12 节）。仍待：接管恢复、多屏 DPI、真实减少动态设置。

@@ -65,3 +65,27 @@ stop_requested=false、protocol=6，PID=46980，HWND=26941512；进程路径确�
 当前显示端保留运行，未恢复任何旧任务，未授予桌面操作权限。
 
 这次确认了安装、启动和授权清理结果；普通关闭重启及真实急停按钮/跨进程解除的完整交互验收仍未执行。
+
+## 急停真按钮全链验收（2026-10-12）
+
+用户以真实操作走完「急停→解除」两段。现场：`fixtures/flows/inspect.yml` 任务 `stopbtn-20261012-03`
+（新 ID,不复用旧计划）在 checkpoint 暂停,显示端 0.2.2 协议 v11(PID 51308,epoch `s18ddcc22628867a00`)。
+
+**急停段（右键菜单「停止操作」路径）**：停止记录五字段全中——`source:"menu"`、`pid:51308`、
+`requested_ms`、`display_epoch`、`version:2`;停止代次推进 `s18db4b81…`→`s18ddf266…`。
+暂停中的 run 保持 paused,不标记完成、不自动续跑。代次门禁实测:`ACTL_EXECUTION_GENERATION`
+绑旧代次的输入调用 35ms 拒绝（`ABORTED / execution_generation_changed`,`retry_input:false`,
+hint 指向「新桌面写需开始/继续」）；新代次无绑定裸调用放行为合同行为（docs/47 行 7/14/20:
+裸调用等效用户本人,否则用户无法自行执行 execution-recover）。
+
+**解除段（详情窗「修复运行状态」路径）**：state 回 ready、stop=null、代次按「修复生成新代次」
+推进为 `s18ddf2e69…`;解除后新任务（三个通知演示任务）正常发起。**观察项：修复点击后 UI 无可见
+反馈**——状态机已变更但面板无确认变化,操作者需以 execution-status 复核;记显示层 UX 待办,非本层缺陷。
+
+语义澄清如实记录：急停后暂停的 run 可被显式 `flow-resume` 续跑,纯观察步执行（AGENTS「纯观察不因
+历史急停拒绝」）,写步由代次门禁拒绝——急停拦的是「跨停止的旧代次调用」,不是「一切后续调用」。
+首轮演练中用户误按「继续」（详情窗主按钮）完成旧任务,审计 `signal_control resume` 如实在案——
+详情窗「继续」与「急停」的视觉权重差是同一 UX 观察项的证据。
+
+剩余：系统重启（OS 级）后急停语义保持、以及急停命中飞行中调用的 ABORTED 实测（需时序编排）,
+分别随 [47](47-execution-recovery.md) 与 [39](39-flow-observation-recovery.md) 后续轮收口。

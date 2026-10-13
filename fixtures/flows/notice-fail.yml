@@ -1,0 +1,8 @@
+version: 1
+name: notice fail demo
+steps:
+  - id: doomed
+    title: Target a window that does not exist (deterministic NOT_FOUND)
+    run:
+      command: find
+      args: ["--name", "nonexistent-window-placeholder-xyz", "--app", "nonexistent-window-placeholder-xyz"]

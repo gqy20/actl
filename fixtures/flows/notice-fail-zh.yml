@@ -1,0 +1,8 @@
+version: 1
+name: 中央失败通知演示
+steps:
+  - id: doomed
+    title: 目标不存在的窗口(确定性 NOT_FOUND)
+    run:
+      command: find
+      args: ["--name", "nonexistent-window-placeholder-xyz", "--app", "nonexistent-window-placeholder-xyz"]

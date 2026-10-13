@@ -14,6 +14,8 @@
 
 ### Documentation and validation
 
+- **急停真按钮全链验收（2026-10-12,自 2026-09-28 悬置的核心信任闭环收口）**：用户真实操作走完「急停→解除」——右键菜单「停止操作」写入停止记录五字段全中（source=menu/pid/requested_ms/display_epoch/version 2）,停止代次推进;暂停中 run 保持 paused 不完成;`ACTL_EXECUTION_GENERATION` 绑旧代次输入调用 35ms 拒绝（ABORTED/execution_generation_changed）;详情窗「修复运行状态」解除后 ready/stop=null/新代次,新任务正常发起。语义澄清如实入册:急停拦「跨停止的旧代次调用」,新代次裸调用等效用户本人放行,急停后显式 flow-resume 可续跑纯观察步（写步由代次门禁拒）。真实失败通知（异常 paused,确定性 NOT_FOUND 演示 `notice-fail.yml`）目视两验,中文任务名渲染正常。两条 UX 观察入册:详情窗「继续/急停」视觉权重差（演练中误按继续完成旧任务,审计 signal_control resume 在案）与修复操作无可见反馈。docs 35/39/75 同步,ROADMAP 条目收窄为余项（接管暂停/严格时点/飞行中 ABORTED/OS 重启/DPI/减少动态）。AGENTS 诊断条款修正:结构性不可达目标（显示窗自排除）的独立只读观察是可达边界而非例外论证,独立截屏须 DPI-aware（非感知进程采错区域致误判「面板被遮挡」实证,后经用户截图纠正）。
+
 - **探索模式接口缝隙收口（2026-10-12 分析轮,P1/P2 落地）**：PACKS.md 新增「探索回写与隔离协议」——①双轨分工显式化:引擎轨 writeback 片段 vs 自由探索轨 agent 手工编辑 pack,两种知识形态不互相格式化,不建自动写入通道（verified 迁移=人工复核红线不变）；②隔离策略前置声明（quirk 形式,不新增结构字段）+ 真实实例探索协议五步成文（标记名产物/前后 find/白名单清理/find 空返回/residue-report 差集）;zotero.yml 以 `exploration_isolation` quirk 首个示范（single-instance 隔离不可行,实测 -datadir 转发给既有实例）。SKILL.md 增补:PowerShell 裸 `@eN` 被 splat 语法吞掉须加引号（实测两次踩坑）。AGENTS.md 验收脚本纪律增第 8 条:产物断言用发现不用预设名。
 
 - **Zotero 导入导出真实库闭环（2026-10-12,用户本地实例授权轮——ROADMAP 应用深化条目关闭）**：剪贴板 RIS 导入→条目行出现在列表视图→条目右键「导出条目…」(菜单项在主窗 UIA 树内 MenuItem,非独立 HWND)→格式窗(Zotero 自有窗,id:format-menu 默认停在**上次使用的格式**——装 Better BibTeX 时默认 bib)→系统另存对话框(独立进程,文件名 Edit id:1001)→**产物落盘字段与导入一致**。三条通道事实入 pack:①系统另存对话框文件名 Edit 的 get value 读回恒空(通道失明),写入走 `type --paste --verify-value`;②写入后保存按钮 STALE_REF(对话框回流重排),文件名内容保留,重 snapshot 后点新 ref;③**Windows 按保存类型过滤器补扩展名**(输入 `.csl.json` 选 bib 类型落盘 `.csl.json.bib`)——产物后缀与格式类型必须成对核对,首轮"文件未出现"实为后缀误判。测试条目经 Delete→「移动到回收站」确认框清理,find 空返回核实;`export_csl_json` 路线保存段换用实证通道,`dynamic_refs` 写入验证范围扩至真实库。
