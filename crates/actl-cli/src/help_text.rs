@@ -160,7 +160,7 @@ Errors: PROTOCOL invalid HWND | ASSERTION_FAILED original instance remains | NOT
             "Example:\n  actl snapshot --app Notepad --skeleton\n  actl snapshot --app Edge --view content --skeleton\n  actl snapshot --app MyApp --keywords 'save,导出' --skeleton\n--skeleton keeps interactive elements + collapsed ancestors (token saver).\n--view content keeps only Document (web/document body) subtrees, drops app chrome;\ncombines with --skeleton (folding inside the document) — the browser/editor token saver.\n--keywords K1,K2 keeps interactive elements whose name/automation_id contains any keyword (case-insensitive) plus ancestors; the task-projection primitive of exploration mode (docs/42). Zero hits return an EMPTY result (no silent fallback). 1-16 keywords, each ≤64 chars.\nExample local scope:\n  actl snapshot --app MyApp --within 'uia:{\"match\":{\"id\":\"panel\"}}' --depth 3 --limit 100\n--within requires --app/--hwnd and one strict UIA container. Root depth is 0.\nLocal refs require the returned snapshot_id on replay; never mix with full-window refs.\nOutput: scope, ref_scope=container, observed_nodes; truncated + truncation_reasons report actual node/depth cuts.\nErrors: PROTOCOL invalid scope/budgets/keywords | AMBIGUOUS container | NOT_FOUND no window/Document | INTERNAL/PERM_DENIED/STALE_REF observation failed | NOT_ACTIONABLE incomplete content scope"
         }
         "click" => {
-            "Example:\n  actl click @e3 --app Notepad --snapshot s1a2b\n  actl click name:item --app Explorer --physical --with ctrl\n(multi-select)\n  actl click id:session_item_x --app 微信 --physical --no-activate\n  actl click id:session_item_x --app 微信 --expect element:id:chat_message_list\n--expect window:<substr> = NEW window appears; element:<target> = postcondition resolves (implicit wait, 2s default).\nErrors: NOT_FOUND | AMBIGUOUS (candidates) | STALE_REF (re-snapshot) | NOT_ACTIONABLE occluded/xy: outside | PERM_DENIED guard | ASSERTION_FAILED --expect unmet | PROTOCOL bad args"
+            "Example:\n  actl click @e3 --app Notepad --snapshot s1a2b\n  actl click name:item --app Explorer --physical --with ctrl\n(multi-select)\n  actl click id:session_item_x --app 微信 --physical --no-activate\n  actl click xyw:300,120 --app MyApp --physical\n--expect window:<substr> = NEW window appears; element:<target> = postcondition resolves (implicit wait, 2s default).\nxyw:x,y = window-relative click (origin = target window top-left, same anchor as screenshot --app): what you see at pixel (x,y) on a window screenshot is exactly what gets clicked — zero scaling math; guards/occlusion checks run on the converted screen point. xy: = absolute screen pixels. Both require --app + --physical.\nErrors: NOT_FOUND | AMBIGUOUS (candidates) | STALE_REF (re-snapshot) | NOT_ACTIONABLE occluded/xy: outside | PERM_DENIED guard | ASSERTION_FAILED --expect unmet | PROTOCOL bad args"
         }
         "focus" => {
             "Example:\n  actl focus name:搜索框 --app 应用\n  actl focus @e7 --snapshot s1a2b --app 应用\nEstablishes UIA keyboard focus on the target element (SetFocus + readback verification: the focused element's RuntimeId must match the target, bounded 3×120ms). No keys injected. Fills the assert-vs-establish gap: press --target only ASSERTS focus. On mismatch returns NOT_ACTIONABLE with expected/actual evidence and hints --physical.\nErrors: NOT_FOUND | AMBIGUOUS (candidates) | STALE_REF (re-snapshot) | NOT_ACTIONABLE refuses focus / readback mismatch (Electron stale widgets, WinUI focus lies) | PROTOCOL bad args"
@@ -191,11 +191,16 @@ Errors: PROTOCOL invalid HWND | ASSERTION_FAILED original instance remains | NOT
   actl screenshot --app Notepad
   actl screenshot --element id:CalculatorResults --app 计算器
   actl screenshot --rect 100,100,400,300
+  actl screenshot --wrect 8,120,161,141 --app VMware Workstation
 Explicit pixel fallback for UIA-blind content (canvases, self-drawn menus, image
 messages) and visual verification. Pixels go to a PNG file; the envelope carries
 only path+metadata (vision consumption is the caller's decision). Region mode
 captures what is ON SCREEN (occluders included); window mode renders the window
-itself even when occluded.
+itself even when occluded. --wrect X,Y,W,H = window-relative region (origin =
+target window top-left, same anchor as xyw: clicks; requires --app/--hwnd) —
+crop a template from a full-window screenshot's pixel coordinates directly:
+screenshot --app W → find-image --wrect-cropped template → click xyw: — zero
+scaling math on scaled displays.
 Errors: PROTOCOL bad args | NOT_FOUND no window | NOT_ACTIONABLE minimized/oversize/empty bounds"
         }
         "paste" => {

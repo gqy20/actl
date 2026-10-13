@@ -172,11 +172,12 @@ fn locate_full(
             "uia selectors do not support --near; use within and unique conditions",
         ));
     }
-    // xy: 坐标目标无元素可解析——物理专用通道(pointer_at_physical),
-    // 误入元素定位路径 = 协议错误(所有元素类命令对 xy 的统一拒绝)
-    if let Target::Coord(..) = target {
+    // xy:/xyw: 坐标目标无元素可解析——物理专用通道(pointer_at_physical /
+    // pointer_at_window),误入元素定位路径 = 协议错误(所有元素类命令对
+    // 坐标目标的统一拒绝;xyw 同拒防漏到全树遍历,2026-10-13 Fix B)
+    if let Target::Coord(..) | Target::CoordRel(..) = target {
         return Err(CtlError::protocol(format!(
-            "{} cannot be resolved to an element; coordinate targets are physical-only (click xy:x,y --app <win> --physical)",
+            "{} cannot be resolved to an element; coordinate targets are physical-only (click xy:x,y / xyw:x,y --app <win> --physical)",
             target.describe()
         )));
     }

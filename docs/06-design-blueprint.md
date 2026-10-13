@@ -214,6 +214,9 @@ find-image --template <png> [--app X] [--threshold 0.85] [--all] [--limit N] [--
 ```
 click @e3 [--expect P]     right-click / double-click
 click xy:1420,856 --app X --physical   # 坐标寻址(视觉兜底的手;§7 守卫)
+click xyw:300,120 --app X --physical   # 窗口相对寻址(Fix B):原点=目标窗左上角
+                                      # 与 screenshot --app 同锚——截图像素位置直接
+                                      # 可点,零换算;守卫在换算后的屏幕坐标上执行
 click @e3 --physical --no-activate     # 抑制激活的物理点击(§7.1;指针族通用)
 type @e5 "text"            set-value @e5 "v"    # UIA Value pattern 优先
 press ctrl+s               key-down shift / key-up shift  # 状态保持键必须成对
@@ -548,6 +551,7 @@ L2  actl commands     机器 schema:全命令+参数的 JSON(agent 自发现入�
 - `get --property` 白名单含 `enabled`（UIA IsEnabled）：禁用态此前只在写动作失败后可见，门户预填锁定字段的写前判读现为只读一步。
 - `get --property selected`（2026-10-13 VMware 向导轮实证补）：RadioButton/CheckBox/MenuItem 选定态读回——SelectionItem `IsSelected` 优先、无该 pattern 时回退 ToggleState（`On`⇒true）；两 pattern 均不可用为 None（非可选控件，诚实降级不伪装）。选择/勾选动作后不再需要截图确认。
 - **坐标系不变量（2026-10-13 进程级 PMv2 修复兑现）**：actl.exe 全进程 Per-Monitor V2 感知——`get rect`、find 证据、preview bounds、focus-report、snapshot 树几何、`click xy:` 与 `screenshot --rect` 全部同为**物理像素**，缩放屏无逻辑/物理混排。修复根因：双 200% 缩放屏实测 `get rect` 曾回逻辑坐标（与 list-windows/find-image 恰差 2×），"PMv2 物理"宣称在 rect 读取路径为假；现进程入口一次设置（signal 显示端同款先例），散点线程 guard 保留为无害冗余。设置失败仅 stderr 诊断，坐标回退逻辑值不静默。
+- **窗口相对寻址 `xyw:` + `screenshot --wrect`（2026-10-13 Fix B，docs/83 §8——"截图看到的像素位置直接可点"）**：原点=目标窗口 DWM extended bounds 左上角（与 `screenshot --app` 截图口径同锚）。`click xyw:x,y --app W --physical` 把全窗截图上第 (x,y) 像素直接换算成屏幕坐标注入，守卫/遮挡检查/急停全复用，envelope 附 `origin`（窗口原点）与换算后 `point` 可判读；`screenshot --wrect X,Y,W,H --app W` 同锚裁模板（自绘控件全链：全窗截图→--wrect 裁模板→find-image→xyw 点击，缩放屏零手工换算）。窗口相对偏移恒非负（负值 PROTOCOL——是调用方算错的信号）；xyw 现限 click/指针族（drag 端点暂拒，PROTOCOL 指引用元素或 xy:）。
 - 默认 `get` 的 data 增加 `unsupported` 属性名数组（如 `["value","text"]`），表示已确认不支持的读取通道；空数组表示本次没有不支持项。其他读取错误使命令失败，不能输出看似完整的成功结果。
 - 显式 `get --property value|text`、verify 和属性等待遇到不支持通道返回 NOT_ACTIONABLE，evidence.reason=`pattern_unsupported`；value 的 get/自动等待允许上述双通道，而 `verify --property value` 严格读取 ValuePattern。
 - UIA 元素失效映射 STALE_REF，访问拒绝映射 PERM_DENIED，其余 provider/属性读取错误映射 INTERNAL；evidence 带 channel、native_code（原生错误存在时）。观察失败不能等同空值、断言不满足或稳定。

@@ -35,6 +35,11 @@ pub enum Target {
     /// 视觉兜底的"手":坐标来自调用方(screenshot+VLM/人),不经元素定位;
     /// 强制 --app + --physical(窗口边界守卫,06 §7)
     Coord(i32, i32),
+    /// 窗口客户区相对坐标(`xyw:300,120`,2026-10-13 Fix B):原点=目标窗口
+    /// 客户区左上角,单位=物理像素——截图上看到的像素位置直接可点,agent
+    /// 不做缩放/平移换算;同样强制 --app + --physical(边界守卫在换算后的
+    /// 屏幕绝对坐标上执行,守卫语义与 xy: 一致)。
+    CoordRel(i32, i32),
 }
 
 impl Target {
@@ -51,6 +56,7 @@ impl Target {
             Target::Focused(None) => "focused:".into(),
             Target::Focused(Some(role)) => format!("focused:{role}"),
             Target::Coord(x, y) => format!("xy:{x},{y}"),
+            Target::CoordRel(x, y) => format!("xyw:{x},{y}"),
         }
     }
 }
@@ -86,6 +92,18 @@ pub fn parse_target(raw: &str) -> Result<Target, CtlError> {
             && let (Ok(x), Ok(y)) = (xs.trim().parse::<i32>(), ys.trim().parse::<i32>())
         {
             return Ok(Target::Coord(x, y));
+        }
+        return Err(bad(raw));
+    }
+    // xyw:x,y(窗口客户区相对坐标,Fix B):换算归执行侧,agent 零换算;
+    // 负值非法(客户区相对坐标恒在客户区内,负数是调用方算错的信号)
+    if let Some(rest) = raw.strip_prefix("xyw:") {
+        if let Some((xs, ys)) = rest.split_once(',')
+            && let (Ok(x), Ok(y)) = (xs.trim().parse::<i32>(), ys.trim().parse::<i32>())
+            && x >= 0
+            && y >= 0
+        {
+            return Ok(Target::CoordRel(x, y));
         }
         return Err(bad(raw));
     }
@@ -195,6 +213,15 @@ mod tests {
             parse_target("xy:-100,200").unwrap(),
             Target::Coord(-100, 200)
         );
+        // xyw:窗口客户区相对坐标(Fix B):零换算寻址;负值 PROTOCOL 拒绝
+        assert_eq!(
+            parse_target("xyw:300,120").unwrap(),
+            Target::CoordRel(300, 120)
+        );
+        assert_eq!(parse_target("xyw:0,0").unwrap(), Target::CoordRel(0, 0));
+        assert!(parse_target("xyw:-5,10").is_err());
+        assert!(parse_target("xyw:300").is_err());
+        assert_eq!(Target::CoordRel(300, 120).describe(), "xyw:300,120");
         assert_eq!(parse_target("xy:0,0").unwrap(), Target::Coord(0, 0));
         // focused:裸(不校验角色)与角色校验形态
         assert_eq!(parse_target("focused:").unwrap(), Target::Focused(None));

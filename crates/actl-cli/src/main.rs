@@ -381,6 +381,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             app,
             hwnd,
             rect,
+            wrect,
             element,
             sapp,
             snear,
@@ -388,8 +389,11 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
         } => screenshot_cmd(
             app.as_deref(),
             hwnd.as_deref(),
-            rect.as_deref(),
-            element.as_deref(),
+            crate::interact::ShotDomain {
+                rect: rect.as_deref(),
+                wrect: wrect.as_deref(),
+                element: element.as_deref(),
+            },
             sapp.as_deref(),
             snear.as_deref(),
             out.as_deref(),

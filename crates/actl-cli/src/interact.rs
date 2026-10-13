@@ -35,12 +35,15 @@ pub(crate) fn click(
         Vec::new()
     };
 
-    let data = if let actl_core::target::Target::Coord(x, y) = target {
-        // xy: 坐标目标:无元素可校验 → ①物理授权必须显式 --physical;
-        // ②强制 --app(窗口边界守卫的锚,防窗口漂移后点进窗外)
+    let data = if let actl_core::target::Target::Coord(x, y)
+    | actl_core::target::Target::CoordRel(x, y) = target
+    {
+        // xy:/xyw: 坐标目标:无元素可校验 → ①物理授权必须显式 --physical;
+        // ②强制 --app(窗口边界守卫的锚,防窗口漂移后点进窗外);
+        // xyw: 的客户区原点换算归执行侧(2026-10-13 Fix B,agent 零换算)
         if !physical {
             return Err(CtlError::protocol(
-                "xy: targets are physical-only (no UIA element to verify); add --physical",
+                "xy:/xyw: targets are physical-only (no UIA element to verify); add --physical",
             ));
         }
         let app = app.ok_or_else(|| {
@@ -56,18 +59,27 @@ pub(crate) fn click(
                 modifiers: with.to_vec(),
             }
         };
-        let out = actl_uia::pointer_at_physical(app, x, y, action, no_activate)?;
-        json!({
+        let relative = matches!(target, actl_core::target::Target::CoordRel(..));
+        let out = if relative {
+            actl_uia::pointer_at_window(app, x, y, action, no_activate)?
+        } else {
+            actl_uia::pointer_at_physical(app, x, y, action, no_activate)?
+        };
+        let mut entry = json!({
             "action": "click",
             "target": target.describe(),
-            "resolved_by": "coord",
+            "resolved_by": if relative { "coord-window-relative" } else { "coord" },
             "pattern": if with.is_empty() { "physical-left" } else { "physical-modified" },
             "modifiers": with,
-            "point": [x, y],
+            "point": [out.point.0, out.point.1],
             "guard": "window-bounds",
             "input_effects": { "keyboard": if with.is_empty() { "none" } else { "injected" }, "clipboard": "untouched", "pointer": "move_and_click", "activation": if no_activate { "suppressed" } else { "normal" } },
             "window": out.window_title,
-        })
+        });
+        if let Some((ox, oy)) = out.origin {
+            entry["origin"] = json!([ox, oy]);
+        }
+        entry
     } else if physical {
         let action = if with.is_empty() {
             actl_uia::PointerAction::LeftClick
@@ -491,25 +503,36 @@ pub(crate) fn pointer_cmd(
         PointerKind::Hover => "move",
         _ => "move_and_click",
     };
-    if let actl_core::target::Target::Coord(x, y) = target {
-        // xy: 坐标目标:本族命名即物理授权,但 --app 必须显式(边界守卫的锚)
+    if let actl_core::target::Target::Coord(x, y) | actl_core::target::Target::CoordRel(x, y) =
+        target
+    {
+        // xy:/xyw: 坐标目标:本族命名即物理授权,但 --app 必须显式(边界守卫的锚);
+        // xyw: 原点换算归执行侧(Fix B)
         let app = app.ok_or_else(|| {
             CtlError::protocol(format!(
                 "{name} {} requires --app <title-substr>: the coordinate bounds guard needs a window anchor (fail-closed)",
                 target.describe()
             ))
         })?;
-        let out = actl_uia::pointer_at_physical(app, x, y, action, no_activate)?;
-        return Ok(json!({
+        let relative = matches!(target, actl_core::target::Target::CoordRel(..));
+        let out = if relative {
+            actl_uia::pointer_at_window(app, x, y, action, no_activate)?
+        } else {
+            actl_uia::pointer_at_physical(app, x, y, action, no_activate)?
+        };
+        let mut entry = json!({
             "action": name,
             "target": target.describe(),
-            "resolved_by": "coord",
-            "point": [x, y],
+            "resolved_by": if relative { "coord-window-relative" } else { "coord" },
+            "point": [out.point.0, out.point.1],
             "guard": "window-bounds",
             "input_effects": { "keyboard": "none", "clipboard": "untouched", "pointer": effects, "activation": if no_activate { "suppressed" } else { "normal" } },
             "window": out.window_title,
-        })
-        .into());
+        });
+        if let Some((ox, oy)) = out.origin {
+            entry["origin"] = json!([ox, oy]);
+        }
+        return Ok(entry.into());
     }
     let (loc, (px, py), scrolled) =
         actl_uia::pointer_physical(app, &target, near, action, no_activate)?;
@@ -561,6 +584,13 @@ pub(crate) fn drag_cmd(
     let from = actl_core::parse_target(from_raw)?;
     let to = actl_core::parse_target(to_raw)?;
     let waypoints = parse_waypoints(path)?;
+    if matches!(from, actl_core::Target::CoordRel(..))
+        || matches!(to, actl_core::Target::CoordRel(..))
+    {
+        return Err(CtlError::protocol(
+            "xyw: is click/pointer-family only for now — drag endpoints use element targets or absolute xy: (window-relative drag is a follow-up, see docs/83 §8)",
+        ));
+    }
     let coord_pair = matches!(
         (&from, &to),
         (
@@ -799,17 +829,28 @@ pub(crate) fn paste_cmd(app: &str) -> Result<CommandOutput, CtlError> {
     .into())
 }
 
+/// screenshot 的互斥域参数(rect/wrect/element 三选一,CLI 展开后的容器)。
+pub(crate) struct ShotDomain<'a> {
+    pub(crate) rect: Option<&'a str>,
+    pub(crate) wrect: Option<&'a str>,
+    pub(crate) element: Option<&'a str>,
+}
+
 /// screenshot:像素捕获兜底(显式请求;envelope 只带文件路径与元数据,
 /// 像素落磁盘——stdout 契约不破,视觉消费是上层 agent 的决定)。
 pub(crate) fn screenshot_cmd(
     app: Option<&str>,
     hwnd: Option<&str>,
-    rect: Option<&str>,
-    element: Option<&str>,
+    domain: ShotDomain<'_>,
     sapp: Option<&str>,
     snear: Option<&str>,
     out: Option<&str>,
 ) -> Result<CommandOutput, CtlError> {
+    let ShotDomain {
+        rect,
+        wrect,
+        element,
+    } = domain;
     let shot = if let Some(r) = rect {
         let parts: Vec<i32> = r
             .split(',')
@@ -824,6 +865,36 @@ pub(crate) fn screenshot_cmd(
             )));
         }
         actl_uia::screenshot_rect(parts[0], parts[1], parts[2], parts[3], out)?
+    } else if let Some(r) = wrect {
+        // 窗口相对区域(Fix B):与 --app/--hwnd 组合(窗口锚必须有);
+        // 负偏移 PROTOCOL(窗口相对语义恒在窗内),越界部分截屏幕实况
+        let parts: Vec<i32> = r
+            .split(',')
+            .map(|p| p.trim().parse::<i32>())
+            .collect::<Result<_, _>>()
+            .map_err(|_| {
+                CtlError::protocol(format!("invalid --wrect {r:?}: expected X,Y,W,H integers"))
+            })?;
+        if parts.len() != 4 {
+            return Err(CtlError::protocol(format!(
+                "invalid --wrect {r:?}: expected X,Y,W,H"
+            )));
+        }
+        if parts[0] < 0 || parts[1] < 0 {
+            return Err(CtlError::protocol(format!(
+                "invalid --wrect {r:?}: window-relative offsets must be non-negative (whole-window capture is --app, not negative offsets)"
+            )));
+        }
+        let win = if let Some(h) = hwnd {
+            actl_uia::WindowRef::Hwnd(actl_uia::parse_hwnd(h)?)
+        } else if let Some(a) = app {
+            actl_uia::WindowRef::Title(a)
+        } else {
+            return Err(CtlError::protocol(
+                "--wrect requires a window anchor: pass --app <title-substr> or --hwnd <n>",
+            ));
+        };
+        actl_uia::screenshot_window_rect(win, parts[0], parts[1], parts[2], parts[3], out)?
     } else if let Some(h) = hwnd {
         actl_uia::screenshot_window(actl_uia::WindowRef::Hwnd(actl_uia::parse_hwnd(h)?), out)?
     } else if let Some(app) = app {

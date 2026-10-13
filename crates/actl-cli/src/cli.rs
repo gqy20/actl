@@ -488,8 +488,11 @@ pub(crate) enum Command {
         /// Capture a screen region: <x>,<y>,<w>,<h> physical pixels
         #[arg(long, id = "srect", value_name = "X,Y,W,H", conflicts_with_all = ["app", "shwnd", "selement"])]
         rect: Option<String>,
+        /// Capture a window-relative region (origin = target window top-left, same anchor as xyw:): <x>,<y>,<w>,<h> — requires --app or --hwnd (Fix B)
+        #[arg(long, id = "swrect", value_name = "X,Y,W,H", conflicts_with_all = ["srect", "selement"])]
+        wrect: Option<String>,
         /// Capture an element's bounding rectangle (goes through the locator chain)
-        #[arg(long, id = "selement", conflicts_with_all = ["app", "shwnd", "srect"])]
+        #[arg(long, id = "selement", conflicts_with_all = ["app", "shwnd", "srect", "swrect"])]
         element: Option<String>,
         /// Window title substring for --element scoping
         #[arg(long, requires = "selement")]

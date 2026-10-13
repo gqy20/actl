@@ -455,6 +455,49 @@ pub fn screenshot_window(r: WindowRef<'_>, out: Option<&str>) -> Result<ShotResu
     finish(px, w, h, None, out)
 }
 
+/// `screenshot --wrect X,Y,W,H --app <win>`:窗口相对区域截取(2026-10-13
+/// Fix B,docs/83 §8)——原点=目标窗口 DWM extended frame bounds 左上角,
+/// 与 `xyw:` 坐标点击同锚同单位;"全窗截图上看到的模板区域"直接用
+/// --wrect 截成模板文件,配合 find-image + `xyw:` 点击,自绘控件全链
+/// (截图→裁模板→定位→点击)零手工换算。换算后复用 screenshot_rect,
+/// 越界部分截到屏幕实况(blt 语义),不裁剪不报错;负偏移由 CLI 参数层
+/// PROTOCOL 拒绝(窗口相对语义恒在窗内)。
+pub fn screenshot_window_rect(
+    r: WindowRef<'_>,
+    wx: i32,
+    wy: i32,
+    w: i32,
+    h: i32,
+    out: Option<&str>,
+) -> Result<ShotResult, CtlError> {
+    use windows::Win32::Foundation::RECT;
+    use windows::Win32::Graphics::Dwm::{DWMWA_EXTENDED_FRAME_BOUNDS, DwmGetWindowAttribute};
+    use windows::Win32::UI::WindowsAndMessaging::GetWindowRect;
+
+    let _dpi = Pmv2Guard::enter();
+    let win = resolve_window(r)?;
+    let hwnd = crate::window::hwnd_of(&win)
+        .ok_or_else(|| CtlError::new(ErrorCode::NotActionable, "window has no native handle"))?;
+    // 原点与 pointer_at_window 的 bounds 守卫同源:DWM 可见边界优先
+    // (最大化窗口 GetWindowRect 含屏外阴影),退化 GetWindowRect
+    let mut r0 = RECT::default();
+    let dwm_ok = unsafe {
+        DwmGetWindowAttribute(
+            hwnd,
+            DWMWA_EXTENDED_FRAME_BOUNDS,
+            &mut r0 as *mut RECT as *mut _,
+            std::mem::size_of::<RECT>() as u32,
+        )
+    }
+    .is_ok()
+        && r0.right > r0.left;
+    if !dwm_ok {
+        unsafe { GetWindowRect(hwnd, &mut r0) }
+            .map_err(|e| CtlError::internal(format!("GetWindowRect: {e}")))?;
+    }
+    screenshot_rect(r0.left + wx, r0.top + wy, w, h, out)
+}
+
 /// 元素域:定位链解析 → bounds 即物理(PMv2 线程内,spike 实证)→ 直接裁屏幕
 pub fn screenshot_element(
     app: Option<&str>,

@@ -78,7 +78,7 @@ pub mod kbd;
 pub mod mouse;
 pub use capture::{
     ShotResult, ensure_process_pmv2, screenshot_element, screenshot_rect, screenshot_screen,
-    screenshot_window,
+    screenshot_window, screenshot_window_rect,
 };
 pub use collect::{CollectOptions, CollectReport, collect};
 pub use native_windows::{native_window, native_windows};
@@ -94,7 +94,7 @@ pub use locate::{
 };
 pub use pointer::{
     CoordOutcome, DragPathOutcome, PointerAction, PointerSpec, click_physical, drag_path_physical,
-    drag_physical, pointer_at_physical, pointer_physical, scroll_element,
+    drag_physical, pointer_at_physical, pointer_at_window, pointer_physical, scroll_element,
 };
 pub use read::{
     ElementRect, PROPS, PropertyInfo, SelectionOutcome, VerifyKind, VerifyOutcome,

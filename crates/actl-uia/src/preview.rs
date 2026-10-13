@@ -13,7 +13,7 @@ pub fn validate(
     message: &str,
     duration: u64,
 ) -> Result<(), CtlError> {
-    if matches!(target, Target::Coord(..)) {
+    if matches!(target, Target::Coord(..) | Target::CoordRel(..)) {
         return Err(CtlError::protocol(
             "preview requires an element, not coordinates",
         ));

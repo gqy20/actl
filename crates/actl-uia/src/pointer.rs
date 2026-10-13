@@ -313,7 +313,11 @@ fn inject_pointer_at(
 /// 坐标点击(xy: 目标)的结果上报。
 pub struct CoordOutcome {
     pub window_title: String,
+    /// 注入的屏幕绝对坐标(物理像素)
     pub point: (i32, i32),
+    /// 窗口原点(xyw: 路径回填;xy: 为 None)——与 point 相加即相对偏移,
+    /// 判读"点的像素来自截图哪个位置"不用回溯(2026-10-13 Fix B)。
+    pub origin: Option<(i32, i32)>,
 }
 
 /// 坐标物理动作(xy: 目标,视觉兜底的"手"):无元素定位,窗口边界守卫 +
@@ -431,7 +435,61 @@ pub fn pointer_at_physical(
     Ok(CoordOutcome {
         window_title: title,
         point: (x, y),
+        origin: None,
     })
+}
+
+/// xyw: 窗口相对坐标的屏幕换算(2026-10-13 Fix B,docs/83 §8):原点=目标窗口
+/// DWM extended frame bounds 左上角——与 `screenshot --app` 的裁剪口径同源
+/// (pointer_at_physical 守卫注释已明说一致),因此"screenshot --app 像素图上
+/// 第 (wx,wy) 像素"与 `xyw:wx,wy` 完全同锚,agent 零换算。守卫/命中检查/
+/// 急停全部复用 pointer_at_physical;本函数只做 origin 一次 DWM 调用 + 加法。
+/// 越界(wx/wy 超出窗口宽高)由 pointer_at_physical 的 bounds 守卫兜底
+/// (换算后的屏幕点在窗外 → 诚实拒绝并提示重截)。
+pub fn pointer_at_window(
+    app: &str,
+    wx: i32,
+    wy: i32,
+    action: PointerAction,
+    no_activate: bool,
+) -> Result<CoordOutcome, CtlError> {
+    use windows::Win32::Foundation::RECT;
+    use windows::Win32::Graphics::Dwm::{DWMWA_EXTENDED_FRAME_BOUNDS, DwmGetWindowAttribute};
+    use windows::Win32::UI::WindowsAndMessaging::GetWindowRect;
+
+    crate::feedback::check_stop()?;
+    let _dpi = crate::capture::Pmv2Guard::enter();
+    let auto = UIAutomation::new().map_err(internal)?;
+    let walker = auto.create_tree_walker().map_err(internal)?;
+    let win = find_window(&auto, &walker, app)?;
+    let hwnd = native_hwnd(&win).ok_or_else(|| {
+        CtlError::new(
+            ErrorCode::NotActionable,
+            "target window has no native handle for window-relative coordinates",
+        )
+    })?;
+    // 原点与 pointer_at_physical 的 bounds 同源:DWM 可见边界优先,退化 GetWindowRect
+    let mut r = RECT::default();
+    let dwm_ok = unsafe {
+        DwmGetWindowAttribute(
+            hwnd,
+            DWMWA_EXTENDED_FRAME_BOUNDS,
+            &mut r as *mut RECT as *mut _,
+            std::mem::size_of::<RECT>() as u32,
+        )
+    }
+    .is_ok()
+        && r.right > r.left;
+    if !dwm_ok {
+        unsafe { GetWindowRect(hwnd, &mut r) }
+            .map_err(|e| CtlError::internal(format!("GetWindowRect: {e}")))?;
+    }
+    let (sx, sy) = (r.left + wx, r.top + wy);
+    let mut out = pointer_at_physical(app, sx, sy, action, no_activate)?;
+    // 证据:窗口原点入 envelope——判读"点在哪/怎么来的"不用回溯
+    out.point = (sx, sy);
+    out.origin = Some((r.left, r.top));
+    Ok(out)
 }
 
 /// offscreen 元素尝试 ScrollItemPattern::ScrollIntoView(P1,虚拟化定位配套)。

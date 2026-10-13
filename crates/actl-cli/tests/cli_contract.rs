@@ -540,6 +540,41 @@ fn coordinate_targets_gated_at_protocol_level() {
     // 负坐标合法(多显示器左侧屏):卡在 --app 门而非解析
     let (code, _) = actl(&["click", "xy:-100,200", "--physical"]);
     assert_eq!(code, 2);
+    // xyw:(Fix B 窗口相对寻址):同族门控——无 --physical/无 --app/负值
+    // (客户区相对坐标恒非负)/非法形态/元素类命令误用 全部 PROTOCOL;
+    // 负值是调用方算错的信号,PROTOCOL 而非静默取 abs
+    let (code, _) = actl(&["click", "xyw:100,200"]);
+    assert_eq!(code, 2, "xyw without --physical is PROTOCOL");
+    let (code, _) = actl(&["click", "xyw:100,200", "--physical"]);
+    assert_eq!(code, 2, "xyw without --app is PROTOCOL");
+    for bad in ["xyw:-5,10", "xyw:100", "xyw:a,b"] {
+        let (code, _) = actl(&["click", bad, "--app", "x", "--physical"]);
+        assert_eq!(code, 2, "malformed/negative {bad}");
+    }
+    let (code, stdout) = actl(&["get", "xyw:100,200"]);
+    assert_eq!(code, 2, "element-family rejects xyw");
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
+    assert_eq!(v["error"]["code"], "PROTOCOL");
+    let (code, _) = actl(&["drag", "--from", "xyw:1,2", "--to", "xyw:3,4", "--app", "x"]);
+    assert_eq!(code, 2, "drag endpoints reject xyw for now");
+    // screenshot --wrect(Fix B 窗口相对截取):无窗口锚 PROTOCOL;
+    // 负偏移 PROTOCOL(窗口相对语义恒在窗内,= 号传参防 clap 吞负号)
+    let (code, stdout) = actl(&["screenshot", "--wrect", "0,0,10,10"]);
+    assert_eq!(code, 2, "--wrect without window anchor");
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
+    assert_eq!(v["error"]["code"], "PROTOCOL");
+    let (code, stdout) = actl(&[
+        "screenshot",
+        "--wrect=-5,0,10,10",
+        "--app",
+        "no-such-window",
+    ]);
+    assert_eq!(
+        code, 2,
+        "--wrect negative offset is PROTOCOL before NOT_FOUND"
+    );
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
+    assert_eq!(v["error"]["code"], "PROTOCOL");
 }
 
 #[test]
