@@ -31,6 +31,7 @@ fn help_has_four_elements() {
         "browser-click",
         "browser-close",
         "browser-netlog",
+        "browser-targets",
     ] {
         let out = support::IsolatedCommand::new()
             .command
@@ -65,6 +66,7 @@ fn commands_schema_contains_browser_family() {
         "browser-list",
         "browser-verify",
         "browser-netlog",
+        "browser-targets",
     ] {
         assert!(names.contains(&cmd), "commands schema lacks {cmd}");
     }
@@ -588,4 +590,32 @@ fn browser_command_surface_has_no_cookie_verbs() {
         !names.iter().any(|n| n.contains("cookie")),
         "cookie verbs must never appear in the command surface: {names:?}"
     );
+}
+
+#[test]
+fn browser_targets_unknown_session_maps_to_not_found() {
+    let (code, stdout) = actl(&["browser-targets", "--session", "nope123"]);
+    assert_eq!(code, 1);
+    let v: Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(v["error"]["code"], "NOT_FOUND");
+}
+
+#[test]
+fn target_override_rejects_malformed_ids_before_session_lookup() {
+    // --target 校验先于会话:畸形 id(过长/非字母数字)→ PROTOCOL;
+    // 空串经 clap 归一为 None(=寻址覆盖未提供),归会话查询面,不在本断言
+    for bad in [&"x".repeat(129), "abc/def"] {
+        let (code, stdout) = actl(&[
+            "browser-read",
+            "--session",
+            "abc123",
+            "--css",
+            "div",
+            "--target",
+            bad,
+        ]);
+        assert_eq!(code, 2, "target {bad:?} must be PROTOCOL");
+        let v: Value = serde_json::from_str(&stdout).unwrap();
+        assert_eq!(v["error"]["code"], "PROTOCOL");
+    }
 }

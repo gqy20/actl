@@ -139,8 +139,11 @@ quirks:
       裁模板路线;Invoke 对菜单项同样 E_FAIL(同族已知);⑤**CDP
       作用域边界**:chrome 层 UI(工具栏/扩展列表菜单)不是 CDP
       target,结构性不可达;**扩展自己的 popup 页面(chrome-
-      extension:// URL)打开期间是 CDP target**——弹层内写动作的
-      正道=物理点击打开弹窗后 browser-read/type 读写其 DOM
+      extension:// URL)打开期间是 CDP target**——弹层写链正道
+      =物理点击开弹窗(UIA)→browser-targets 枚举取 popup 的
+      target_id→browser-read/type/click --target <id> 读写其
+      DOM(2026-10-13 --target 寻址落地);popup 收起即 target
+      消失,死 id 如实 NOT_FOUND(重枚举即可)
   - id: webui_weak_a11y
     note: >-
       Chrome 内置页面(WebUI)视觉完全渲染但 a11y 弱暴露(extensions

@@ -71,6 +71,7 @@ pub(crate) fn read_cmd(
     deep: bool,
     limit: Option<usize>,
     wait_for: Option<u64>,
+    target: Option<&str>,
     timeout: Option<u64>,
 ) -> Result<CommandOutput, CtlError> {
     let (kind, value) = selector_of(css, xpath)?;
@@ -87,6 +88,7 @@ pub(crate) fn read_cmd(
             limit,
             deep,
             wait_for,
+            target,
         },
     )
     .map(Into::into)
@@ -141,6 +143,8 @@ pub(crate) fn netlog_cmd(
     .map(Into::into)
 }
 
+// clap 变体字段直转的薄适配层——参数即命令面(与 read_cmd/collect_cmd 同豁免)
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn type_cmd(
     session: &str,
     css: Option<&str>,
@@ -149,6 +153,7 @@ pub(crate) fn type_cmd(
     iframe: bool,
     timeout: Option<u64>,
     allow_popups: bool,
+    target: Option<&str>,
 ) -> Result<CommandOutput, CtlError> {
     let (kind, value) = selector_of(css, xpath)?;
     ops::type_text(
@@ -160,10 +165,13 @@ pub(crate) fn type_cmd(
         iframe,
         timeout,
         allow_popups,
+        target,
     )
     .map(Into::into)
 }
 
+// clap 变体字段直转的薄适配层(参数即命令面,与 read_cmd 同豁免)
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn click_cmd(
     session: &str,
     css: Option<&str>,
@@ -172,6 +180,7 @@ pub(crate) fn click_cmd(
     expect_text: Option<&str>,
     timeout: Option<u64>,
     allow_popups: bool,
+    target: Option<&str>,
 ) -> Result<CommandOutput, CtlError> {
     let (kind, value) = selector_of(css, xpath)?;
     ops::click(
@@ -183,6 +192,7 @@ pub(crate) fn click_cmd(
         expect_text,
         timeout,
         allow_popups,
+        target,
     )
     .map(Into::into)
 }
@@ -193,6 +203,11 @@ pub(crate) fn close_cmd(session: &str, timeout: Option<u64>) -> Result<CommandOu
 
 pub(crate) fn list_cmd() -> Result<CommandOutput, CtlError> {
     ops::list(&paths()).map(Into::into)
+}
+
+/// CDP target 枚举(只读):--target 寻址的发现通道(扩展 popup 写链第一步)。
+pub(crate) fn targets_cmd(session: &str) -> Result<CommandOutput, CtlError> {
+    actl_browser::deep::targets(&paths(), session).map(Into::into)
 }
 
 /// browser-verify 的 CLI 参数束(避开多参数告警;main.rs 从 clap 变体直构)。

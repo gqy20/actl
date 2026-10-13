@@ -954,6 +954,10 @@ pub(crate) enum Command {
         /// pages settle on their own; timeout carries the observed count in evidence)
         #[arg(long)]
         wait_for: Option<u64>,
+        /// CDP target override (id from browser-targets): default is the bound tab;
+        /// extension popups are separate targets while open (docs/72)
+        #[arg(long)]
+        target: Option<String>,
         /// Timeout in milliseconds (default 10000)
         #[arg(long)]
         timeout: Option<u64>,
@@ -1020,6 +1024,10 @@ pub(crate) enum Command {
         /// Locate inside the (cross-origin) child iframe instead of the main frame
         #[arg(long)]
         iframe: bool,
+        /// CDP target override (id from browser-targets): default is the bound tab;
+        /// extension popups are separate targets while open (docs/72)
+        #[arg(long)]
+        target: Option<String>,
         /// Skip the pre-action in-page popup gate (only after judging popup samples)
         #[arg(long)]
         allow_popups: bool,
@@ -1044,6 +1052,10 @@ pub(crate) enum Command {
         /// Assert the element text contains this substring after the click (post-write verification)
         #[arg(long)]
         expect_text: Option<String>,
+        /// CDP target override (id from browser-targets): default is the bound tab;
+        /// extension popups are separate targets while open (docs/72)
+        #[arg(long)]
+        target: Option<String>,
         /// Skip the pre-action in-page popup gate (only after judging popup samples)
         #[arg(long)]
         allow_popups: bool,
@@ -1062,6 +1074,12 @@ pub(crate) enum Command {
     },
     /// List active browser sessions, newest first (read-only; safe discovery for flows and agents)
     BrowserList,
+    /// List the session browser's CDP targets (read-only; discovery channel for --target addressing)
+    BrowserTargets {
+        /// Session id from browser-launch
+        #[arg(long)]
+        session: String,
+    },
     /// Register a local application path (stable) or pattern (Store apps with version wildcards)
     AppRegister {
         /// Short name for the app (1-64 [a-zA-Z0-9_-])
@@ -1314,6 +1332,7 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
         Command::BrowserClick { .. } => "browser-click",
         Command::BrowserClose { .. } => "browser-close",
         Command::BrowserList => "browser-list",
+        Command::BrowserTargets { .. } => "browser-targets",
         Command::AppRegister { .. } => "app-register",
         Command::AppList => "app-list",
         Command::AppLocate { .. } => "app-locate",

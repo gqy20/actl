@@ -9,6 +9,56 @@ use serde_json::{Value, json};
 use crate::bridge;
 use crate::session::{self, Paths};
 
+/// CDP target 枚举(只读,浅层连接即可):发现会话浏览器内的全部 target
+/// (绑 tab/其他 tab/扩展 popup/扩展 service worker)。`--target` 寻址的
+/// 发现通道——扩展弹窗写链(物理打开 → 枚举 → attach popup)的第一步。
+pub fn targets(paths: &Paths, session_id: &str) -> Result<Value, CtlError> {
+    let session = session::load(paths, session_id)?;
+    // Target.getTargets 是浏览器级方法,不需要 attach,浅层连接直达
+    let url = format!(
+        "ws://127.0.0.1:{}{}",
+        session.devtools_port, session.browser_ws_path
+    );
+    let conn = crate::cdp::Connection::connect(&url).map_err(crate::ops::map_cdp)?;
+    let res = conn
+        .call(
+            "Target.getTargets",
+            json!({}),
+            None,
+            Duration::from_secs(10),
+        )
+        .map_err(crate::ops::map_cdp)?;
+    let list = res
+        .get("targetInfos")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let mut targets: Vec<Value> = list
+        .iter()
+        .filter_map(|t| {
+            let kind = t.get("type").and_then(Value::as_str)?;
+            // page/popup/iframe 是 DOM 可读写面;service_worker 等如实枚举
+            // 但标注 dom:false(消费方自行取舍——--target 寻址只对 DOM 面有意义)
+            let dom = matches!(kind, "page" | "iframe" | "background_page");
+            Some(json!({
+                "target_id": t.get("targetId").and_then(Value::as_str).unwrap_or_default(),
+                "type": kind,
+                "url": t.get("url").and_then(Value::as_str).unwrap_or_default(),
+                "title": t.get("title").and_then(Value::as_str).unwrap_or_default(),
+                "bound": t.get("targetId").and_then(Value::as_str) == Some(session.target_id.as_str()),
+                "dom": dom,
+            }))
+        })
+        .collect();
+    // 绑 tab 置顶(发现 popup 时消费方第一眼看到的应该是会话锚)
+    targets.sort_by_key(|t| t.get("bound").and_then(Value::as_bool) == Some(false));
+    Ok(json!({
+        "session_id": session_id,
+        "total": targets.len(),
+        "targets": targets,
+    }))
+}
+
 /// 有界网络采集(请求清单快照)。窗口、条数、过滤器全部有界——
 /// 与 envelope 的请求/响应形态对齐,不引入流式输出语义。
 pub struct NetlogSpec<'a> {

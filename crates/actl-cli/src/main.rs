@@ -724,6 +724,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             deep,
             limit,
             wait_for,
+            target,
             timeout,
         } => browser::read_cmd(
             session,
@@ -735,6 +736,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             *deep,
             *limit,
             *wait_for,
+            target.as_deref(),
             *timeout,
         ),
         Command::BrowserType {
@@ -743,6 +745,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             xpath,
             text,
             iframe,
+            target,
             allow_popups,
             timeout,
         } => browser::type_cmd(
@@ -753,6 +756,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             *iframe,
             *timeout,
             *allow_popups,
+            target.as_deref(),
         ),
         Command::BrowserClick {
             session,
@@ -760,6 +764,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             xpath,
             iframe,
             expect_text,
+            target,
             allow_popups,
             timeout,
         } => browser::click_cmd(
@@ -770,9 +775,11 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             expect_text.as_deref(),
             *timeout,
             *allow_popups,
+            target.as_deref(),
         ),
         Command::BrowserClose { session, timeout } => browser::close_cmd(session, *timeout),
         Command::BrowserList => browser::list_cmd(),
+        Command::BrowserTargets { session } => browser::targets_cmd(session),
         Command::AppRegister {
             name,
             path,

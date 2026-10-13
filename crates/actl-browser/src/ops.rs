@@ -64,7 +64,7 @@ pub(crate) fn protocol(message: impl Into<String>) -> CtlError {
 }
 
 /// CDP 连接层错误 → envelope 错误码(docs/72 §9 错误映射)。
-fn map_cdp(err: CdpError) -> CtlError {
+pub(crate) fn map_cdp(err: CdpError) -> CtlError {
     match err.code {
         "CONNECT" => CtlError::with_evidence(
             ErrorCode::NotFound,
@@ -205,6 +205,32 @@ pub(crate) fn connect_browser(session: &BrowserSession) -> Result<Connection, Ct
     Connection::connect(&url).map_err(map_cdp)
 }
 
+/// --target 寻址解析(2026-10-13 spec,扩展弹层写链):None = 会话绑 tab
+/// (既有语义);Some = 覆盖目标(popup/其他 tab 的 CDP target id)。
+/// 覆盖时绑定重核与守卫弹层门全部落在覆盖目标上——写护栏不因寻址放宽。
+pub(crate) fn effective_target<'a>(
+    record: &'a BrowserSession,
+    target: Option<&'a str>,
+) -> Result<&'a str, CtlError> {
+    match target {
+        None => Ok(&record.target_id),
+        Some(id) => {
+            validate_target_shape(id)?;
+            Ok(id)
+        }
+    }
+}
+
+/// --target 形状校验(早于会话 load,坏参数不触达会话文件——netlog 同序)。
+pub(crate) fn validate_target_shape(id: &str) -> Result<(), CtlError> {
+    if id.is_empty() || id.len() > 128 || !id.bytes().all(|b| b.is_ascii_alphanumeric()) {
+        return Err(protocol(
+            "--target expects a CDP target id (1-128 ascii alphanumeric)",
+        ));
+    }
+    Ok(())
+}
+
 pub(crate) fn attach_target(
     conn: &Connection,
     target_id: &str,
@@ -217,7 +243,23 @@ pub(crate) fn attach_target(
             None,
             timeout,
         )
-        .map_err(map_cdp)?;
+        .map_err(|e| {
+            // 目标不存在(target 已关闭/弹窗已收起)是环境态不是内部故障:
+            // 归 NOT_FOUND 与 verify_target_alive 同判(死 id 实测
+            // "No target with given id found",2026-10-13)
+            if e.code == "CDP_ERROR" && e.message.contains("No target with given id") {
+                CtlError::with_evidence(
+                    ErrorCode::NotFound,
+                    format!(
+                        "target no longer exists (popup closed or tab gone); \
+                         re-enumerate with browser-targets: {e}"
+                    ),
+                    json!({ "target_id": target_id }),
+                )
+            } else {
+                map_cdp(e)
+            }
+        })?;
     res.get("sessionId")
         .and_then(Value::as_str)
         .map(str::to_string)
@@ -741,6 +783,9 @@ pub struct ReadSpec<'a> {
     /// (GitHub hpc 列表 CSR 等)的读段自稳,内建 500ms 轮询,超时 TIMEOUT
     /// 带实测命中数;与 --all/唯一读通用。
     pub wait_for: Option<u64>,
+    /// --target 寻址覆盖(2026-10-13):None = 会话绑 tab;Some = 指定
+    /// CDP target(扩展 popup/其他 tab,发现走 browser-targets)。
+    pub target: Option<&'a str>,
 }
 
 /// 沉降谓词(2026-10-11 spec,--wait-for N):命中数 < N 时 500ms 轮询
@@ -793,15 +838,20 @@ pub fn read(paths: &Paths, spec: ReadSpec<'_>) -> Result<Value, CtlError> {
         limit,
         deep,
         wait_for,
+        target,
     } = spec;
     validate_selector(kind, value)?;
     let property = property.unwrap_or("text");
     validate_property(property)?;
+    if let Some(t) = target {
+        validate_target_shape(t)?;
+    }
     let timeout = dur(timeout_ms, OP_DEFAULT_TIMEOUT_MS);
     let record = session::load(paths, session_id)?;
     let conn = connect_browser(&record)?;
-    let cdp_session = attach_target(&conn, &record.target_id, timeout)?;
-    verify_target_alive(&conn, &record.target_id, timeout)?;
+    let target_id = effective_target(&record, target)?;
+    let cdp_session = attach_target(&conn, target_id, timeout)?;
+    verify_target_alive(&conn, target_id, timeout)?;
     let context_id = if iframe {
         Some(iframe_context(&conn, &cdp_session, timeout)?.1)
     } else {
@@ -874,6 +924,9 @@ pub fn read(paths: &Paths, spec: ReadSpec<'_>) -> Result<Value, CtlError> {
             "session_id": session_id,
             "frame": if iframe { "iframe" } else { "main" },
         });
+        if let Some(t) = target {
+            payload["target"] = Value::String(t.to_string());
+        }
         // --deep 的遍历预算触顶:matches 是下界,如实上报不谎称全量
         if deep {
             payload["deep"] = Value::Bool(true);
@@ -922,6 +975,9 @@ pub fn read(paths: &Paths, spec: ReadSpec<'_>) -> Result<Value, CtlError> {
     }
     payload["session_id"] = Value::String(session_id.to_string());
     payload["frame"] = Value::String(if iframe { "iframe" } else { "main" }.to_string());
+    if let Some(t) = target {
+        payload["target"] = Value::String(t.to_string());
+    }
     Ok(payload)
 }
 
@@ -940,6 +996,7 @@ pub fn click(
     expect_text: Option<&str>,
     timeout_ms: Option<u64>,
     allow_popups: bool,
+    target: Option<&str>,
 ) -> Result<Value, CtlError> {
     validate_selector(kind, value)?;
     if expect_text.is_some_and(str::is_empty) {
@@ -947,11 +1004,15 @@ pub fn click(
     }
     // 停止代次核验:与桌面写操作同纪律(急停压过一切写通道)
     actl_core::stop::check_current()?;
+    if let Some(t) = target {
+        validate_target_shape(t)?;
+    }
     let timeout = dur(timeout_ms, OP_DEFAULT_TIMEOUT_MS);
     let record = session::load(paths, session_id)?;
     let conn = connect_browser(&record)?;
-    let cdp_session = attach_target(&conn, &record.target_id, timeout)?;
-    verify_target_alive(&conn, &record.target_id, timeout)?;
+    let target_id = effective_target(&record, target)?;
+    let cdp_session = attach_target(&conn, target_id, timeout)?;
+    verify_target_alive(&conn, target_id, timeout)?;
     let context_id = if iframe {
         Some(iframe_context(&conn, &cdp_session, timeout)?.1)
     } else {
@@ -1045,6 +1106,7 @@ pub fn click(
         "truncated": truncated,
         "url": url,
         "frame": if iframe { "iframe" } else { "main" },
+        "target": target,
     }))
 }
 
@@ -1065,17 +1127,22 @@ pub fn type_text(
     iframe: bool,
     timeout_ms: Option<u64>,
     allow_popups: bool,
+    target: Option<&str>,
 ) -> Result<Value, CtlError> {
     validate_selector(kind, value)?;
     if text.is_empty() || text.len() > TEXT_LIMIT {
         return Err(protocol("--text requires 1-65536 characters"));
     }
+    if let Some(t) = target {
+        validate_target_shape(t)?;
+    }
     actl_core::stop::check_current()?;
     let timeout = dur(timeout_ms, OP_DEFAULT_TIMEOUT_MS);
     let record = session::load(paths, session_id)?;
     let conn = connect_browser(&record)?;
-    let cdp_session = attach_target(&conn, &record.target_id, timeout)?;
-    verify_target_alive(&conn, &record.target_id, timeout)?;
+    let target_id = effective_target(&record, target)?;
+    let cdp_session = attach_target(&conn, target_id, timeout)?;
+    verify_target_alive(&conn, target_id, timeout)?;
     let context_id = if iframe {
         Some(iframe_context(&conn, &cdp_session, timeout)?.1)
     } else {
@@ -1154,6 +1221,7 @@ pub fn type_text(
         "typed": true,
         "value_after_len": value_after.len(),
         "frame": if iframe { "iframe" } else { "main" },
+        "target": target,
     }))
 }
 
