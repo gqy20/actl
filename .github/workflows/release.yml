@@ -2,9 +2,12 @@ name: Release
 
 # 发布体系参照 zotero_cli 的模式(tag 触发);
 # 差异:① msvc target 必须在 windows runner 原生构建 ② 不做 UPX(压缩解压损害冷启动 NFR)
-# ③ 版本号来自 Cargo.toml(单源),无需注入 ④ 两段式:verify → release(打包与发布
-# 同 job 直传,不经 actions/artifact 中转——artifact 存储配额是账号级共享资源,
-# 2026-09-26 v0.1.0 发版实测被配额阻断,且删除后 6-12h 才重算)。
+# ③ 版本号来自 Cargo.toml(单源),无需注入 ④ 打包与发布同 job 直传,不经 actions/artifact
+# 中转(artifact 存储配额是账号级共享资源,2026-09-26 v0.1.0 发版实测被配额阻断)。
+# 2026-10-13 v0.2.3 复盘两改:① verify 不再重跑 gate——main+tag 同推时 CI 已在跑同一
+# SHA,等它的结论即可(失败即失败;查无 CI 的孤儿 tag 回落本地 gate);② crates.io 发布
+# 按依赖分层并行 + --no-verify(CI 同 SHA 已全量验证,逐 crate verify 构建是发布耗时
+# 大头)。
 # 发布流程文档:docs/TECH_STACK.md §6
 
 on:
@@ -24,9 +27,45 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  verify:
-    name: Verify (gate = CI)
+  # tag 与 main 同推时 CI 已在跑同一 SHA——等结论而非重跑 gate(v0.2.3 实测
+  # verify 重跑 14m38s 全程与 CI 重复)。CI 失败即发布失败;查无 CI run 的
+  # 孤儿 tag(从非 main 提交打 tag)回落本地 gate,安全不降级。
+  await-ci:
+    name: Await CI on the same commit
+    runs-on: ubuntu-latest
+    outputs:
+      outcome: ${{ steps.await.outputs.outcome }}
+    steps:
+      - name: Poll CI conclusion for this SHA (up to 20 min)
+        id: await
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          outcome=missing
+          for i in $(seq 1 60); do
+            line=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${GITHUB_SHA}&workflow=ci.yml&per_page=1"               --jq '.workflow_runs[0] | "\(.status) \(.conclusion // "pending")"' 2>/dev/null || echo "none pending")
+            echo "poll $i: $line"
+            if [ "${line%% *}" = "completed" ]; then
+              outcome=${line#* }
+              break
+            fi
+            sleep 20
+          done
+          echo "outcome=$outcome" >> "$GITHUB_OUTPUT"
+          if [ "$outcome" = "failure" ] || [ "$outcome" = "cancelled" ]; then
+            echo "::error::CI on ${GITHUB_SHA} concluded '$outcome' — refusing to release"
+            exit 1
+          fi
+          # outcome=success → 发布继续;missing(无 CI run 的孤儿 tag)→ fallback-gate 兜底
+
+  # 孤儿 tag 兜底:同 SHA 查无 CI run 时才跑本地 gate(main+tag 同推的常规路径整段跳过)
+  fallback-gate:
+    name: Fallback gate (orphan tag only)
     runs-on: windows-latest
+    needs: await-ci
+    if: needs.await-ci.outputs.outcome == 'missing'
     steps:
       - uses: actions/checkout@v7
 
@@ -49,8 +88,13 @@ jobs:
     name: Publish to crates.io (real tags only)
     # 与 release job 并行:同一条 tag 同步发布 GitHub Release 与 crates.io
     runs-on: windows-latest
-    needs: verify
-    if: startsWith(github.ref, 'refs/tags/')
+    needs: [await-ci, fallback-gate]
+    if: >-
+      ${{
+        startsWith(github.ref, 'refs/tags/')
+        && needs.await-ci.result == 'success'
+        && (needs.fallback-gate.result == 'success' || needs.fallback-gate.result == 'skipped')
+      }}
     env:
       CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
     steps:
@@ -70,24 +114,49 @@ jobs:
             exit 1
           fi
 
-      # 按依赖序;crates.io 会拒绝重复版本(400),版本守卫已先行拦截 tag/版本错位
-      - name: Publish actl-core
-        run: cargo publish -p actl-core
-      - name: Publish actl-uia
-        run: cargo publish -p actl-uia
-      - name: Publish actl-browser
-        run: cargo publish -p actl-browser
-      - name: Publish actl-flow
-        run: cargo publish -p actl-flow
-      - name: Publish actl-cli
-        run: cargo publish -p actl-cli
-      - name: Publish actl-mcp
-        run: cargo publish -p actl-mcp
+      # 依赖分层并行 + --no-verify(CI 同 SHA 已全量验证——逐 crate 的
+      # publish verify 构建是发布耗时大头,CI 驱动发布的标准姿态)。
+      # 层间 settle 10s 等 crates.io 索引传播,层内依赖图:
+      #   L0 core/mcp(互不依赖)→ L1 uia/flow(仅依赖 core)→
+      #   L2 browser(core+uia)→ L3 cli(全量)。
+      - name: 'Wave 1 — actl-core, actl-mcp (independent, parallel)'
+        shell: bash
+        run: |
+          cargo publish -p actl-core --no-verify &
+          cargo publish -p actl-mcp --no-verify &
+          wait
+      - name: Settle (registry index propagation)
+        shell: bash
+        run: sleep 10
+      - name: 'Wave 2 — actl-uia, actl-flow (parallel)'
+        shell: bash
+        run: |
+          cargo publish -p actl-uia --no-verify &
+          cargo publish -p actl-flow --no-verify &
+          wait
+      - name: Settle (registry index propagation)
+        shell: bash
+        run: sleep 10
+      - name: Wave 3 — actl-browser
+        shell: bash
+        run: cargo publish -p actl-browser --no-verify
+      - name: Settle (registry index propagation)
+        shell: bash
+        run: sleep 10
+      - name: Wave 4 — actl-cli
+        shell: bash
+        run: cargo publish -p actl-cli --no-verify
 
   release:
     name: Package and publish (windows/amd64)
     runs-on: windows-latest
-    needs: verify
+    needs: [await-ci, fallback-gate]
+    if: >-
+      ${{
+        startsWith(github.ref, 'refs/tags/')
+        && needs.await-ci.result == 'success'
+        && (needs.fallback-gate.result == 'success' || needs.fallback-gate.result == 'skipped')
+      }}
     steps:
       - uses: actions/checkout@v7
 
