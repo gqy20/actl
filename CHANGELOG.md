@@ -11,8 +11,11 @@
 
 - **浏览器深水层基建（2026-10-13,用户授权「深度浏览器调用优先」后的选型落地第一步）**：`actl-browser` 引入 `chromiumoxide 0.9`（+tokio/futures,直接依赖 5→8,预算内）——全协议域类型化 CDP 骨干;async 圈在新增 `bridge` 同步门面之后(受控单 worker runtime + 通道投递 + handler 泵),crate 公共 API 保持同步,CLI/flow 调用方零改动。**ADR-001 相应窄修订**:桌面命令路径的对外 API 与派发链仍禁 async,例外清单加入「actl-browser bridge 同步门面之后」。选型证据:双候选三轮真机 spike + 三树全量许可盘点(`prototypes/browser-lib-probe/`,headless_chrome 因 GPL-3.0 协议生成器 auto_generate_cdp 出局)。浅层手写客户端(tungstenite/cdp.rs)原样保留——双栈过渡态,终态吸收由 ROADMAP 裁定。
 - **`browser-netlog`(深水层首动词,spec)**:有界网络请求快照——`--window`(100..=60000ms,默认 5000)、`--filter` URL 子串、`--max-entries`(1..=2000,默认 500,触顶 truncated:true);仅绑 tab 的请求,enable 收尾必 disable,无响应体/头捕获(URL 清查面);read_only 分类入 flow 观察步。真机 smoke 实证:窗口内导航的请求被捕获(2 example.com GET,smoke 首轮暴露 target 发现竞态——attach 后立即 pages() 可能空表,修复=有界轮询至 3s;spike 未暴露因 new_page 显式等待)。cookie 姿态随深水层重述(docs/72 §8):类型面可达但**命令面**不可达,新增负面契约测试 `browser_command_surface_has_no_cookie_verbs` 钉死。TECH_STACK §3 登记三依赖(顺手修正 tungstenite 登记漂移 =0.29→=0.30),docs/06 命令族收录,docs/72 §13 死项清理(pipe 判死/batch 边界入册)。
+- **flow 背景观察步 `background: true`(spec,用户裁定方案 a)**:只读观察命令与后续步骤**并发**的流程一等形态——引擎派发后不等待、流程退出前统一收割,结果入 StepRecord.background_result;语义边界(只读 run、禁 verify/outputs/pause_before 等控制组合)引擎 PROTOCOL 强制,收割失败如实改判 Failed(`background_failed:<step>`)。动机:B站场景轮实证 netlog 窗口×collect 并发是「观察 A 期间执行 B」的结构需求,shell 编排绕开 flow 治理是反模式(用户明确裁定)。契约:引擎 4 用例(派发时序/收割产物/失败改判/组合拒)+ input golden v1 增量;docs/06 YAML 接入段;AGENTS 验收脚本纪律第 7 条增补(裸 sleep 禁令扩展到编排层,并发观察场景一律 flow 背景步)。
 
 ### Changed
+
+- **[BC] 打包 skills 的 URL lint 收窄(用户裁定)**:旧 blanket「技能不含任何 URL」禁令过宽——浏览器自动化的**操作目标 URL**(站点/API 端点/ws 端点)是可操作事实,曾逼出 pack 里截肢式记录。收窄为真实风险面:**仓库身份指针**(自有仓库路径/用户名,裸写同拒)+`mailto:`;残余的「给人读」第三方外链归代码评审。顺手修复:workflows/README.md 泄露的 `Releases · gqy20/actl` 标题锚点参数化为 `<owner>/<repo>`(未开源前的发布包身份泄露,对第三方用户也是错误锚点)。
 
 - **[BC] 单二进制 NFR 修订(PRD §4)**:深水层引入后主二进制 7.88MB→**14.20MB**(同机同配置实测),「<10MB」破线(用户裁定接受:深度浏览器能力优先);分发 NFR 口径改为「<16MB,零运行时依赖」——冷启动 NFR 不变。
 

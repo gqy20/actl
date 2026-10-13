@@ -51,7 +51,7 @@
 ### release-review-draft.yml
 
 - **必需信息**:无逐次输入;草稿文件名固定为 `actl-release-draft.docx`(Word 默认文档目录,同名覆盖,表示"当前核对状态"而非历史留痕)。
-- **应用前提**:Chrome 已打开发布页且为当前标签(标题含 `Releases · gqy20/actl`);出现多个标题含 `Google Chrome` 的窗口时 AMBIGUOUS 拒绝,先收窄。本机无其他已打开的 Word 窗口。
+- **应用前提**:Chrome 已打开发布页且为当前标签(标题含 `Releases · <owner>/<repo>`,同工作流 URL 占位符);出现多个标题含 `Google Chrome` 的窗口时 AMBIGUOUS 拒绝,先收窄。本机无其他已打开的 Word 窗口。
 - **授权边界**:读段(前两步)只读;写段从 `open_word` 检查点开始,需要显示端人工"开始"授权,一次授权跑完。`type --paste` 会覆盖系统剪贴板。
 - **时效**:标题输出 `max_age_ms: 1800000`(30 分钟)。检查点后超时恢复以 `output_freshness_failed` 拒绝且不派发任何动作,须整跑重开。
 - **写段待定案项**:Office 另存为页的文件名输入框按 `role:Edit` 定位、文件名框回车触发保存——联测时核对唯一性与语义,不符则收紧选择器;写段未验收前不宣称业务闭环。

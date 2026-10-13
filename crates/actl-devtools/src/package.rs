@@ -29,39 +29,28 @@ fn collect(base: &Path, path: &Path, items: &mut BTreeMap<String, Vec<u8>>) -> R
         {
             let text = std::str::from_utf8(&data).map_err(io)?;
             require(
-                !text.contains("mailto:") && !text.contains("www."),
-                "skill contains external URL",
+                !repo_or_mail_pointer(text),
+                "skill contains a repository pointer or mailto (private-repo leakage guard)",
             )?;
-            require(!external_url(text), "skill contains external URL")?;
         }
         items.insert(name, data);
     }
     Ok(())
 }
 
-/// skills 不携带外部网络指针的纪律(2026-10-04 前打包事故的 lint)。窄豁免
-/// (mcp-remote.md 增补):① `actl://` 是自有 URN(资源模板寻址,非网络);
-/// ② http/https 仅放行本机与尖括号占位符(MCP 接入配置的格式示例)——
-/// 真实外域仍然全拒,纪律意图不变。
-fn external_url(text: &str) -> bool {
-    text.match_indices("://").any(|(at, _)| {
-        let scheme: String = text[..at]
-            .chars()
-            .rev()
-            .take_while(|c| c.is_ascii_alphanumeric() || *c == '+' || *c == '-')
-            .collect::<Vec<_>>()
-            .into_iter()
-            .rev()
-            .collect();
-        if scheme.eq_ignore_ascii_case("actl") {
-            return false;
-        }
-        let host = text[at + 3..]
-            .split(['/', ':', '>', '"', '\n', ' '])
-            .next()
-            .unwrap_or("");
-        !(host.is_empty() || host == "localhost" || host == "127.0.0.1" || host.starts_with('<'))
-    })
+/// skills 外链纪律(2026-10-04 打包事故的 lint;2026-10-13 范围收窄,用户
+/// 裁定:blanket「不含 URL」禁令过宽)。浏览器自动化技能的**操作目标 URL**
+/// (站点/API 端点/ws 端点,含 github.com 发布页这类操作靶标)是可操作事实,
+/// 合法内容;禁令收窄为真实风险面——**仓库身份指针**:自有仓库路径
+/// (gqy20/actl)与用户名在任何书写形式下都是身份泄露(未开源前发布包
+/// 携带它 = 私有仓地址泄露;开源后对第三方用户也是错误锚点),裸写同拒;
+/// 任意用户的 `user/repo` 形态不拒(操作 github 公共仓的合法目标)。
+/// mailto: 同拒。残余风险:「给人读的」第三方外链不再被此 lint 拦——
+/// 归代码评审(gate 是边界检查,语义把关在评审)。
+fn repo_or_mail_pointer(text: &str) -> bool {
+    ["gqy20/actl", "gqy17", "mailto:"]
+        .iter()
+        .any(|needle| text.contains(needle))
 }
 pub fn build(root: &Path, binaries: &Path, out: &Path, version: &str) -> Result<Value> {
     require(
@@ -219,15 +208,34 @@ mod tests {
     }
 
     #[test]
-    fn external_url_lint_allows_own_urn_and_local_placeholders() {
-        // 窄豁免面:actl:// URN、localhost/127.0.0.1/尖括号占位符;
-        // 真实外域(含 https)仍然全拒——纪律意图不变。
-        assert!(!external_url("读取资源模板 actl://help/{command} 按需"));
-        assert!(!external_url("\"url\":\"http://<device>:7600/mcp\""));
-        assert!(!external_url("见 http://localhost:3000 本机"));
-        assert!(!external_url("见 https://127.0.0.1:8443 本机"));
-        assert!(external_url("见 https://github.com/foo/bar"));
-        assert!(external_url("文档在 http://example.com/docs"));
-        assert!(external_url("连接 ws://remote.host:1"));
+    fn url_lint_blocks_repo_identity_and_allows_operational_targets() {
+        // 收窄后的纪律面(2026-10-13):仓库身份指针与 mailto 拒——裸写同拒
+        // (私有仓身份泄露的灾难场景);操作目标 URL(含 github 发布页靶标、
+        // 公共仓 user/repo 形态)合法。
+        assert!(repo_or_mail_pointer("标题含 Releases · gqy20/actl"));
+        assert!(repo_or_mail_pointer("仓库在 github.com/gqy20/actl"));
+        assert!(repo_or_mail_pointer("clone gqy20/actl 后构建"));
+        assert!(repo_or_mail_pointer("联系人 mailto:a@b.c"));
+        assert!(repo_or_mail_pointer("路径 C:/Users/gqy17/..."));
+        assert!(!repo_or_mail_pointer(
+            "https://search.bilibili.com/all?keyword=music"
+        ));
+        assert!(!repo_or_mail_pointer(
+            "api.bilibili.com/x/v2/reply/wbi/main?oid=1"
+        ));
+        assert!(!repo_or_mail_pointer(
+            "chrome-extension://service_worker 在场"
+        ));
+        assert!(!repo_or_mail_pointer(
+            "读取资源模板 actl://help/{command} 按需"
+        ));
+        assert!(!repo_or_mail_pointer("连接 ws://127.0.0.1:9222/devtools"));
+        assert!(!repo_or_mail_pointer("网络可达 github.com(操作靶标)"));
+        assert!(!repo_or_mail_pointer(
+            "公共仓 fork 自 some-user/public-repo"
+        ));
+        assert!(!repo_or_mail_pointer(
+            "草稿 URL 形如 https://<owner>/<repo>/releases"
+        ));
     }
 }
