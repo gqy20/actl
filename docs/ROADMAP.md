@@ -41,7 +41,7 @@
 - [ ] Phase 2 人工/专用环境验收子集（[44](44-phase2-acceptance.md) 表格聚合）：观察故障注入五类（空值/截断/控件重建/虚拟化/provider 故障）、监听冗余 hook 失效现场验收（[39](39-flow-observation-recovery.md)）、外部对照 Blender/Photoshop/Minecraft 可用环境
 - [ ] 浏览器场景实测余项：①持久 profile 真实站点登录验收待用户选站（[72](72-browser-cdp-integration.md)）；②settle 噪声鲁棒（[16](16-browser-scenarios.md)）；③WebView CUA 检查流程重跑（[71](71-signal-webview-details.md)）；④xhs「展开更多评论」低优先附带
 - [ ] 浏览器页内弹层声明式处置（pack 级 allow 清单注入,与 popup_ignores 对称——真实站点误报面出现再立项）
-- [ ] 浏览器 CDP 工程余量（[72 §13](72-browser-cdp-integration.md)）：UIA 轨路线固化（browser.yml 3 verified/5 manual/2 unverified,随应用轮渐进）
+- [ ] 浏览器 CDP 工程余量（[72 §13](72-browser-cdp-integration.md)）：UIA 轨路线固化（browser.yml 3 verified/5 manual/2 unverified,随应用轮渐进）；**深水层终态吸收**（2026-10-13 登记：基建+`browser-netlog` 已落，双栈过渡态显式接受——触发=第 2-3 个深水层动词定型或手写传输层首次真实维护痛，届时迁移现有动词到库骨干并退役 cdp.rs/tungstenite，golden 全量重写随迁）
 - [ ] word-note-typography 的 popup_ignores 声明路径重验（随下次 Word 轮顺带,不专跑）
 - [ ] preview-choice computer-use 真机鼠标点击验收（[46](46-target-preview.md)：两轮 "window is not a usable app window" 失败如实保留）
 
