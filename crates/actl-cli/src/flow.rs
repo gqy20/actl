@@ -786,6 +786,7 @@ fn state(store: &Store) -> Result<Value, CtlError> {
 fn load_plan(
     file: &str,
     inputs: &Option<String>,
+    set: &[String],
     root: &std::path::Path,
     id: &str,
 ) -> Result<(Plan, actl_flow::resources::Prepared), CtlError> {
@@ -796,11 +797,12 @@ fn load_plan(
         &root.join("flow-resources").join(id),
         id,
     )?;
-    let values = inputs
+    let supplied = inputs
         .as_ref()
         .map(|file| actl_flow::store::read_text(std::path::Path::new(file)))
         .transpose()?;
-    let mut plan = actl_flow::inputs::resolve(&prepared.text, values.as_deref())?;
+    let merged = actl_flow::inputs::overlay(supplied.as_deref(), set)?;
+    let mut plan = actl_flow::inputs::resolve(&prepared.text, merged.as_deref())?;
     // pack 级常驻面板声明注入(降噪第二轮 pack 来源,2026-10-11):apps/*.yml
     // 的 popup_ignores 与模板级声明并集去重——逐模板抄窗格清单不可扩展,
     // pack 是应用知识持有者(锚形态列全是 pack 职责)。注入留 stderr 痕。
@@ -867,9 +869,10 @@ pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
         FlowCommand::Validate {
             file,
             inputs,
+            set,
             emit_plan,
         } => {
-            let (plan, resources) = load_plan(file, inputs, &root, "validation-preview")?;
+            let (plan, resources) = load_plan(file, inputs, set, &root, "validation-preview")?;
             validate(&plan)?;
             let mut result =
                 json!({"valid":true,"version":1,"name":plan.name,"steps":plan.steps.len()});
@@ -962,10 +965,11 @@ pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
         FlowCommand::Run {
             file,
             inputs,
+            set,
             id,
             paused,
         } => {
-            let (plan, resources) = load_plan(file, inputs, &root, id)?;
+            let (plan, resources) = load_plan(file, inputs, set, &root, id)?;
             validate(&plan)?;
             let store = Store::at(&root, id)?;
             let _global = store.lock(true)?;
@@ -1097,6 +1101,7 @@ pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
             id,
             file,
             inputs,
+            set,
             message,
             accept_rerun,
             resume,
@@ -1119,7 +1124,8 @@ pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
                 .as_ref()
                 .map(|f| actl_flow::store::read_text(std::path::Path::new(f)))
                 .transpose()?;
-            let mut new_plan = actl_flow::inputs::resolve(&prepared.text, values.as_deref())?;
+            let merged = actl_flow::inputs::overlay(values.as_deref(), set)?;
+            let mut new_plan = actl_flow::inputs::resolve(&prepared.text, merged.as_deref())?;
             // pack 级常驻面板声明注入(与 load_plan 同口径):修订计划同样
             // 注入,否则与冻结计划 diff 时 ignores 差异误报为规格变化。
             crate::pack_inject::inject_pack_popup_ignores(&mut new_plan)?;

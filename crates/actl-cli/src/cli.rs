@@ -133,6 +133,9 @@ pub(crate) enum FlowCommand {
         /// UTF-8 YAML/JSON string map for declared workflow inputs
         #[arg(long)]
         inputs: Option<String>,
+        /// Inline input override `key=value` (repeatable; wins over --inputs)
+        #[arg(long = "set", value_name = "KEY=VALUE")]
+        set: Vec<String>,
         /// Include the validated concrete plan for resource-preparation tools
         #[arg(long)]
         emit_plan: bool,
@@ -145,6 +148,9 @@ pub(crate) enum FlowCommand {
         /// Resolve inputs once; resume uses the saved concrete plan
         #[arg(long)]
         inputs: Option<String>,
+        /// Inline input override `key=value` (repeatable; wins over --inputs)
+        #[arg(long = "set", value_name = "KEY=VALUE")]
+        set: Vec<String>,
         #[arg(long)]
         id: String,
         /// Save the plan and start paused for inspection
@@ -202,6 +208,9 @@ pub(crate) enum FlowCommand {
         /// Resolve {"input":...} references in the revision file (defaults apply without it)
         #[arg(long)]
         inputs: Option<String>,
+        /// Inline input override `key=value` (repeatable; wins over --inputs)
+        #[arg(long = "set", value_name = "KEY=VALUE")]
+        set: Vec<String>,
         /// Why this revision (recorded in the version lineage, ≤200 chars)
         #[arg(long, default_value = "")]
         message: String,

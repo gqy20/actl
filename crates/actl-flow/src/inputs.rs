@@ -190,6 +190,48 @@ fn resolve_arguments(
     Ok(())
 }
 
+/// `--set key=value` 内联覆盖(2026-10-13,可重复):与 --inputs 值文件合并,
+/// **set 优先**——换词重跑的零文件通道(临时值不落盘)。返回合并后的
+/// string map 文本(JSON,resolve 同一解析器消费)。缺等号/空键/重复键拒绝;
+/// 未声明键与值约束(16 KiB/NUL/`-` 前缀)由 resolve 统一裁决(与文件值同口径)。
+pub fn overlay(supplied: Option<&str>, set: &[String]) -> Result<Option<String>, CtlError> {
+    if set.is_empty() {
+        return Ok(supplied.map(str::to_owned));
+    }
+    let mut values: BTreeMap<String, String> = match supplied {
+        Some(text) => serde_json::from_value(super::decode_yaml(text)?)
+            .map_err(|_| super::schema::error("inputs", None, "input file must be a string map"))?,
+        None => BTreeMap::new(),
+    };
+    let mut seen_keys: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for item in set {
+        let (key, value) = item.split_once('=').ok_or_else(|| {
+            super::schema::error(
+                "set",
+                None,
+                "--set expects key=value (split at the first '=')",
+            )
+        })?;
+        if key.is_empty() {
+            return Err(super::schema::error(
+                "set",
+                None,
+                "--set key must not be empty",
+            ));
+        }
+        // 重复键只针对 --set 自身(同键给两次);值文件里的同名键是合法
+        // 覆盖对象——set 优先于 --inputs 是本通道的语义,不是错误。
+        let duplicate = seen_keys.contains(key);
+        seen_keys.insert(key.to_owned());
+        if duplicate {
+            return Err(super::schema::error("set", None, "--set key given twice"));
+        }
+        values.insert(key.to_owned(), value.to_owned());
+    }
+    let merged = serde_json::to_string(&values).map_err(|e| CtlError::internal(e.to_string()))?;
+    Ok(Some(merged))
+}
+
 #[cfg(test)]
 mod tests {
     use super::resolve;

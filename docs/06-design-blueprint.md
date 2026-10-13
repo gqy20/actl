@@ -1086,8 +1086,13 @@ state/run 响应的步骤可带 outputs，显式保存的业务数据不受 erro
 最多 128 个声明；名称沿用 1–80 位 ASCII ID。所有解析后的命令仍须通过 CLI 和流程策略预检。
 仅参数值可绑定，command、策略、步骤 ID 等不可参数化；命令选项应明确写在流程中。
 
+`--set key=value`（可重复，flow-validate/flow-run/flow-revise）内联覆盖声明输入——换词重跑免值文件：
+与 `--inputs` 值文件合并后 **set 优先**（同名键 set 赢）；缺等号、空键、`--set` 同键给两次返回 PROTOCOL；
+未声明键与值约束沿用 inputs 统一裁决。覆盖值不落盘，随 run 计划冻结。
+
 ```powershell
 actl flow-validate --file skills/actl/workflows/verify-text.yml --inputs target/readback-inputs.yml
+actl flow-run --file skills/actl/workflows/quark-search.yml --id search-01 --set app=夸克网盘 --set query=今日天气
 actl flow-run --file skills/actl/workflows/verify-text.yml --inputs target/readback-inputs.yml --id readback-001 --paused
 actl flow-resume --id readback-001
 ```

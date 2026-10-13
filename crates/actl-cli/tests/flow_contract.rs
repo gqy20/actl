@@ -1122,3 +1122,110 @@ fn for_each_plan_validates_and_bad_shapes_are_rejected() {
         );
     }
 }
+
+/// --set 内联输入覆盖(2026-10-13):换词重跑的零文件通道;set 优先于 --inputs。
+const SET_WORKFLOW: &str = r#"version: 1
+name: set-demo
+inputs:
+  query: {default: "hello"}
+steps:
+  - id: echo
+    title: clipboard echo of the resolved input
+    run:
+      command: set-clipboard
+      args: [{input: query}]
+    verify:
+      command: verify-clipboard
+      args: ["--expected", {input: query}]
+"#;
+
+#[test]
+fn flow_set_overrides_inputs_and_validates() {
+    let s = Sandbox::new();
+    let file = s.file(SET_WORKFLOW);
+    // 单独 --set:换词直验(免值文件)
+    let (code, out) = s.invoke(&[
+        "flow-validate",
+        "--file",
+        &file,
+        "--set",
+        "query=今日天气",
+        "--emit-plan",
+    ]);
+    assert_eq!(code, 0, "{out}");
+    let args = out["data"]["plan"]["steps"][0]["run"]["args"]
+        .as_array()
+        .unwrap();
+    assert_eq!(
+        args[0],
+        json!("今日天气"),
+        "resolved plan carries the set value: {out}"
+    );
+    // 值文件 + --set 并存:set 优先(值文件独立路径——Sandbox::file 恒写 flow.yml)
+    let values = s.root.join("values.yml");
+    std::fs::write(&values, "query: 文件值").unwrap();
+    let values = values.to_string_lossy().into_owned();
+    let (code, out) = s.invoke(&[
+        "flow-validate",
+        "--file",
+        &file,
+        "--inputs",
+        &values,
+        "--set",
+        "query=内联赢",
+    ]);
+    assert_eq!(code, 0, "{out}");
+    let (code, out) = s.invoke(&[
+        "flow-validate",
+        "--file",
+        &file,
+        "--inputs",
+        &values,
+        "--emit-plan",
+    ]);
+    assert_eq!(code, 0, "{out}");
+    let args = out["data"]["plan"]["steps"][0]["run"]["args"]
+        .as_array()
+        .unwrap();
+    assert_eq!(
+        args[0],
+        json!("文件值"),
+        "file value applies without --set: {out}"
+    );
+    // 多键重复
+    let (code, out) = s.invoke(&[
+        "flow-validate",
+        "--file",
+        &file,
+        "--set",
+        "query=a",
+        "--set",
+        "query=b",
+    ]);
+    assert_eq!(code, 2);
+    assert!(out["error"]["message"].as_str().unwrap().contains("twice"));
+    // 无等号
+    let (code, out) = s.invoke(&["flow-validate", "--file", &file, "--set", "query"]);
+    assert_eq!(code, 2);
+    assert!(
+        out["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("key=value")
+    );
+    // 未声明键:沿用 inputs 统一裁决
+    let (code, out) = s.invoke(&[
+        "flow-validate",
+        "--file",
+        &file,
+        "--set",
+        "undeclared_key=x",
+    ]);
+    assert_eq!(code, 2);
+    assert!(
+        out["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("undeclared")
+    );
+}

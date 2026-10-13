@@ -9,6 +9,7 @@
 
 ### Added
 
+- **flow `--set key=value` 内联输入覆盖(2026-10-13,可重复)**:flow-run/flow-validate/flow-revise 三命令新增——换词重跑免值文件(`actl flow-run --file search.yml --id search-02 --set query=天气`);与 `--inputs` 值文件合并后 **set 优先**(同名键覆盖,重复只针对 --set 自身同键给两次);缺等号/空键 PROTOCOL,未声明键与值约束(16 KiB/NUL/`-` 前缀)沿用 inputs 统一裁决;覆盖值不落盘随 run 计划冻结。overlay 纯函数落 actl-flow/inputs.rs(与 resolve 同解析器消费)。契约 +1(换词/文件+set 并存优先序/重复键/无等号/未声明键,顺带钉"文件值无 --set 照常生效");实测 quark-search 换词换 app 全通。docs/06 可复用流程输入节同步。
 - **decide 应答回路 YAML 化(2026-10-13)**:①`decide --run <id>` 第四输入通道——从 run 状态直读悬挂卡(`flows/<id>/explore.json` 的 `pending.card`),flow 步无 stdin 管道,这是应答步流程化的卡源;id 白名单 `[A-Za-z0-9_-]`(防路径拼接),与 --card/--task 互斥;②decide 入 flow `read_only` 分类(观察步,无写语义);③`skills/actl/workflows/explore-decide-answer.yml`——决策卡模型应答步(decide --run + choice/confidence 输出保存),回填 `flow-resume --decision` 属流程生命周期治理,nested-flow 守卫禁入步骤(与 batch/preview 同族,协议边界非流程限制),由编排层执行;④工作流 README 索引登记。契约 16 用例(--run 成功/未知 run/无悬挂卡/路径注入拒绝)。零模型重放不新增 fixture(同应用同 goal 已有 `replay-explore-s1.yml` 先例,本轮临时 batch 重放与之同构即废弃)。
 
 - **`get --property enabled`（属性白名单补齐,2026-10-13 Broadcom 门户表单轮收口）**:UIA IsEnabled 进 `get` 白名单——禁用态此前只在写动作失败后可见,门户预填锁定字段(姓名/邮箱/国家类)的写前判读现为只读一步,配合 NOT_ACTIONABLE `target_disabled` 分型把"撞禁用字段"从多轮失败变为一轮预判。docs/06 §3.7 与 help 同步。
