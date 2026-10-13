@@ -174,7 +174,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             hwnd,
             pid,
             instance,
-        } => file_check::closed(hwnd, *pid, instance).map(Into::into),
+        } => file_check::closed(hwnd, *pid, instance.as_deref()).map(Into::into),
         Command::VerifyClipboard {
             expected,
             normalize_lines,

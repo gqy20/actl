@@ -167,3 +167,18 @@ fn interaction_ergonomics_round_surface_in_help() {
         );
     }
 }
+
+#[test]
+fn verify_closed_without_instance_still_decisive_on_dead_pid() {
+    // ⑤ --instance 可选化:pid 消失 → 决定性通过(与 instance 无关);
+    // 冒烟断言用必然不存在的 pid,离线可跑。
+    let out = support::IsolatedCommand::new()
+        .command
+        .args(["verify-closed", "--hwnd", "12345", "--pid", "4294967290"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let result: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(result["data"]["verified"], true);
+    assert_eq!(result["data"]["original_instance_gone"], true);
+}

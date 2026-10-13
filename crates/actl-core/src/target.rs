@@ -67,6 +67,19 @@ pub fn parse_target(raw: &str) -> Result<Target, CtlError> {
         }
         return Ok(Target::Ref(n));
     }
+    // 裸 e<N> 与 @e<N> 同义(2026-10-12 交互轮):PowerShell 把裸 @eN 当
+    // splat 语法吞掉(agent 侧两次踩坑),e<N> 是免引号等价形态;此前的
+    // 未知形态报错意味着无回归面。
+    if let Some(n) = raw
+        .strip_prefix('e')
+        .filter(|rest| !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()))
+    {
+        let n: u32 = n.parse().map_err(|_| bad(raw))?;
+        if n == 0 {
+            return Err(bad(raw));
+        }
+        return Ok(Target::Ref(n));
+    }
     // xy:x,y(物理屏幕坐标;负 x 合法——虚拟桌面左侧屏)
     if let Some(rest) = raw.strip_prefix("xy:") {
         if let Some((xs, ys)) = rest.split_once(',')
@@ -145,6 +158,14 @@ mod tests {
     #[test]
     fn parses_all_forms() {
         assert_eq!(parse_target("@e3").unwrap(), Target::Ref(3));
+        // 裸 e<N> 别名(PS splat 安全):与 @e<N> 同义;e0 非法同 @e0;
+        // 非 e 开头既有形态不受影响
+        assert_eq!(parse_target("e3").unwrap(), Target::Ref(3));
+        assert_eq!(parse_target("e391").unwrap(), Target::Ref(391));
+        assert!(parse_target("e0").is_err());
+        assert!(parse_target("e").is_err());
+        assert!(parse_target("e3x").is_err());
+        assert_eq!(parse_target("name:e3").unwrap(), Target::Name("e3".into()));
         assert_eq!(
             parse_target("name:确定").unwrap(),
             Target::Name("确定".into())

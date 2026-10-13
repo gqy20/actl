@@ -94,7 +94,8 @@ actl verify --value <target> "<期望>" --app <app> # 确认:立即断言
 6. **人在用电脑时**:注入会被焦点护栏拒绝(PERM_DENIED/部分送达 stopped_early)——
    这是保护,不是 bug;等空闲再试。紧急情况人按 Ctrl+Alt+F12(actl-signal),你的注入会收到 ABORTED。
 7. **PowerShell 里 `@eN` 引用必须加引号**:PowerShell 把裸 `@e7` 当 splat 语法吞掉
-   (实测报"required arguments not provided"),脚本中写 `'@e7'`;bash 无此问题。
+   (实测报"required arguments not provided"),脚本中写 `'@e7'` 或直接用**裸 `e7` 别名**
+   (与 `@e7` 同义,免引号);bash 无此问题。
    读回恒空不等于写入丢失:系统对话框 Edit(provider 背书)的 get value 可能恒空——
    写通道核验用 `type --verify-value`(键盘路径可达),勿以读回空判失败。
 

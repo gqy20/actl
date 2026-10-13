@@ -253,33 +253,55 @@ pub fn owner(
     )
 }
 
-pub fn closed(hwnd: &str, pid: u32, instance: &str) -> Result<Value, CtlError> {
+pub fn closed(hwnd: &str, pid: u32, instance: Option<&str>) -> Result<Value, CtlError> {
     settle(|| closed_once(hwnd, pid, instance))
 }
-fn closed_once(hwnd: &str, pid: u32, instance: &str) -> Result<Value, CtlError> {
+fn closed_once(hwnd: &str, pid: u32, instance: Option<&str>) -> Result<Value, CtlError> {
     let hwnd = actl_uia::parse_hwnd(hwnd)?;
     let process = inspect_office(&pid.to_string(), "process-identity")?;
     // Query windows after the slower process read, not before a possible exit.
     let windows = actl_uia::native_windows()?;
     let absent = process["state"] == "absent";
-    if absent && windows.iter().any(|w| w.hwnd == Some(hwnd) && w.pid == pid) {
+    let window_present = windows.iter().any(|w| w.hwnd == Some(hwnd) && w.pid == pid);
+    if absent && window_present {
         return Err(CtlError::new(
             ErrorCode::NotActionable,
             "native window remains while process state is absent",
         ));
     }
+    // pid 已消失:决定性通过(与 instance 无关——复用的 pid 是别的进程)。
+    if absent {
+        return Ok(json!({"verified":true,"original_instance_gone":true}));
+    }
     let same = process["start"]
         .as_str()
-        .ok_or_else(|| CtlError::new(ErrorCode::NotActionable, "unknown process identity"));
-    if !absent && same? == instance {
+        .ok_or_else(|| CtlError::new(ErrorCode::NotActionable, "unknown process identity"))?;
+    if let Some(instance) = instance {
+        // 有 instance:同例存活 → 断言失败;不同例 = pid 复用 → 通过。
+        if same == instance {
+            return Err(CtlError::with_evidence(
+                ErrorCode::AssertionFailed,
+                "owned process instance remains",
+                json!({"window_present": window_present}),
+            ));
+        }
+        return Ok(json!({"verified":true,"original_instance_gone":true}));
+    }
+    // 无 instance 的两分支(pid 活着):
+    // 窗口仍在 → 原实例必然还在,决定性失败(失败是终态,settle 不改写);
+    // 窗口不在 → pid 复用与无窗原实例不可区分,如实 NOT_ACTIONABLE 求签。
+    if window_present {
         return Err(CtlError::with_evidence(
             ErrorCode::AssertionFailed,
             "owned process instance remains",
-            json!({"window_present":windows.iter().any(|w| w.hwnd == Some(hwnd) && w.pid == pid)}),
+            json!({"window_present": true, "instance": "omitted"}),
         ));
     }
-    // A reused PID belongs to a different process; never close it.
-    Ok(json!({"verified":true,"original_instance_gone":true}))
+    Err(CtlError::with_evidence(
+        ErrorCode::NotActionable,
+        "pid is alive but its window is absent; provide --instance (from verify-owner or the close-window envelope) to distinguish pid reuse from a windowless original",
+        json!({"pid": pid, "instance": "omitted"}),
+    ))
 }
 pub fn clipboard(expected: &str, normalize_lines: bool) -> Result<Value, CtlError> {
     // 复制送达与剪贴板可读之间有竞态:空剪贴板表现为 NOT_ACTIONABLE、旧内容为

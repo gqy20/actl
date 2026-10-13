@@ -14,6 +14,8 @@
 
 ### Documentation and validation
 
+- **交互摩擦 ⑤⑦ 收口(2026-10-12)**:⑤`verify-closed --instance` 改可选,三分支诚实语义——pid 消失→**决定性通过**(复用 pid 属别的进程,与 instance 无关);窗口仍在→**决定性失败**(原实例必然还在);pid 活而窗不在→NOT_ACTIONABLE 求签(复用与无窗原实例不可区分,instance 取 verify-owner 或 close-window 信封)——临时「关了没」核验不再被前置记录挡死,不可区分象限诚实报错而非假装通过。⑦裸 `e<N>` 引用别名:与 `@e<N>` 同义同约束(parse_target 新形态)——PowerShell 把裸 `@eN` 当 splat 语法吞掉(agent 实测两次踩坑),`e<N>` 免引号等价;此前为未知目标报错,无回归面。docs/06 目标文法+verify-closed 契约、SKILL.md、help 同步;契约测试:离线死 pid 决定性通过+e<N> 解析七断言。
+
 - **CLI 交互摩擦轮(2026-10-12,debug 实证驱动的五项修复)**:①`get --property rect`——元素物理像素包围盒 {x,y,width,height}(PMv2),此前元素坐标无 CLI 通道,调用方被迫手写 GetWindowRect 并踩 DPI 虚拟化陷阱(实测误判「面板被遮挡」的根因链);`screenshot --element/--rect` 信封同步带 `rect` 原点(此前只有宽高)。②指针族(right/double/middle/triple-click/hover)补 `--snapshot`——ref 漂移时右键想绑快照曾被拒,与 click 参数对称。③`front-report --app` 旗标——docs/06 契约本就写 --app 形态,实现只收位置参数属契约违背 bug;位置参数保留兼容。④`close-window` 信封带 pid+instance(进程创建时刻,与 verify-owner/verify-closed 同表示)——close→verify-closed 配对不再依赖事先记录;explorer.exe 的 shell 承载面(Shell_TrayWnd/Progman/WorkerW)PERM_DENIED 结构拒绝,ROADMAP 实录「拒绝属安全巧合」升级为护栏。⑤find --id 快路径 ref 问题澄清为文档修复:命中不赋 @eN 是形态而非缺陷——元素命令直接吃 target 形态(`click id:<X>`),docs/06 与 help 已讲明动作路径。测试:rect 映射单测/shell 护栏单测/交互人体工学 help 契约七断言。
 
 - **探索引擎候选①收口:tried 资格化过滤（2026-10-12,docs/77 #5 无增量应用前沿空根因修复）**:XAML 无增量应用(计算器)点击不产生 added 元素,旧 tried 一刀切把首点后的按钮全部逐出前沿——应答「七」后前沿空 no_candidates,按钮序列任务死路。新语义:前沿与应答队列预过滤改 `candidate_eligible`——dead/no_effect 永久出局,**reveals(已证有效,changed-only diff 归因)保持可重选**,同按钮重复点击经应答者编排恢复;MockHost 序列测试 clicks=[b1,b2,b1] 实证(旧语义 [b1,b2] 即断),第三次点击无显示变化诚实归因 no_effect 出局。docs/77 #5 观察条目补决议;ROADMAP 引擎候选清空(剩④跨进程 picker⑤UCB 对照,均待真实场景)。

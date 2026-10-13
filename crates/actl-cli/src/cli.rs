@@ -336,7 +336,7 @@ pub(crate) enum Command {
     },
     /// Click an element (UIA Invoke by default; --physical for a real mouse click)
     Click {
-        /// Target: uia:<JSON> (strict match/within/scope) | @eN (needs --app) | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | focused:[<Type>] (OS keyboard focus element; role-checked, fail-closed) | xy:<x>,<y> (physical-only; needs --app)
+        /// Target: uia:<JSON> (strict match/within/scope) | @eN or e<N> (needs --app) | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | focused:[<Type>] (OS keyboard focus element; role-checked, fail-closed) | xy:<x>,<y> (physical-only; needs --app)
         target: String,
         /// Target window by title substring or hwnd:<n> (@eN refs require it; otherwise focused window)
         #[arg(long)]
@@ -366,7 +366,7 @@ pub(crate) enum Command {
     },
     /// Read properties of an element
     Get {
-        /// Target: uia:<JSON> (strict match/within/scope) | @eN (needs --app) | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | focused:[<Type>] (OS keyboard focus element; role-checked, fail-closed) | xy:<x>,<y> (physical-only; needs --app)
+        /// Target: uia:<JSON> (strict match/within/scope) | @eN or e<N> (needs --app) | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | focused:[<Type>] (OS keyboard focus element; role-checked, fail-closed) | xy:<x>,<y> (physical-only; needs --app)
         target: String,
         /// Property: name | role | automation_id | offscreen | value | text (default: all)
         #[arg(long)]
@@ -395,7 +395,7 @@ pub(crate) enum Command {
     },
     /// Type text into an element via keyboard (focuses the element first)
     Type {
-        /// Target: uia:<JSON> (strict match/within/scope) | @eN | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | focused:[<Type>] (OS keyboard focus element; role-checked, fail-closed)
+        /// Target: uia:<JSON> (strict match/within/scope) | @eN or e<N> | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | focused:[<Type>] (OS keyboard focus element; role-checked, fail-closed)
         target: String,
         /// Text to type (literal)
         text: String,
@@ -491,7 +491,7 @@ pub(crate) enum Command {
     },
     /// Set an element's value directly via UIA Value pattern (no keyboard)
     SetValue {
-        /// Target: uia:<JSON> (strict match/within/scope) | @eN (needs --app) | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | focused:[<Type>] (OS keyboard focus element; role-checked, fail-closed) | xy:<x>,<y> (physical-only; needs --app)
+        /// Target: uia:<JSON> (strict match/within/scope) | @eN or e<N> (needs --app) | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | focused:[<Type>] (OS keyboard focus element; role-checked, fail-closed) | xy:<x>,<y> (physical-only; needs --app)
         target: String,
         /// Value to set
         value: String,
@@ -510,7 +510,7 @@ pub(crate) enum Command {
     },
     /// Focus an element for subsequent keyboard input (UIA SetFocus + readback verification; no keys injected)
     Focus {
-        /// Target: uia:<JSON> (strict match/within/scope) | @eN (needs --app) | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | focused:[<Type>]
+        /// Target: uia:<JSON> (strict match/within/scope) | @eN or e<N> (needs --app) | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | focused:[<Type>]
         target: String,
         /// Target window by title substring or hwnd:<n> (@eN refs require it; otherwise focused window)
         #[arg(long)]
@@ -524,7 +524,7 @@ pub(crate) enum Command {
     },
     /// Right-click an element (physical; opens context menus)
     RightClick {
-        /// Target: uia:<JSON> (strict match/within/scope) | @eN | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | focused:[<Type>] (OS keyboard focus element; role-checked, fail-closed)
+        /// Target: uia:<JSON> (strict match/within/scope) | @eN or e<N> | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | focused:[<Type>] (OS keyboard focus element; role-checked, fail-closed)
         target: String,
         /// Target window by title substring, or hwnd:<n> (0x ok; survives SPA title changes)
         #[arg(long)]
@@ -542,7 +542,7 @@ pub(crate) enum Command {
     },
     /// Double-click an element (physical)
     DoubleClick {
-        /// Target: uia:<JSON> (strict match/within/scope) | @eN | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | focused:[<Type>] (OS keyboard focus element; role-checked, fail-closed)
+        /// Target: uia:<JSON> (strict match/within/scope) | @eN or e<N> | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | focused:[<Type>] (OS keyboard focus element; role-checked, fail-closed)
         target: String,
         /// Target window by title substring, or hwnd:<n> (0x ok; survives SPA title changes)
         #[arg(long)]
@@ -560,7 +560,7 @@ pub(crate) enum Command {
     },
     /// Middle-click an element (browser: link in new tab; taskbar: new instance)
     MiddleClick {
-        /// Target: uia:<JSON> (strict match/within/scope) | @eN | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | focused:[<Type>] (OS keyboard focus element; role-checked, fail-closed)
+        /// Target: uia:<JSON> (strict match/within/scope) | @eN or e<N> | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | focused:[<Type>] (OS keyboard focus element; role-checked, fail-closed)
         target: String,
         /// Target window by title substring, or hwnd:<n> (0x ok; survives SPA title changes)
         #[arg(long)]
@@ -578,7 +578,7 @@ pub(crate) enum Command {
     },
     /// Triple-click an element (editors: paragraph-level selection)
     TripleClick {
-        /// Target: uia:<JSON> (strict match/within/scope) | @eN | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | focused:[<Type>] (OS keyboard focus element; role-checked, fail-closed)
+        /// Target: uia:<JSON> (strict match/within/scope) | @eN or e<N> | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | focused:[<Type>] (OS keyboard focus element; role-checked, fail-closed)
         target: String,
         /// Target window by title substring, or hwnd:<n> (0x ok; survives SPA title changes)
         #[arg(long)]
@@ -596,7 +596,7 @@ pub(crate) enum Command {
     },
     /// Move the pointer onto an element (hover; physical)
     Hover {
-        /// Target: uia:<JSON> (strict match/within/scope) | @eN | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | focused:[<Type>] (OS keyboard focus element; role-checked, fail-closed)
+        /// Target: uia:<JSON> (strict match/within/scope) | @eN or e<N> | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | focused:[<Type>] (OS keyboard focus element; role-checked, fail-closed)
         target: String,
         /// Target window by title substring, or hwnd:<n> (0x ok; survives SPA title changes)
         #[arg(long)]
@@ -743,8 +743,12 @@ pub(crate) enum Command {
         hwnd: String,
         #[arg(long)]
         pid: u32,
+        /// Process creation time (verify-owner/close-window envelope). Optional:
+        /// pid absent → definitive pass; window present → definitive fail; pid
+        /// alive but window absent → NOT_ACTIONABLE asking for --instance
+        /// (pid reuse vs. windowless original cannot be distinguished)
         #[arg(long)]
-        instance: String,
+        instance: Option<String>,
     },
     /// Assert complete clipboard text without changing it
     VerifyClipboard {
@@ -1132,7 +1136,7 @@ pub(crate) enum Command {
     },
     /// Toggle an element's state (checkbox/switch; reports the resulting state)
     Toggle {
-        /// Target: uia:<JSON> (strict match/within/scope) | @eN | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | focused:[<Type>] (OS keyboard focus element; role-checked, fail-closed)
+        /// Target: uia:<JSON> (strict match/within/scope) | @eN or e<N> | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | focused:[<Type>] (OS keyboard focus element; role-checked, fail-closed)
         target: String,
         /// Target window by title substring, or hwnd:<n> (0x ok; survives SPA title changes)
         #[arg(long)]
