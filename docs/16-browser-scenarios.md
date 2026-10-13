@@ -229,6 +229,30 @@ find 恒空,抖音卡片依赖读屏标签给的 name 才可能走此路,无名�
 ⑤ ref 弹层漂移 hazard 登记;⑥ xy 闭环纪律入 SKILL。未动:settle 噪声
 鲁棒、AMBIGUOUS 候选带文档上下文(登记 M3 候选)。
 
+### 5.8 深水层首场景:netlog×collect 并发窗(2026-10-13,背景步真机验收)
+
+深水层(chromiumoxide 同步门面,docs/72)落地后的第一个真实场景验收,
+同时是 flow 背景观察步(`background: true`)的首个真机流程
+`browser-netlog-collect-probe.yml`(9 步全绿):
+
+- **路线**:persistent profile bilibili(登录态+扩展世界)→ 搜索页
+  `--wait-for` 沉降后 `--property href` 枚举卡片(`a[href*='/video/BV']`,
+  75 张)→ navigate 直达视频页 → `#commentapp` 挂载锚沉降 → **netlog
+  60s 背景窗 × collect --deep 前台并发**(引擎派发不等待,退出前收割)
+  → 优雅关闭;
+- **netlog 收割 158 请求**,评论分页 XHR 端点一发读出:
+  `api.bilibili.com/x/v2/reply/wbi/main?oid=<aid>&type=1&mode=3&
+  pagination_str={"offset":"<cursor>"}` 与评论组件脚本
+  `commentpc/bili-comments.<hash>.js`——「URL 清查面定位懒加载端点」
+  的设计目标在真实站点兑现,quirk `bilibili_comments_xhr_shape` 入 pack;
+- **教训两则**:①搜索卡片异步渲染,navigate 返回 ≠ 就绪,枚举必须带
+  `--wait-for 1` 沉降(与评论挂载同族时序);②`--property` 读的值在
+  envelope 的 `value` 字段(`property` 字段是属性名标记),编排侧读错
+  字段产出过 "https:href" 残值——字段语义沿 docs/06 既有描述,非 bug;
+- **形态结论**:并发观察是 flow 背景步的结构性客户——shell 编排
+  (Start-Job+脚本)此前为同一目标写了三轮一次性脚本,背景步落地后
+  该场景彻底进 YAML 流程治理(AGENTS 验收脚本纪律第 7 条同步收口)。
+
 ## 6. 三个实测发现(沉淀为 pack quirks)
 
 1. **多文档页 AMBIGUOUS**:xiaohongshu.com 有 **2 个 `RootWebArea`**(主文档

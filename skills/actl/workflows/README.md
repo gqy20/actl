@@ -44,6 +44,7 @@
 | [verify-text.yml](verify-text.yml) | 已打开应用的完整文本只读核验；输入 app/target/expected | 参数预检及 VS Code 真实全文只读核验通过；见 docs/56 |
 | [edit-value.yml](edit-value.yml) | 核对 previous 后 set-value，再核对 value；输入 app/target/previous/value | 参数预检测试；需要 ValuePattern，真实应用分别验收 |
 | [browser-login-session.yml](browser-login-session.yml) | CDP 轨登录会话：持久 profile（resources.browser_profiles 声明）+ 登录暂停点（pause_before + browser-verify 选择器断言为 resume_check）；输入 browser_executable/start_url/login_selector | 本地页暂停/恢复/谓词不满足保持暂停/同 profile 复用全链实测通过（2026-10-02，docs/72）；真实站点登录验收待选站 |
+| [browser-netlog-collect-probe.yml](browser-netlog-collect-probe.yml) | 登录态 B 站视频页评论收集×背景网络清查并发：`background: true` 首个真机流程（netlog 60s 窗与 collect --deep 并发,退出前收割）；输入 browser_executable/search_url | 9 步真机全绿（2026-10-13,158 请求窗,评论分页 XHR 端点一发读出,quirk bilibili_comments_xhr_shape）；背景步契约见 docs/06 |
 | [inspect-desktop-native.yml](inspect-desktop-native.yml) | 只读系统状态与 Win32 原生窗口清单；无需应用、输入或资源准备，输出窗口数量；清单不代表任务资源归属 | 预检与两步只读现场执行通过（2026-10-02）；用于桌面检查和显示层起止演示，不证明 UIA 查询正常 |
 | [release-review-draft.yml](release-review-draft.yml) | 读取已打开的 actl Releases 页(Chrome),在 Word 新文档生成核对草稿并落盘 | 协议预检通过;读段与时效拒绝路径真机验证;写段联测待执行。验证记录见开发仓库 docs/43(技能包不含 docs) |
 | [notepad-save-handoff.yml](notepad-save-handoff.yml) | 记事本另存为路径交接:点加号新建空标签,录入内容后文件名框直填完整绝对路径保存并磁盘核验;输入 save_path | 干净现场全链真机通过(2026-10-12 handoff-03:8 步零重试 40s,文件逐字节一致);前置纪律与 TabState 治理见文件头注释与 apps/notepad.yml |
