@@ -17,6 +17,8 @@ use crate::locate::locate;
 /// get:读取元素属性;`property` 白名单,缺省返回基本全集。
 /// 属性白名单。`value` = ValuePattern 直读;`text` = TextPattern 文档正文
 /// (专用通道:Chromium 的 Document Value=URL 会掩盖正文,value 与 text 分工)。
+/// `rect` = 物理像素包围盒(2026-10-12 交互轮补:此前元素坐标无 CLI 通道,
+/// 调用方被迫手写 PS GetWindowRect 并踩 DPI 虚拟化陷阱)。
 pub const PROPS: &[&str] = &[
     "name",
     "role",
@@ -24,7 +26,17 @@ pub const PROPS: &[&str] = &[
     "offscreen",
     "value",
     "text",
+    "rect",
 ];
+
+/// 元素物理像素包围盒(PMv2 口径,与 list-windows rect 同源)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ElementRect {
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
+}
 
 pub struct PropertyInfo {
     pub name: Option<String>,
@@ -36,6 +48,7 @@ pub struct PropertyInfo {
     pub value_via: Option<&'static str>,
     /// TextPattern 文档正文(--property text 专用)
     pub text: Option<String>,
+    pub rect: Option<ElementRect>,
     pub unsupported: Vec<&'static str>,
 }
 
@@ -86,6 +99,34 @@ pub fn read_property(
     if property == Some("text") {
         crate::read_channel::require(text.as_ref(), "text-pattern")?;
     }
+    let rect = if want("rect") {
+        let r = loc
+            .element
+            .get_bounding_rectangle()
+            .map_err(|e| crate::read_channel::failure("rect", e))?;
+        let rect = ElementRect {
+            x: r.get_left(),
+            y: r.get_top(),
+            width: r.get_right() - r.get_left(),
+            height: r.get_bottom() - r.get_top(),
+        };
+        if rect.width <= 0 || rect.height <= 0 {
+            None
+        } else {
+            Some(rect)
+        }
+    } else {
+        None
+    };
+    if want("rect") && rect.is_none() {
+        unsupported.push("rect");
+    }
+    if property == Some("rect") && rect.is_none() {
+        return Err(CtlError::new(
+            ErrorCode::NotActionable,
+            "element exposes no usable bounding rectangle (virtualized/offscreen)",
+        ));
+    }
     let info = PropertyInfo {
         name: if want("name") {
             Some(
@@ -127,6 +168,7 @@ pub fn read_property(
         value,
         value_via,
         text,
+        rect,
         unsupported,
     };
     // 显式 Release 进看门狗区(反序析构会让它裸奔——见函数头注释)。

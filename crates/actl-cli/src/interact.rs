@@ -468,10 +468,15 @@ pub(crate) fn pointer_cmd(
     target_raw: &str,
     app: Option<&str>,
     near: Option<&str>,
+    snapshot: Option<&str>,
     no_activate: bool,
     kind: PointerKind,
 ) -> Result<CommandOutput, CtlError> {
     let target = actl_core::parse_target(target_raw)?;
+    // --snapshot 与 click 同机制:ref 重放的新鲜度核验(replay 守卫为
+    // 线程环境,locate 链内生效)。交互轮实证:ref 漂移时右键想绑快照
+    // 被拒(--snapshot 缺席),指针族补齐与 click 的参数对称。
+    let _replay = replay_guard(snapshot, app)?;
     let action = match kind {
         PointerKind::Right => actl_uia::PointerAction::RightClick,
         PointerKind::Double => actl_uia::PointerAction::DoubleClick,
@@ -732,8 +737,14 @@ pub(crate) fn close_window_cmd(
     hwnd: Option<&str>,
     system_close: bool,
 ) -> Result<CommandOutput, CtlError> {
-    let title = actl_uia::close_window_by(window_ref_of(pattern, pid, hwnd)?, system_close)?;
-    Ok(json!({ "action": "close-window", "window": title }).into())
+    let out = actl_uia::close_window_by(window_ref_of(pattern, pid, hwnd)?, system_close)?;
+    Ok(json!({
+        "action": "close-window",
+        "window": out.title,
+        "pid": out.pid,
+        "instance": out.instance,
+    })
+    .into())
 }
 
 /// select:容器内按选项名选中(SelectionItem;上报实际选中的名字与匹配层级)。
@@ -822,15 +833,18 @@ pub(crate) fn screenshot_cmd(
             "screenshot needs one of --app / --hwnd / --rect / --element",
         ));
     };
-    Ok(json!({
+    let mut envelope = json!({
         "action": "screenshot",
         "path": shot.path,
         "width": shot.width,
         "height": shot.height,
         "bytes": shot.bytes,
         "input_effects": { "keyboard": "none", "clipboard": "untouched", "pointer": "none" },
-    })
-    .into())
+    });
+    if let Some([x, y, w, h]) = shot.rect {
+        envelope["rect"] = json!({"x": x, "y": y, "width": w, "height": h});
+    }
+    Ok(envelope.into())
 }
 
 /// find-image:确定性模板匹配定位(RPA 图色,非语义视觉)。像素相关在

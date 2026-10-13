@@ -783,21 +783,80 @@ fn list_windows_inner() -> Result<Vec<WindowEntry>, CtlError> {
 /// 的 SC_CLOSE——即点标题栏 X 的同一命令;对"收起窗口但不退出进程"的应用
 /// (实测 Excel:后台关闭文档后裸框架对 WM_CLOSE 只隐藏,SC_CLOSE 才退出),
 /// 这是文档正确关闭后终结进程的收尾手段。
-pub fn close_window(pattern: &str, system_close: bool) -> Result<String, CtlError> {
+/// close-window 结果面:标题 + 进程身份(配对 verify-closed --instance,
+/// 交互轮实证:临时核对"关了没"时 instance 只有事先跑过 verify-owner 才有)。
+pub struct CloseOutcome {
+    pub title: String,
+    pub pid: Option<u32>,
+    /// 进程创建时刻(与 verify-owner/verify-closed 的 instance 同表示)。
+    pub instance: Option<String>,
+}
+
+/// shell 承载面硬护栏(2026-10-12):explorer.exe 的任务栏/桌面类窗承载整个
+/// shell——WM_CLOSE 到它们可拖垮桌面。ROADMAP 实录此前拒绝属 AMBIGUOUS
+/// "安全巧合",此处升级为结构判定:explorer 进程 + shell 承载类名 → 拒。
+fn is_shell_surface(program: &str, hwnd: windows::Win32::Foundation::HWND) -> bool {
+    // 反斜杠经 char::from_u32(0x5C) 规避源码转义(仓库惯例,见 resolve_app_path)
+    let bs = char::from_u32(0x5C).unwrap_or('/');
+    if !program
+        .to_ascii_lowercase()
+        .ends_with(&format!("{bs}explorer.exe"))
+    {
+        return false;
+    }
+    let mut buf = [0u16; 256];
+    let len = unsafe { windows::Win32::UI::WindowsAndMessaging::GetClassNameW(hwnd, &mut buf) };
+    if len <= 0 {
+        return false;
+    }
+    let class = String::from_utf16_lossy(&buf[..len as usize]);
+    matches!(class.as_str(), "Shell_TrayWnd" | "Progman" | "WorkerW")
+}
+
+fn close_outcome(
+    win: &UIElement,
+    system_close: bool,
+    fallback_title: &str,
+) -> Result<CloseOutcome, CtlError> {
+    let mut action = crate::feedback::window_action("close-window", win, false)?;
+    let title = win.get_name().unwrap_or_default();
+    let Some(hwnd) = native_hwnd(win) else {
+        return Err(CtlError::new(
+            ErrorCode::NotActionable,
+            format!("window {fallback_title:?} exposes no native handle"),
+        ));
+    };
+    let pid = win.get_process_id().ok();
+    let mut instance = None;
+    if let Some(pid) = pid
+        && let Ok(process) = crate::evidence::process(pid, true)
+        && let Some(start) = process.get("start").and_then(|v| v.as_str())
+    {
+        instance = Some(start.to_string());
+        if let Some(program) = process.get("program").and_then(|v| v.as_str())
+            && is_shell_surface(program, hwnd)
+        {
+            return Err(CtlError::with_evidence(
+                ErrorCode::PermDenied,
+                "close-window refuses the Windows shell surface held by explorer.exe;                  closing it destabilizes the whole desktop",
+                serde_json::json!({"pid": pid, "class_hint": "Shell_TrayWnd/Progman/WorkerW"}),
+            ));
+        }
+    }
+    post_close(hwnd, system_close, &title)?;
+    action.delivered();
+    Ok(CloseOutcome {
+        title,
+        pid,
+        instance,
+    })
+}
+
+pub fn close_window(pattern: &str, system_close: bool) -> Result<CloseOutcome, CtlError> {
     let auto = UIAutomation::new().map_err(internal)?;
     let walker = auto.create_tree_walker().map_err(internal)?;
     let win = find_window(&auto, &walker, pattern)?;
-    let mut action = crate::feedback::window_action("close-window", &win, false)?;
-    let title = win.get_name().unwrap_or_default();
-    let Some(hwnd) = native_hwnd(&win) else {
-        return Err(CtlError::new(
-            ErrorCode::NotActionable,
-            format!("window {pattern:?} exposes no native handle"),
-        ));
-    };
-    post_close(hwnd, system_close, &title)?;
-    action.delivered();
-    Ok(title)
+    close_outcome(&win, system_close, pattern)
 }
 
 /// 统一的关闭投递:默认 WM_CLOSE(语义关闭);`system_close` 走 SC_CLOSE。
@@ -1017,19 +1076,9 @@ pub fn parse_hwnd(raw: &str) -> Result<isize, CtlError> {
 }
 
 /// close-window 的按引用入口(FR3)。
-pub fn close_window_by(r: WindowRef<'_>, system_close: bool) -> Result<String, CtlError> {
+pub fn close_window_by(r: WindowRef<'_>, system_close: bool) -> Result<CloseOutcome, CtlError> {
     let win = resolve_window(r)?;
-    let mut action = crate::feedback::window_action("close-window", &win, false)?;
-    let title = win.get_name().unwrap_or_default();
-    let Some(hwnd) = native_hwnd(&win) else {
-        return Err(CtlError::new(
-            ErrorCode::NotActionable,
-            format!("window {title:?} exposes no native handle"),
-        ));
-    };
-    post_close(hwnd, system_close, &title)?;
-    action.delivered();
-    Ok(title)
+    close_outcome(&win, system_close, "close target")
 }
 
 /// focus-window 的按引用入口(FR3)。
@@ -1407,39 +1456,5 @@ mod app_paths_tests {
 }
 
 #[cfg(test)]
-mod crash_signature_tests {
-    use super::crash_signature;
-
-    /// WER 崩溃框族签名:两起真机事故形态+本地化变体全命中。
-    #[test]
-    fn wcrash_family_titles_match() {
-        assert_eq!(
-            crash_signature("WMExternal.exe - Fail Fast Exception"),
-            Some("fail_fast"),
-            "2026-10-12 两起真机事故的原始标题"
-        );
-        assert_eq!(crash_signature("Foo.exe - 应用程序错误"), Some("app_error"));
-        assert_eq!(crash_signature("Bar 已停止工作"), Some("stopped_working"));
-        assert_eq!(
-            crash_signature("Bar 已停止响应"),
-            Some("stopped_responding")
-        );
-        assert_eq!(crash_signature("Windows 错误报告"), Some("wer"));
-    }
-
-    /// 非崩溃窗口不命中(签名必须应用无关且宁缺勿滥——正常窗口误报会
-    /// 把 residue-report 变噪音):业务确认框/保存框/普通标题全过。
-    #[test]
-    fn normal_titles_do_not_match() {
-        for clean in [
-            "腾讯会议",
-            "另存为",
-            "确认另存为",
-            "WMExternal", // 签名要求标题含崩溃短语,仅进程名不算
-            "失败",       // 单字"失败"不是 WER 标题形态
-            "无标题 - Notepad",
-        ] {
-            assert_eq!(crash_signature(clean), None, "{clean:?} must not match");
-        }
-    }
-}
+#[path = "window_tests.rs"]
+mod window_tests;

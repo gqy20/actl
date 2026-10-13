@@ -23,6 +23,10 @@ pub struct ShotResult {
     pub width: i32,
     pub height: i32,
     pub bytes: u64,
+    /// 捕获区物理原点(--element/--rect 模式;窗口模式 None)。
+    /// 交互轮实证:只有宽高没有原点时,调用方被迫手写 GetWindowRect 并踩
+    /// DPI 虚拟化陷阱(2026-10-12 误判"面板被遮挡"的根因链)。
+    pub rect: Option<[i32; 4]>,
 }
 
 /// 截图输出目录(懒建;keep-20 滚动,同 snapshots 纪律)
@@ -359,7 +363,13 @@ unsafe fn encode_png(
         .map_err(|e| CtlError::internal(format!("stat: {e}")))
 }
 
-fn finish(pixels: Vec<u8>, w: i32, h: i32, out: Option<&str>) -> Result<ShotResult, CtlError> {
+fn finish(
+    pixels: Vec<u8>,
+    w: i32,
+    h: i32,
+    rect: Option<[i32; 4]>,
+    out: Option<&str>,
+) -> Result<ShotResult, CtlError> {
     let path = match out {
         Some(p) => std::path::PathBuf::from(p),
         None => std::path::PathBuf::from(
@@ -376,6 +386,7 @@ fn finish(pixels: Vec<u8>, w: i32, h: i32, out: Option<&str>) -> Result<ShotResu
         width: w,
         height: h,
         bytes,
+        rect,
     })
 }
 
@@ -389,7 +400,7 @@ pub fn screenshot_rect(
 ) -> Result<ShotResult, CtlError> {
     let _dpi = Pmv2Guard::enter();
     let (px, w, h) = unsafe { blt_region(x, y, w, h)? };
-    finish(px, w, h, out)
+    finish(px, w, h, Some([x, y, w, h]), out)
 }
 
 /// 整屏域:虚拟屏全域(多显示器合并)。失败留证的默认视野——对话框归属、
@@ -409,7 +420,7 @@ pub fn screenshot_screen(out: Option<&str>) -> Result<ShotResult, CtlError> {
         )
     };
     let (px, w, h) = unsafe { blt_region(x, y, w, h)? };
-    finish(px, w, h, out)
+    finish(px, w, h, Some([x, y, w, h]), out)
 }
 
 /// 窗口域:标题/hwnd 解析唯一窗口;PrintWindow 抗遮挡,最小化如实拒
@@ -419,7 +430,7 @@ pub fn screenshot_window(r: WindowRef<'_>, out: Option<&str>) -> Result<ShotResu
     let hwnd = crate::window::hwnd_of(&win)
         .ok_or_else(|| CtlError::new(ErrorCode::NotActionable, "window has no native handle"))?;
     let (px, w, h) = unsafe { blt_window(hwnd)? };
-    finish(px, w, h, out)
+    finish(px, w, h, None, out)
 }
 
 /// 元素域:定位链解析 → bounds 即物理(PMv2 线程内,spike 实证)→ 直接裁屏幕
@@ -451,7 +462,7 @@ pub fn screenshot_element(
         ));
     }
     let (px, w, h) = unsafe { blt_region(x, y, w, h)? };
-    finish(px, w, h, out)
+    finish(px, w, h, Some([x, y, w, h]), out)
 }
 
 /// 供窗口域取原生句柄(resolve_window 返回 UIElement)

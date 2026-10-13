@@ -140,3 +140,30 @@ fn set_value_verify_value_and_verify_file_discover_are_documented() {
         assert!(help.contains(needle), "help: {help}");
     }
 }
+
+#[test]
+fn interaction_ergonomics_round_surface_in_help() {
+    // 2026-10-12 交互轮:get rect 属性、指针族 --snapshot、front-report --app
+    // 旗标、close-window instance 配对、find --id 动作路径说明。
+    for (command, needle) in [
+        ("get", "rect"),
+        ("right-click", "--snapshot"),
+        ("hover", "--snapshot"),
+        ("double-click", "--snapshot"),
+        ("front-report", "--app"),
+        ("close-window", "instance"),
+        ("find", "click id:<X>"),
+    ] {
+        let out = support::IsolatedCommand::new()
+            .command
+            .args([command, "--help"])
+            .output()
+            .unwrap();
+        let help = String::from_utf8_lossy(&out.stdout);
+        assert!(out.status.success());
+        assert!(
+            help.contains(needle),
+            "{command} help missing {needle}: {help}"
+        );
+    }
+}

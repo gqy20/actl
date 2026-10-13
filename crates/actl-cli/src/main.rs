@@ -266,8 +266,14 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             })
             .into())
         }
-        Command::Desktop(DesktopCommand::FrontReport { app }) => {
-            actl_uia::front_report(app).map(Into::into)
+        Command::Desktop(DesktopCommand::FrontReport { app, app_flag }) => {
+            // docs/06 契约是 --app 形态;位置参数为既有调用兼容。
+            let anchor = app_flag.as_deref().or(app.as_deref()).ok_or_else(|| {
+                actl_core::CtlError::protocol(
+                    "front-report needs a window anchor (--app <窗口> or positional)",
+                )
+            })?;
+            actl_uia::front_report(anchor).map(Into::into)
         }
         Command::Desktop(DesktopCommand::ResidueReport) => {
             actl_uia::residue_report().map(Into::into)
@@ -479,12 +485,14 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             target,
             app,
             near,
+            snapshot,
             no_activate,
         } => pointer_cmd(
             "right-click",
             target,
             app.as_deref(),
             near.as_deref(),
+            snapshot.as_deref(),
             *no_activate,
             PointerKind::Right,
         ),
@@ -492,12 +500,14 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             target,
             app,
             near,
+            snapshot,
             no_activate,
         } => pointer_cmd(
             "double-click",
             target,
             app.as_deref(),
             near.as_deref(),
+            snapshot.as_deref(),
             *no_activate,
             PointerKind::Double,
         ),
@@ -505,12 +515,14 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             target,
             app,
             near,
+            snapshot,
             no_activate,
         } => pointer_cmd(
             "middle-click",
             target,
             app.as_deref(),
             near.as_deref(),
+            snapshot.as_deref(),
             *no_activate,
             PointerKind::Middle,
         ),
@@ -518,12 +530,14 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             target,
             app,
             near,
+            snapshot,
             no_activate,
         } => pointer_cmd(
             "triple-click",
             target,
             app.as_deref(),
             near.as_deref(),
+            snapshot.as_deref(),
             *no_activate,
             PointerKind::Triple,
         ),
@@ -531,12 +545,14 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             target,
             app,
             near,
+            snapshot,
             no_activate,
         } => pointer_cmd(
             "hover",
             target,
             app.as_deref(),
             near.as_deref(),
+            snapshot.as_deref(),
             *no_activate,
             PointerKind::Hover,
         ),

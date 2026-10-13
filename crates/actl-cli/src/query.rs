@@ -202,6 +202,12 @@ fn property_data(target: &str, info: actl_uia::PropertyInfo) -> Value {
     if let Some(v) = &info.text {
         props.insert("text".into(), json!(v));
     }
+    if let Some(r) = &info.rect {
+        props.insert(
+            "rect".into(),
+            json!({"x": r.x, "y": r.y, "width": r.width, "height": r.height}),
+        );
+    }
     json!({ "target": target, "properties": props, "unsupported": info.unsupported })
 }
 
@@ -922,6 +928,7 @@ mod property_contract_tests {
                 value: Some(String::new()),
                 value_via: Some("value-pattern"),
                 text: None,
+                rect: None,
                 unsupported: vec!["text"],
             },
         );
@@ -929,5 +936,32 @@ mod property_contract_tests {
         let expected: Value =
             serde_json::from_str(include_str!("../tests/golden/get_empty_value.json")).unwrap();
         assert_eq!(serde_json::to_value(envelope).unwrap(), expected);
+    }
+    #[test]
+    fn rect_property_maps_to_xywh_object() {
+        // 2026-10-12 交互轮:get --property rect → {x,y,width,height}(PMv2)
+        let data = property_data(
+            "id:input",
+            actl_uia::PropertyInfo {
+                name: None,
+                role: String::new(),
+                automation_id: None,
+                offscreen: None,
+                value: None,
+                value_via: None,
+                text: None,
+                rect: Some(actl_uia::ElementRect {
+                    x: 10,
+                    y: 20,
+                    width: 300,
+                    height: 40,
+                }),
+                unsupported: Vec::new(),
+            },
+        );
+        assert_eq!(
+            data["properties"]["rect"],
+            serde_json::json!({"x": 10, "y": 20, "width": 300, "height": 40})
+        );
     }
 }

@@ -171,6 +171,8 @@ find --role button [--name "确定"]   # 条件查元素(带 ref);与 snapshot �
 get @e3 [--property p] [--raw]      # 读元素属性;--raw 全量含 pattern 支持(合并原 inspect)
                                      # property 白名单含 text(TextPattern 文档正文专用通道,
                                      # 与 value 分工:Chromium 的 Document Value=URL 会掩盖正文)
+                                     # 与 rect(物理像素包围盒 {x,y,width,height},PMv2 口径——
+                                     # 元素坐标的权威通道,2026-10-12 交互轮补)
 list-windows [--native [--hwnd <n>]] / list-surfaces # 窗口/虚拟桌面枚举(list-surfaces 未实现)
                                      # list-windows 附物理层叠放事实:foreground / topmost /
                                      # minimized / visible / z_order(0 = 最顶) / rect / owner_title
@@ -252,7 +254,12 @@ close-window --hwnd w-4521 --system-close  # 投 WM_SYSCOMMAND/SC_CLOSE(=点标�
                                            # 才退出),作为进程收尾手段
 close-window 存活复核:消息投递成功≠已关——模态未清时窗口存活,
   投递后有界等待(2s)窗口销毁;仍存活返回 NOT_ACTIONABLE,evidence 携带同 pid
-  归属弹窗清单(title/class/hwnd),调用方直接看到挡路者(docs/81 §8)
+  归属弹窗清单(title/class/hwnd),调用方直接看到挡路者(docs/81 §8)。
+envelope 附 pid + instance(进程创建时刻,与 verify-owner/verify-closed 同表示)
+  ——close→verify-closed 配对不再依赖事先的 verify-owner 记录(2026-10-12 交互轮)。
+shell 承载面硬护栏:explorer.exe 的任务栏/桌面类窗(Shell_TrayWnd/Progman/WorkerW)
+  PERM_DENIED 结构拒绝——WM_CLOSE 到它们可拖垮整个桌面,ROADMAP 实录此前
+  "拒绝属 AMBIGUOUS 安全巧合"升级为结构判定;资源管理器文件夹窗不受影响
 launch --wait-window:等待成功新增 window 对象{hwnd,pid,title,foreground:true,
   matched_by:"title"},window_ready:true;匹配不证明窗口来自新 PID(§7.5.2)
 launch 解析优先级(程序名形态):app-registry 别名(%LOCALAPPDATA%/actl/
@@ -297,6 +304,9 @@ UIA 看门狗(引擎行为):定位/树观察/焦点查询区段超过 ACTL_UIA_W
   `target` 选择器语义 + `resolved_by:"provider-exact"`,无快照绑定);
   无命中回落原全树路径(保快照面与 L4 兜底)。**--name/--role 为子串语义,
   UIA 属性条件只支持等值,不走此路径(诚实边界)**。
+  命中结果不赋 @eN ref 是形态而非缺陷——元素命令直接吃 target 形态
+  (`click id:<X> --app ...`),envelope 的 `target` 字段即动作参数;
+  需要 ref/快照绑定就走全树路径(--name 等值子串或 snapshot)。
 **析构纪律(尾段挂起族)**:UIElement 的 Drop(跨进程 Release)与
   读取/调用同族无界——看门狗是单槽时间戳不能嵌套,guard 声明在资源之后会因
   反序析构让 Release 裸奔。两条铁律:① **成功路径硬退出**——envelope 落盘 flush 后 `std::process::exit(0)`,
@@ -674,7 +684,7 @@ click（Invoke/SelectionItem/Toggle/ExpandCollapse）、set-value、select、tog
 ### 7.1 后台物理点击 `--no-activate`
 
 指针族物理动作（click --physical / right-click / double-click / middle-click / triple-click / hover，
-含 xy: 坐标寻址）可加 `--no-activate`：注入前给目标窗口根 HWND 临时置 `WS_EX_NOACTIVATE`，
+含 xy: 坐标寻址）可加 `--snapshot <id>`（ref 重放的新鲜度核验，与 click 同机制）与 `--no-activate`：注入前给目标窗口根 HWND 临时置 `WS_EX_NOACTIVATE`，
 点击按坐标正常落地（命中/边界守卫照走），但**不激活、不抢前台、不改 Z 序**；结束后只清
 自己置的那一位（期间其他 exstyle 位的合法变更不被吞掉），并把光标送回原位（drag 除外——落点有语义）。
 `input_effects.activation` 上报 `suppressed|normal`。

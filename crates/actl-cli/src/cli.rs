@@ -45,8 +45,12 @@ pub(crate) enum DesktopCommand {
     },
     /// Report the app's front guidance layer (owned popups + in-tree dialog surfaces); read-only
     FrontReport {
-        /// Target window by title substring or hwnd:<n>
-        app: String,
+        /// Target window by title substring or hwnd:<n> (--app 形态与 docs/06
+        /// 契约一致;位置参数保留兼容既有调用)
+        #[arg(long = "app")]
+        app_flag: Option<String>,
+        /// Target window (positional compat)
+        app: Option<String>,
     },
     /// Report crash-dialog residue across the desktop (WER family, app-agnostic); read-only
     ResidueReport,
@@ -525,6 +529,9 @@ pub(crate) enum Command {
         /// Target window by title substring, or hwnd:<n> (0x ok; survives SPA title changes)
         #[arg(long)]
         app: Option<String>,
+        /// Validate window and ref element identities against this snapshot id
+        #[arg(long)]
+        snapshot: Option<String>,
         /// Disambiguate multi-matches by picking the one nearest to this anchor
         #[arg(long)]
         near: Option<String>,
@@ -540,6 +547,9 @@ pub(crate) enum Command {
         /// Target window by title substring, or hwnd:<n> (0x ok; survives SPA title changes)
         #[arg(long)]
         app: Option<String>,
+        /// Validate window and ref element identities against this snapshot id
+        #[arg(long)]
+        snapshot: Option<String>,
         /// Disambiguate multi-matches by picking the one nearest to this anchor
         #[arg(long)]
         near: Option<String>,
@@ -555,6 +565,9 @@ pub(crate) enum Command {
         /// Target window by title substring, or hwnd:<n> (0x ok; survives SPA title changes)
         #[arg(long)]
         app: Option<String>,
+        /// Validate window and ref element identities against this snapshot id
+        #[arg(long)]
+        snapshot: Option<String>,
         /// Disambiguate multi-matches by picking the one nearest to this anchor
         #[arg(long)]
         near: Option<String>,
@@ -570,6 +583,9 @@ pub(crate) enum Command {
         /// Target window by title substring, or hwnd:<n> (0x ok; survives SPA title changes)
         #[arg(long)]
         app: Option<String>,
+        /// Validate window and ref element identities against this snapshot id
+        #[arg(long)]
+        snapshot: Option<String>,
         /// Disambiguate multi-matches by picking the one nearest to this anchor
         #[arg(long)]
         near: Option<String>,
@@ -585,6 +601,9 @@ pub(crate) enum Command {
         /// Target window by title substring, or hwnd:<n> (0x ok; survives SPA title changes)
         #[arg(long)]
         app: Option<String>,
+        /// Validate window and ref element identities against this snapshot id
+        #[arg(long)]
+        snapshot: Option<String>,
         /// Disambiguate multi-matches by picking the one nearest to this anchor
         #[arg(long)]
         near: Option<String>,
