@@ -69,13 +69,14 @@ actl CLI / flow(统一 envelope、错误码、人工交接、急停)
 - profile 目录登记为受保护流程资源(docs/60 契约),路径归 actl 数据目录管辖。
 - **cookie 搬运/复制用户 profile 明确排除**(沿 docs/16 §5.5 安全边界)。
 
-## 5. 连接层设计(spike 已验证形态)
+## 5. 连接层设计(Phase 2 终态吸收后的现行态,2026-10-13)
 
-- **单属主事件循环 + mpsc**:socket 仅被循环线程持有(非阻塞读 + 出站队列 + WouldBlock 重发箱);调用方投递请求并限时阻塞收响应;事件全部外抛。无 async、无共享 socket 锁竞争。
-- 自建 TcpStream 握手后切非阻塞(tungstenite `connect()` 的 MaybeTlsStream 不暴露该控制)。
-- 错误码:连接层 `DISCONNECTED/TIMEOUT/SEND/CONNECT`,协议层 `CDP_<code>`(带 message+data)。
-- HTTP 发现端点(`/json/version`)**必须按头解析、按 Content-Length 读体**:Chromium DevTools HTTP 不保证按 `Connection: close` 断开,`read_to_end` 会吃读超时(§10 run-2 实证,Windows 上读超时同样报 10060,易误诊为连接被拒)。
-- DevToolsActivePort 用 `--remote-debugging-port=0` 自动分配,从 profile 目录读取。
+- **chromiumoxide 骨干承载全部动词**:原手写「单属主事件循环 + mpsc」传输层(cdp.rs/tungstenite)已退役——bridge 同步门面(connect/open_lane/eval_json/navigate_and_wait/find_iframe_context)圈住库的 async,crate 对外 API 保持同步(ADR-001 修订不变)。
+- **订阅先于派发是骨干事件流的不变序**:库的 EventStream 只收订阅后的事件(与手写 drain_events 的积压回放语义结构性不同),导航事件的监听必须在 NavigateParams 派发之前建立——吸收首轮真机回归实证:先派发后订阅恒 TIMEOUT。
+- target 发现经 `pages()` 有界轮询(3s 上限):SetDiscoverTargets 的快照回流是异步的,立即调用可能空表。
+- 错误码:目标不在场→NOT_FOUND(重枚举指引),端点死→NOT_FOUND,窗口/求值超预算→TIMEOUT;协议层错误带 message。
+- HTTP 发现端点(`/json/version`,随 cdp.rs 退役挪入 ops)**必须按头解析、按 Content-Length 读体 + CRLF 请求行**:Chromium DevTools HTTP 不保证按 `Connection: close` 断开,`read_to_end` 会吃读超时(§10 run-2 实证);请求分隔符必须 `\r\n` 转义序列——搬运事故实证:裸 LF 使 Edge 拒答、launch 健康检查恒败。
+- DevToolsActivePort 用 `--remote-debugging-port=0` 自动分配,从 profile 目录读取;launch 的进程治理面(spawn/stdio 清理/端口等待/失败回收)不经库、保持自管。
 
 ## 6. 身份绑定与导航竞态
 
@@ -181,5 +182,5 @@ iframe 守卫写+核验→iframe 读"1"→navigate(标题+计数归零证明新�
   InputEffects 全空,无租约门——展示透明性而非权限门;动作日志验证 preparing/executing/
   delivered/failed 全周期在场)。真机 13 步验收 `target/browser-p1p2-accept/`。
 - [ ] 显示端会话卡(常驻浏览器会话 UI,非动作流);close 后 ephemeral profile 延迟重删的残余竞争(7 轮 2 次失败后已收口,复发再议)
-- [ ] **深水层终态吸收**:现有动词迁移到 chromiumoxide 骨干、退役手写传输层(cdp.rs)与 tungstenite 依赖——双栈过渡态是显式接受的中间态,吸收时机由 ROADMAP 裁定;进一步深水层动词(协议级输入/下载管理/Fetch 拦截改写)按真实场景逐个 spec
+- [x] **深水层终态吸收(2026-10-13 完成,用户指令提前于原触发条件)**:全部动词迁移 chromiumoxide 骨干(launch 尾段 connect+new_page/navigate/read/type/click/collect/verify/targets/close),cdp.rs 与 tungstenite 依赖退役;scripts.rs JS 全量复用零语义变化;真机验收 9 步 B 站流程全绿(33.8s,netlog 353 请求窗)。吸收期两真回归如实入册:①http_get_json 搬运时 `\r\n` 字面量变裸 LF,Edge 拒答致 launch 恒败;②事件流订阅晚于导航派发恒 TIMEOUT(积压回放≠订阅流,§5 不变序);体积 14.20→14.62MB(tungstenite 移除与 async-tungstenite 变体引入相抵)。进一步深水层动词(协议级输入/下载管理/Fetch 拦截改写)按真实场景逐个 spec
 - [ ] WebView2 内嵌形态评估(并入 M3 WebView2 专项验收后)

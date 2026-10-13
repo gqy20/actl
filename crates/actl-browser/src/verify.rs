@@ -5,11 +5,7 @@
 //! 谓词管复核/分支,门禁管写步拒发(docs/06 §3.4 浏览器组)。
 
 use crate::SelectorKind;
-use crate::cdp::Connection;
-use crate::ops::{
-    OP_DEFAULT_TIMEOUT_MS, attach_target, connect_browser, dur, eval_json, list, truncate_text,
-    validate_selector, verify_target_alive,
-};
+use crate::ops::{OP_DEFAULT_TIMEOUT_MS, dur, list, truncate_text, validate_selector};
 use crate::scripts::{locate_script, popup_scan_script};
 use crate::session::{self, Paths};
 use actl_core::{CtlError, ErrorCode};
@@ -60,13 +56,11 @@ pub const DEFAULT_POPUP_SELECTOR: &str =
 /// 并附样本。NOT_ACTIONABLE(非断言失败:动作还没发生,是护栏拒绝);
 /// --allow-popups 显式放行(流内静态 role=dialog 的误报面,调用方拿样本证据决策)。
 pub(crate) fn pre_action_popup_gate(
-    conn: &Connection,
-    cdp_session: &str,
+    page: &chromiumoxide::Page,
     timeout: Duration,
 ) -> Result<(), CtlError> {
-    let scanned = eval_json(
-        conn,
-        cdp_session,
+    let scanned = crate::bridge::eval_json(
+        page,
         &popup_scan_script(DEFAULT_POPUP_SELECTOR),
         None,
         timeout,
@@ -131,10 +125,8 @@ pub fn verify(paths: &Paths, mode: VerifyMode, timeout_ms: Option<u64>) -> Resul
                 .unwrap_or_default()
                 .to_string();
             let record = session::load(paths, &id)?;
-            let conn = connect_browser(&record)?;
-            // attach 本身即端点+target 存活的第一重核验
-            attach_target(&conn, &record.target_id, timeout)?;
-            verify_target_alive(&conn, &record.target_id, timeout)?;
+            // open_lane 的发现本身即端点+target 存活的第一重核验
+            crate::bridge::open_lane(&record, None, timeout)?;
             Ok(json!({ "assertion": "newest_alive", "passed": true, "session_id": id }))
         }
         VerifyMode::SessionGone(session_id) => match session::load(paths, &session_id) {
@@ -152,9 +144,7 @@ pub fn verify(paths: &Paths, mode: VerifyMode, timeout_ms: Option<u64>) -> Resul
         },
         VerifyMode::SessionAlive(session_id) => {
             let record = session::load(paths, &session_id)?;
-            let conn = connect_browser(&record)?;
-            attach_target(&conn, &record.target_id, timeout)?;
-            verify_target_alive(&conn, &record.target_id, timeout)?;
+            crate::bridge::open_lane(&record, None, timeout)?;
             Ok(json!({ "assertion": "alive", "passed": true, "session_id": session_id }))
         }
         VerifyMode::Selector {
@@ -165,12 +155,9 @@ pub fn verify(paths: &Paths, mode: VerifyMode, timeout_ms: Option<u64>) -> Resul
         } => {
             validate_selector(kind, &value)?;
             let record = session::load(paths, &session)?;
-            let conn = connect_browser(&record)?;
-            let cdp_session = attach_target(&conn, &record.target_id, timeout)?;
-            verify_target_alive(&conn, &record.target_id, timeout)?;
-            let located = eval_json(
-                &conn,
-                &cdp_session,
+            let lane = crate::bridge::open_lane(&record, None, timeout)?;
+            let located = crate::bridge::eval_json(
+                &lane.page,
                 &locate_script(kind, &value, None),
                 None,
                 timeout,
@@ -224,10 +211,9 @@ pub fn verify(paths: &Paths, mode: VerifyMode, timeout_ms: Option<u64>) -> Resul
                 return Err(CtlError::protocol("popup selector must be 1-4096 chars"));
             }
             let record = session::load(paths, &session)?;
-            let conn = connect_browser(&record)?;
-            let cdp_session = attach_target(&conn, &record.target_id, timeout)?;
-            verify_target_alive(&conn, &record.target_id, timeout)?;
-            let scanned = eval_json(&conn, &cdp_session, &popup_scan_script(&sel), None, timeout)?;
+            let lane = crate::bridge::open_lane(&record, None, timeout)?;
+            let scanned =
+                crate::bridge::eval_json(&lane.page, &popup_scan_script(&sel), None, timeout)?;
             // 选择器语法错误如实 PROTOCOL——吞错成 total=0 等于谎称「无弹层」
             if let Some(err) = scanned.get("error").and_then(Value::as_str) {
                 return Err(CtlError::protocol(format!(

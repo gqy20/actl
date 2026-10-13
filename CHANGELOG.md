@@ -16,6 +16,7 @@
 
 ### Changed
 
+- **[BC] Phase 2 终态吸收:actl-browser 全动词上 chromiumoxide 骨干,手写传输层退役(用户指令提前于原触发条件)**——cdp.rs(单属主事件循环/421 行)与 `tungstenite` 直接依赖删除;launch 尾段(connect+new_page)/navigate/read/type/click/collect/verify/targets/close 全部经 bridge 骨干通道(open_lane 有界发现/eval_json 同 JSON 约定/订阅先于派发的事件等待);scripts.rs JS 与会话治理零语义变化,golden 契约零改动(30 用例原样全绿)。吸收期两真回归如实入册(均为骨干与浅层的**结构性语义差**,非平凡搬运):①http_get_json 移植时 `\r\n` 字面量变裸 LF——Edge 拒答、launch 健康检查恒败;②事件流订阅晚于导航派发恒 TIMEOUT(drain_events 是积压回放模型,EventStream 只收订阅后事件)——navigate 收束为 `navigate_and_wait`(订阅前置不变序),教训入 docs/72 §5。真机验收:9 步 B 站流程纯骨干全绿(33.8s,netlog 353 请求窗含评论 XHR 端点),现场零残留;体积 14.20→14.62MB(tungstenite 移除与 async-tungstenite 变体引入相抵,<16MB NFR 绿);直依赖 8→7。
 - **[BC] 打包 skills 的 URL lint 收窄(用户裁定)**:旧 blanket「技能不含任何 URL」禁令过宽——浏览器自动化的**操作目标 URL**(站点/API 端点/ws 端点)是可操作事实,曾逼出 pack 里截肢式记录。收窄为真实风险面:**仓库身份指针**(自有仓库路径/用户名,裸写同拒)+`mailto:`;残余的「给人读」第三方外链归代码评审。顺手修复:workflows/README.md 泄露的 `Releases · gqy20/actl` 标题锚点参数化为 `<owner>/<repo>`(未开源前的发布包身份泄露,对第三方用户也是错误锚点)。
 
 - **[BC] 单二进制 NFR 修订(PRD §4)**:深水层引入后主二进制 7.88MB→**14.20MB**(同机同配置实测),「<10MB」破线(用户裁定接受:深度浏览器能力优先);分发 NFR 口径改为「<16MB,零运行时依赖」——冷启动 NFR 不变。

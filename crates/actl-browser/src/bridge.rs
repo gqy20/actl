@@ -95,6 +95,255 @@ fn pump(mut handler: chromiumoxide::Handler) -> Result<(), CtlError> {
     Ok(())
 }
 
+/// 骨干操作面(Phase 2 终态吸收,2026-10-13):Browser + 已发现目标的 Page。
+pub(crate) struct Lane {
+    /// 骨干连接持有者(生命期锚:Page 依赖其 handler 存活;现役消费方为
+    /// page 侧操作,close 走独立 connect)。
+    #[allow(dead_code)]
+    pub browser: chromiumoxide::Browser,
+    pub page: chromiumoxide::Page,
+}
+
+/// target 发现竞态上限:attach 后 pages() 需等 discover 快照回流
+/// (SetDiscoverTargets(true) 对已存在 target 也发 TargetCreated;
+/// 立即调用可能空表——smoke 首轮实证)。
+pub(crate) const DISCOVERY_SETTLE_MAX_MS: u64 = 3_000;
+const DISCOVERY_POLL_MS: u64 = 100;
+
+/// 打开骨干会话:connect → pages() 有界发现(默认会话绑 tab;--target 覆盖)。
+/// 发现失败 = 目标不在场(新 tab 顶替/popup 收起)→ NOT_FOUND 与浅层同判。
+pub(crate) fn open_lane(
+    record: &crate::session::BrowserSession,
+    target: Option<&str>,
+    timeout: Duration,
+) -> Result<Lane, CtlError> {
+    let want = target.unwrap_or(&record.target_id).to_string();
+    let ws_url = format!(
+        "ws://127.0.0.1:{}{}",
+        record.devtools_port, record.browser_ws_path
+    );
+    let browser = connect(&ws_url, timeout)?;
+    let want_clone = want.clone();
+    let work = async move {
+        let deadline = tokio::time::Instant::now() + Duration::from_millis(DISCOVERY_SETTLE_MAX_MS);
+        loop {
+            let pages = browser
+                .pages()
+                .await
+                .map_err(|e| format!("enumerate pages: {e}"))?;
+            if let Some(page) = pages
+                .into_iter()
+                .find(|p| p.target_id().as_ref() == want_clone)
+            {
+                return Ok::<(chromiumoxide::Browser, chromiumoxide::Page), String>((
+                    browser, page,
+                ));
+            }
+            if tokio::time::Instant::now() >= deadline {
+                return Err("target not among live pages".to_string());
+            }
+            tokio::time::sleep(Duration::from_millis(DISCOVERY_POLL_MS)).await;
+        }
+    };
+    match block_on(
+        work,
+        timeout + Duration::from_millis(DISCOVERY_SETTLE_MAX_MS),
+    ) {
+        Ok(Ok((browser, page))) => Ok(Lane { browser, page }),
+        Ok(Err(msg)) => Err(CtlError::with_evidence(
+            ErrorCode::NotFound,
+            format!(
+                "target no longer exists (new tab took over or popup closed); \
+                 re-enumerate with browser-targets: {msg}"
+            ),
+            serde_json::json!({ "target_id": want }),
+        )),
+        Err(e) => Err(e),
+    }
+}
+
+/// JS 求值(浅层 eval_json 同约定,scripts.rs 全量复用零语义变化):
+/// 脚本恒返回 JSON.stringify 字符串,returnByValue 后取 value 解析。
+pub(crate) fn eval_json(
+    page: &chromiumoxide::Page,
+    script: &str,
+    context_id: Option<u64>,
+    timeout: Duration,
+) -> Result<serde_json::Value, CtlError> {
+    use chromiumoxide::cdp::js_protocol::runtime::{EvaluateParams, ExecutionContextId};
+    let mut builder = EvaluateParams::builder()
+        .expression(script)
+        .await_promise(true)
+        .return_by_value(true);
+    if let Some(id) = context_id {
+        builder = builder.context_id(ExecutionContextId::new(id as i64));
+    }
+    let params = builder
+        .build()
+        .map_err(|e| CtlError::protocol(format!("evaluate params: {e}")))?;
+    let page_owned = page.clone();
+    let text = block_on(
+        async move {
+            let response = page_owned
+                .execute(params)
+                .await
+                .map_err(|e| format!("evaluate: {e}"))?;
+            if let Some(details) = &response.result.exception_details {
+                return Err(format!("page script raised: {}", details.text));
+            }
+            let value = response
+                .result
+                .result
+                .value
+                .ok_or("evaluate returned no value (exception path)")?;
+            let text = value
+                .as_str()
+                .ok_or("evaluate returned non-string value")?
+                .to_string();
+            Ok::<String, String>(text)
+        },
+        timeout,
+    )
+    .and_then(|inner| {
+        inner.map_err(|msg| CtlError::internal(format!("page script evaluation failed: {msg}")))
+    })?;
+    serde_json::from_str(&text)
+        .map_err(|e| CtlError::internal(format!("page script returned non-JSON payload: {e}")))
+}
+
+/// 派发导航并等主 frame 导航事件(浅层 navigate 竞态判定的骨干等价物)。
+/// **订阅必须先于派发**:骨干 EventStream 只收订阅后的事件(与浅层
+/// drain_events 的积压回放语义结构性不同——那是 backlog 模型),先导航后
+/// 订阅会恒错过事件(2026-10-13 真机回归实证:go_search 恒 TIMEOUT)。
+/// 返回 frame_id;errorText 网络级失败以 net_error: 前缀上抛由调用方映射。
+pub(crate) fn navigate_and_wait(
+    page: &chromiumoxide::Page,
+    url: &str,
+    timeout: Duration,
+) -> Result<(String,), CtlError> {
+    use chromiumoxide::cdp::browser_protocol::page::{EnableParams, EventFrameNavigated};
+    use futures::StreamExt;
+    let page_owned = page.clone();
+    let url_owned = url.to_string();
+    let work = async move {
+        page_owned
+            .execute(EnableParams::default())
+            .await
+            .map_err(|e| format!("page enable: {e}"))?;
+        let mut listener = page_owned
+            .event_listener::<EventFrameNavigated>()
+            .await
+            .map_err(|e| format!("frame listener: {e}"))?;
+        let params = chromiumoxide::cdp::browser_protocol::page::NavigateParams::builder()
+            .url(url_owned)
+            .build()
+            .map_err(|e| format!("navigate params: {e}"))?;
+        let nav = page_owned
+            .execute(params)
+            .await
+            .map_err(|e| format!("navigate dispatch: {e}"))?;
+        if let Some(net_error) = nav.result.error_text.as_deref()
+            && !net_error.is_empty()
+        {
+            return Err(format!("net_error:{net_error}"));
+        }
+        let frame = nav.result.frame_id.as_ref().to_string();
+        let deadline = tokio::time::Instant::now() + timeout;
+        loop {
+            match tokio::time::timeout_at(deadline, listener.next()).await {
+                Ok(Some(ev)) => {
+                    if ev.frame.id.as_ref() == frame {
+                        return Ok((frame,));
+                    }
+                }
+                Ok(None) => return Err("frame navigated stream ended".to_string()),
+                Err(_) => return Err("frame navigated not observed".to_string()),
+            }
+        }
+    };
+    match block_on(work, timeout) {
+        Ok(Ok(pair)) => Ok(pair),
+        Ok(Err(msg)) if msg.starts_with("net_error:") => Err(CtlError::with_evidence(
+            ErrorCode::Internal,
+            format!("page load failed at network level: {}", &msg[10..]),
+            serde_json::json!({ "url": url, "net_error": &msg[10..] }),
+        )),
+        Ok(Err(msg)) => Err(CtlError::new(
+            ErrorCode::Timeout,
+            format!(
+                "navigation not observed within {}ms: {msg}",
+                timeout.as_millis()
+            ),
+        )),
+        Err(e) => Err(e),
+    }
+}
+
+/// iframe 执行上下文发现(浅层 iframe_context 的骨干等价物):
+/// 主 frame 首个子 frame + Runtime.executionContextCreated 事件配对。
+pub(crate) fn find_iframe_context(
+    page: &chromiumoxide::Page,
+    timeout: Duration,
+) -> Result<(String, u64), CtlError> {
+    use chromiumoxide::cdp::browser_protocol::page::GetFrameTreeParams;
+    use chromiumoxide::cdp::js_protocol::runtime::{
+        EnableParams as RuntimeEnable, EventExecutionContextCreated,
+    };
+    use futures::StreamExt;
+    let page_owned = page.clone();
+    let work = async move {
+        let page = page_owned;
+        let tree = page
+            .execute(GetFrameTreeParams::default())
+            .await
+            .map_err(|e| format!("frame tree: {e}"))?;
+        let child_id = tree
+            .result
+            .frame_tree
+            .child_frames
+            .as_deref()
+            .unwrap_or(&[])
+            .iter()
+            .map(|c| c.frame.id.as_ref().to_string())
+            .next()
+            .ok_or("no child iframe in frame tree")?;
+        page.execute(RuntimeEnable::default())
+            .await
+            .map_err(|e| format!("runtime enable: {e}"))?;
+        let mut listener = page
+            .event_listener::<EventExecutionContextCreated>()
+            .await
+            .map_err(|e| format!("context listener: {e}"))?;
+        let deadline = tokio::time::Instant::now() + timeout;
+        while let Some(ev) = match tokio::time::timeout_at(deadline, listener.next()).await {
+            Ok(item) => item,
+            Err(_) => return Err("iframe context not observed".to_string()),
+        } {
+            if ev
+                .context
+                .aux_data
+                .as_ref()
+                .and_then(|a| a.get("frameId"))
+                .and_then(|v| v.as_str())
+                == Some(child_id.as_str())
+            {
+                let numeric = *ev.context.id.inner() as u64;
+                return Ok((child_id.clone(), numeric));
+            }
+        }
+        Err("context stream ended".to_string())
+    };
+    match block_on(work, timeout) {
+        Ok(Ok(pair)) => Ok(pair),
+        Ok(Err(msg)) => Err(CtlError::with_evidence(
+            ErrorCode::NotFound,
+            format!("no cross-origin iframe execution context found: {msg}"),
+            serde_json::json!({ "hint": "iframe must be attached and its context created" }),
+        )),
+        Err(e) => Err(e),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

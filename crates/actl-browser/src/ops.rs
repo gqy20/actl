@@ -7,7 +7,7 @@
 //! - cookie 域不在实现面内(构造性不可达,lib.rs 范围铁律)。
 
 use crate::SelectorKind;
-use crate::cdp::{self, CdpError, Connection};
+use crate::bridge;
 use crate::scripts::{locate_all_script, locate_deep_script, locate_script};
 use crate::session::{self, BrowserSession, Mode, Paths};
 use crate::verify::pre_action_popup_gate;
@@ -63,24 +63,61 @@ pub(crate) fn protocol(message: impl Into<String>) -> CtlError {
     CtlError::new(ErrorCode::Protocol, message)
 }
 
-/// CDP 连接层错误 → envelope 错误码(docs/72 §9 错误映射)。
-pub(crate) fn map_cdp(err: CdpError) -> CtlError {
-    match err.code {
-        "CONNECT" => CtlError::with_evidence(
-            ErrorCode::NotFound,
-            format!(
-                "browser devtools endpoint unreachable (browser exited or session expired): {}",
-                err.message
-            ),
-            json!({ "cdp_code": err.code }),
-        ),
-        "TIMEOUT" => CtlError::new(ErrorCode::Timeout, err.message),
-        _ => CtlError::with_evidence(
-            ErrorCode::Internal,
-            format!("CDP layer failure: {err}"),
-            json!({ "cdp_code": err.code }),
-        ),
+/// DevTools HTTP 发现端点的最小 GET(Phase 2 随 cdp.rs 退役挪入 ops)。
+/// 端点不保证按 `Connection: close` 断开,必须按头解析、按 Content-Length 读体
+/// (docs/72 §10 run-2 实证:`read_to_end` 会吃读超时,Windows 上同为 10060)。
+pub(crate) fn http_get_json(port: u16, path: &str, timeout: Duration) -> Result<Value, CtlError> {
+    use std::io::{Read, Write};
+    let wrap = |message: String| CtlError::new(actl_core::ErrorCode::NotFound, message);
+    let mut s = TcpStream::connect(("127.0.0.1", port))
+        .map_err(|e| wrap(format!("http connect 127.0.0.1:{port}{path}: {e}")))?;
+    s.set_read_timeout(Some(timeout))
+        .map_err(|e| wrap(e.to_string()))?;
+    s.set_write_timeout(Some(timeout))
+        .map_err(|e| wrap(e.to_string()))?;
+    let req = format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n");
+    s.write_all(req.as_bytes())
+        .map_err(|e| wrap(format!("http write: {e}")))?;
+    let mut raw: Vec<u8> = Vec::new();
+    let mut chunk = [0u8; 4096];
+    let header_end = loop {
+        if let Some(pos) = raw.windows(4).position(|w| w == b"\r\n\r\n") {
+            break pos;
+        }
+        let n = s
+            .read(&mut chunk)
+            .map_err(|e| wrap(format!("http read headers: {e}")))?;
+        if n == 0 {
+            return Err(wrap(format!(
+                "http connection closed before headers: {path}"
+            )));
+        }
+        raw.extend_from_slice(&chunk[..n]);
+    };
+    let headers = String::from_utf8_lossy(&raw[..header_end]).to_string();
+    let content_length = headers
+        .lines()
+        .find_map(|l| {
+            l.split_once(':').and_then(|(k, v)| {
+                if k.trim().eq_ignore_ascii_case("content-length") {
+                    v.trim().parse::<usize>().ok()
+                } else {
+                    None
+                }
+            })
+        })
+        .unwrap_or(0);
+    let mut body = raw[header_end + 4..].to_vec();
+    while body.len() < content_length {
+        let n = s
+            .read(&mut chunk)
+            .map_err(|e| wrap(format!("http read body: {e}")))?;
+        if n == 0 {
+            break;
+        }
+        body.extend_from_slice(&chunk[..n]);
     }
+    serde_json::from_slice(&body).map_err(|e| wrap(format!("bad JSON from {path}: {e}")))
 }
 
 pub(crate) fn dur(timeout_ms: Option<u64>, default: u64) -> Duration {
@@ -163,64 +200,6 @@ pub(crate) fn validate_property(property: &str) -> Result<(), CtlError> {
     }
 }
 
-/// Runtime.evaluate;脚本约定返回 JSON 字符串(内部脚本,非用户表达式)。
-pub(crate) fn eval_json(
-    conn: &Connection,
-    cdp_session: &str,
-    script: &str,
-    context_id: Option<u64>,
-    timeout: Duration,
-) -> Result<Value, CtlError> {
-    let mut params = json!({ "expression": script, "returnByValue": true, "awaitPromise": true });
-    if let Some(ctx) = context_id {
-        params["contextId"] = json!(ctx);
-    }
-    let res = conn
-        .call("Runtime.evaluate", params, Some(cdp_session), timeout)
-        .map_err(map_cdp)?;
-    if let Some(exc) = res.get("exceptionDetails") {
-        let text = exc
-            .get("text")
-            .and_then(Value::as_str)
-            .unwrap_or("(no text)");
-        return Err(CtlError::with_evidence(
-            ErrorCode::Internal,
-            format!("page script raised: {text}"),
-            json!({ "exception": text }),
-        ));
-    }
-    let raw = match res.pointer("/result/value").and_then(Value::as_str) {
-        Some(s) => s.to_string(),
-        None => return Err(CtlError::internal("page script returned no value")),
-    };
-    serde_json::from_str(&raw)
-        .map_err(|_| CtlError::internal("page script returned non-JSON payload"))
-}
-
-pub(crate) fn connect_browser(session: &BrowserSession) -> Result<Connection, CtlError> {
-    let url = format!(
-        "ws://127.0.0.1:{}{}",
-        session.devtools_port, session.browser_ws_path
-    );
-    Connection::connect(&url).map_err(map_cdp)
-}
-
-/// --target 寻址解析(2026-10-13 spec,扩展弹层写链):None = 会话绑 tab
-/// (既有语义);Some = 覆盖目标(popup/其他 tab 的 CDP target id)。
-/// 覆盖时绑定重核与守卫弹层门全部落在覆盖目标上——写护栏不因寻址放宽。
-pub(crate) fn effective_target<'a>(
-    record: &'a BrowserSession,
-    target: Option<&'a str>,
-) -> Result<&'a str, CtlError> {
-    match target {
-        None => Ok(&record.target_id),
-        Some(id) => {
-            validate_target_shape(id)?;
-            Ok(id)
-        }
-    }
-}
-
 /// --target 形状校验(早于会话 load,坏参数不触达会话文件——netlog 同序)。
 pub(crate) fn validate_target_shape(id: &str) -> Result<(), CtlError> {
     if id.is_empty() || id.len() > 128 || !id.bytes().all(|b| b.is_ascii_alphanumeric()) {
@@ -229,119 +208,6 @@ pub(crate) fn validate_target_shape(id: &str) -> Result<(), CtlError> {
         ));
     }
     Ok(())
-}
-
-pub(crate) fn attach_target(
-    conn: &Connection,
-    target_id: &str,
-    timeout: Duration,
-) -> Result<String, CtlError> {
-    let res = conn
-        .call(
-            "Target.attachToTarget",
-            json!({ "targetId": target_id, "flatten": true }),
-            None,
-            timeout,
-        )
-        .map_err(|e| {
-            // 目标不存在(target 已关闭/弹窗已收起)是环境态不是内部故障:
-            // 归 NOT_FOUND 与 verify_target_alive 同判(死 id 实测
-            // "No target with given id found",2026-10-13)
-            if e.code == "CDP_ERROR" && e.message.contains("No target with given id") {
-                CtlError::with_evidence(
-                    ErrorCode::NotFound,
-                    format!(
-                        "target no longer exists (popup closed or tab gone); \
-                         re-enumerate with browser-targets: {e}"
-                    ),
-                    json!({ "target_id": target_id }),
-                )
-            } else {
-                map_cdp(e)
-            }
-        })?;
-    res.get("sessionId")
-        .and_then(Value::as_str)
-        .map(str::to_string)
-        .ok_or_else(|| CtlError::internal("attachToTarget returned no sessionId"))
-}
-
-/// 绑定重核:target 必须仍存在(导航竞态防护的第一道闸,docs/72 §6)。
-pub(crate) fn verify_target_alive(
-    conn: &Connection,
-    target_id: &str,
-    timeout: Duration,
-) -> Result<(), CtlError> {
-    let res = conn.call(
-        "Target.getTargetInfo",
-        json!({ "targetId": target_id }),
-        None,
-        timeout,
-    );
-    match res {
-        Ok(_) => Ok(()),
-        Err(e) => Err(CtlError::with_evidence(
-            ErrorCode::NotFound,
-            format!(
-                "bound target no longer exists (new tab took over or browser restarted); \
-                 re-run browser-navigate or browser-launch: {e}"
-            ),
-            json!({ "target_id": target_id }),
-        )),
-    }
-}
-
-/// 跨源 iframe 定位:主 frame 的首个子 frame + 其执行上下文。
-/// headless 未启用站点隔离时 iframe 无独立 target,上下文路线是唯一正路(docs/72 §10)。
-fn iframe_context(
-    conn: &Connection,
-    cdp_session: &str,
-    timeout: Duration,
-) -> Result<(String, u64), CtlError> {
-    let tree = conn
-        .call("Page.getFrameTree", json!({}), Some(cdp_session), timeout)
-        .map_err(map_cdp)?;
-    let children = tree
-        .pointer("/frameTree/childFrames")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    let child_id = children
-        .iter()
-        .find_map(|f| f.pointer("/frame/id").and_then(Value::as_str))
-        .ok_or_else(|| {
-            CtlError::new(
-                ErrorCode::NotFound,
-                "page has no child iframe to address (--iframe is not applicable here)",
-            )
-        })?
-        .to_string();
-    // Runtime.enable 会重放既有上下文的 executionContextCreated 事件
-    conn.call("Runtime.enable", json!({}), Some(cdp_session), timeout)
-        .map_err(map_cdp)?;
-    let deadline = Instant::now() + timeout;
-    loop {
-        for e in conn.drain_events() {
-            if e.method != "Runtime.executionContextCreated" {
-                continue;
-            }
-            let frame_ok = e
-                .params
-                .pointer("/context/auxData/frameId")
-                .and_then(Value::as_str)
-                .is_some_and(|id| id == child_id);
-            if frame_ok && let Some(ctx) = e.params.pointer("/context/id").and_then(Value::as_u64) {
-                return Ok((child_id.clone(), ctx));
-            }
-        }
-        if Instant::now() >= deadline {
-            return Err(CtlError::new(
-                ErrorCode::NotFound,
-                format!("no execution context observed for iframe {child_id} within timeout"),
-            ));
-        }
-        std::thread::sleep(Duration::from_millis(20));
-    }
 }
 
 /// 唯一匹配硬判定:0 → NOT_FOUND,>1 → AMBIGUOUS(带 matches 证据)。
@@ -527,9 +393,8 @@ pub fn launch(paths: &Paths, spec: LaunchSpec) -> Result<Value, CtlError> {
         }
     };
 
-    let version = cdp::http_get_json(devtools.0, "/json/version", timeout).map_err(|e| {
+    let version = http_get_json(devtools.0, "/json/version", timeout).inspect_err(|_| {
         reclaim_on_failure(&mut child, &mode, &profile_dir);
-        map_cdp(e)
     })?;
     let browser_version = version
         .get("Browser")
@@ -545,22 +410,44 @@ pub fn launch(paths: &Paths, spec: LaunchSpec) -> Result<Value, CtlError> {
             CtlError::internal("devtools /json/version returned no browser websocket url")
         })?;
 
-    let conn = Connection::connect(&format!("ws://127.0.0.1:{}{}", devtools.0, browser_ws_path))
-        .map_err(|e| {
-            reclaim_on_failure(&mut child, &mode, &profile_dir);
-            map_cdp(e)
-        })?;
-    let created = conn
-        .call("Target.createTarget", json!({ "url": url }), None, timeout)
-        .map_err(|e| {
-            reclaim_on_failure(&mut child, &mode, &profile_dir);
-            map_cdp(e)
-        })?;
-    let target_id = created
-        .get("targetId")
-        .and_then(Value::as_str)
-        .ok_or_else(|| CtlError::internal("createTarget returned no targetId"))?
-        .to_string();
+    // 骨干接管 launch 尾段(Phase 2):connect + new_page 替代手写
+    // createTarget/attachToTarget;浏览器进程治理不变(spawn/端口等待/回收)
+    let url_for_page = url.clone();
+    let ws_path_for_lane = browser_ws_path.clone();
+    let (target_id,) = bridge::block_on(
+        async move {
+            let (browser, mut handler) = chromiumoxide::Browser::connect(format!(
+                "ws://127.0.0.1:{}{}",
+                devtools.0, ws_path_for_lane
+            ))
+            .await
+            .map_err(|e| format!("connect: {e}"))?;
+            {
+                use futures::StreamExt;
+                let _pump = tokio::spawn(async move {
+                    while let Some(item) = handler.next().await {
+                        if item.is_err() {
+                            break;
+                        }
+                    }
+                });
+            }
+            let page = browser
+                .new_page(url_for_page.as_str())
+                .await
+                .map_err(|e| format!("createTarget: {e}"))?;
+            Ok::<_, String>((page.target_id().as_ref().to_string(),))
+        },
+        timeout,
+    )
+    .map_err(|e| {
+        reclaim_on_failure(&mut child, &mode, &profile_dir);
+        CtlError::internal(format!("deep-lane launch tail failed: {e}"))
+    })?
+    .map_err(|msg| {
+        reclaim_on_failure(&mut child, &mode, &profile_dir);
+        CtlError::internal(format!("deep-lane launch tail failed: {msg}"))
+    })?;
 
     let record = BrowserSession {
         version: session::SESSION_VERSION,
@@ -597,7 +484,7 @@ pub fn launch(paths: &Paths, spec: LaunchSpec) -> Result<Value, CtlError> {
 fn reuse_persistent_session(
     paths: &Paths,
     name: &str,
-    timeout: Duration,
+    _timeout: Duration,
 ) -> Result<Option<Value>, CtlError> {
     let sessions = list(paths)?;
     let Some(arr) = sessions.get("sessions").and_then(Value::as_array) else {
@@ -620,9 +507,12 @@ fn reuse_persistent_session(
             continue;
         };
         let alive = (|| {
-            let conn = connect_browser(&record).ok()?;
-            attach_target(&conn, &record.target_id, timeout).ok()?;
-            verify_target_alive(&conn, &record.target_id, timeout).ok()
+            let ws = format!(
+                "ws://127.0.0.1:{}{}",
+                record.devtools_port, record.browser_ws_path
+            );
+            bridge::connect(&ws, Duration::from_secs(3)).ok()?;
+            Some(())
         })()
         .is_some();
         if alive {
@@ -660,7 +550,7 @@ fn wait_devtools_port(profile_dir: &Path, timeout: Duration) -> Option<(u16, Str
             if let Some(port) = lines.next().and_then(|l| l.trim().parse::<u16>().ok()) {
                 // 文件出现 ≠ 端点就绪:陈旧文件(上次退出残留)与竞态启动都会假阳,
                 // 必须以 /json/version 实答为准
-                if cdp::http_get_json(port, "/json/version", Duration::from_millis(1000)).is_ok() {
+                if http_get_json(port, "/json/version", Duration::from_millis(1000)).is_ok() {
                     let ws_path = lines.next().unwrap_or("").trim().to_string();
                     return Some((port, ws_path));
                 }
@@ -685,65 +575,13 @@ pub fn navigate(
     let timeout = dur(timeout_ms, OP_DEFAULT_TIMEOUT_MS);
     let record = session::load(paths, session_id)?;
     let mut action = declare_action("browser-navigate", &format!("cdp:{session_id}"));
-    let conn = connect_browser(&record)?;
-    let cdp_session = attach_target(&conn, &record.target_id, timeout)?;
-    verify_target_alive(&conn, &record.target_id, timeout)?;
+    let lane = bridge::open_lane(&record, None, timeout)?;
     action.executing();
-    conn.call("Page.enable", json!({}), Some(&cdp_session), timeout)
-        .map_err(map_cdp)?;
-    let nav = conn
-        .call(
-            "Page.navigate",
-            json!({ "url": url }),
-            Some(&cdp_session),
-            timeout,
-        )
-        .map_err(map_cdp)?;
-    // 网络级加载失败必须显式失败:chrome-error 错误页不是导航成功
-    // (2026-10-02 x.com 场景实证:DoH 绕过 TUN fake-ip 致连接重置曾表现为静默 ok)
-    if let Some(net_error) = nav.get("errorText").and_then(Value::as_str)
-        && !net_error.is_empty()
-    {
-        return Err(CtlError::with_evidence(
-            ErrorCode::Internal,
-            format!("page load failed at network level: {net_error}"),
-            json!({ "url": url, "net_error": net_error }),
-        ));
-    }
-    let frame_id = nav
-        .get("frameId")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_string();
-    // 导航事件经读线程可达是竞态判定的前提(spike 实证 10ms 级)
-    let deadline = Instant::now() + timeout;
-    let mut navigated = false;
-    loop {
-        for e in conn.drain_events() {
-            if e.method == "Page.frameNavigated"
-                && e.session.as_deref() == Some(cdp_session.as_str())
-                && e.params["frame"]["id"].as_str() == Some(frame_id.as_str())
-            {
-                navigated = true;
-            }
-        }
-        if navigated || Instant::now() >= deadline {
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(20));
-    }
-    if !navigated {
-        return Err(CtlError::new(
-            ErrorCode::Timeout,
-            format!(
-                "Page.frameNavigated for frame {frame_id} not observed within {}ms",
-                timeout.as_millis()
-            ),
-        ));
-    }
-    let info = eval_json(
-        &conn,
-        &cdp_session,
+    // 骨干接管(Phase 2):订阅先于派发是事件流语义的不变序
+    // (net_error 映射与错误码语义在 bridge::navigate_and_wait 内保持原样)
+    let (frame_id,) = bridge::navigate_and_wait(&lane.page, url, timeout)?;
+    let info = bridge::eval_json(
+        &lane.page,
         "(function(){return JSON.stringify({url:location.href,title:document.title})})()",
         None,
         timeout,
@@ -793,8 +631,7 @@ pub struct ReadSpec<'a> {
 /// 实测命中数与期望下界(诚实证据:差多少、等多久)。轮询共用药洞超时
 /// 预算(与单次读同界,不另开)。
 fn wait_for_matches(
-    conn: &Connection,
-    cdp_session: &str,
+    page: &chromiumoxide::Page,
     script: &str,
     context_id: Option<u64>,
     timeout: Duration,
@@ -819,7 +656,7 @@ fn wait_for_matches(
             ));
         }
         std::thread::sleep(Duration::from_millis(500));
-        current = eval_json(conn, cdp_session, script, context_id, timeout)?;
+        current = bridge::eval_json(page, script, context_id, timeout)?;
         if matches_of(&current) >= min {
             return Ok(current);
         }
@@ -848,12 +685,9 @@ pub fn read(paths: &Paths, spec: ReadSpec<'_>) -> Result<Value, CtlError> {
     }
     let timeout = dur(timeout_ms, OP_DEFAULT_TIMEOUT_MS);
     let record = session::load(paths, session_id)?;
-    let conn = connect_browser(&record)?;
-    let target_id = effective_target(&record, target)?;
-    let cdp_session = attach_target(&conn, target_id, timeout)?;
-    verify_target_alive(&conn, target_id, timeout)?;
+    let lane = bridge::open_lane(&record, target, timeout)?;
     let context_id = if iframe {
-        Some(iframe_context(&conn, &cdp_session, timeout)?.1)
+        Some(bridge::find_iframe_context(&lane.page, timeout)?.1)
     } else {
         None
     };
@@ -874,17 +708,9 @@ pub fn read(paths: &Paths, spec: ReadSpec<'_>) -> Result<Value, CtlError> {
         } else {
             locate_all_script(kind, value, Some(property))
         };
-        let mut located = eval_json(&conn, &cdp_session, &script, context_id, timeout)?;
+        let mut located = bridge::eval_json(&lane.page, &script, context_id, timeout)?;
         if let Some(min) = wait_for {
-            located = wait_for_matches(
-                &conn,
-                &cdp_session,
-                &script,
-                context_id,
-                timeout,
-                min,
-                located,
-            )?;
+            located = wait_for_matches(&lane.page, &script, context_id, timeout, min, located)?;
         }
         let total = located
             .get("matches")
@@ -941,17 +767,9 @@ pub fn read(paths: &Paths, spec: ReadSpec<'_>) -> Result<Value, CtlError> {
     } else {
         locate_script(kind, value, Some(property))
     };
-    let mut located = eval_json(&conn, &cdp_session, &script, context_id, timeout)?;
+    let mut located = bridge::eval_json(&lane.page, &script, context_id, timeout)?;
     if let Some(min) = wait_for {
-        located = wait_for_matches(
-            &conn,
-            &cdp_session,
-            &script,
-            context_id,
-            timeout,
-            min,
-            located,
-        )?;
+        located = wait_for_matches(&lane.page, &script, context_id, timeout, min, located)?;
     }
     require_unique_match(&located, kind, value)?;
     // --deep 脚本恒返回枚举形态:唯一命中取 elements[0] 作载荷
@@ -1009,24 +827,20 @@ pub fn click(
     }
     let timeout = dur(timeout_ms, OP_DEFAULT_TIMEOUT_MS);
     let record = session::load(paths, session_id)?;
-    let conn = connect_browser(&record)?;
-    let target_id = effective_target(&record, target)?;
-    let cdp_session = attach_target(&conn, target_id, timeout)?;
-    verify_target_alive(&conn, target_id, timeout)?;
+    let lane = bridge::open_lane(&record, target, timeout)?;
     let context_id = if iframe {
-        Some(iframe_context(&conn, &cdp_session, timeout)?.1)
+        Some(bridge::find_iframe_context(&lane.page, timeout)?.1)
     } else {
         None
     };
     let mut action = declare_action("browser-click", &format!("cdp:{session_id}"));
     action.executing();
     if !allow_popups {
-        pre_action_popup_gate(&conn, &cdp_session, timeout)?;
+        pre_action_popup_gate(&lane.page, timeout)?;
     }
 
-    let located = eval_json(
-        &conn,
-        &cdp_session,
+    let located = bridge::eval_json(
+        &lane.page,
         &locate_script(kind, value, None),
         context_id,
         timeout,
@@ -1048,7 +862,7 @@ pub fn click(
              it.snapshotItem(0).click();return JSON.stringify({{clicked:true}});}})()"
         ),
     };
-    let clicked = eval_json(&conn, &cdp_session, &click_script, context_id, timeout)?;
+    let clicked = bridge::eval_json(&lane.page, &click_script, context_id, timeout)?;
     if clicked.get("clicked").and_then(Value::as_bool) != Some(true) {
         return Err(CtlError::with_evidence(
             ErrorCode::NotActionable,
@@ -1059,9 +873,8 @@ pub fn click(
     }
 
     // 读回:同选择器重定位取文本
-    let after = eval_json(
-        &conn,
-        &cdp_session,
+    let after = bridge::eval_json(
+        &lane.page,
         &locate_script(kind, value, None),
         context_id,
         timeout,
@@ -1072,9 +885,8 @@ pub fn click(
             .and_then(Value::as_str)
             .unwrap_or_default(),
     );
-    let state = eval_json(
-        &conn,
-        &cdp_session,
+    let state = bridge::eval_json(
+        &lane.page,
         "(function(){return JSON.stringify({url:location.href})})()",
         None,
         timeout,
@@ -1139,23 +951,19 @@ pub fn type_text(
     actl_core::stop::check_current()?;
     let timeout = dur(timeout_ms, OP_DEFAULT_TIMEOUT_MS);
     let record = session::load(paths, session_id)?;
-    let conn = connect_browser(&record)?;
-    let target_id = effective_target(&record, target)?;
-    let cdp_session = attach_target(&conn, target_id, timeout)?;
-    verify_target_alive(&conn, target_id, timeout)?;
+    let lane = bridge::open_lane(&record, target, timeout)?;
     let context_id = if iframe {
-        Some(iframe_context(&conn, &cdp_session, timeout)?.1)
+        Some(bridge::find_iframe_context(&lane.page, timeout)?.1)
     } else {
         None
     };
     let mut action = declare_action("browser-type", &format!("cdp:{session_id}"));
     action.executing();
     if !allow_popups {
-        pre_action_popup_gate(&conn, &cdp_session, timeout)?;
+        pre_action_popup_gate(&lane.page, timeout)?;
     }
-    let located = eval_json(
-        &conn,
-        &cdp_session,
+    let located = bridge::eval_json(
+        &lane.page,
         &locate_script(kind, value, Some("value")),
         context_id,
         timeout,
@@ -1193,7 +1001,7 @@ pub fn type_text(
          e.dispatchEvent(new Event('change',{{bubbles:true}}));\
          return JSON.stringify({{typed:true,value:String(e.value)}});}})()"
     );
-    let typed = eval_json(&conn, &cdp_session, &script, context_id, timeout)?;
+    let typed = bridge::eval_json(&lane.page, &script, context_id, timeout)?;
     if typed.get("typed").and_then(Value::as_bool) != Some(true) {
         return Err(CtlError::with_evidence(
             ErrorCode::NotActionable,
@@ -1232,16 +1040,28 @@ pub fn close(paths: &Paths, session_id: &str, timeout_ms: Option<u64>) -> Result
     action.executing();
 
     let mut already_gone = false;
-    match connect_browser(&record) {
-        Ok(conn) => {
-            conn.call("Browser.close", json!({}), None, timeout)
-                .map_err(map_cdp)?;
-            // 等连接断开(浏览器侧关闭会终结 websocket)
-            let deadline = Instant::now() + timeout;
-            while conn.is_connected() && Instant::now() < deadline {
-                std::thread::sleep(Duration::from_millis(50));
-            }
-            // 端口探测兜底:连接断开但端口仍可达视为未收尾
+    let ws_url = format!(
+        "ws://127.0.0.1:{}{}",
+        record.devtools_port, record.browser_ws_path
+    );
+    match bridge::connect(&ws_url, Duration::from_secs(5)) {
+        Ok(browser) => {
+            bridge::block_on(
+                async move {
+                    let mut browser = browser;
+                    browser.close().await.map_err(|e| format!("Browser.close: {e}"))
+                },
+                timeout,
+            )?
+            .map_err(|msg| {
+                CtlError::with_evidence(
+                    ErrorCode::Internal,
+                    format!("Browser.close dispatch failed: {msg}"),
+                    json!({ "session_id": session_id, "devtools_port": record.devtools_port }),
+                )
+            })?;
+            // 端口探测兜底:端点仍可达视为未收尾(骨干连接无 is_connected 可查)
+            std::thread::sleep(Duration::from_millis(300));
             let port_dead = !TcpStream::connect_timeout(
                 &format!("127.0.0.1:{}", record.devtools_port)
                     .parse()
@@ -1249,21 +1069,19 @@ pub fn close(paths: &Paths, session_id: &str, timeout_ms: Option<u64>) -> Result
                 Duration::from_millis(500),
             )
             .is_ok();
-            if !conn.is_connected() && port_dead {
+            if port_dead {
                 finish_close(paths, &record)
             } else {
                 Err(CtlError::with_evidence(
                     ErrorCode::Internal,
-                    "Browser.close acknowledged but the endpoint still answers; \
-                     session kept for retry",
+                    "Browser.close acknowledged but the endpoint still answers;                      session kept for retry",
                     json!({ "session_id": session_id, "devtools_port": record.devtools_port }),
                 ))
             }
         }
-        Err(e) => {
+        Err(_) => {
             // 端点本就不可达:幂等关闭(浏览器已死),如实标注
             already_gone = true;
-            let _ = e;
             finish_close(paths, &record)
         }
     }

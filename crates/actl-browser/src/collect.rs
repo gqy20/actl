@@ -3,9 +3,10 @@
 //! 会话/求值/校验等共享部件经 ops 的 pub(crate) 面复用。
 
 use crate::SelectorKind;
+use crate::bridge;
 use crate::ops::{
-    OP_DEFAULT_TIMEOUT_MS, attach_target, connect_browser, declare_action, dur, eval_json,
-    protocol, truncate_text, validate_property, validate_selector, verify_target_alive,
+    OP_DEFAULT_TIMEOUT_MS, declare_action, dur, protocol, truncate_text, validate_property,
+    validate_selector,
 };
 use crate::scripts::{locate_all_script, locate_deep_script, scroll_page_script};
 use crate::session::{self, Paths};
@@ -71,9 +72,7 @@ pub fn collect(paths: &Paths, spec: CollectSpec<'_>) -> Result<Value, CtlError> 
     }
     let timeout = dur(timeout_ms, OP_DEFAULT_TIMEOUT_MS);
     let record = session::load(paths, session_id)?;
-    let conn = connect_browser(&record)?;
-    let cdp_session = attach_target(&conn, &record.target_id, timeout)?;
-    verify_target_alive(&conn, &record.target_id, timeout)?;
+    let lane = bridge::open_lane(&record, None, timeout)?;
     let script = if deep {
         locate_deep_script(kind, value, Some(property))
     } else {
@@ -92,7 +91,7 @@ pub fn collect(paths: &Paths, spec: CollectSpec<'_>) -> Result<Value, CtlError> 
     for round in 1..=max_rounds {
         actl_core::stop::check_current()?;
         actl_core::watchdog::reset();
-        let located = eval_json(&conn, &cdp_session, &script, None, timeout)?;
+        let located = bridge::eval_json(&lane.page, &script, None, timeout)?;
         let elements = located
             .get("elements")
             .and_then(Value::as_array)
@@ -123,7 +122,7 @@ pub fn collect(paths: &Paths, spec: CollectSpec<'_>) -> Result<Value, CtlError> 
         // 分段可能在更下方(B 站视频页评论区分页实证:播放器占 2-3 屏,纯
         // 空连两轮会在抵达评论区前提前收敛);到底后完成权威仍是空连两轮
         // 差分(scrollHeight 随加载增长,触底后新内容出现继续滚)。
-        let at_bottom = match eval_json(&conn, &cdp_session, &scroll_page_script(), None, timeout) {
+        let at_bottom = match bridge::eval_json(&lane.page, &scroll_page_script(), None, timeout) {
             Ok(scrolled) => {
                 last_scroll = Some(scrolled.clone());
                 scrolled
