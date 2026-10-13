@@ -195,6 +195,9 @@ fn property_data(target: &str, info: actl_uia::PropertyInfo) -> Value {
     if let Some(v) = info.offscreen {
         props.insert("offscreen".into(), json!(v));
     }
+    if let Some(v) = info.enabled {
+        props.insert("enabled".into(), json!(v));
+    }
     if let Some(v) = &info.value {
         props.insert("value".into(), json!(v));
     }
@@ -551,11 +554,11 @@ pub(crate) fn batch_cmd(json_str: &str) -> Result<CommandOutput, CtlError> {
     let app_patterns: Vec<String> = cmds
         .iter()
         .filter_map(|l| {
-            let toks: Vec<&str> = l.split_whitespace().collect();
-            toks.iter().position(|t| *t == "--app").and_then(|p| {
-                toks.get(p + 1)
-                    .map(|v| v.trim_matches(|c| c == '"' || c == '\'').to_string())
-            })
+            // 与步骤解析同源分词:引号里的含空格 --app 值同样要提取
+            let toks = split_command_tokens(l).ok()?;
+            toks.iter()
+                .position(|t| *t == "--app")
+                .and_then(|p| toks.get(p + 1).cloned())
         })
         .collect();
     for (i, line) in cmds.iter().enumerate() {
@@ -586,12 +589,14 @@ pub(crate) fn batch_cmd(json_str: &str) -> Result<CommandOutput, CtlError> {
         };
         // 步前采样一次(launch 后自启窗未成形的竞态由失败时刻补采样兜住)
         let mut blocked_by = fg_blocked();
-        let tokens: Vec<&str> = line.split_whitespace().collect();
+        let tokens = split_command_tokens(line)
+            .map_err(|e| CtlError::protocol(format!("batch[{i}]: {e}")))?;
         if tokens.is_empty() {
             return Err(CtlError::protocol(format!("batch[{i}] is empty")));
         }
-        let sub = Cli::try_parse_from(std::iter::once("actl").chain(tokens.iter().copied()))
-            .map_err(|e| CtlError::protocol(format!("batch[{i}] {line:?}: {e}")))?;
+        let sub =
+            Cli::try_parse_from(std::iter::once("actl".to_string()).chain(tokens.iter().cloned()))
+                .map_err(|e| CtlError::protocol(format!("batch[{i}] {line:?}: {e}")))?;
         if matches!(sub.command, Command::Batch { .. } | Command::Flow(_)) {
             return Err(CtlError::protocol(
                 "batch cannot nest batch or flow commands",
@@ -605,15 +610,14 @@ pub(crate) fn batch_cmd(json_str: &str) -> Result<CommandOutput, CtlError> {
         );
         let step_started = Instant::now();
         match dispatch(&sub.command) {
-            Ok(_) => {
-                let mut entry = json!({
-                    "i": i, "cmd": line, "ok": true,
-                    "duration_ms": step_started.elapsed().as_millis() as u64,
-                });
-                if let Some(b) = &blocked_by {
-                    entry["blocked_by"] = b.clone();
-                }
-                steps.push(entry);
+            Ok(out) => {
+                steps.push(ok_step(
+                    i,
+                    line,
+                    blocked_by.as_ref(),
+                    step_started.elapsed().as_millis() as u64,
+                    &out,
+                ));
             }
             Err(err) => {
                 // 失败时刻补采样:launch 竞态/慢弹窗在步执行中才成形,
@@ -621,24 +625,25 @@ pub(crate) fn batch_cmd(json_str: &str) -> Result<CommandOutput, CtlError> {
                 if blocked_by.is_none() {
                     blocked_by = fg_blocked();
                 }
-                let mut entry = json!({
-                    "i": i, "cmd": line, "ok": false,
-                    "duration_ms": step_started.elapsed().as_millis() as u64,
-                    "error": { "code": err.code, "message": err.message },
-                });
-                if let Some(b) = &blocked_by {
-                    entry["blocked_by"] = b.clone();
-                }
-                steps.push(entry);
+                steps.push(err_step(
+                    i,
+                    line,
+                    blocked_by.as_ref(),
+                    step_started.elapsed().as_millis() as u64,
+                    &err,
+                ));
                 let mut evidence = json!({"executed": executed, "steps": steps});
                 attach_created_windows(&mut evidence, windows_created_since(&baseline));
-                return Err(CtlError::with_evidence(
+                return Err(CtlError::with_evidence_hint(
                     err.code,
                     format!(
                         "batch[{i}] {:?} failed after {executed} ok: {}",
                         line, err.message
                     ),
                     evidence,
+                    // 顶层错误继承首错的精确恢复路径:只读顶层 envelope 的
+                    // 调用方与单命令调用拿到同一 hint,不退化到错误码缺省
+                    err.effective_hint(),
                 ));
             }
         }
@@ -660,6 +665,99 @@ fn batch_window_matches(pattern: &str, title: &str, hwnd: isize) -> bool {
         Some(raw) => actl_uia::parse_hwnd(raw).is_ok_and(|target| target == hwnd),
         None => title.contains(pattern),
     }
+}
+
+/// batch 步命令分词:支持双/单引号包裹含空格的值(shell 语义子集)。
+/// 反斜杠不是转义符——Windows 路径按字面保留(实证:`"E:\dir\file"` 在
+/// POSIX 转义下会被吃成 `E:dirfile`,残渣参数曾实际产出)。未闭合引号
+/// 拒绝(PROTOCOL),不静默吞掉半开的值。
+fn split_command_tokens(line: &str) -> Result<Vec<String>, String> {
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+    let mut quote: Option<char> = None;
+    let mut started = false;
+    for ch in line.chars() {
+        match quote {
+            Some(q) if ch == q => quote = None,
+            Some(_) => current.push(ch),
+            None if (ch == '"' || ch == '\'') && !started => {
+                // 行首(或空白后)的引号开启引用段;值中间的引号按字面保留
+                quote = Some(ch);
+                started = true;
+            }
+            None if ch.is_whitespace() => {
+                if started {
+                    tokens.push(std::mem::take(&mut current));
+                    started = false;
+                }
+            }
+            None => {
+                current.push(ch);
+                started = true;
+            }
+        }
+    }
+    if let Some(q) = quote {
+        return Err(format!("unterminated quote {q} in command"));
+    }
+    if started {
+        tokens.push(current);
+    }
+    Ok(tokens)
+}
+
+/// 成功步条目:data 与 snapshot_id 进 steps[](2026-10-13 契约修复:
+/// 读类命令在 batch 中曾丢值,9 字段读取误判全空引发连锁盲写;
+/// snapshot 类步骤缺 snapshot_id 则后续步无 ref 可绑)。
+fn ok_step(
+    i: usize,
+    cmd: &str,
+    blocked_by: Option<&Value>,
+    duration_ms: u64,
+    out: &CommandOutput,
+) -> Value {
+    let mut entry = json!({
+        "i": i, "cmd": cmd, "ok": true,
+        "duration_ms": duration_ms,
+        "data": out.data,
+    });
+    if let Some(id) = &out.snapshot_id {
+        entry["snapshot_id"] = json!(id);
+    }
+    if let Some(b) = blocked_by {
+        entry["blocked_by"] = b.clone();
+    }
+    entry
+}
+
+/// 失败步条目:error 与顶层 ErrorBody 同形(code/message/hint/evidence)——
+/// 同一错误在单调用与 batch 步里形状一致,失败处置协议(先读 evidence/hint)
+/// 在 batch 中不再失效(2026-10-13 实证:target_disabled 的 evidence 丢失
+/// 致使误诊为身份漂移)。hint 走 effective_hint 单一渲染源。
+fn err_step(
+    i: usize,
+    cmd: &str,
+    blocked_by: Option<&Value>,
+    duration_ms: u64,
+    err: &CtlError,
+) -> Value {
+    let mut error = json!({
+        "code": err.code,
+        "message": err.message,
+        "hint": err.effective_hint(),
+    });
+    if let Some(ev) = &err.evidence {
+        error["evidence"] = ev.clone();
+    }
+    let mut entry = json!({
+        "i": i, "cmd": cmd, "ok": false,
+        "duration_ms": duration_ms,
+        "error": error,
+    });
+    if let Some(b) = blocked_by {
+        entry["blocked_by"] = b.clone();
+    }
+    entry
 }
 
 fn attach_created_windows(data: &mut Value, result: Result<Value, CtlError>) {
@@ -901,6 +999,91 @@ mod window_baseline_tests {
     }
 }
 #[cfg(test)]
+mod batch_step_tests {
+    use super::*;
+
+    #[test]
+    fn split_command_tokens_keeps_quoted_spaces_and_literal_backslashes() {
+        let toks = split_command_tokens(
+            r#"set-value id:address1 "350 5th Avenue" --verify-value "350 5th Avenue" --app hwnd:42"#,
+        )
+        .unwrap();
+        assert_eq!(
+            toks,
+            vec![
+                "set-value",
+                "id:address1",
+                "350 5th Avenue",
+                "--verify-value",
+                "350 5th Avenue",
+                "--app",
+                "hwnd:42",
+            ]
+        );
+        // Windows 路径按字面保留:反斜杠不是转义符
+        let path = split_command_tokens(r#"type id:line "E:\dir\file.txt" --app Notepad"#).unwrap();
+        assert_eq!(path[2], r"E:\dir\file.txt");
+        // 裸值含空格照旧按空白切分(旧行为)
+        assert_eq!(
+            split_command_tokens("status --app Notepad").unwrap(),
+            vec!["status", "--app", "Notepad"]
+        );
+        // 值中间的引号按字面保留,不开启引用段
+        assert_eq!(
+            split_command_tokens("set-value id:x it\"s --app Notepad").unwrap()[2],
+            "it\"s"
+        );
+        // 单引号同语义
+        assert_eq!(
+            split_command_tokens("set-value id:x 'New York' --app Notepad").unwrap()[2],
+            "New York"
+        );
+        // 未闭合引号拒绝,不静默截断
+        assert!(split_command_tokens(r#"set-value id:x "open --app Notepad"#).is_err());
+    }
+
+    #[test]
+    fn ok_step_carries_data_and_snapshot_id() {
+        let out = CommandOutput {
+            data: json!({"version": "0.2.3"}),
+            snapshot_id: Some("s123".into()),
+        };
+        let entry = ok_step(0, "snapshot", None, 5, &out);
+        assert_eq!(entry["ok"], true);
+        assert_eq!(entry["data"]["version"], "0.2.3");
+        assert_eq!(entry["snapshot_id"], "s123");
+        let no_snap = CommandOutput {
+            data: Value::Null,
+            snapshot_id: None,
+        };
+        let entry = ok_step(1, "status", Some(&json!({"title": "X"})), 3, &no_snap);
+        assert!(entry.get("snapshot_id").is_none());
+        assert_eq!(entry["blocked_by"]["title"], "X");
+    }
+
+    #[test]
+    fn err_step_preserves_first_error_evidence_and_hint() {
+        let err = CtlError::with_evidence_hint(
+            actl_core::ErrorCode::NotActionable,
+            "target is disabled at action time",
+            json!({"reason": "target_disabled", "enabled": false}),
+            "pick a writable target",
+        );
+        let entry = err_step(0, "set-value id:firstName X", None, 9, &err);
+        assert_eq!(entry["ok"], false);
+        assert_eq!(entry["error"]["code"], "NOT_ACTIONABLE");
+        assert_eq!(entry["error"]["evidence"]["reason"], "target_disabled");
+        assert_eq!(entry["error"]["hint"], "pick a writable target");
+        // 无 evidence 的错误只缺 evidence 字段;hint 恒在(与顶层信封一致)
+        let plain = err_step(1, "status", None, 1, &CtlError::protocol("bad"));
+        assert!(plain["error"].get("evidence").is_none());
+        assert_eq!(
+            plain["error"]["hint"],
+            actl_core::ErrorCode::Protocol.recovery_hint()
+        );
+    }
+}
+#[cfg(test)]
 mod property_contract_tests {
     use super::*;
     #[test]
@@ -927,6 +1110,7 @@ mod property_contract_tests {
                 role: String::new(),
                 automation_id: None,
                 offscreen: None,
+                enabled: None,
                 value: Some(String::new()),
                 value_via: Some("value-pattern"),
                 text: None,
@@ -949,6 +1133,7 @@ mod property_contract_tests {
                 role: String::new(),
                 automation_id: None,
                 offscreen: None,
+                enabled: Some(true),
                 value: None,
                 value_via: None,
                 text: None,
@@ -965,5 +1150,27 @@ mod property_contract_tests {
             data["properties"]["rect"],
             serde_json::json!({"x": 10, "y": 20, "width": 300, "height": 40})
         );
+    }
+    #[test]
+    fn enabled_serializes_into_properties_when_observed() {
+        let data = property_data(
+            "id:firstName",
+            actl_uia::PropertyInfo {
+                name: Some("First Name".into()),
+                role: "Edit".into(),
+                automation_id: None,
+                offscreen: Some(false),
+                enabled: Some(false),
+                value: Some("Qingyu".into()),
+                value_via: Some("value-pattern"),
+                text: None,
+                rect: None,
+                unsupported: Vec::new(),
+            },
+        );
+        assert_eq!(data["properties"]["enabled"], false);
+        assert_eq!(data["properties"]["offscreen"], false);
+        // None 保持省略语义:未观察不伪装缺席
+        assert!(data["properties"].get("text").is_none());
     }
 }

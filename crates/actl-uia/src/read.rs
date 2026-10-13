@@ -24,6 +24,7 @@ pub const PROPS: &[&str] = &[
     "role",
     "automation_id",
     "offscreen",
+    "enabled",
     "value",
     "text",
     "rect",
@@ -43,6 +44,9 @@ pub struct PropertyInfo {
     pub role: String,
     pub automation_id: Option<String>,
     pub offscreen: Option<bool>,
+    /// UIA IsEnabled(2026-10-13 补:门户预填锁定字段禁用态此前只在写动作
+    /// 失败后可见,`get --property enabled` 让写前判读成为只读一步)。
+    pub enabled: Option<bool>,
     pub value: Option<String>,
     /// value 的读取通道；仅 ValuePattern 不支持时回退 TextPattern。
     pub value_via: Option<&'static str>,
@@ -161,6 +165,15 @@ pub fn read_property(
                 loc.element
                     .is_offscreen()
                     .map_err(|e| crate::read_channel::failure("offscreen", e))?,
+            )
+        } else {
+            None
+        },
+        enabled: if want("enabled") {
+            Some(
+                loc.element
+                    .is_enabled()
+                    .map_err(|e| crate::read_channel::failure("enabled", e))?,
             )
         } else {
             None

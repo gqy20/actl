@@ -156,6 +156,18 @@ impl CtlError {
         }
     }
 
+    /// envelope hint 的唯一渲染源:显式覆盖 > handoff 阶段缺省 > 错误码缺省。
+    /// ErrorEnvelope 与 batch 步级 error 复用,同错误两处 hint 一致。
+    pub fn effective_hint(&self) -> String {
+        match &self.hint {
+            Some(h) => h.clone(),
+            None if self.evidence.as_ref().is_some_and(|e| e["stage"] == "handoff") => {
+                "wait for explicit user handoff; inspect partial results before retrying; never clear emergency stop automatically".to_owned()
+            }
+            None => self.code.recovery_hint().to_owned(),
+        }
+    }
+
     pub fn protocol(message: impl Into<String>) -> Self {
         Self::new(ErrorCode::Protocol, message)
     }
@@ -221,13 +233,7 @@ pub struct ErrorBody {
 
 impl ErrorEnvelope {
     pub fn new(command: impl Into<String>, err: &CtlError, duration_ms: u64) -> Self {
-        let hint = match &err.hint {
-            Some(h) => h.clone(),
-            None if err.evidence.as_ref().is_some_and(|e| e["stage"] == "handoff") => {
-                "wait for explicit user handoff; inspect partial results before retrying; never clear emergency stop automatically".to_owned()
-            }
-            None => err.code.recovery_hint().to_owned(),
-        };
+        let hint = err.effective_hint();
         Self {
             version: ENVELOPE_VERSION.to_owned(),
             ok: false,

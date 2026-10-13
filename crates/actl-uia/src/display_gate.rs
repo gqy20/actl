@@ -278,10 +278,11 @@ pub fn ensure() -> Result<actl_core::display::DisplayLease, CtlError> {
         }
         std::thread::sleep(Duration::from_millis(crate::timing().fast_poll_ms));
     }
-    Err(CtlError::with_evidence(
+    Err(CtlError::with_evidence_hint(
         ErrorCode::NotActionable,
         "display not ready; inspect evidence.reason; use a matching companion for version_mismatch; stop state was preserved",
         diagnostics(),
+        "for reason:version_mismatch stop then restart the companion with the same actl binary (`display-stop --reason <why>` then `display-start`) and verify `display-status` ready:true; a stopped companion only needs `display-start`; do not loop on restarts",
     ))
 }
 pub(crate) fn wait_presented(

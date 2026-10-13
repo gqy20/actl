@@ -310,7 +310,34 @@ fn batch_reports_per_step_results_and_durations() {
         assert_eq!(s["ok"], true, "step ok");
         assert!(s["duration_ms"].is_u64(), "step duration");
         assert!(s["cmd"].is_string(), "step cmd echo");
+        // 2026-10-13 契约修复:读类命令的值不再在 batch 中丢失(9 字段
+        // 读取误判全空曾引发连锁盲写)——steps[] 回传 data
+        assert!(s["data"].is_object(), "step carries envelope data");
     }
+}
+
+#[test]
+fn batch_quoted_values_parse_as_single_tokens() {
+    // 引号包裹的含空格值按单 token 解析("350 5th Avenue" 形态曾不可表达,
+    // 与"3+ 顺序调用必须走 batch"纪律冲突):窗口不存在 → NOT_FOUND;
+    // 若按空白撕裂,clap 会答 PROTOCOL(参数错乱),据此区分。
+    // JSON 里 \" 是内容引号,字符串闭引号在其后——注意双引号层次。
+    let (code, stdout) = actl(&[
+        "batch",
+        "--json",
+        r#"["focus-window \"No Such Window 42\""]"#,
+    ]);
+    assert_eq!(code, 1);
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
+    assert_eq!(v["error"]["code"], "NOT_FOUND");
+}
+
+#[test]
+fn batch_unterminated_quote_is_protocol() {
+    let (code, stdout) = actl(&["batch", "--json", r#"["status \"open"]"#]);
+    assert_eq!(code, 2);
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
+    assert_eq!(v["error"]["code"], "PROTOCOL");
 }
 
 #[test]
@@ -332,6 +359,15 @@ fn batch_failure_carries_partial_steps_in_evidence() {
     assert_eq!(steps[0]["ok"], true);
     assert_eq!(steps[1]["ok"], false);
     assert_eq!(steps[1]["error"]["code"], "NOT_FOUND");
+    // 2026-10-13 契约修复:步级 error 与顶层信封同形(hint 恒在)——
+    // 失败处置协议(先读 evidence/hint)在 batch 中不再失效;evidence
+    // 保留语义("有则同形")由 query.rs batch_step_tests 单测钉死
+    let step_hint = steps[1]["error"]["hint"].as_str().expect("step hint");
+    assert_eq!(
+        v["error"]["hint"].as_str().expect("top hint"),
+        step_hint,
+        "top-level hint inherits the first error's exact recovery path"
+    );
 }
 
 #[test]

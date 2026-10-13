@@ -216,13 +216,28 @@ fn validate_semantic(
     let same =
         crate::identity::same_instance(&before["target"], &after["target"]) && before == after;
     if !same || !enabled {
-        return Err(CtlError::with_evidence(
+        // 同码两态(disabled/identity_changed)曾共用一句 message,agent 只读 message
+        // 会误诊为漂移去重拍快照——对禁用字段完全无效(2026-10-13 门户预填锁定
+        // 字段实证)。message/hint 按 reason 分型,evidence 结构不变。
+        let (message, hint) = if !enabled {
+            (
+                "target is disabled at action time",
+                "disabled elements cannot be written — account-prefilled/locked fields stay read-only; confirm with `get --property enabled` and pick a writable target instead of retrying",
+            )
+        } else {
+            (
+                "target changed during action preparation",
+                "re-observe with `snapshot` — the ref likely drifted across a re-render; re-resolve the target before acting, do not replay blindly",
+            )
+        };
+        return Err(CtlError::with_evidence_hint(
             ErrorCode::NotActionable,
-            "target changed during action preparation",
+            message,
             serde_json::json!({
                 "reason": if !enabled { "target_disabled" } else { "target_identity_changed" },
                 "enabled": enabled, "action_started": false,
             }),
+            hint,
         ));
     }
     Ok(())
@@ -253,5 +268,37 @@ mod tests {
         assert!(validate_semantic(&before, &reparented, true).is_err());
         let error = validate_semantic(&before, &before, false).unwrap_err();
         assert_eq!(error.code, ErrorCode::NotActionable);
+        // disabled 与身份漂移分离:message/evidence.reason/hint 三处可判读,
+        // 只读 message 的 agent 不再误诊为漂移去重拍快照
+        assert_eq!(error.message, "target is disabled at action time");
+        assert_eq!(
+            error.evidence.as_ref().unwrap()["reason"],
+            "target_disabled"
+        );
+        assert!(error.hint.as_deref().unwrap().contains("enabled"));
+        let mut replaced = before.clone();
+        replaced["target"]["runtime_id"] = json!([9, 9]);
+        let drifted = validate_semantic(&before, &replaced, true).unwrap_err();
+        assert_eq!(drifted.message, "target changed during action preparation");
+        assert_eq!(
+            drifted.evidence.as_ref().unwrap()["reason"],
+            "target_identity_changed"
+        );
+        assert!(drifted.hint.as_deref().unwrap().contains("snapshot"));
+    }
+    #[test]
+    fn disabled_target_envelope_is_pinned_by_golden() {
+        // spec 契约(硬规则 8):disabled 分型的 envelope 形状钉死 golden——
+        // 与 identity 漂移同码不同 message/hint/evidence,agent 三处可判读
+        let before = json!({"target":{"runtime_id":[42,7],"pid":123,
+            "role":"Edit","automation_id":"line","name":"Go to line."},
+            "host":{"runtime_id":[42,1],"pid":123}});
+        let error = validate_semantic(&before, &before, false).unwrap_err();
+        let output = actl_core::ErrorEnvelope::new("set-value", &error, 0);
+        let golden: serde_json::Value = serde_json::from_str(include_str!(
+            "../tests/golden/feedback_disabled_envelope.json"
+        ))
+        .unwrap();
+        assert_eq!(serde_json::to_value(output).unwrap(), golden);
     }
 }

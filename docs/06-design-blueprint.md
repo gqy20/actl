@@ -480,8 +480,13 @@ wait --idle 8000 [--timeout 120000]              # 等系统空闲:全系统键�
                                                   # 只观测物理输入,UIA 语义注入对它不可见)
 verify --exists @e3 / --value @e3 "x" / --checked @e8 / --order ...
 batch --json '<commands>'   # 单进程内顺序执行,共享 snapshot;每步结果与耗时进 steps[]
-                             # (i/cmd/ok/duration_ms,失败步附 error),首错即停时
+                             # (i/cmd/ok/duration_ms/data——步级回传该步 envelope 的 data,
+                             # snapshot 类步附 snapshot_id;失败步 error 与单调用信封
+                             # 同形:code/message/hint 恒在、evidence 有则保留,顶层错误
+                             # hint 继承首错精确恢复路径),首错即停时
                              # 已执行步随错误 evidence 带出(部分结果不丢失);
+                             # 命令字符串支持 shell 式双/单引号包裹含空格值
+                             # (反斜杠保持字面——Windows 路径;未闭合引号 PROTOCOL);
                              # 本轮新开窗口差集上报 windows_created(title/pid/hwnd,
                              # 清理地基;生命周期归编排层,CLI 不代管);
                              # 步前弹窗闸门:前台非基线且不匹配本批 --app → steps 附 blocked_by(warning)
@@ -540,6 +545,7 @@ L2  actl commands     机器 schema:全命令+参数的 JSON(agent 自发现入�
 ### 3.7 观察与读取语义(UIA 轨现行契约)
 
 - `get` 保留成功读取的空字符串；`value` 仅在 ValuePattern 明确不支持时回退 TextPattern，读取失败不回退。
+- `get --property` 白名单含 `enabled`（UIA IsEnabled）：禁用态此前只在写动作失败后可见，门户预填锁定字段的写前判读现为只读一步。
 - 默认 `get` 的 data 增加 `unsupported` 属性名数组（如 `["value","text"]`），表示已确认不支持的读取通道；空数组表示本次没有不支持项。其他读取错误使命令失败，不能输出看似完整的成功结果。
 - 显式 `get --property value|text`、verify 和属性等待遇到不支持通道返回 NOT_ACTIONABLE，evidence.reason=`pattern_unsupported`；value 的 get/自动等待允许上述双通道，而 `verify --property value` 严格读取 ValuePattern。
 - UIA 元素失效映射 STALE_REF，访问拒绝映射 PERM_DENIED，其余 provider/属性读取错误映射 INTERNAL；evidence 带 channel、native_code（原生错误存在时）。观察失败不能等同空值、断言不满足或稳定。
@@ -551,7 +557,7 @@ L2  actl commands     机器 schema:全命令+参数的 JSON(agent 自发现入�
 - snapshot、旧语义定位与表格树回退使用显式 RawView 的可失败枚举；子级为空与枚举错误分开。必要属性读取失败按 channel/native_code 报错，成功空名称与 ID 保留为空字符串。
 - snapshot 增加 `truncation_reasons` 数组，完整时为 `[]`；节点/深度预算实际省略内容时分别记录 `node_limit` / `depth_limit`，并设 `truncated=true`。恰好达到上限但无未观察节点不算截断。属性或枚举失败整次报错，不提供携带属性错误的部分树。
 - snapshot/find 信封附 `materialization`(2026-10-12):`subtree_cache`(单次 provider 物化成功)| `node_by_node_fallback`(物化被 provider 拒答回落逐节点——Word a11y 缓存回归实证,回落态文本通道可能为空)| `node_by_node_legacy`(env 强制)。过滤式 find、旧语义定位/ref 重放和表格树提取拒绝不完整范围，返回 NOT_ACTIONABLE，evidence 为 `{reason:"observation_incomplete",causes:[...]}`。长观察的中途可见性（2026-10-12）：逐节点遍历路径每节点核对 stop/pause（急停与流程暂停可中断长扫描）并间隔 2s 向 stderr 发 `[actl-progress]` 人读进度行（诊断增强，不承诺格式，stdout 信封不受影响）；**物化路径为单次 provider 调用无中途点**——中断归看门狗（区段上限），慢完成归 `[actl-slow]` 事后报告。content 投影在截断范围内未见 Document 时也不能声称 NOT_FOUND。成功采样仍不是原子快照，控件可能在调用之间变化。
-- 所有元素等待仅将 NOT_FOUND 解释为缺席；STALE_REF、权限、provider 错误及超限立即传播。虚拟化查询区分成功空结果与原生失败，多个匹配拒绝为 AMBIGUOUS。
+- 所有元素等待仅将 NOT_FOUND 解释为缺席；STALE_REF、权限、provider 错误及超限立即传播。虚拟化查询区分成功空结果与原生失败，多个匹配拒绝为 AMBIGUOUS；provider 对查询本身的结构性拒绝（`E_INVALIDARG`，Chromium 对 ItemContainer 形态）归并 NOT_FOUND 并附 evidence.reason=`virtualized_probe_rejected`（channel/native_code），不冒充 INTERNAL——元素缺席是诚实判定，探测拒绝细节留证即可。
 - extract 仅在 GridPattern availability 明确为 false 时回退树提取，输出 `fallback_reason:"grid_pattern_unsupported"`；Grid 直读时为 null。Grid 属性、单元格失败不回退；合法空表和空单元格保留。负行列数报 INTERNAL；超限或前后行列数变化报 NOT_ACTIONABLE（causes 为 `table_limit` / `table_changed`）。树回退只反映已物化 Text/Edit 单元格，不保证与逻辑表格的列结构一致。
 - 窗口清单、窗口 RuntimeId 基线、等待新窗口及按 PID 定位也使用可失败的 RawView 枚举；根、子窗口、分类及必要 name/class/pid/hwnd/runtime_id 读取失败传播原错误，不输出成功的部分清单，不用漏掉候选后的结果证明唯一性。成功空标题仍按清单约定过滤。
 - `wait --idle` 的 GetLastInputInfo 失败返回 INTERNAL，evidence 为 `{reason:"input_observation_failed",api:"GetLastInputInfo"}`，不把未知状态当空闲；每次轮询先检查 flow 暂停/停止。Rust `idle_ms` 接口相应返回 Result。
@@ -601,11 +607,11 @@ L2  actl commands     机器 schema:全命令+参数的 JSON(agent 自发现入�
 | 码 | 含义 | agent 的恢复动作 |
 |---|---|---|
 | `STALE_REF` | ref 失效(fallback 链已穷尽) | 重新 snapshot(错误里已附变化线索) |
-| `NOT_FOUND` | 选择器无匹配 | 用 find 放宽条件 |
+| `NOT_FOUND` | 选择器无匹配 | 用 find 放宽条件；evidence.reason=`virtualized_probe_rejected` 时为虚拟化探测被 provider 结构性拒绝（按缺席处理，可 snapshot 复核，勿原选择器重试） |
 | `PERM_DENIED` | 权限不足(UIPI/管理员窗口) | 提示用户以管理员重开,勿重试 |
 | `TIMEOUT` | wait/谓词或 UIA 提供程序明确超时（`UIA_E_TIMEOUT`） | 重估前置状态 |
 | `AMBIGUOUS` | 匹配到多个元素(附候选 evidence,含可重放 @eN;**重复标签附 `context`**=最近具名祖先文本——所在行/容器,8 跳有界 120 字符截断;无具名祖先时为 null。唯一标签不带 context 控制证据体积) | 收紧条件 / `--near` 锚点 / `role:X#N` 序数 |
-| `NOT_ACTIONABLE` | 元素存在但不可操作(disabled/offscreen) | 先 scroll/focus;hint 会指向 `set-value` |
+| `NOT_ACTIONABLE` | 元素存在但不可操作(offscreen/通道不支持),或动作准备期校验拒绝。**同码分型**（2026-10-13 Broadcom 门户轮收口：一码三态曾共用一句 message,只读 message 的 agent 会误诊）:`target_disabled`=预填锁定字段不可写(message="target is disabled at action time",写前可 `get --property enabled` 判读,重试无效);`target_identity_changed`=准备期身份漂移(message="target changed during action preparation",重拍快照重解析);display `version_mismatch`=companion 版本失配(hint 指向 display-stop/start 配对重启)。各分型 hint 独立给恢复路径 | 按 message/evidence.reason 选恢复路径,勿盲重试 |
 | `ASSERTION_FAILED` | `verify`/`--expect` 断言未成立 | 检查前置步骤(`--expect` 默认 2s 轮询后判定) |
 | `PROTOCOL` | 协议/参数错误(不可恢复) | 修正命令参数 |
 | `INTERNAL` | 内部/UIA/系统层错误(非协议非目标问题) | 重试一次;持续出现附 evidence 报 issue |

@@ -306,15 +306,14 @@ fn locate_full(
             Some(hits) if hits.is_empty() => {
                 // L1 确定空手(id: 无 fuzzy 层),直落 L4 虚拟化容器
                 let _t = actl_core::trace::scope("locate.l4");
-                if let Some(hit) = locate_virtualized(&walker, &root, target)? {
+                let (hit, rejected) = locate_virtualized(&walker, &root, target)?;
+                if let Some(hit) = hit {
                     return located_from(hit, window_title, "item-container");
                 }
-                return Err(CtlError::new(
-                    ErrorCode::NotFound,
-                    format!(
-                        "no element matches {} (exact and virtualized-container levels)",
-                        target.describe()
-                    ),
+                return Err(probe_limited_not_found(
+                    target,
+                    "exact and virtualized-container levels",
+                    rejected,
                 ));
             }
             _ => {} // 多命中(候选需 ref 编号)或快路径不可用 → 全遍历
@@ -345,19 +344,17 @@ fn locate_full(
         }
         // L4 虚拟化容器(spike 2026-09-26 证真:Explorer 文件列表的 ListItem 不物化,
         // walker 遍历恒 0 命中;ItemContainerPattern::FindItemByProperty 精确命中)
-        let l4 = {
+        let (l4, rejected) = {
             let _t = actl_core::trace::scope("locate.l4");
             locate_virtualized(&walker, &root, target)?
         };
         if let Some(hit) = l4 {
             return located_from(hit, window_title, "item-container");
         }
-        return Err(CtlError::new(
-            ErrorCode::NotFound,
-            format!(
-                "no element matches {} (exact, fuzzy and virtualized-container levels)",
-                target.describe()
-            ),
+        return Err(probe_limited_not_found(
+            target,
+            "exact, fuzzy and virtualized-container levels",
+            rejected,
         ));
     }
     matches.sort_by_key(|c: &Candidate| c.ref_no);
@@ -727,9 +724,13 @@ fn container_query_for(
 }
 
 /// L4 执行体:窗口内收集 ItemContainer 容器,逐个精确查询。
-/// 仅在 L1/L2 双落空后进入(不在热路径);无命中返回 None → NotFound。
+/// 仅在 L1/L2 双落空后进入(不在热路径);无命中返回 (None, None) → NotFound。
 /// FindItemByProperty 为**精确匹配**(provider 侧无子串语义)——name: 的
 /// 子串语义在 L1/L2 已消耗,进入 L4 的 name 值必须是完整名称(如完整文件名)。
+/// 返回的 `Option<ProbeRejection>` 记录 provider 对查询本身的结构性拒绝
+/// (2026-10-13 Chromium 实证:FindItemByProperty 对 AutomationId 回
+/// E_INVALIDARG——元素确已不在,探测通道被拒,此前误报 INTERNAL 且
+/// hint 指向无意义的 retry;现在如实归 NOT_FOUND 并在 evidence 说明拒绝)。
 ///
 /// unsafe 理由(AGENTS §5,crate 豁免点):crate 安全包装不接受 NULL 起查元素
 /// (MS 文档语义 = "从头查",且零值 UIElement 的 Drop 会 Release(null) 崩溃),
@@ -739,7 +740,7 @@ fn locate_virtualized(
     _walker: &UITreeWalker,
     root: &UIElement,
     target: &Target,
-) -> Result<Option<UIElement>, CtlError> {
+) -> Result<(Option<UIElement>, Option<ProbeRejection>), CtlError> {
     use uiautomation::{types::UIProperty, variants::Variant};
     use windows::{
         Win32::UI::Accessibility::{
@@ -748,11 +749,12 @@ fn locate_virtualized(
         core::Interface,
     };
     let Some((prop, value)) = container_query_for(target) else {
-        return Ok(None);
+        return Ok((None, None));
     };
     let value = Variant::from(value);
     let entries = crate::observation::tree_live(root)?.require_complete()?;
     let mut hit = None;
+    let mut rejection: Option<ProbeRejection> = None;
     for entry in entries {
         let c = entry.element;
         if !crate::read_channel::available(
@@ -771,15 +773,31 @@ fn locate_virtualized(
                 .and_then(|p| p.cast())
                 .map_err(|e| crate::read_channel::failure("item-container.pattern", e.into()))?;
             let mut raw = std::ptr::null_mut();
-            (pattern.vtable().FindItemByProperty)(
+            let queried = (pattern.vtable().FindItemByProperty)(
                 pattern.as_raw(),
                 std::ptr::null_mut(),
                 prop,
                 std::mem::transmute_copy(value.as_ref()),
                 &mut raw,
-            )
-            .ok()
-            .map_err(|e| crate::read_channel::failure("item-container.query", e.into()))?;
+            );
+            if let Err(e) = queried.ok() {
+                // E_INVALIDARG = provider 对该属性查询的结构性拒绝(Chromium
+                // 形态):记录后继续扫其余容器——同 (prop,value) 其余容器
+                // 大概率同拒,但混排树(浏览器+原生对话框)可能有支持者,不代答。
+                if e.code() == windows::Win32::Foundation::E_INVALIDARG {
+                    if rejection.is_none() {
+                        rejection = Some(ProbeRejection {
+                            channel: "item-container.query",
+                            native_code: e.code().0,
+                        });
+                    }
+                    continue;
+                }
+                return Err(crate::read_channel::failure(
+                    "item-container.query",
+                    e.into(),
+                ));
+            }
             if !raw.is_null() {
                 let element = UIElement::from(IUIAutomationElement::from_raw(raw));
                 let mut second = std::ptr::null_mut();
@@ -810,7 +828,42 @@ fn locate_virtualized(
             }
         }
     }
-    Ok(hit)
+    Ok((hit, rejection))
+}
+
+/// L4 探测被 provider 结构性拒绝的留证(非万金油 INTERNAL):
+/// 元素缺席是诚实判定,拒绝细节随 NOT_FOUND evidence 带出。
+#[derive(Debug, Clone)]
+struct ProbeRejection {
+    channel: &'static str,
+    native_code: i32,
+}
+
+/// L4 探测受限时的 NOT_FOUND:evidence 标记 `virtualized_probe_rejected`
+/// (channel/native_code),hint 指向"按缺席处理、可 snapshot 复核"——
+/// 与裸 NOT_FOUND(缺省 hint:放宽选择器)区分;无拒绝时保持旧消息形状
+/// (golden 兼容)。
+fn probe_limited_not_found(
+    target: &Target,
+    levels: &str,
+    rejected: Option<ProbeRejection>,
+) -> CtlError {
+    let Some(r) = rejected else {
+        return CtlError::new(
+            ErrorCode::NotFound,
+            format!("no element matches {} ({levels})", target.describe()),
+        );
+    };
+    CtlError::with_evidence_hint(
+        ErrorCode::NotFound,
+        format!("no element matches {} ({levels})", target.describe()),
+        serde_json::json!({
+            "reason": "virtualized_probe_rejected",
+            "channel": r.channel,
+            "native_code": r.native_code,
+        }),
+        "no match at any locate level; the virtualized-container probe was rejected by this UIA provider (see evidence) — treat as absence and re-observe with `snapshot`/`find` if the element should exist; do not retry the same selector",
+    )
 }
 /// wait 族轮询的定位语义:仅 NOT_FOUND 表示缺席；其他观察错误立即传播。
 /// **AMBIGUOUS = 确定性多命中,等待不可能收敛 → 立即失败**(候选 evidence

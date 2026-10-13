@@ -47,6 +47,17 @@ quirks:
     note: >-
       Chromium a11y 树按需构建——首次 snapshot 可能只含部分内容或偏慢,
       重拍一次即完整;冷启动后第一拍不要急着下"内容为空"的结论
+  - id: web_form_setvalue_channel
+    note: >-
+      网页表单 Edit 的填写主通道是 set-value --verify-value(UIA ValuePattern
+      直写+同元素读回,Broadcom 合规表单 5 字段实证 100%)——不是剪贴板/type;
+      剪贴板通道只服务地址栏导航与中文 IME 场景。网页 Edit 无 Invoke pattern,
+      click 网页输入框会 NOT_ACTIONABLE,属预期而非异常
+  - id: portal_prefill_disabled
+    note: >-
+      门户表单的账户预填字段(姓名/邮箱/国家)处于禁用态:get 可读值、写入
+      报 NOT_ACTIONABLE(target_disabled);写前用 get --property enabled 判读,
+      空字段才是写目标,对预填字段盲重试永远无效
   - id: lazy_virtualized
     note: >-
       无限滚动 feed 的 DOM 会回收(旧内容卸载、新内容滚动驱动物化)——
