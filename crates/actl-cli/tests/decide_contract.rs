@@ -607,3 +607,42 @@ fn front_hallucinated_family_is_rejected_as_provider_fault() {
     assert_eq!(out["error"]["code"], "PROVIDER_UNAVAILABLE");
     assert_eq!(out["error"]["evidence"]["reason"], "choice_not_offered");
 }
+
+#[test]
+fn ambiguous_truncated_envelope_abstains_without_provider_call() {
+    let sandbox = Sandbox::new();
+    // 端口 1 不可达:截断护栏若触网会 PROVIDER_UNAVAILABLE——必须免网弃权。
+    sandbox.write_config("http://127.0.0.1:1/v1/systemone");
+    let envelope = sandbox.write(
+        "truncated.json",
+        &json!({
+            "version": "1", "ok": false, "command": "click",
+            "error": {
+                "code": "AMBIGUOUS",
+                "message": "name:x matches 12 elements in the window",
+                "evidence": {
+                    "candidates": [
+                        {"ref": "@e1", "role": "Button", "name": "a"},
+                        {"ref": "@e2", "role": "Button", "name": "b"}
+                    ],
+                    "total": 12, "returned": 2, "truncated": true
+                }
+            }
+        })
+        .to_string(),
+    );
+    let (code, out) = sandbox.invoke(&[
+        "decide",
+        "--card",
+        envelope.to_str().unwrap(),
+        "--task",
+        "narrow the selector instead",
+    ]);
+    assert_eq!(
+        code, 0,
+        "truncation abstain is success, not a provider fault: {out}"
+    );
+    assert_eq!(out["data"]["abstain"], "candidates_truncated");
+    assert_eq!(out["data"]["choice"], Value::Null);
+    assert_eq!(out["data"]["candidates_sent"], 2);
+}

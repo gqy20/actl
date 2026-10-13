@@ -24,6 +24,9 @@ use std::time::{Duration, Instant};
 /// 置信度门槛默认值(实测校准起点:18 载荷中两个错误/退化答案的 conf 恰为
 /// 最低两档 0.37/0.446,正确答案主体 ≥0.55;低阈值泄漏错误,高阈值浪费正确应答)。
 pub(crate) const DEFAULT_MIN_CONFIDENCE: f64 = 0.5;
+/// 领先裕度门槛(p1-p2):t_g 薄裕度形态 0.604-0.228≈0.38 尚可过,t_j 退化
+/// 形态 0.468-0.23≈0.24 恰好该拦——0.3 取中间保守值,校准数据积累后调。
+pub(crate) const MIN_LEAD_MARGIN: f64 = 0.3;
 /// HTTP 超时默认(毫秒)。
 pub(crate) const DEFAULT_TIMEOUT_MS: u64 = 10_000;
 /// 审计文件体积上限:超过即轮换为 .old(有界,单文件历史)。
@@ -94,8 +97,10 @@ pub(crate) struct Decision {
 #[derive(Debug)]
 enum InputForm {
     Card(DecisionCard),
-    /// 合成消歧卡 + 候选元数据(答案回显用)。
-    Ambiguous(DecisionCard, Vec<ResolvedMeta>),
+    /// 合成消歧卡 + 候选元数据(答案回显用)+ 截断标志(证据候选 >8 被
+    /// ambiguous_error 截断时 true——消费方见标志即弃权,不冒充完整
+    /// 选项集问模型,third-hand §13.2.1 召回保护的 decide 侧收口)。
+    Ambiguous(DecisionCard, Vec<ResolvedMeta>, bool),
     /// 弹窗判读咨询:前台引导层 + 任务意图。
     Front(front::FrontInput),
 }
@@ -326,7 +331,7 @@ fn parse_input(text: &str, task: Option<&str>) -> Result<InputForm, CtlError> {
             )
         })?;
         return ambiguous_card(&value, task)
-            .map(|(card, metas)| InputForm::Ambiguous(card, metas))
+            .map(|(card, metas, truncated)| InputForm::Ambiguous(card, metas, truncated))
             .map_err(|mut e| {
                 e.message = format!("{}; expected an AMBIGUOUS error envelope", e.message);
                 e
@@ -372,7 +377,7 @@ fn parse_input(text: &str, task: Option<&str>) -> Result<InputForm, CtlError> {
 fn ambiguous_card(
     envelope: &serde_json::Value,
     task: &str,
-) -> Result<(DecisionCard, Vec<ResolvedMeta>), CtlError> {
+) -> Result<(DecisionCard, Vec<ResolvedMeta>, bool), CtlError> {
     let raw = envelope
         .pointer("/error/evidence/candidates")
         .and_then(|c| c.as_array())
@@ -380,6 +385,13 @@ fn ambiguous_card(
     if raw.is_empty() {
         return Err(CtlError::protocol("AMBIGUOUS envelope has zero candidates"));
     }
+    // 截断护栏消费(2026-10-13):ambiguous_error 超 8 候选截断时带
+    // truncated:true(旧格式信封缺标志按未截断);截断的证据集不是完整
+    // 选项集,在残缺集上问模型会把「正确候选恰好被裁掉」变成强迫硬选。
+    let truncated = envelope
+        .pointer("/error/evidence/truncated")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
     let clip = |text: &str, max: usize| text.chars().take(max).collect::<String>();
     let mut metas = Vec::with_capacity(raw.len());
     let mut candidates = Vec::with_capacity(raw.len());
@@ -444,7 +456,7 @@ fn ambiguous_card(
         },
         candidates,
     };
-    Ok((card, metas))
+    Ok((card, metas, truncated))
 }
 
 /// 读配置:文件缺省/JSON 失败都是 PROTOCOL(带 recovery 提示,不留静默默认)。
@@ -554,12 +566,13 @@ pub(crate) fn answer_pending_auto(card: &DecisionCard) -> Result<Decision, CtlEr
     };
     let result = answer_card(card, &provider, config.min_confidence);
     match &result {
-        Ok(decision) => append_audit(&dir, decision, None, Some("auto_decide")),
+        Ok(decision) => append_audit(&dir, decision, None, Some("auto_decide"), Some(card)),
         Err(error) => append_audit(
             &dir,
             &empty_audit_decision(&card.card_id, 0),
             Some(error),
             Some("auto_decide"),
+            Some(card),
         ),
     }
     result
@@ -655,11 +668,52 @@ pub(crate) fn answer_card(
             model,
         });
     }
+    // 领先裕度双门槛(fastjev-egolite 同款第三重守卫,2026-10-13):confidence
+    // 只答「头名多可信」,不答「头名比次名可信多少」——探针 t_g 实证薄裕度
+    // 形态(导出 0.604 vs 另存为 0.228)恰好是过 conf 门槛但次名仍有实质
+    // 权重的答案。p1-p2 < MIN_LEAD_MARGIN 即 abstain low_margin(与
+    // low_confidence 语义同族,弃权时 top_choice/confidence 照报供判读);
+    // none 不参与裕度(弃权选项无"对手"语义)。
+    let ranked: Vec<f64> = pick
+        .get("probabilities")
+        .and_then(serde_json::Value::as_object)
+        .map(|map| {
+            let mut values: Vec<f64> = map
+                .iter()
+                .filter(|(key, _)| key.as_str() != "none")
+                .filter_map(|(_, value)| value.as_f64())
+                .collect();
+            values.sort_by(|a, b| b.total_cmp(a));
+            values
+        })
+        .unwrap_or_default();
+    let lead_margin = match (ranked.first(), ranked.get(1)) {
+        (Some(&p1), Some(&p2)) => Some(p1 - p2),
+        // 单候选(除 none 外只一项):无次名即无竞争,裕度视为无穷
+        (Some(_), None) => Some(f64::INFINITY),
+        _ => None,
+    };
     if confidence < min_confidence {
         return Ok(Decision {
             card_id: card.card_id.clone(),
             choice: None,
             abstain: Some("low_confidence".into()),
+            confidence: Some(confidence),
+            top_choice: Some(choice),
+            resolved: None,
+            family: None,
+            blocking: None,
+            candidates_sent: offered.len() - 1,
+            dangerous_filtered,
+            provider_ms: Some(provider_ms),
+            model,
+        });
+    }
+    if lead_margin.is_some_and(|margin| margin < MIN_LEAD_MARGIN) {
+        return Ok(Decision {
+            card_id: card.card_id.clone(),
+            choice: None,
+            abstain: Some("low_margin".into()),
             confidence: Some(confidence),
             top_choice: Some(choice),
             resolved: None,
@@ -688,12 +742,16 @@ pub(crate) fn answer_card(
 }
 
 /// 审计追加(旁路:失败仅 stderr 警告,不影响命令语义)。>4 MiB 轮换 .old。
-/// `responder` 区分应答来源(CLI decide 判读 / flow --auto-decide 自动)。
+/// `responder` 区分应答来源(CLI decide 判读 / flow --auto-decide 自动);
+/// `card` 嵌完整卡(≤4KiB,卡协议硬上限兜底审计行体积)——每行=
+/// 请求(卡)+应答配对,是模型换版回归与阈值校准的直接语料(05 优化,
+/// docs/08 §7 校准债的偿还通道);front 形态无卡传 None。
 fn append_audit(
     dir: &std::path::Path,
     decision: &Decision,
     error: Option<&CtlError>,
     responder: Option<&str>,
+    card: Option<&DecisionCard>,
 ) {
     let path = dir.join("decision-audit.jsonl");
     let rotate = std::fs::metadata(&path).is_ok_and(|m| m.len() > AUDIT_MAX_BYTES);
@@ -711,6 +769,11 @@ fn append_audit(
     });
     if let Some(responder) = responder {
         line["responder"] = serde_json::json!(responder);
+    }
+    if let Some(card) = card {
+        // 完整卡入行(≤4KiB 卡协议上限兜底):请求+应答配对成一行,
+        // 换 provider/模型版本后离线重放语料直接可取。
+        line["card"] = serde_json::to_value(card).unwrap_or(serde_json::Value::Null);
     }
     if let Some(choice) = &decision.choice {
         line["choice"] = serde_json::json!(choice);
@@ -765,13 +828,13 @@ pub(crate) struct DecideArgs {
 pub(crate) fn run(args: DecideArgs) -> Result<serde_json::Value, CtlError> {
     // 卡源三选一:--run(run 状态直读,不碰 stdin——无管道时会阻塞)/
     // --card(文件)/ stdin(管道)。--run 与 --task 互斥(意图只对消歧形态)。
-    let (card, metas, front) = if let Some(run_id) = &args.run {
+    let (card, metas, truncated, front) = if let Some(run_id) = &args.run {
         if args.task.is_some() {
             return Err(CtlError::protocol(
                 "--task is only valid for AMBIGUOUS and front-report envelopes",
             ));
         }
-        (load_pending_card(run_id)?, None, None)
+        (load_pending_card(run_id)?, None, false, None)
     } else {
         let text = match &args.card {
             Some(path) => std::fs::read_to_string(path)
@@ -786,15 +849,37 @@ pub(crate) fn run(args: DecideArgs) -> Result<serde_json::Value, CtlError> {
         };
         let form = parse_input(&text, args.task.as_deref())?;
         match form {
-            InputForm::Card(card) => (card, None, None),
-            InputForm::Ambiguous(card, metas) => (card, Some(metas), None),
-            InputForm::Front(input) => (empty_card(), None, Some(input)),
+            InputForm::Card(card) => (card, None, false, None),
+            InputForm::Ambiguous(card, metas, truncated) => (card, Some(metas), truncated, None),
+            InputForm::Front(input) => (empty_card(), None, false, Some(input)),
         }
     };
     let dir = std::env::var_os("LOCALAPPDATA")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(std::env::temp_dir)
         .join("actl");
+    // 截断护栏消费:证据候选被截断(>8)时残缺集上问模型=把「正确候选
+    // 恰好被裁掉」变成强迫硬选——诚实弃权交回人,改判收窄选择器/
+    // --near 是正解;不触 provider(与 dangerous_only 同族的免网短路)。
+    if truncated {
+        let decision = Decision {
+            card_id: card.card_id.clone(),
+            choice: None,
+            abstain: Some("candidates_truncated".into()),
+            confidence: None,
+            top_choice: None,
+            resolved: None,
+            family: None,
+            blocking: None,
+            candidates_sent: card.candidates.len(),
+            dangerous_filtered: 0,
+            provider_ms: None,
+            model: None,
+        };
+        append_audit(&dir, &decision, None, None, Some(&card));
+        return serde_json::to_value(&decision)
+            .map_err(|e| CtlError::internal(format!("decision encode failed: {e}")));
+    }
     let config_path = args
         .config
         .as_deref()
@@ -837,7 +922,7 @@ pub(crate) fn run(args: DecideArgs) -> Result<serde_json::Value, CtlError> {
     if let Some(input) = &front {
         if input.front_clear || input.surface_count == 0 {
             let decision = front_consult(input, &NeverProvider, min_confidence)?;
-            append_audit(&dir, &decision, None, None);
+            append_audit(&dir, &decision, None, None, None);
             return serde_json::to_value(&decision)
                 .map_err(|e| CtlError::internal(format!("decision encode failed: {e}")));
         }
@@ -857,9 +942,15 @@ pub(crate) fn run(args: DecideArgs) -> Result<serde_json::Value, CtlError> {
         };
         let result = front_consult(input, &provider, min_confidence);
         match &result {
-            Ok(decision) => append_audit(&dir, decision, None, None),
+            Ok(decision) => append_audit(&dir, decision, None, None, None),
             Err(error) => {
-                append_audit(&dir, &empty_audit_decision("d-front", 0), Some(error), None);
+                append_audit(
+                    &dir,
+                    &empty_audit_decision("d-front", 0),
+                    Some(error),
+                    None,
+                    None,
+                );
             }
         }
         return result
@@ -888,7 +979,7 @@ pub(crate) fn run(args: DecideArgs) -> Result<serde_json::Value, CtlError> {
             provider_ms: None,
             model: None,
         };
-        append_audit(&dir, &decision, None, None);
+        append_audit(&dir, &decision, None, None, Some(&card));
         return serde_json::to_value(&decision)
             .map_err(|e| CtlError::internal(format!("decision encode failed: {e}")));
     };
@@ -927,12 +1018,13 @@ pub(crate) fn run(args: DecideArgs) -> Result<serde_json::Value, CtlError> {
         (result, _) => result,
     };
     match &result {
-        Ok(decision) => append_audit(&dir, decision, None, None),
+        Ok(decision) => append_audit(&dir, decision, None, None, Some(&card)),
         Err(error) => append_audit(
             &dir,
             &empty_audit_decision(&card.card_id, dangerous_filtered),
             Some(error),
             None,
+            Some(&card),
         ),
     }
     result
@@ -947,419 +1039,5 @@ pub(crate) fn run(args: DecideArgs) -> Result<serde_json::Value, CtlError> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use actl_core::decision::{CardCandidate, CardDiff};
-
-    fn card(candidates: Vec<CardCandidate>) -> DecisionCard {
-        DecisionCard {
-            version: 1,
-            card_id: "d-test".into(),
-            task: "保存文档".into(),
-            app: "记事本".into(),
-            goal: "verify-file ..".into(),
-            step: 3,
-            diff: CardDiff {
-                added: 2,
-                removed: 0,
-                changed: 1,
-                added_names: vec![],
-                removed_names: vec![],
-            },
-            candidates,
-        }
-    }
-
-    fn candidate(id: &str, name: &str, dangerous: bool, score: u32) -> CardCandidate {
-        CardCandidate {
-            id: id.into(),
-            selector: format!("name:{name}"),
-            role: "Button".into(),
-            name: Some(name.into()),
-            automation_id: None,
-            effect: None,
-            context: None,
-            score,
-            dangerous,
-        }
-    }
-
-    struct FixedProvider {
-        choice: &'static str,
-        confidence: f64,
-        model: Option<String>,
-    }
-
-    impl Provider for FixedProvider {
-        fn ask(
-            &self,
-            _request: &SystemOneRequest<'_>,
-        ) -> Result<(Option<String>, serde_json::Value), CtlError> {
-            Ok((
-                self.model.clone(),
-                serde_json::json!({"pick": {"type": "choice", "choice": self.choice, "confidence": self.confidence}}),
-            ))
-        }
-    }
-
-    #[test]
-    fn build_request_strips_dangerous_and_forces_none() {
-        let card = card(vec![
-            candidate("c1", "保存", false, 8),
-            candidate("c2", "删除全部", true, 9),
-        ]);
-        let (request, dangerous) = build_request(&card);
-        assert_eq!(dangerous, 1);
-        let request = request.expect("safe candidates remain");
-        assert!(!request.state.contains("删除全部"), "dangerous invisible");
-        assert!(request.state.contains("保存"));
-        assert!(request.state.contains(UNTRUSTED_NOTICE));
-        assert!(
-            request.questions["pick"]
-                .criteria
-                .as_ref()
-                .unwrap()
-                .contains_key("none")
-        );
-        assert_eq!(
-            request.questions["pick"].criteria.as_ref().unwrap().len(),
-            2,
-            "c1 + none"
-        );
-    }
-
-    #[test]
-    fn all_dangerous_abstains_without_provider_call() {
-        let card = card(vec![candidate("c1", "格式化", true, 9)]);
-        let decision = answer_card(
-            &card,
-            &FixedProvider {
-                choice: "c1",
-                confidence: 0.99,
-                model: None,
-            },
-            0.5,
-        )
-        .unwrap();
-        assert_eq!(decision.abstain.as_deref(), Some("dangerous_only"));
-        assert_eq!(decision.choice, None);
-        assert_eq!(decision.dangerous_filtered, 1);
-    }
-
-    #[test]
-    fn low_confidence_abstains_with_top_choice() {
-        let card = card(vec![candidate("c1", "保存", false, 8)]);
-        let decision = answer_card(
-            &card,
-            &FixedProvider {
-                choice: "c1",
-                confidence: 0.37,
-                model: None,
-            },
-            0.5,
-        )
-        .unwrap();
-        assert_eq!(decision.abstain.as_deref(), Some("low_confidence"));
-        assert_eq!(decision.top_choice.as_deref(), Some("c1"));
-        assert_eq!(decision.choice, None);
-    }
-
-    #[test]
-    fn confident_answer_passes_gate() {
-        let card = card(vec![candidate("c1", "保存", false, 8)]);
-        let decision = answer_card(
-            &card,
-            &FixedProvider {
-                choice: "c1",
-                confidence: 0.82,
-                model: Some("kev-4b".into()),
-            },
-            0.5,
-        )
-        .unwrap();
-        assert_eq!(decision.choice.as_deref(), Some("c1"));
-        assert_eq!(decision.confidence, Some(0.82));
-        assert_eq!(decision.abstain, None);
-    }
-
-    #[test]
-    fn provider_none_is_abstain_not_error() {
-        let card = card(vec![candidate("c1", "设置", false, 4)]);
-        let decision = answer_card(
-            &card,
-            &FixedProvider {
-                choice: "none",
-                confidence: 0.7,
-                model: None,
-            },
-            0.5,
-        )
-        .unwrap();
-        assert_eq!(decision.abstain.as_deref(), Some("provider_none"));
-        assert_eq!(decision.choice, None);
-    }
-
-    #[test]
-    fn hallucinated_choice_is_rejected() {
-        let card = card(vec![candidate("c1", "保存", false, 8)]);
-        let error = answer_card(
-            &card,
-            &FixedProvider {
-                choice: "c99",
-                confidence: 0.99,
-                model: None,
-            },
-            0.5,
-        )
-        .unwrap_err();
-        assert_eq!(error.code, ErrorCode::ProviderUnavailable);
-        assert!(error.message.contains("not offered"));
-    }
-
-    #[test]
-    fn parse_input_accepts_bare_and_envelope_forms() {
-        let bare = card(vec![candidate("c1", "保存", false, 8)]);
-        let text = serde_json::to_string(&bare).unwrap();
-        assert!(matches!(
-            parse_input(&text, None).unwrap(),
-            InputForm::Card(_)
-        ));
-        let envelope = serde_json::json!({
-            "command": "flow-status",
-            "data": { "decision_card": serde_json::to_value(&bare).unwrap() }
-        });
-        let parsed = parse_input(&envelope.to_string(), None).unwrap();
-        let InputForm::Card(parsed) = parsed else {
-            panic!("envelope form must parse as card");
-        };
-        assert_eq!(parsed.card_id, "d-test");
-        assert!(parse_input("{}", None).is_err());
-        assert!(parse_input("not json", None).is_err());
-        // 卡形态配 --task = PROTOCOL(意图只对 AMBIGUOUS 形态有意义)
-        assert!(parse_input(&text, Some("点击保存")).is_err());
-    }
-
-    #[test]
-    fn ambiguous_envelope_requires_task_and_maps_candidates() {
-        let envelope = serde_json::json!({
-            "version": "1", "ok": false, "command": "click",
-            "error": {
-                "code": "AMBIGUOUS",
-                "message": "name:浏览 matches 2 elements",
-                "evidence": { "candidates": [
-                    {"ref": "@e3", "role": "Button", "name": "浏览", "automation_id": "btnBrowse1", "context": "文件名行"},
-                    {"ref": "@e7", "role": "Button", "name": "浏览", "automation_id": "btnBrowse2", "context": "联机图片区"}
-                ]}
-            }
-        });
-        let text = envelope.to_string();
-        // 无 --task:PROTOCOL + 结构化 evidence + 专属 hint
-        let error = parse_input(&text, None).unwrap_err();
-        assert_eq!(error.code, ErrorCode::Protocol);
-        assert_eq!(error.evidence.unwrap()["reason"], "task_missing");
-        // 有 --task:合成卡,候选序即证据序,context 保留
-        let InputForm::Ambiguous(card, metas) =
-            parse_input(&text, Some("打开本地文件选择器")).unwrap()
-        else {
-            panic!("ambiguous form expected");
-        };
-        assert_eq!(card.candidates.len(), 2);
-        assert_eq!(card.candidates[0].id, "c1");
-        assert_eq!(card.candidates[0].context.as_deref(), Some("文件名行"));
-        assert_eq!(card.candidates[0].selector, "@e3");
-        assert_eq!(metas[1].ref_id, "@e7");
-        // 危险词法闸独立重算:危险候选入卡但带 dangerous 位(构造侧剥离)
-        let envelope = serde_json::json!({
-            "error": {
-                "code": "AMBIGUOUS",
-                "evidence": { "candidates": [
-                    {"ref": "@e1", "role": "Button", "name": "删除"},
-                    {"ref": "@e2", "role": "Button", "name": "保存"}
-                ]}
-            }
-        });
-        let InputForm::Ambiguous(card, _) =
-            parse_input(&envelope.to_string(), Some("保存文档")).unwrap()
-        else {
-            panic!("ambiguous form expected");
-        };
-        assert!(card.candidates[0].dangerous);
-        assert!(!card.candidates[1].dangerous);
-        // 零候选/缺 evidence = PROTOCOL
-        assert!(parse_input(
-            &serde_json::json!({"error": {"code": "AMBIGUOUS", "evidence": {"candidates": []}}}).to_string(),
-            Some("t")
-        )
-        .is_err());
-    }
-
-    #[test]
-    fn config_requires_endpoint() {
-        let error = load_config(std::path::Path::new("Z:/definitely-missing.json"));
-        assert!(error.is_err());
-        let dir = std::env::temp_dir().join(format!("actl-decide-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("decision.json");
-        std::fs::write(&path, r#"{"timeout_ms": 5000}"#).unwrap();
-        let error = load_config(&path).unwrap_err();
-        assert_eq!(error.code, ErrorCode::Protocol);
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    fn front(surfaces: usize, front_clear: bool) -> front::FrontInput {
-        let mut state = String::from("Front guidance layer.\nGuidance surfaces:\n");
-        for i in 0..surfaces {
-            state.push_str(&format!("owned | 对话框{i} | [确定] | 提示文本\n"));
-        }
-        front::FrontInput {
-            front_clear,
-            state,
-            surface_count: surfaces,
-        }
-    }
-
-    struct FrontProvider {
-        family: &'static str,
-        confidence: f64,
-        blocking: f64,
-    }
-
-    impl Provider for FrontProvider {
-        fn ask(
-            &self,
-            request: &SystemOneRequest<'_>,
-        ) -> Result<(Option<String>, serde_json::Value), CtlError> {
-            assert!(
-                request.questions.contains_key("family")
-                    && request.questions.contains_key("blocking"),
-                "family + blocking ride one request"
-            );
-            Ok((
-                Some("kev-test".into()),
-                serde_json::json!({
-                    "family": {"type": "choice", "choice": self.family, "confidence": self.confidence},
-                    "blocking": {"type": "noul", "noul": self.blocking}
-                }),
-            ))
-        }
-    }
-
-    #[test]
-    fn front_clear_short_circuits_without_provider() {
-        // front_clear 诚实「无引导层」:NeverProvider 若被触达会 INTERNAL——
-        // 短路必须先于任何网络调用。
-        let decision = front_consult(&front(2, true), &NeverProvider, 0.5).unwrap();
-        assert_eq!(decision.family.as_deref(), Some("front_clear"));
-        assert_eq!(decision.blocking, Some(0.0));
-        assert_eq!(decision.provider_ms, None);
-        // 零表面(in_tree_skipped 形态)同样免问
-        let decision = front_consult(&front(0, false), &NeverProvider, 0.5).unwrap();
-        assert_eq!(decision.abstain.as_deref(), Some("no_surfaces"));
-    }
-
-    #[test]
-    fn front_consult_classifies_and_reports_blocking() {
-        let decision = front_consult(
-            &front(1, false),
-            &FrontProvider {
-                family: "save",
-                confidence: 0.9,
-                blocking: 0.85,
-            },
-            0.5,
-        )
-        .unwrap();
-        assert_eq!(decision.family.as_deref(), Some("save"));
-        assert_eq!(decision.blocking, Some(0.85));
-        assert_eq!(decision.abstain, None);
-        assert_eq!(decision.card_id, "d-front");
-    }
-
-    #[test]
-    fn front_hallucinated_family_is_rejected() {
-        let error = front_consult(
-            &front(1, false),
-            &FrontProvider {
-                family: "definitely_not_a_family",
-                confidence: 0.99,
-                blocking: 0.5,
-            },
-            0.5,
-        )
-        .unwrap_err();
-        assert_eq!(error.code, ErrorCode::ProviderUnavailable);
-        assert_eq!(error.evidence.unwrap()["reason"], "choice_not_offered");
-    }
-
-    #[test]
-    fn front_low_confidence_abstains_with_top_family() {
-        let decision = front_consult(
-            &front(1, false),
-            &FrontProvider {
-                family: "confirm",
-                confidence: 0.4,
-                blocking: 0.7,
-            },
-            0.5,
-        )
-        .unwrap();
-        assert_eq!(decision.abstain.as_deref(), Some("low_confidence"));
-        assert_eq!(decision.top_choice.as_deref(), Some("confirm"));
-        assert_eq!(decision.family, None, "不冒充可信判读");
-        assert_eq!(decision.blocking, Some(0.7), "概率照报,概率不是决定");
-        // unknown 家族低置信不是 abstain——unknown 本身就是交回人的诚实出口
-        let decision = front_consult(
-            &front(1, false),
-            &FrontProvider {
-                family: "unknown",
-                confidence: 0.3,
-                blocking: 0.2,
-            },
-            0.5,
-        )
-        .unwrap();
-        assert_eq!(decision.family.as_deref(), Some("unknown"));
-        assert_eq!(decision.abstain, None);
-    }
-
-    #[test]
-    fn front_input_parses_envelope_and_renders_state() {
-        let envelope = serde_json::json!({
-            "version": "1", "ok": true, "command": "front-report",
-            "data": {
-                "front_clear": false,
-                "owned": [{"title": "应用程序错误", "pid": 12, "hwnd": 34, "visible": true}],
-                "in_tree": [{"name": "计算器", "classification": "unknown",
-                    "buttons": ["最小化", "关闭"], "text": "计算器 表达式"}]
-            }
-        });
-        let InputForm::Front(input) =
-            parse_input(&envelope.to_string(), Some("导出表格为 CSV")).unwrap()
-        else {
-            panic!("front form expected");
-        };
-        assert_eq!(input.surface_count, 2);
-        assert!(input.state.contains("应用程序错误"));
-        assert!(input.state.contains("最小化 / 关闭"));
-        assert!(input.state.contains("untrusted data"));
-        // front_clear 形态照实读入(短路在 consult 层)
-        let envelope = serde_json::json!({
-            "version": "1", "ok": true, "command": "front-report",
-            "data": {"front_clear": true, "owned": [], "in_tree": []}
-        });
-        let InputForm::Front(input) = parse_input(&envelope.to_string(), Some("任务")).unwrap()
-        else {
-            panic!("front form expected");
-        };
-        assert!(input.front_clear);
-        assert_eq!(input.surface_count, 0);
-        // 缺 --task:task_missing
-        let error = parse_input(
-            &serde_json::json!({"command": "front-report", "data": {"front_clear": false, "owned": []}}).to_string(),
-            None,
-        )
-        .unwrap_err();
-        assert_eq!(error.code, ErrorCode::Protocol);
-        assert_eq!(error.evidence.unwrap()["reason"], "task_missing");
-    }
-}
+#[path = "decide/tests.rs"]
+mod tests;

@@ -559,7 +559,16 @@ fn ambiguous_error(target: &str, total: usize, cands: &[CandidateMeta]) -> CtlEr
             "{} matches {} elements in the window; pick one by @eN or role ordinal              (--near anchor also applies)",
             target, total
         ),
-        serde_json::json!({ "candidates": evidence }),
+        serde_json::json!({
+            "candidates": evidence,
+            // 截断护栏(2026-10-13,third-hand §13.2.1 教训机制化):候选超 8
+            // 截断时如实上报——消费方(decide)见截断拒绝冒充完整选项集,
+            // 人/agent 可改判收窄选择器;静默截断会把正确答案裁掉后强迫
+            // 在残缺集里硬选(召回保护)。
+            "total": total,
+            "returned": evidence.len(),
+            "truncated": total > evidence.len(),
+        }),
     )
 }
 
