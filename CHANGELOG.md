@@ -14,6 +14,8 @@
 
 ### Documentation and validation
 
+- **快照 materialization 回落态标注 + 显示层 glyph 前置实证(2026-10-12,长期观察项两项收口)**:①snapshot/find 信封新增 `materialization` 字段(subtree_cache/node_by_node_fallback/node_by_node_legacy)——Word a11y 缓存回归轮的需求现场:回落态下文本通道天生为空,此前调用方无法从信封自查(实测 text_len=0 困惑轮);live 验证 4000 段 Word 文档报 node_by_node_fallback。②主行 glyph 裁定前置实证:export 探针渲染候选码位目视判定——U+2328 ⌨ DirectWrite 回退链出字形干净(VS16 可选,与 CJK 同行无挤压),U+1F5B1 🖱 实锤豆腐块;**待裁定提案入 ROADMAP:键盘用 U+2328,鼠标弃 emoji 改文字或 paint.rs 几何绘制**;探针测试 `export_device_glyph_candidates` 入库(产物即证据,与 export_flash_previews 同款先例)。
+
 - **前台交接 v9 真机矩阵收口（2026-10-12,用户协同三场景——ROADMAP 长期观察项删除）**:S1 嵌套租约:flow 两步写动作审计 foreground_transfer/return 各×2,每动作一租一还;**首次转交被 Windows 拒绝(0x80070005)→授权落账 3ms 后重试 accepted=true**——「可拒绝合法请求」边界活体发生且被正确处理(拒绝入档+授权重试,无误报通过)。S2 人工接管:三步键入中用户物理抢键鼠——type_c completed/type_d uncertain+NOT_ACTIONABLE(注入打断如实报不确定)/type_e pending(闸门挡下)/run paused reason=human_takeover_or_grant_expired;input_monitor 外部输入增量入档。S3 接管恢复:面板继续→consent 重签→uncertain 步恢复核查失败→**needs_review/result_unconfirmed 禁止盲目重放**(docs/39 语义活体);同轮首证 control_log 对称修复的 source=cli 记录真机在位。fixtures v9-nested-lease/v9-takeover 入库;docs/62 矩阵补全,ROADMAP 条目删除。
 
 - **交互摩擦 ⑤⑦ 收口(2026-10-12)**:⑤`verify-closed --instance` 改可选,三分支诚实语义——pid 消失→**决定性通过**(复用 pid 属别的进程,与 instance 无关);窗口仍在→**决定性失败**(原实例必然还在);pid 活而窗不在→NOT_ACTIONABLE 求签(复用与无窗原实例不可区分,instance 取 verify-owner 或 close-window 信封)——临时「关了没」核验不再被前置记录挡死,不可区分象限诚实报错而非假装通过。⑦裸 `e<N>` 引用别名:与 `@e<N>` 同义同约束(parse_target 新形态)——PowerShell 把裸 `@eN` 当 splat 语法吞掉(agent 实测两次踩坑),`e<N>` 免引号等价;此前为未知目标报错,无回归面。docs/06 目标文法+verify-closed 契约、SKILL.md、help 同步;契约测试:离线死 pid 决定性通过+e<N> 解析七断言。

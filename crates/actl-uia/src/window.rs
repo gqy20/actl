@@ -29,6 +29,9 @@ pub struct CaptureResult {
     pub truncation_reasons: Vec<&'static str>,
     /// 激活感知等待的毫秒数(0 = 目标本就在响应;>0 = 目标曾挂起,已唤醒)
     pub wake_ms: u32,
+    /// 物化形态(2026-10-12 交互轮):subtree_cache/node_by_node_fallback/
+    /// node_by_node_legacy——回落态下文本通道可能为空,信封标注让调用方自查
+    pub materialization: &'static str,
 }
 
 impl CaptureResult {
@@ -127,7 +130,7 @@ pub fn capture(app: Option<&str>) -> Result<CaptureResult, CtlError> {
     let mut element_identities = Vec::new();
     // 登记观察目标窗(失败上下文汇流:identity 错误自述目标窗+标题分类)。
     crate::diagnostic::set_observation_target(&window.title);
-    let truncation_reasons = {
+    let (truncation_reasons, materialization) = {
         let _t = actl_core::trace::scope("capture.walk");
         walk(
             &walker,
@@ -147,6 +150,7 @@ pub fn capture(app: Option<&str>) -> Result<CaptureResult, CtlError> {
         truncated,
         truncation_reasons,
         wake_ms,
+        materialization,
     })
 }
 
@@ -488,7 +492,7 @@ fn walk(
     _parent: Option<usize>,
     nodes: &mut Vec<UiNode>,
     identities: &mut Vec<serde_json::Value>,
-) -> Result<Vec<&'static str>, CtlError> {
+) -> Result<(Vec<&'static str>, &'static str), CtlError> {
     let observed = crate::observation::tree(elem)?;
     append_observed(observed, nodes, identities)
 }
@@ -497,7 +501,7 @@ pub(crate) fn append_observed(
     observed: crate::observation::Observed<UIElement>,
     nodes: &mut Vec<UiNode>,
     identities: &mut Vec<serde_json::Value>,
-) -> Result<Vec<&'static str>, CtlError> {
+) -> Result<(Vec<&'static str>, &'static str), CtlError> {
     for entry in observed.entries {
         let element = entry.element;
         let node = UiNode {
@@ -518,7 +522,7 @@ pub(crate) fn append_observed(
         }
         nodes.push(node);
     }
-    Ok(observed.reasons)
+    Ok((observed.reasons, observed.materialization))
 }
 /// 等待标题包含 `substr` 的顶层窗口出现(--expect 的执行体,06 §4:默认 2s 轮询)。
 pub fn wait_window(substr: &str, timeout_ms: u64) -> Result<String, CtlError> {
@@ -1194,7 +1198,7 @@ pub fn capture_hwnd(hwnd_raw: isize) -> Result<CaptureResult, CtlError> {
         .map_err(|e| crate::read_channel::failure("window.runtime_id", e))?;
     let mut nodes = Vec::new();
     let mut element_identities = Vec::new();
-    let truncation_reasons = {
+    let (truncation_reasons, materialization) = {
         let _t = actl_core::trace::scope("capture.walk");
         walk(
             &walker,
@@ -1214,6 +1218,7 @@ pub fn capture_hwnd(hwnd_raw: isize) -> Result<CaptureResult, CtlError> {
         truncated,
         truncation_reasons,
         wake_ms,
+        materialization,
     })
 }
 

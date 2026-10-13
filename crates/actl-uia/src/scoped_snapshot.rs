@@ -35,7 +35,7 @@ pub fn capture(
     let observed = crate::observation::tree_bounded(&located.element, depth, limit)?;
     let mut nodes = Vec::new();
     let mut element_identities = Vec::new();
-    let truncation_reasons =
+    let (truncation_reasons, materialization) =
         crate::window::append_observed(observed, &mut nodes, &mut element_identities)?;
     ensure_identity(
         &identity,
@@ -65,6 +65,7 @@ pub fn capture(
             truncated: !truncation_reasons.is_empty(),
             truncation_reasons,
             wake_ms: 0,
+            materialization,
         },
         scope,
     ))

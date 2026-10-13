@@ -148,6 +148,8 @@ pub(crate) fn snapshot_cmd(args: SnapshotArgs<'_>) -> Result<CommandOutput, CtlE
         },
         "truncated": cap.truncated || out.truncated,
         "truncation_reasons": cap.truncation_reasons,
+        // 物化形态(2026-10-12 交互轮):回落态下文本通道可能为空,调用方自查
+        "materialization": cap.materialization,
         // 激活感知:目标曾挂起并被唤醒时如实上报等待量(0/未挂起时省略)
         "wake_ms": cap.wake_ms,
         "elements": serde_json::to_value(&out.elements).map_err(|e| CtlError::internal(e.to_string()))?,

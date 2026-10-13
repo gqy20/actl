@@ -52,7 +52,7 @@
 - [ ] **观察步后台慢墙（条件触发项,2026-10-11 登记/release-review-11 根因链副产物）**：wait/verify 等观察命令在后台锚窗的慢 provider 上单次定位 14-22s——前台快拒绝只覆盖输入命令与门禁捕获,读步不激活窗口是设计承诺（docs/06 §7.5.2/§7.7⑦）。触发条件=真机流程反复被观察步慢墙拖垮（超时风暴/分钟级停滞）。候选方案：wait_element 在锚窗非前台时先做原生窗口存在性+轻量探针预筛（不进树）,或 wait 增加锚窗前台前置可选项。不预置。
 - [ ] **门禁前台 Electron 慢窗暴露面（条件触发项,2026-10-11 登记）**：release-review-11 首次 runner 死亡走的是前台 ZCode（Electron）树的门禁捕获——前台快拒绝只盖"锚窗在后台"场景,锚窗前台但门禁顺路遍历到**别的前台 Electron 窗**仍可撞 UIA 看门狗。触发条件=第二次同签名死亡。候选方案：门禁捕获限定 app 锚窗口树（不遍历前台窗）或对非锚窗捕获加节点预算。
 
-- [ ] Word a11y 缓存回归（疑 Office 更新,2026-10-12 定性）:Malformed Cacheresponse pTreeStructure 跨文档类全量触发——原生 Word 模板/外部最小 OOXML/新空白文档三证(body_read 的 Document text 双通道空+物化拒答→逐节点回落,143 页 walk 6.9s)。时间线:body_read 2026-10-04 verified 于 16.0.20326,现 16.0.20430 失效——Office 更新回归嫌疑,与 Excel 两态探针同款剧本;word.yml body_read 已降 manual+quirk 入册。复验条件=Office 修复后版本复测;候选工程=快照 envelope 显式标注 materialization 回落态(spec 裁定)
+- [ ] Word a11y 缓存回归（疑 Office 更新,2026-10-12 定性）:Malformed Cacheresponse pTreeStructure 跨文档类全量触发——原生 Word 模板/外部最小 OOXML/新空白文档三证(body_read 的 Document text 双通道空+物化拒答→逐节点回落,143 页 walk 6.9s)。时间线:body_read 2026-10-04 verified 于 16.0.20326,现 16.0.20430 失效——Office 更新回归嫌疑,与 Excel 两态探针同款剧本;word.yml body_read 已降 manual+quirk 入册。复验条件=Office 修复后版本复测;候选工程已落地(2026-10-12:snapshot/find 信封 `materialization` 字段=subtree_cache/node_by_node_fallback/node_by_node_legacy,回落态文本通道空自此信封自解,docs/06 §3.7)
 
 - [ ] 探索引擎形态边界与改进候选（[77](77-exploration-s2-acceptance.md)）:④跨进程 picker 形态（记事本另存为+画图打开双证否=同进程 32770,待照片类 Store 应用场景验证 RuntimeBroker 放宽判据）;⑤UCB 真机对照轮（v2 机制已落地冷启动回落,待 quirks 计数积累后对比无统计基线:死候选自动压后/预算下降）。②③①已收（2026-10-12:②texts `focused:` 键 dangerous 永不自动、应答显式裁决;③frontier 同帧重复 id `#N` 序数唯一化;①tried 资格化过滤——dead/no_effect 出局、**reveals 保持可重选**,XAML 按钮序列不再「应答七后前沿空」,MockHost 序列测试 clicks=[b1,b2,b1] 实证）
 
@@ -65,7 +65,7 @@
 - [ ] **键盘/IME 编码语义余量**（[09 §3.5](09-input-backends-review.md)）：VK/扫描码/扩展键/左右修饰键/目标线程布局未成完整模型；中文输入刚需已由 `--paste` 剪贴板通道覆盖，余量是编码完备性边界（方向键/数字键盘/代理对等）——按真实失败案例收口，不预防性铺
 - [ ] **无人值守调度（定位裁定：当前不立项）**：触发层归上层（agent 侧调度），actl 不做 scheduler/常驻（PRD 非目标：触发面板/热键、常驻 agent）；出现真实需求时按 PRD §1.3 另行评审
 - [ ] **评测基建提案在案（待裁定，不承诺实施）**：[40](40-automated-testing-evaluation.md) 自动化测试评估系统与 [78](78-comparative-benchmark-suite.md) 三方对比测试集均自述「调研+提案，未实施」（78 含六个待用户裁定开放问题）——与「无人值守调度」同款定位裁定形态，裁定期满未启动再明确关闭
-- [ ] **显示层 spec 小项**：device 字段设备粒度折叠——**数据面已落地**(2026-10-12 判定:ActionState.effects 即单一事实来源,随 SessionState 持久化+跨会话聚合;详情面已分列「影响:键盘/鼠标/读写剪贴板/焦点」,docs/11 §15.4 路线 B 实质完成);剩**主行 glyph**(琥珀态一行加设备字形)——显示层渲染决策:emoji 码位(U+1F5B1 等)在 DirectWrite 有豆腐块风险,字形选择+像素预算属显示端排版裁定,与演示速度配置([19](19-history-and-user-experience.md) 未实现)同款待裁定点
+- [ ] **显示层 spec 小项**：device 字段设备粒度折叠——**数据面已落地**(2026-10-12 判定:ActionState.effects 即单一事实来源,随 SessionState 持久化+跨会话聚合;详情面已分列「影响:键盘/鼠标/读写剪贴板/焦点」,docs/11 §15.4 路线 B 实质完成);剩**主行 glyph**(琥珀态一行加设备字形)——**前置实证已完成(2026-10-12,export 探针 `export_device_glyph_candidates` 渲染目视判定,产物 target/glyph-probe/)**:U+2328 ⌨ 渲染干净(DirectWrite 回退链出字形,VS16 加不加均可,与 CJK 同行无挤压),U+1F5B1 🖱 实锤豆腐块。**待裁定提案:键盘指示用 U+2328;鼠标指示放弃 emoji 码位,用文字「鼠标」或 paint.rs 几何原语绘制(与 ACTL 曲线同风格)**;像素预算:字形占位与一个 CJK 字符相当,24 DIP 行高无压力。原始待裁点存档:显示层渲染决策属显示端排版裁定,与演示速度配置([19](19-history-and-user-experience.md) 未实现)同款
 
 ## 维护
 

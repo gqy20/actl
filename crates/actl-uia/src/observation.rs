@@ -81,7 +81,16 @@ fn truncate_chars(text: &str, max: usize) -> String {
 pub(crate) struct Observed<T> {
     pub entries: Vec<Entry<T>>,
     pub reasons: Vec<&'static str>,
+    /// 物化形态(2026-10-12 交互轮):subtree_cache=单次 provider 物化成功;
+    /// node_by_node_fallback=物化被拒答回落逐节点(Word a11y 缓存回归——
+    /// 回落态下文本通道可能为空,信封标注让调用方自查不困惑);
+    /// node_by_node_legacy=env 强制逐节点。
+    pub materialization: &'static str,
 }
+
+pub const MAT_SUBTREE: &str = "subtree_cache";
+pub const MAT_FALLBACK: &str = "node_by_node_fallback";
+pub const MAT_LEGACY: &str = "node_by_node_legacy";
 
 pub(crate) fn incomplete(reasons: &[&str]) -> CtlError {
     CtlError::with_evidence(
@@ -106,6 +115,7 @@ fn collect<T: Clone>(
     max_depth: u32,
     max_nodes: usize,
     mut children: impl FnMut(&T) -> Result<Vec<T>, CtlError>,
+    materialization: &'static str,
 ) -> Result<Observed<T>, CtlError> {
     let mut entries = Vec::new();
     let mut reasons = Vec::new();
@@ -158,7 +168,11 @@ fn collect<T: Clone>(
         let kids: Vec<_> = kids.into_iter().take(remaining).collect();
         pending.extend(kids.into_iter().rev().map(|c| (c, depth + 1, Some(index))));
     }
-    Ok(Observed { entries, reasons })
+    Ok(Observed {
+        entries,
+        reasons,
+        materialization,
+    })
 }
 
 /// 观察树(默认物化):纯观察消费——snapshot/find 的输出序列化后元素即弃,
@@ -213,22 +227,26 @@ fn tree_bounded_mode(
     // 实证;legacy 的错误如实上抛,不静默吞)。
     if legacy {
         let cache = make_cache(&auto, TreeScope::Element)?;
-        collect_per_node(root, depth, limit, &cache)
+        collect_per_node(root, depth, limit, &cache, MAT_LEGACY)
     } else {
         let cache = make_cache(&auto, TreeScope::Subtree)?;
         match root
             .build_updated_cache(&cache)
             .map_err(crate::internal)
             .and_then(|materialized| {
-                collect(materialized, depth, limit, |element| {
-                    Ok(element.get_cached_children().unwrap_or_default())
-                })
+                collect(
+                    materialized,
+                    depth,
+                    limit,
+                    |element| Ok(element.get_cached_children().unwrap_or_default()),
+                    MAT_SUBTREE,
+                )
             }) {
             Ok(observed) => Ok(observed),
             Err(error) => {
                 eprintln!("· 物化被 provider 拒答({error:?}),回落逐节点遍历");
                 let cache = make_cache(&auto, TreeScope::Element)?;
-                collect_per_node(root, depth, limit, &cache)
+                collect_per_node(root, depth, limit, &cache, MAT_FALLBACK)
             }
         }
     }
@@ -257,17 +275,24 @@ fn collect_per_node(
     depth: u32,
     limit: usize,
     cache: &UICacheRequest,
+    materialization: &'static str,
 ) -> Result<Observed<UIElement>, CtlError> {
     let auto = UIAutomation::new().map_err(crate::internal)?;
     let condition = auto.create_true_condition().map_err(crate::internal)?;
-    collect(root.clone(), depth, limit, |element| {
-        crate::observation_query::children(
-            element,
-            &condition,
-            cache,
-            crate::observation_query::Scope::ElementChildren,
-        )
-    })
+    collect(
+        root.clone(),
+        depth,
+        limit,
+        |element| {
+            crate::observation_query::children(
+                element,
+                &condition,
+                cache,
+                crate::observation_query::Scope::ElementChildren,
+            )
+        },
+        materialization,
+    )
 }
 
 pub(crate) fn children(root: &UIElement) -> Result<Vec<UIElement>, CtlError> {
@@ -444,32 +469,56 @@ mod tests {
 
     #[test]
     fn depth_cut_is_not_complete() {
-        let result = collect(0, 1, 10, |n| Ok(if *n < 2 { vec![n + 1] } else { vec![] })).unwrap();
+        let result = collect(
+            0,
+            1,
+            10,
+            |n| Ok(if *n < 2 { vec![n + 1] } else { vec![] }),
+            MAT_SUBTREE,
+        )
+        .unwrap();
         assert_eq!(result.reasons, ["depth_limit"]);
         assert!(result.require_complete().is_err());
     }
     #[test]
     fn enumeration_failure_is_not_absence() {
-        let result = collect(0, 5, 10, |_| {
-            Err(CtlError::new(ErrorCode::PermDenied, "denied"))
-        });
+        let result = collect(
+            0,
+            5,
+            10,
+            |_| Err(CtlError::new(ErrorCode::PermDenied, "denied")),
+            MAT_SUBTREE,
+        );
         assert!(matches!(result, Err(e) if e.code == ErrorCode::PermDenied));
     }
     #[test]
     fn exact_limit_is_complete() {
-        let result = collect(0, 1, 2, |n| Ok(if *n == 0 { vec![1] } else { vec![] })).unwrap();
+        let result = collect(
+            0,
+            1,
+            2,
+            |n| Ok(if *n == 0 { vec![1] } else { vec![] }),
+            MAT_SUBTREE,
+        )
+        .unwrap();
         assert!(result.reasons.is_empty());
     }
 
     #[test]
     fn node_cut_preserves_parent_indices_and_cannot_prove_absence() {
-        let result = collect(0, 5, 3, |n| {
-            Ok(match n {
-                0 => vec![1, 2],
-                1 => vec![3],
-                _ => vec![],
-            })
-        })
+        let result = collect(
+            0,
+            5,
+            3,
+            |n| {
+                Ok(match n {
+                    0 => vec![1, 2],
+                    1 => vec![3],
+                    _ => vec![],
+                })
+            },
+            MAT_SUBTREE,
+        )
         .unwrap();
         assert_eq!(result.reasons, ["node_limit"]);
         assert_eq!(
@@ -486,11 +535,17 @@ mod tests {
 
     #[test]
     fn failure_after_a_match_is_not_a_unique_result() {
-        let result = collect(0, 5, 10, |n| match n {
-            0 => Ok(vec![1, 2]),
-            1 => Ok(vec![]),
-            _ => Err(CtlError::new(ErrorCode::StaleRef, "rebuilt")),
-        });
+        let result = collect(
+            0,
+            5,
+            10,
+            |n| match n {
+                0 => Ok(vec![1, 2]),
+                1 => Ok(vec![]),
+                _ => Err(CtlError::new(ErrorCode::StaleRef, "rebuilt")),
+            },
+            MAT_SUBTREE,
+        );
         assert!(matches!(result, Err(e) if e.code == ErrorCode::StaleRef));
     }
 

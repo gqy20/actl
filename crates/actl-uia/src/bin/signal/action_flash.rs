@@ -454,3 +454,40 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod glyph_probe {
+    use super::*;
+
+    /// 候选设备字形 DirectWrite 渲染探针(显示层 glyph 裁定的前置实证,
+    /// 2026-10-12):豆腐块/空渲染在 BGRA 里目视判定。非断言型——产物即证据。
+    #[test]
+    fn export_device_glyph_candidates() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/glyph-probe");
+        std::fs::create_dir_all(&dir).unwrap();
+        let candidates: [(&str, &str); 5] = [
+            ("mouse_1f5b1", "\u{1F5B1}"),
+            ("keyboard_2328", "\u{2328}"),
+            ("keyboard_vs16", "\u{2328}\u{FE0F}"),
+            ("keyboard_2328_text", "\u{2328} 键盘"),
+            ("bracket_glyph", "⌨"),
+        ];
+        for (name, text) in candidates {
+            let raster = unsafe { flash_paint::raster(text, 144, Kind::Stopped, 760) }.unwrap();
+            std::fs::write(
+                dir.join(format!("{name}.bgra")),
+                flash_paint::illuminate(&raster, 48),
+            )
+            .unwrap();
+            std::fs::write(
+                dir.join(format!("{name}.size")),
+                format!(
+                    "{} {}",
+                    paint::pixels(raster.width, raster.dpi),
+                    paint::pixels(flash_paint::HEIGHT, raster.dpi)
+                ),
+            )
+            .unwrap();
+        }
+    }
+}
