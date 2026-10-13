@@ -114,6 +114,62 @@ fn pair_uwp_frame(candidates: Vec<WindowEntry>) -> Vec<WindowEntry> {
     }
 }
 
+/// 原生弹窗的子窗文本/按钮枚举(2026-10-13 front 判读信号增强,ROADMAP
+/// front 观察项候选①):owned 层此前只有标题(#32770 的全文在子窗——
+/// Static 文本与 Button),判读咨询的置信贫困(conf 0.32-0.37 vs 合成
+/// 载荷同题 0.95)根因即此。纯 Win32 EnumChildWindows + GetWindowText,
+/// 不进 UIA provider(无慢墙,前台快门路径同样可用)。按钮=类名 Button
+/// 的子窗,文本=其余有非空标题子窗(Static 全文/标题即语义);去重去噪
+/// (空/超长截断/重复行),≤16 文本 + ≤12 按钮封顶(front state 行预算)。
+pub(crate) fn owned_child_texts(hwnd: HWND) -> (Vec<String>, Vec<String>) {
+    // SAFETY: EnumChildWindows 同步回调;LPARAM 指向本帧存活的双 Vec,
+    // 不持引用越过调用,与顶层 collect 同款纪律。
+    unsafe extern "system" fn collect_child(child: HWND, param: LPARAM) -> BOOL {
+        let sink = unsafe { &mut *(param.0 as *mut Vec<(String, String)>) };
+        let mut class = [0u16; 64];
+        let class_len = unsafe { GetClassNameW(child, &mut class) };
+        let class_name = if class_len > 0 {
+            String::from_utf16_lossy(&class[..class_len as usize])
+        } else {
+            String::new()
+        };
+        let mut buf = [0u16; 512];
+        let len = unsafe { GetWindowTextW(child, &mut buf) };
+        if len <= 0 {
+            return BOOL(1);
+        }
+        let text = String::from_utf16_lossy(&buf[..len as usize]);
+        sink.push((class_name, text));
+        BOOL(1)
+    }
+    let mut children: Vec<(String, String)> = Vec::new();
+    // 枚举失败=拿不到子窗文本,如实保持空集(不伪造,owned 层回退仅标题)。
+    let _ = unsafe {
+        EnumChildWindows(
+            Some(hwnd),
+            Some(collect_child),
+            LPARAM((&mut children as *mut Vec<(String, String)>) as isize),
+        )
+    };
+    let clip = |text: &str| -> String { text.chars().take(240).collect() };
+    let mut texts: Vec<String> = Vec::new();
+    let mut buttons: Vec<String> = Vec::new();
+    for (class_name, text) in children {
+        let trimmed = text.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if class_name == "Button" {
+            if buttons.len() < 12 && !buttons.iter().any(|b| b == trimmed) {
+                buttons.push(clip(trimmed));
+            }
+        } else if texts.len() < 16 && !texts.iter().any(|t| t == trimmed) {
+            texts.push(clip(trimmed));
+        }
+    }
+    (texts, buttons)
+}
+
 pub(crate) fn read_window(hwnd: HWND, foreground: HWND) -> Result<Option<WindowEntry>, CtlError> {
     let mut pid = 0;
     unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };

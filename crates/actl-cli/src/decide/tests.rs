@@ -513,3 +513,35 @@ fn ambiguous_truncation_flag_parses() {
     };
     assert!(!truncated);
 }
+
+#[test]
+fn front_owned_texts_render_into_state() {
+    // ④信号增强(2026-10-13):owned 表面的 texts[](原生子窗 Static 全文,
+    // front-report EnumChildWindows 采集)拼进判读 state——A/B 实证
+    // 同一崩溃框 conf 0.32→0.622 跨门槛,判读信号恢复的主通道。
+    let envelope = serde_json::json!({
+        "version": "1", "ok": true, "command": "front-report",
+        "data": {
+            "anchor_foreground": true, "front_clear": false,
+            "owned": [{
+                "title": "wmexternal.exe - Fail Fast Exception",
+                "class": "#32770", "hwnd": 395238, "visible": true, "foreground": true,
+                "texts": ["应用程序错误: 应用程序无法正常启动(0xc0000409)。Fail Fast。"],
+                "buttons": ["确定"]
+            }],
+            "in_tree": []
+        }
+    });
+    let InputForm::Front(input) =
+        parse_input(&envelope.to_string(), Some("continue the meeting flow")).unwrap()
+    else {
+        panic!("front form expected");
+    };
+    assert_eq!(input.surface_count, 1);
+    assert!(
+        input.state.contains("应用程序错误"),
+        "subwindow text reaches the consult state: {}",
+        input.state
+    );
+    assert!(input.state.contains("[确定]"), "buttons render");
+}

@@ -81,11 +81,23 @@ pub(super) fn front_input(
                 .get("text")
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or_default();
+            // 子窗文本增强(2026-10-13):owned 表面新增 texts[](静态全文/
+            // 说明文字,front-report 信号增强——#32770 全文在子窗);in_tree
+            // 保持 text 单行。拼接有界(≤4 行×240),判读 state 预算内。
+            let mut combined = text.to_owned();
+            if let Some(extra) = surface.get("texts").and_then(serde_json::Value::as_array) {
+                for piece in extra.iter().filter_map(serde_json::Value::as_str).take(4) {
+                    if !combined.is_empty() {
+                        combined.push(' ');
+                    }
+                    combined.push_str(clip(piece, 240).trim());
+                }
+            }
             state.push_str(&format!(
                 "{kind} | {} | [{}] | {}\n",
                 clip(name, 64),
                 clip(&buttons, 160),
-                clip(text, 240)
+                clip(combined.trim(), 480)
             ));
         }
     }

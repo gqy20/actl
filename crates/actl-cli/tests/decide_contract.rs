@@ -646,3 +646,44 @@ fn ambiguous_truncated_envelope_abstains_without_provider_call() {
     assert_eq!(out["data"]["choice"], Value::Null);
     assert_eq!(out["data"]["candidates_sent"], 2);
 }
+
+#[test]
+fn front_owned_texts_reach_the_consult_request() {
+    let sandbox = Sandbox::new();
+    sandbox.write_config("http://127.0.0.1:9/v1/systemone");
+    let envelope = sandbox.write(
+        "front-texts.json",
+        &json!({
+            "version": "1", "ok": true, "command": "front-report",
+            "data": {
+                "anchor_foreground": true, "front_clear": false,
+                "owned": [{
+                    "title": "app.exe - 应用程序错误", "class": "#32770",
+                    "hwnd": 111, "visible": true, "foreground": true,
+                    "texts": ["Fail Fast。单击确定关闭程序。"],
+                    "buttons": ["确定", "取消"]
+                }],
+                "in_tree": []
+            }
+        })
+        .to_string(),
+    );
+    let (code, out) = sandbox.invoke(&[
+        "decide",
+        "--card",
+        envelope.to_str().unwrap(),
+        "--task",
+        "continue the flow",
+        "--dry-run",
+    ]);
+    assert_eq!(code, 0, "{out}");
+    let state = out["data"]["request"]["state"].as_str().unwrap();
+    assert!(
+        state.contains("Fail Fast。单击确定关闭程序。"),
+        "subwindow full text rides the consult state: {state}"
+    );
+    assert!(
+        state.contains("[确定 / 取消]"),
+        "subwindow buttons render: {state}"
+    );
+}

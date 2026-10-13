@@ -1297,6 +1297,26 @@ pub fn residue_report() -> Result<serde_json::Value, CtlError> {
 /// ——错误框、确认框、保存提示、向导。自动化动手前必须先听它说。汇聚两层
 /// 证据:原生 owned 弹窗(标题/可见/前台)与树内子窗(文本全文+按钮清单),
 /// 附朴素分类提示;front_clear 表示当前无前台引导层。本命令不点击任何东西。
+/// owned 表面渲染(2026-10-13 信号增强):子窗文本/按钮入行——#32770 类
+/// 弹窗全文在子窗(Static 文本+Button 标题),纯 Win32 枚举不进 provider;
+/// 无子窗文本的原生弹窗(托管应用自绘)保持仅标题,如实不强造。
+fn owned_surface(w: &WindowEntry) -> serde_json::Value {
+    let mut entry = serde_json::json!({"hwnd": w.hwnd, "title": w.title, "class": w.class,
+           "visible": w.visible, "foreground": w.foreground});
+    if let Some(hwnd) = w.hwnd {
+        let (texts, buttons) = crate::native_windows::owned_child_texts(
+            windows::Win32::Foundation::HWND(hwnd as *mut _),
+        );
+        if !texts.is_empty() {
+            entry["texts"] = serde_json::json!(texts);
+        }
+        if !buttons.is_empty() {
+            entry["buttons"] = serde_json::json!(buttons);
+        }
+    }
+    entry
+}
+
 pub fn front_report(app: &str) -> Result<serde_json::Value, CtlError> {
     // 前台快门(2026-10-11,release-review-11 根因同源):锚窗非前台时其
     // 树内面板用户不可见,不构成 docs/31"最前方的弹窗引导"语义,而全树
@@ -1315,10 +1335,7 @@ pub fn front_report(app: &str) -> Result<serde_json::Value, CtlError> {
         let owned: Vec<serde_json::Value> = all_native
             .iter()
             .filter(|w| w.owner_title.as_deref() == Some(anchor_title.as_str()) && w.visible)
-            .map(|w| {
-                serde_json::json!({"hwnd": w.hwnd, "title": w.title, "class": w.class,
-                       "visible": w.visible, "foreground": w.foreground})
-            })
+            .map(owned_surface)
             .collect();
         return Ok(serde_json::json!({
             "anchor_foreground": false,
@@ -1337,10 +1354,7 @@ pub fn front_report(app: &str) -> Result<serde_json::Value, CtlError> {
         .iter()
         // 只报可见弹窗:Default IME 等隐形宿主是噪音(实测两枚)。
         .filter(|w| w.owner_title.as_deref() == Some(title.as_str()) && w.visible)
-        .map(|w| {
-            serde_json::json!({"hwnd": w.hwnd, "title": w.title, "class": w.class,
-                   "visible": w.visible, "foreground": w.foreground})
-        })
+        .map(owned_surface)
         .collect();
     // 树内子窗(depth>0 的 Window):整棵子树的文本与按钮归入该层;
     // 无文本也无按钮的宿主壳不报(降噪)。

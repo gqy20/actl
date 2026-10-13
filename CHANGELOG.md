@@ -5,9 +5,10 @@
 0.x 期间破坏性变更在条目中以 **[BC]** 标注。条目只记"变了什么与为什么"；
 过程细节与归因在 git 提交信息与 docs/ 里，不在此重复。
 
-## [Unreleased]
-
 ### Added
+
+- **front-report owned 子窗文本信号增强(spec,2026-10-13,ROADMAP front 观察项候选①兑现)**:owned 原生弹窗表面新增 `texts[]/buttons[]`——`owned_child_texts`(actl-uia,EnumChildWindows+GetWindowText 纯 Win32 直采,不进 UIA provider,前台快门路径同样可用;文本 ≤16 行×240 字符、按钮 ≤12,去重截断)。动机:#32770 类弹窗全文在子窗 Static/Button,owned 只带标题是 decide 判读咨询置信贫困(conf 0.32-0.37<门槛)的根因;decide/front.rs 渲染行拼接 texts(≤4 行×240,判读 state 预算内)。**A/B 实测(真 Kev)**:同一 WMExternal Fail Fast 崩溃框信封,不带文本 conf 0.32 弃权 → 带子窗全文 conf **0.622 跨过 0.5 门槛**,family=crash 判读成立——「信号补全即恢复」预测证实;新式另存为(Explorer 壳,子窗是浏览器噪声)判读 unknown 属诚实行为,如实入册。真机链路:记事本 ctrl+s 真对话框 owned 层拿到完整 texts/buttons(另存为/编码/保存按钮族)。测试:单测 +1+契约 +1(texts 入 state/入 consult request);help front-report 四要素更新。无 golden 冲突(owned texts 可选字段,旧信封兼容)。
+
 
 - **decide 应答质量三优化(spec,2026-10-13,jev-ultrafast/fastjev-egolite 对照吸收)**:①**领先裕度双门槛**——answer_card 消费 provider 完整概率分布,p1-p2 < MIN_LEAD_MARGIN(0.3) 即 abstain `low_margin` 附 top_choice/confidence;conf 只答「头名多可信」不答「比次名可信多少」,探针 t_g 实证薄裕度形态(0.604/0.228)恰是过 conf 门槛但次名有实质权重的答案;none 不参与裕度,provider 未返回分布时裕度让位(旧后端兼容,conf 独立工作)。②**AMBIGUOUS 截断护栏**——`ambiguous_error` 候选超 8 截断时证据带 `total/returned/truncated:true`(actl-uia),decide 见标志 abstain `candidates_truncated` 免网交回人——third-hand §13.2.1 召回保护(「排 536 位的正确目标不被裁掉」)的 decide 侧收口,在残缺选项集上问模型=把「正确候选恰好被裁掉」变成强迫硬选;旧格式信封缺标志按未截断。③**审计嵌卡**——decision-audit 每行附完整卡(≤4KiB 卡协议上限兜底体积),请求+应答配对成行=模型换版回归与阈值校准的**直接语料**(换 provider/模型版本后离线重放测漂移;golden 防不住首次错,语料防换版退化)——docs/08 §7 校准债的偿还通道。真机复验:calc-tie 真实分布裕度 0.80 正确放行(无误伤)/AMBIGUOUS conf 0.31 先拦门槛顺序无回归;单测 16+契约 21(薄裕度/宽裕度/无分布兼容/截断标志/截断免网弃权)。front 子窗文本增强(actl-uia 枚举,治 owned 层只有标题的信号贫困)按最小设计裁定为独立中等活登记 ROADMAP,不混入本 spec。
 

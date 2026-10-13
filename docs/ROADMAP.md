@@ -44,7 +44,7 @@
 - [ ] 浏览器 CDP 工程余量（[72 §13](72-browser-cdp-integration.md)）：UIA 轨路线固化（browser.yml 3 verified/5 manual/2 unverified,随应用轮渐进）；深水层终态吸收已完成（2026-10-13:全动词上骨干,cdp.rs/tungstenite 退役,证据 docs/72 §13）
 - [ ] word-note-typography 的 popup_ignores 声明路径重验（随下次 Word 轮顺带,不专跑）
 - [ ] preview-choice computer-use 真机鼠标点击验收（[46](46-target-preview.md)：两轮 "window is not a usable app window" 失败如实保留）
-- [ ] decide front 判读真实信封低置信形态的使用观察（2026-10-13 双态实测:常驻表面/崩溃框方向全对但真实信封 conf 0.32-0.37<0.5 门槛,日常形态=弃权+top_choice 照报——owned 层只带标题无全文的信号差;若实际使用过保守,候选方案按优先序:①front-report 增强 owned 原生弹窗子窗文本/按钮枚举(actl-uia EnumChildWindows,unsafe 豁免区中等活,治本——合成载荷同题 0.95 证明信号补全即恢复);②判读咨询位局部降门槛;③带 in_tree 全文的调用形态;不动全局阈值）
+- [ ] decide front 判读真实信封低置信形态的使用观察（2026-10-13 双态实测:常驻表面/崩溃框方向全对但真实信封 conf 0.32-0.37<0.5 门槛,日常形态=弃权+top_choice 照报——owned 层只带标题无全文的信号差;若实际使用过保守,候选方案按优先序:①front-report 增强 owned 子窗文本/按钮枚举——**已实现(2026-10-13,EnumChildWindows 直采,A/B 实证同崩溃框 conf 0.32→0.622 跨门槛)**;②判读咨询位局部降门槛;③带 in_tree 全文的调用形态;不动全局阈值;观察残留=Explorer 系新式另存为的子窗是浏览器壳噪声,判读仍走 unknown 属诚实行为）
 
 
 
