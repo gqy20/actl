@@ -64,6 +64,12 @@ quirks:
     note: >-
       Win11 guest 安装期 NAT 网络会卡"让我们连接到网络"且无法跳过——
       装 guest 时网卡选 Bridged;装完再按需改回 NAT(官方 workaround)。
+      多网卡宿主(物理口未插线+VPN/虚拟适配器成堆)Bridged 自动选择器
+      会桥到不可用适配器,guest 仅拿 169.254 APIPA——长周期评测 VM 用
+      NAT 最稳:不依赖物理网卡在位,宿主换网/换地不用重配。NAT 网络在
+      guest 判为 Public profile:需 host→guest 入站(MCP/诊断)时先
+      Set-NetConnectionProfile 设 Private,ICMP 另加放行规则(默认不回
+      ping 不代表链路不通——host→guest 的 TCP 入站按端口单独放行)。
   - id: whp_mode_host
     note: >-
       宿主 WSL2 常驻(HypervisorPresent=true)→ VMware 走 Host VBS Mode

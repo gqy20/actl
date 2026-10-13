@@ -9,12 +9,12 @@
 |---|---|
 | VM | `eval-win11-26h2` @ `G:\vm\eval-win11-26h2.vmx`,已入 GUI 库 |
 | Guest | Windows 11 企业评估版 26H2 zh-cn(x64),本地账户 `actl1` |
-| 硬件 | 4 vCPU / 6144 MB / 64 GB NVMe / Bridged(e1000e) / EFI+安全启动 |
+| 硬件 | 4 vCPU / 6144 MB / 64 GB NVMe / NAT(e1000e,2026-10-14 由 Bridged 改) / EFI+安全启动 |
 | vTPM | Present+部分加密(`vmx.encryptionType="partial"`,密码见 G:\vm\eval-win11-26h2-credentials.txt) |
 | Tools | 13.1.5 已装,vmtoolsd 在跑 |
 | 宿主↔guest 通道 | vmrun 全凭据链通:copyFile 双向 / runProgramInGuest / captureScreen / 共享夹(UNC) |
 | ISO 归档 | `G:\vm\iso\26200.6584...CLIENTENTERPRISEEVAL...zh-cn.iso`(6.9 GB) |
-| 遗留 | guest 无外网;Snapshot 类 vmrun 命令 CLI 认证失败(见 §5) |
+| 遗留 | Snapshot 类 vmrun 命令 CLI 认证失败(见 §4.7;guest 外网已修,见 §4.6) |
 
 ## 1. 全流程(六阶段,可复放)
 
@@ -97,9 +97,13 @@ ValuePattern 读回恒空(安全控件特性):`set-value --verify-value` 报 ASS
 
 "Number of processors" 是 ComboBox:set-value 写内部 Edit **不被采纳**(摘要栏不刷新);select 又因下拉项不物化失败;**正确通道 = type 值 + press tab(焦点离开触发 ValuePattern 提交)**,左侧摘要栏刷新才算生效。Win32 传统应用 ComboBox 通用形态。
 
-### 4.6 guest 无外网(TCP False,遗留)
+### 4.6 guest 无外网(已修,2026-10-14 改 NAT)
 
-Bridged 模式但 guest 只拿到 169.254(APIPA),`Test-NetConnection` False——宿主多网卡场景 Bridged 虚拟网卡可能桥到错误物理适配器。**不阻塞离线评测题**;Web 类题面前修:VM Settings → Network Adapter → Bridged → "Configure Adapters" 勾选正确的物理网卡(或改 NAT)。
+装机期 Bridged 导致 guest 只拿到 169.254(APIPA)——本宿主 12 块网卡(物理有线口未插线、WLAN、TAP/Wintun×2/Sangfor×2/FlClash/ZeroTier/VMnet1/8),Bridged 自动选择器桥到不可用适配器。**修法 = VM Settings 改 NAT**(比 Configure Adapters 钉物理网卡更稳:不依赖任何物理网卡在位,宿主换 Wi-Fi/网线/地点都不用重配——评测基线的结构性稳定)。
+
+2026-10-14 实测核验(vmrun 三段式带外探测):guest 拿 DHCP `192.168.92.128/24`(网关/DNS `192.168.92.2`);guest→宿主 ping VMnet8(`192.168.92.1`)通;ping 1.1.1.1 78–88ms、HTTP connect test 200——**外网全通,且出站透明继承宿主 FlClash 代理(DNS 应答为 fake-ip 段 198.18.x)**。三条含义:①Web 类题可用;②涉网 verifier 结果受宿主代理栈影响,代理开关状态进评测环境头;③NAT 网络在 guest 判为"网络/Public profile"——本轮已设 Private 并加 ICMP 放行规则 `ACTL-Eval-Ping`(profile=any),host↔guest 双向 ping 实测通;host→guest 的 TCP 入站(MCP)仍须按端口单独放行。
+
+收口遗留:**base 快照(Snapshot1,2026-10-13 23:25)早于 NAT 生效(23:58)**——revert 会回到无网状态且 Private/防火墙规则不在基线内;须在网络收口完成后重打 base(走 GUI,snapshot CLI 认证问题见 §4.7)。guest 用户目录的历轮探测残件(probe*/diag*/hgfs* 18 个)已清理,重打后基线不含诊断垃圾。
 
 ### 4.7 Snapshot 类 CLI 认证失败(遗留,开放)
 
