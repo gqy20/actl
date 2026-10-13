@@ -1,0 +1,82 @@
+pack_format: 1
+name: ms-settings
+display: Windows 设置(ms-settings)
+launch: ms-settings:     # uri 直达;explorer "ms-settings:sound" 等深链各页
+window: "设置"
+app_version: "Win11 25H2 Settings(SystemSettings.exe)"
+verified_date: 2026-10-14
+verified_env: Win11 25H2 (build 26200) zh-cn
+quirks:
+  - id: uri_deep_links
+    note: >-
+      深链直达是首选路由:`ms-settings:<page>`(sound/display/notifications/
+      easeofaccess-narrator 等,explorer 或 `cmd /c start` 拉起)——
+      免窗内导航树逐页点。启动后同 hwnd 复用(已开的设置窗直接切页,
+      不新开窗);同屏多"设置"窗时活动页=element 数最多那个(skeleton
+      86+ vs 空壳 5),或逐窗 find 探测。
+  - id: foreground_for_full_tree
+    note: >-
+      设置窗**必须在前台**才有完整树——后台时 Slider/Toggle/ComboBox
+      全部不可见(实测:后台 find --role Slider=0,前台化后=2)。流程
+      序:launch/focus-window → 等 1s → 再观察;MSIX 应用的 UIA 惰性。
+  - id: window_anchor
+    note: >-
+      锚=最大 element 数的"设置"窗(标题恒为"设置"不随页变,标题锚
+      多窗 AMBIGUOUS 时按 find 探测结果选);设置窗常驻(Win+I 拉起
+      SystemSettings.exe),关闭用 Stop-Process 或 wm close——
+      close-window 对该 UWP 窗实测 NOT_FOUND(窗口归属特殊)。
+  - id: control_type_matrix
+    note: >-
+      WinUI 3 四型控件全部语义可达(2026-10-14 实测):
+      ①Slider(音量/亮度):set-value 走 RangeValue 回退,读走
+      find --property value(value_via range-value);
+      ②ComboBox(缩放/分辨率):select 自动 Expand 直达(收起态
+      一步选中,substring 大小写不敏感)——但 WinUI combo 的 value
+      读回 NOT_ACTIONABLE(Value/Text 都不暴露),读选后状态走
+      snapshot 树名或截图;
+      ③ToggleSwitch(讲述人开关等):role 映射为 Button!树里无
+      ToggleSwitch role——用 toggle 动词(pattern 判定非 role 判定,
+      Toggle pattern 在),状态读 get --property selected(ToggleState
+      回退);通知页的"设置优先级通知"等按钮不全是开关,先探测再动;
+      ④RadioButton(输出设备):click 切换,get --property selected 判读。
+  - id: settings_is_system_app
+    note: >-
+      系统应用=fixture 纪律合规(任何 Win11 机器可复现);主窗标题恒
+      "设置",页导航在窗内(BreadcrumbBarItemButton 可回上级);设置窗
+      属用户系统状态(亮度/音量改动留桌面),验证后回原状。
+routes:
+  - id: page_open
+    description: 深链打开指定设置页(变量 {page}:sound/display/notifications/...);actl launch 不认 URI scheme——编排层用 powershell Start-Process ms-settings:<page> 或 cmd /c start(实测均拉起);已有设置窗在场时同窗切页不新开
+    status: verified
+    verify: >-
+      设置窗在场且 find --role Slider(声音/显示页)命中 2 或 1;
+      页面元素数 >5(非空壳窗)。
+    steps:
+      - ["launch", "explorer.exe"]
+  - id: slider_read_write
+    description: 滑块读改(音量/亮度):find --property value 批读;set-value RangeValue 写+verify
+    status: verified
+    verify: >-
+      set-value --verify-value <v> ok 且 value_verified:true;
+      envelope range.value == 期望值(step 网格钳制时按 actual 判读)。
+    steps:
+      - ["find", "--role", "Slider", "--property", "value", "--app", "{window}", "--limit", "4"]
+      - ["set-value", "{slider_ref}", "{v}", "--verify-value", "{v}", "--app", "{window}"]
+  - id: combo_select
+    description: 下拉选择(缩放/分辨率/输出设备):select 自动 Expand,收起态直达
+    status: verified
+    verify: >-
+      select ok 且 matched_by(exact-name|substring-name);WinUI combo
+      无 value 读回,终态走 snapshot 树名核对或截图。
+    steps:
+      - ["find", "--name", "{combo_name}", "--role", "ComboBox", "--app", "{window}"]
+      - ["select", "{combo_ref}", "{option}", "--app", "{window}"]
+  - id: toggle_switch
+    description: 开关切换(讲述人/辅助功能):toggle 动词+selected 读回
+    status: verified
+    verify: >-
+      toggle ok 且 state 为期望;get --property selected 与 state 一致。
+    steps:
+      - ["find", "--name", "{switch_name}", "--role", "Button", "--app", "{window}"]
+      - ["toggle", "{switch_ref}", "--app", "{window}"]
+      - ["get", "{switch_ref}", "--property", "selected", "--app", "{window}"]
