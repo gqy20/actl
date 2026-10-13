@@ -1,0 +1,504 @@
+=== chromiumoxide tree ===
+aho-corasick 1.1.5 :: Unlicense OR MIT
+async-tungstenite 0.32.1 :: MIT
+atomic-waker 1.1.2 :: Apache-2.0 OR MIT
+base64 0.22.1 :: MIT OR Apache-2.0
+base64 0.23.1 :: MIT OR Apache-2.0
+bitflags 2.13.2 :: MIT OR Apache-2.0
+block-buffer 0.10.4 :: MIT OR Apache-2.0
+bumpalo 3.20.3 :: MIT OR Apache-2.0
+bytes 1.12.1 :: MIT
+cfg-if 1.0.5 :: MIT OR Apache-2.0
+chromiumoxide 0.9.1 :: MIT OR Apache-2.0
+chromiumoxide-probe 0.1.0 :: (local/no-manifest)
+chromiumoxide_cdp 0.9.1 :: MIT OR Apache-2.0
+chromiumoxide_pdl 0.9.1 :: MIT OR Apache-2.0
+chromiumoxide_types 0.9.1 :: MIT OR Apache-2.0
+cpufeatures 0.2.17 :: MIT OR Apache-2.0
+crypto-common 0.1.7 :: MIT OR Apache-2.0
+data-encoding 2.11.1 :: MIT
+digest 0.10.7 :: MIT OR Apache-2.0
+displaydoc 0.2.7 :: MIT OR Apache-2.0
+dunce 1.0.5 :: CC0-1.0 OR MIT-0 OR Apache-2.0
+either 1.19.0 :: MIT OR Apache-2.0
+errno 0.3.14 :: (local/no-manifest)
+fnv 1.0.7 :: Apache-2.0 / MIT
+form_urlencoded 1.2.2 :: MIT OR Apache-2.0
+futures 0.3.34 :: MIT OR Apache-2.0
+futures-channel 0.3.34 :: MIT OR Apache-2.0
+futures-core 0.3.34 :: MIT OR Apache-2.0
+futures-executor 0.3.34 :: MIT OR Apache-2.0
+futures-io 0.3.34 :: MIT OR Apache-2.0
+futures-macro 0.3.34 :: MIT OR Apache-2.0
+futures-sink 0.3.34 :: MIT OR Apache-2.0
+futures-task 0.3.34 :: MIT OR Apache-2.0
+futures-timer 3.0.4 :: MIT/Apache-2.0
+futures-util 0.3.34 :: MIT OR Apache-2.0
+generic-array 0.14.7 :: MIT
+getrandom 0.3.4 :: MIT OR Apache-2.0
+heck 0.5.0 :: MIT OR Apache-2.0
+http 1.5.0 :: MIT OR Apache-2.0
+http-body 1.1.0 :: MIT
+http-body-util 0.1.5 :: MIT
+httparse 1.10.1 :: MIT OR Apache-2.0
+hyper 1.12.0 :: MIT
+hyper-util 0.1.21 :: MIT
+icu_collections 2.3.0 :: Unicode-3.0
+icu_locale_core 2.3.0 :: Unicode-3.0
+icu_normalizer 2.3.0 :: Unicode-3.0
+icu_normalizer_data 2.3.0 :: Unicode-3.0
+icu_properties 2.3.0 :: Unicode-3.0
+icu_properties_data 2.3.0 :: Unicode-3.0
+icu_provider 2.3.1 :: Unicode-3.0
+idna 1.1.0 :: MIT OR Apache-2.0
+idna_adapter 1.2.2 :: Apache-2.0 OR MIT
+ipnet 2.12.2 :: MIT OR Apache-2.0
+itoa 1.0.18 :: MIT OR Apache-2.0
+js-sys 0.3.106 :: MIT OR Apache-2.0
+libc 0.2.190 :: MIT OR Apache-2.0
+litemap 0.8.3 :: Unicode-3.0
+log 0.4.34 :: MIT OR Apache-2.0
+memchr 2.8.3 :: Unlicense OR MIT
+mio 1.2.4 :: MIT
+once_cell 1.21.4 :: MIT OR Apache-2.0
+percent-encoding 2.3.2 :: MIT OR Apache-2.0
+pin-project-lite 0.2.17 :: Apache-2.0 OR MIT
+potential_utf 0.1.6 :: Unicode-3.0
+ppv-lite86 0.2.21 :: MIT OR Apache-2.0
+proc-macro2 1.0.107 :: MIT OR Apache-2.0
+quote 1.0.47 :: MIT OR Apache-2.0
+r-efi 5.3.0 :: (local/no-manifest)
+rand 0.9.5 :: MIT OR Apache-2.0
+rand_chacha 0.9.0 :: MIT OR Apache-2.0
+rand_core 0.9.5 :: MIT OR Apache-2.0
+regex 1.13.1 :: MIT OR Apache-2.0
+regex-automata 0.4.18 :: MIT OR Apache-2.0
+regex-syntax 0.8.11 :: MIT OR Apache-2.0
+reqwest 0.13.5 :: MIT OR Apache-2.0
+rustversion 1.0.23 :: MIT OR Apache-2.0
+serde 1.0.229 :: MIT OR Apache-2.0
+serde_core 1.0.229 :: MIT OR Apache-2.0
+serde_derive 1.0.229 :: MIT OR Apache-2.0
+serde_json 1.0.154 :: MIT OR Apache-2.0
+sha1 0.10.7 :: MIT OR Apache-2.0
+signal-hook-registry 1.4.8 :: (local/no-manifest)
+slab 0.4.12 :: MIT
+smallvec 1.16.3 :: MIT OR Apache-2.0
+socket2 0.6.5 :: MIT OR Apache-2.0
+stable_deref_trait 1.2.1 :: MIT OR Apache-2.0
+syn 2.0.119 :: MIT OR Apache-2.0
+syn 3.0.9 :: MIT OR Apache-2.0
+sync_wrapper 1.0.2 :: Apache-2.0
+synstructure 0.14.0 :: MIT
+thiserror 2.0.21 :: MIT OR Apache-2.0
+thiserror-impl 2.0.21 :: MIT OR Apache-2.0
+tinystr 0.8.4 :: Unicode-3.0
+tokio 1.53.2 :: MIT
+tokio-macros 2.7.2 :: MIT
+tower 0.5.3 :: MIT
+tower-http 0.6.11 :: MIT
+tower-layer 0.3.3 :: MIT
+tower-service 0.3.3 :: MIT
+tracing 0.1.44 :: MIT
+tracing-attributes 0.1.31 :: MIT
+tracing-core 0.1.36 :: MIT
+try-lock 0.2.5 :: MIT
+tungstenite 0.28.0 :: MIT OR Apache-2.0
+typenum 1.20.1 :: MIT OR Apache-2.0
+unicode-ident 1.0.27 :: (MIT OR Apache-2.0) AND Unicode-3.0
+url 2.5.8 :: MIT OR Apache-2.0
+utf-8 0.7.6 :: MIT OR Apache-2.0
+utf8_iter 1.0.4 :: Apache-2.0 OR MIT
+version_check 0.9.5 :: MIT/Apache-2.0
+want 0.3.2 :: MIT
+wasi 0.11.1+wasi-snapshot-preview1 :: (local/no-manifest)
+wasip2 1.0.4+wasi-0.2.12 :: (local/no-manifest)
+wasm-bindgen 0.2.129 :: MIT OR Apache-2.0
+wasm-bindgen-futures 0.4.79 :: (local/no-manifest)
+wasm-bindgen-macro 0.2.129 :: MIT OR Apache-2.0
+wasm-bindgen-macro-support 0.2.129 :: MIT OR Apache-2.0
+wasm-bindgen-shared 0.2.129 :: MIT OR Apache-2.0
+web-sys 0.3.106 :: (local/no-manifest)
+which 8.0.6 :: MIT
+windows-link 0.2.1 :: MIT OR Apache-2.0
+windows-registry 0.6.1 :: MIT OR Apache-2.0
+windows-result 0.4.1 :: MIT OR Apache-2.0
+windows-strings 0.5.1 :: MIT OR Apache-2.0
+windows-sys 0.61.2 :: MIT OR Apache-2.0
+wit-bindgen 0.57.1 :: (local/no-manifest)
+writeable 0.6.4 :: Unicode-3.0
+yoke 0.8.3 :: Unicode-3.0
+yoke-derive 0.8.4 :: Unicode-3.0
+zerocopy 0.8.62 :: BSD-2-Clause OR Apache-2.0 OR MIT
+zerocopy-derive 0.8.62 :: (local/no-manifest)
+zerofrom 0.1.8 :: Unicode-3.0
+zerofrom-derive 0.1.8 :: Unicode-3.0
+zerotrie 0.2.5 :: Unicode-3.0
+zerovec 0.11.8 :: Unicode-3.0
+zerovec-derive 0.11.6 :: Unicode-3.0
+zmij 1.0.23 :: MIT
+
+=== headless_chrome tree ===
+adler2 2.0.1 :: 0BSD OR MIT OR Apache-2.0
+aho-corasick 1.1.5 :: Unlicense OR MIT
+anyhow 1.0.104 :: MIT OR Apache-2.0
+auto_generate_cdp 0.4.6 :: LICENSE.txt
+base64 0.22.1 :: MIT OR Apache-2.0
+base64 0.23.1 :: MIT OR Apache-2.0
+bitflags 2.13.2 :: MIT OR Apache-2.0
+block-buffer 0.10.4 :: MIT OR Apache-2.0
+byteorder 1.5.0 :: Unlicense OR MIT
+bytes 1.12.1 :: MIT
+cc 1.8.0 :: MIT OR Apache-2.0
+cfg-if 1.0.5 :: MIT OR Apache-2.0
+chacha20 0.10.2 :: MIT OR Apache-2.0
+convert_case 0.8.0 :: MIT
+cpufeatures 0.2.17 :: MIT OR Apache-2.0
+cpufeatures 0.3.1 :: MIT OR Apache-2.0
+crc32fast 1.5.2 :: MIT OR Apache-2.0
+crypto-common 0.1.7 :: MIT OR Apache-2.0
+darling 0.20.11 :: MIT
+darling_core 0.20.11 :: MIT
+darling_macro 0.20.11 :: MIT
+data-encoding 2.11.1 :: MIT
+derive_builder 0.20.2 :: MIT OR Apache-2.0
+derive_builder_core 0.20.2 :: MIT OR Apache-2.0
+derive_builder_macro 0.20.2 :: MIT OR Apache-2.0
+digest 0.10.7 :: MIT OR Apache-2.0
+displaydoc 0.2.7 :: MIT OR Apache-2.0
+errno 0.3.14 :: (local/no-manifest)
+fastrand 2.5.0 :: Apache-2.0 OR MIT
+find-msvc-tools 0.1.14 :: MIT OR Apache-2.0
+flate2 1.1.10 :: MIT OR Apache-2.0
+fnv 1.0.7 :: Apache-2.0 / MIT
+form_urlencoded 1.2.2 :: MIT OR Apache-2.0
+generic-array 0.14.7 :: MIT
+getrandom 0.2.17 :: MIT OR Apache-2.0
+getrandom 0.3.4 :: MIT OR Apache-2.0
+getrandom 0.4.3 :: MIT OR Apache-2.0
+headless-chrome-probe 0.1.0 :: (local/no-manifest)
+headless_chrome 1.0.22 :: MIT
+http 1.5.0 :: MIT OR Apache-2.0
+httparse 1.10.1 :: MIT OR Apache-2.0
+icu_collections 2.3.0 :: Unicode-3.0
+icu_locale_core 2.3.0 :: Unicode-3.0
+icu_normalizer 2.3.0 :: Unicode-3.0
+icu_normalizer_data 2.3.0 :: Unicode-3.0
+icu_properties 2.3.0 :: Unicode-3.0
+icu_properties_data 2.3.0 :: Unicode-3.0
+icu_provider 2.3.1 :: Unicode-3.0
+ident_case 1.0.1 :: MIT/Apache-2.0
+idna 1.1.0 :: MIT OR Apache-2.0
+idna_adapter 1.2.2 :: Apache-2.0 OR MIT
+itoa 1.0.18 :: MIT OR Apache-2.0
+libc 0.2.190 :: MIT OR Apache-2.0
+linux-raw-sys 0.12.1 :: (local/no-manifest)
+litemap 0.8.3 :: Unicode-3.0
+log 0.4.34 :: MIT OR Apache-2.0
+memchr 2.8.3 :: Unlicense OR MIT
+miniz_oxide 0.9.1 :: MIT OR Zlib OR Apache-2.0
+once_cell 1.21.4 :: MIT OR Apache-2.0
+percent-encoding 2.3.2 :: MIT OR Apache-2.0
+potential_utf 0.1.6 :: Unicode-3.0
+ppv-lite86 0.2.21 :: MIT OR Apache-2.0
+proc-macro2 1.0.107 :: MIT OR Apache-2.0
+quote 1.0.47 :: MIT OR Apache-2.0
+r-efi 5.3.0 :: (local/no-manifest)
+r-efi 6.0.0 :: (local/no-manifest)
+rand 0.9.5 :: MIT OR Apache-2.0
+rand 0.10.3 :: MIT OR Apache-2.0
+rand_chacha 0.9.0 :: MIT OR Apache-2.0
+rand_core 0.9.5 :: MIT OR Apache-2.0
+rand_core 0.10.1 :: MIT OR Apache-2.0
+regex 1.13.1 :: MIT OR Apache-2.0
+regex-automata 0.4.18 :: MIT OR Apache-2.0
+regex-syntax 0.8.11 :: MIT OR Apache-2.0
+ring 0.17.14 :: Apache-2.0 AND ISC
+rustix 1.1.5 :: (local/no-manifest)
+rustls 0.23.45 :: Apache-2.0 OR ISC OR MIT
+rustls-pki-types 1.15.1 :: MIT OR Apache-2.0
+rustls-webpki 0.103.15 :: ISC
+serde 1.0.229 :: MIT OR Apache-2.0
+serde_core 1.0.229 :: MIT OR Apache-2.0
+serde_derive 1.0.229 :: MIT OR Apache-2.0
+serde_json 1.0.154 :: MIT OR Apache-2.0
+sha1 0.10.7 :: MIT OR Apache-2.0
+shlex 2.0.1 :: MIT OR Apache-2.0
+simd-adler32 0.3.10 :: MIT
+smallvec 1.16.3 :: MIT OR Apache-2.0
+socks 0.3.4 :: MIT/Apache-2.0
+stable_deref_trait 1.2.1 :: MIT OR Apache-2.0
+strsim 0.11.1 :: MIT
+subtle 2.6.1 :: BSD-3-Clause
+syn 2.0.119 :: MIT OR Apache-2.0
+syn 3.0.9 :: MIT OR Apache-2.0
+synstructure 0.14.0 :: MIT
+tempfile 3.27.0 :: MIT OR Apache-2.0
+thiserror 2.0.21 :: MIT OR Apache-2.0
+thiserror-impl 2.0.21 :: MIT OR Apache-2.0
+tinystr 0.8.4 :: Unicode-3.0
+tungstenite 0.29.0 :: MIT OR Apache-2.0
+typenum 1.20.1 :: MIT OR Apache-2.0
+unicode-ident 1.0.27 :: (MIT OR Apache-2.0) AND Unicode-3.0
+unicode-segmentation 1.13.3 :: MIT OR Apache-2.0
+untrusted 0.9.0 :: ISC
+ureq 3.4.2 :: MIT OR Apache-2.0
+ureq-proto 0.6.4 :: MIT OR Apache-2.0
+url 2.5.8 :: MIT OR Apache-2.0
+utf8-zero 0.8.1 :: MIT OR Apache-2.0
+utf8_iter 1.0.4 :: Apache-2.0 OR MIT
+version_check 0.9.5 :: MIT/Apache-2.0
+wasi 0.11.1+wasi-snapshot-preview1 :: (local/no-manifest)
+wasip2 1.0.4+wasi-0.2.12 :: (local/no-manifest)
+webpki-roots 1.0.9 :: CDLA-Permissive-2.0
+which 8.0.6 :: MIT
+winapi 0.3.9 :: MIT/Apache-2.0
+winapi-i686-pc-windows-gnu 0.4.0 :: (local/no-manifest)
+winapi-x86_64-pc-windows-gnu 0.4.0 :: (local/no-manifest)
+windows-link 0.2.1 :: MIT OR Apache-2.0
+windows-sys 0.52.0 :: (local/no-manifest)
+windows-sys 0.61.2 :: MIT OR Apache-2.0
+windows-targets 0.52.6 :: (local/no-manifest)
+windows_aarch64_gnullvm 0.52.6 :: (local/no-manifest)
+windows_aarch64_msvc 0.52.6 :: (local/no-manifest)
+windows_i686_gnu 0.52.6 :: (local/no-manifest)
+windows_i686_gnullvm 0.52.6 :: (local/no-manifest)
+windows_i686_msvc 0.52.6 :: (local/no-manifest)
+windows_x86_64_gnu 0.52.6 :: (local/no-manifest)
+windows_x86_64_gnullvm 0.52.6 :: (local/no-manifest)
+windows_x86_64_msvc 0.52.6 :: (local/no-manifest)
+winreg 0.56.0 :: MIT
+wit-bindgen 0.57.1 :: (local/no-manifest)
+writeable 0.6.4 :: Unicode-3.0
+yoke 0.8.3 :: Unicode-3.0
+yoke-derive 0.8.4 :: Unicode-3.0
+zerocopy 0.8.62 :: BSD-2-Clause OR Apache-2.0 OR MIT
+zerocopy-derive 0.8.62 :: (local/no-manifest)
+zerofrom 0.1.8 :: Unicode-3.0
+zerofrom-derive 0.1.8 :: Unicode-3.0
+zeroize 1.9.1 :: Apache-2.0 OR MIT
+zerotrie 0.2.5 :: Unicode-3.0
+zerovec 0.11.8 :: Unicode-3.0
+zerovec-derive 0.11.6 :: Unicode-3.0
+zlib-rs 0.6.8 :: Zlib
+zmij 1.0.23 :: MIT
+
+=== actl workspace baseline (current) ===
+actl-browser 0.2.2 :: (local/no-manifest)
+actl-cli 0.2.2 :: (local/no-manifest)
+actl-core 0.2.2 :: (local/no-manifest)
+actl-devtools 0.2.2 :: (local/no-manifest)
+actl-flow 0.2.2 :: (local/no-manifest)
+actl-mcp 0.2.2 :: (local/no-manifest)
+actl-physical 0.2.2 :: (local/no-manifest)
+actl-uia 0.2.2 :: (local/no-manifest)
+aho-corasick 1.1.5 :: Unlicense OR MIT
+android_system_properties 0.1.6 :: MIT OR Apache-2.0
+annotate-snippets 0.12.16 :: MIT OR Apache-2.0
+anstream 1.0.0 :: MIT OR Apache-2.0
+anstyle 1.0.14 :: MIT OR Apache-2.0
+anstyle-parse 1.0.0 :: MIT OR Apache-2.0
+anstyle-query 1.1.5 :: MIT OR Apache-2.0
+anstyle-wincon 3.0.11 :: MIT OR Apache-2.0
+arraydeque 0.5.1 :: MIT/Apache-2.0
+async-trait 0.1.92 :: MIT OR Apache-2.0
+atomic-waker 1.1.2 :: Apache-2.0 OR MIT
+autocfg 1.5.1 :: Apache-2.0 OR MIT
+axum 0.8.9 :: MIT
+axum-core 0.5.6 :: MIT
+base64 0.23.1 :: MIT OR Apache-2.0
+bitflags 2.13.2 :: MIT OR Apache-2.0
+block-buffer 0.12.1 :: MIT OR Apache-2.0
+bumpalo 3.20.3 :: MIT OR Apache-2.0
+bytes 1.12.1 :: MIT
+cc 1.5.1 :: MIT OR Apache-2.0
+cfg-if 1.0.5 :: MIT OR Apache-2.0
+chacha20 0.10.2 :: MIT OR Apache-2.0
+chrono 0.4.45 :: MIT OR Apache-2.0
+clap 4.6.7 :: MIT OR Apache-2.0
+clap_builder 4.6.7 :: MIT OR Apache-2.0
+clap_derive 4.6.7 :: MIT OR Apache-2.0
+clap_lex 1.1.1 :: MIT OR Apache-2.0
+colorchoice 1.0.5 :: MIT OR Apache-2.0
+const-oid 0.10.2 :: Apache-2.0 OR MIT
+core-foundation-sys 0.8.7 :: MIT OR Apache-2.0
+core_detect 1.0.0 :: MIT/Apache-2.0
+cpufeatures 0.3.1 :: MIT OR Apache-2.0
+crc32fast 1.5.2 :: MIT OR Apache-2.0
+crypto-common 0.2.2 :: MIT OR Apache-2.0
+darling 0.24.1 :: MIT
+darling_core 0.24.1 :: MIT
+darling_macro 0.24.1 :: MIT
+data-encoding 2.11.1 :: MIT
+digest 0.11.3 :: MIT OR Apache-2.0
+displaydoc 0.2.7 :: MIT OR Apache-2.0
+dyn-clone 1.0.20 :: MIT OR Apache-2.0
+encoding_rs 0.8.42 :: (Apache-2.0 OR MIT) AND BSD-3-Clause
+encoding_rs_io 0.1.8 :: MIT OR Apache-2.0
+equivalent 1.0.2 :: Apache-2.0 OR MIT
+errno 0.3.14 :: (local/no-manifest)
+find-msvc-tools 0.1.14 :: MIT OR Apache-2.0
+flate2 1.1.10 :: MIT OR Apache-2.0
+form_urlencoded 1.2.2 :: MIT OR Apache-2.0
+futures 0.3.34 :: MIT OR Apache-2.0
+futures-channel 0.3.34 :: MIT OR Apache-2.0
+futures-core 0.3.34 :: MIT OR Apache-2.0
+futures-executor 0.3.34 :: MIT OR Apache-2.0
+futures-io 0.3.34 :: MIT OR Apache-2.0
+futures-macro 0.3.34 :: MIT OR Apache-2.0
+futures-sink 0.3.34 :: MIT OR Apache-2.0
+futures-task 0.3.34 :: MIT OR Apache-2.0
+futures-util 0.3.34 :: MIT OR Apache-2.0
+getrandom 0.4.3 :: MIT OR Apache-2.0
+granit-parser 1.3.0 :: MIT OR Apache-2.0
+hashbrown 0.17.1 :: MIT OR Apache-2.0
+heck 0.5.0 :: MIT OR Apache-2.0
+http 1.5.0 :: MIT OR Apache-2.0
+http-body 1.1.0 :: MIT
+http-body-util 0.1.5 :: MIT
+httparse 1.10.1 :: MIT OR Apache-2.0
+httpdate 1.0.3 :: MIT OR Apache-2.0
+hybrid-array 0.4.15 :: MIT OR Apache-2.0
+hyper 1.11.1 :: MIT
+hyper-util 0.1.21 :: MIT
+iana-time-zone 0.1.65 :: MIT OR Apache-2.0
+iana-time-zone-haiku 0.1.2 :: MIT OR Apache-2.0
+icu_collections 2.3.0 :: Unicode-3.0
+icu_locale_core 2.3.0 :: Unicode-3.0
+icu_normalizer 2.3.0 :: Unicode-3.0
+icu_normalizer_data 2.3.0 :: Unicode-3.0
+icu_properties 2.3.0 :: Unicode-3.0
+icu_properties_data 2.3.0 :: Unicode-3.0
+icu_provider 2.3.1 :: Unicode-3.0
+ident_case 1.0.1 :: MIT/Apache-2.0
+idna 1.1.0 :: MIT OR Apache-2.0
+idna_adapter 1.2.2 :: Apache-2.0 OR MIT
+indexmap 2.14.2 :: Apache-2.0 OR MIT
+ipnet 2.12.2 :: MIT OR Apache-2.0
+is_terminal_polyfill 1.70.2 :: MIT OR Apache-2.0
+itoa 1.0.18 :: MIT OR Apache-2.0
+js-sys 0.3.85 :: (local/no-manifest)
+lazy_static 1.5.1 :: MIT OR Apache-2.0
+libc 0.2.189 :: MIT OR Apache-2.0
+litemap 0.8.3 :: Unicode-3.0
+log 0.4.34 :: MIT OR Apache-2.0
+matchers 0.2.0 :: MIT
+matchit 0.8.4 :: MIT AND BSD-3-Clause
+memchr 2.8.3 :: Unlicense OR MIT
+mime 0.3.17 :: MIT OR Apache-2.0
+mio 1.2.4 :: MIT
+multiversion_no_op 1.0.0 :: Apache-2.0 OR MIT
+nu-ansi-term 0.50.3 :: MIT
+num-traits 0.2.19 :: MIT OR Apache-2.0
+once_cell 1.21.4 :: MIT OR Apache-2.0
+once_cell_polyfill 1.70.2 :: MIT OR Apache-2.0
+pastey 0.2.3 :: MIT OR Apache-2.0
+percent-encoding 2.3.2 :: MIT OR Apache-2.0
+pin-project-lite 0.2.17 :: Apache-2.0 OR MIT
+potential_utf 0.1.6 :: Unicode-3.0
+proc-macro2 1.0.107 :: MIT OR Apache-2.0
+quote 1.0.47 :: MIT OR Apache-2.0
+r-efi 6.0.0 :: (local/no-manifest)
+rand 0.10.3 :: MIT OR Apache-2.0
+rand_core 0.10.1 :: MIT OR Apache-2.0
+ref-cast 1.0.27 :: MIT OR Apache-2.0
+ref-cast-impl 1.0.27 :: MIT OR Apache-2.0
+regex-automata 0.4.18 :: MIT OR Apache-2.0
+regex-syntax 0.8.11 :: MIT OR Apache-2.0
+reqwest 0.13.5 :: MIT OR Apache-2.0
+rmcp 3.5.0 :: Apache-2.0
+rmcp-macros 3.5.0 :: Apache-2.0
+rustversion 1.0.23 :: MIT OR Apache-2.0
+ryu 1.0.23 :: Apache-2.0 OR BSL-1.0
+schemars 1.2.2 :: MIT
+schemars_derive 1.2.2 :: MIT
+scopeguard 1.2.0 :: MIT OR Apache-2.0
+serde 1.0.229 :: MIT OR Apache-2.0
+serde-saphyr 1.3.0 :: MIT OR Apache-2.0
+serde_core 1.0.229 :: MIT OR Apache-2.0
+serde_derive 1.0.229 :: MIT OR Apache-2.0
+serde_derive_internals 0.30.0 :: MIT OR Apache-2.0
+serde_json 1.0.151 :: MIT OR Apache-2.0
+serde_path_to_error 0.1.20 :: MIT OR Apache-2.0
+serde_urlencoded 0.7.1 :: MIT/Apache-2.0
+sha1 0.11.0 :: MIT OR Apache-2.0
+sharded-slab 0.1.7 :: MIT
+shlex 2.0.1 :: MIT OR Apache-2.0
+signal-hook-registry 1.4.8 :: (local/no-manifest)
+simdutf8 0.1.5 :: MIT OR Apache-2.0
+slab 0.4.12 :: MIT
+smallvec 1.16.2 :: MIT OR Apache-2.0
+socket2 0.6.5 :: MIT OR Apache-2.0
+sse-stream 0.2.6 :: MIT OR Apache-2.0
+stable_deref_trait 1.2.1 :: MIT OR Apache-2.0
+strsim 0.11.1 :: MIT
+syn 2.0.119 :: MIT OR Apache-2.0
+syn 3.0.6 :: MIT OR Apache-2.0
+sync_wrapper 1.0.2 :: Apache-2.0
+synstructure 0.14.0 :: MIT
+thiserror 2.0.21 :: MIT OR Apache-2.0
+thiserror-impl 2.0.21 :: MIT OR Apache-2.0
+thread_local 1.1.10 :: MIT OR Apache-2.0
+tinystr 0.8.4 :: Unicode-3.0
+tokio 1.53.2 :: MIT
+tokio-macros 2.7.2 :: MIT
+tokio-stream 0.1.19 :: MIT
+tokio-util 0.7.19 :: MIT
+tower 0.5.3 :: MIT
+tower-http 0.6.11 :: MIT
+tower-layer 0.3.3 :: MIT
+tower-service 0.3.3 :: MIT
+tracing 0.1.44 :: MIT
+tracing-attributes 0.1.31 :: MIT
+tracing-core 0.1.36 :: MIT
+tracing-log 0.2.0 :: MIT
+tracing-subscriber 0.3.23 :: MIT
+try-lock 0.2.5 :: MIT
+tungstenite 0.30.0 :: MIT OR Apache-2.0
+typed-path 0.12.3 :: MIT OR Apache-2.0
+typenum 1.20.1 :: MIT OR Apache-2.0
+uiautomation 0.25.1 :: Apache-2.0
+uiautomation_derive 0.7.9 :: Apache-2.0
+unicode-ident 1.0.26 :: (MIT OR Apache-2.0) AND Unicode-3.0
+unicode-width 0.2.2 :: MIT OR Apache-2.0
+url 2.5.8 :: MIT OR Apache-2.0
+utf8_iter 1.0.4 :: Apache-2.0 OR MIT
+utf8parse 0.2.2 :: Apache-2.0 OR MIT
+uuid 1.27.0 :: Apache-2.0 OR MIT
+valuable 0.1.1 :: (local/no-manifest)
+want 0.3.1 :: MIT
+wasi 0.11.1+wasi-snapshot-preview1 :: (local/no-manifest)
+wasm-bindgen 0.2.108 :: (local/no-manifest)
+wasm-bindgen-futures 0.4.58 :: (local/no-manifest)
+wasm-bindgen-macro 0.2.108 :: (local/no-manifest)
+wasm-bindgen-macro-support 0.2.108 :: (local/no-manifest)
+wasm-bindgen-shared 0.2.108 :: (local/no-manifest)
+wasm-streams 0.5.0 :: (local/no-manifest)
+web-sys 0.3.85 :: (local/no-manifest)
+webview2-com 0.39.1 :: MIT
+webview2-com-macros 0.8.1 :: MIT
+webview2-com-sys 0.39.1 :: MIT
+windows 0.62.2 :: MIT OR Apache-2.0
+windows-collections 0.3.2 :: MIT OR Apache-2.0
+windows-core 0.62.2 :: MIT OR Apache-2.0
+windows-future 0.3.2 :: MIT OR Apache-2.0
+windows-implement 0.60.2 :: MIT OR Apache-2.0
+windows-interface 0.59.3 :: MIT OR Apache-2.0
+windows-link 0.2.1 :: MIT OR Apache-2.0
+windows-numerics 0.3.1 :: MIT OR Apache-2.0
+windows-result 0.4.1 :: MIT OR Apache-2.0
+windows-strings 0.5.1 :: MIT OR Apache-2.0
+windows-sys 0.61.2 :: MIT OR Apache-2.0
+windows-threading 0.2.1 :: MIT OR Apache-2.0
+writeable 0.6.4 :: Unicode-3.0
+xtask 0.2.2 :: (local/no-manifest)
+yoke 0.8.3 :: Unicode-3.0
+yoke-derive 0.8.4 :: Unicode-3.0
+zerofrom 0.1.8 :: Unicode-3.0
+zerofrom-derive 0.1.8 :: Unicode-3.0
+zerotrie 0.2.5 :: Unicode-3.0
+zerovec 0.11.8 :: Unicode-3.0
+zerovec-derive 0.11.6 :: Unicode-3.0
+zip 8.6.0 :: MIT
+zlib-rs 0.6.8 :: Zlib
+zmij 1.0.23 :: MIT
