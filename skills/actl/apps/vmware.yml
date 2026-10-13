@@ -9,11 +9,44 @@ verified_env: Win11 25H2 (build 26200) zh-cn
 quirks:
   - id: vmrun_is_the_channel
     note: >-
-      自动化主通道是 vmrun CLI 不是 UIA 点界面:`-T ws list`(运行清单)/
-      `snapshot|revertToSnapshot <vmx> <name>`(秒级快照复位,revert 后挂起态
-      需 start 接力)/`runScriptInGuest`(guest 内执行,需 Tools+凭据)/
-      `captureScreen <vmx> <png>`(guest 截图直接落宿主)/`clone full|linked`
-      (链接克隆多 lane)。vmrun 位于安装目录,无参调用打印版本。
+      自动化主通道是 vmrun CLI 不是 UIA 点界面。26H1 实测完整语法:
+      `vmrun -T ws -vp <vTPM加密密码> -gu <客机用户> -gp <客机密码> <子命令> <vmx> [args]`。
+      三凭据缺一不可:-vp=向导 Configure Encryption 页设的 vTPM 密码(缺它报
+      "A password is required");-gu/-gp=OOBE 本地账户(缺它报 "Command
+      requires valid user name and password")。参数序陷阱:认证标志必须在
+      子命令前;vmx 位置两类不一致——GUEST OS 类(runProgramInGuest/
+      fileExistsInGuest/directoryExistsInGuest/copyFileFromGuestToHost/
+      addSharedFolder)=子命令在前 vmx 在后;captureScreen=同序;vmx 放错
+      报 "Unrecognized command: <vmx>"。runProgramInGuest 要完整程序路径
+      (shell 内建不行),输出重定向类命令用 -noWait + 参数逐个传,或写结果
+      到共享夹由宿主读回。captureScreen 截 guest 屏幕(1.5MB PNG 实测),
+      PowerShell 复杂命令走 runProgramInGuest powershell.exe -Command。
+      常用:revertToSnapshot(秒级复位,revert 后挂起态需 start 接力)/
+      clone linked(多 lane)/addSharedFolder(跨边界主通道)。
+  - id: guest_io_three_stage
+    note: >-
+      guest 复杂命令标准模式(实测 vmrun 通道的坑与正解):guest 程序的
+      stdout **不回传** vmrun 管道(只回 exit code);多行 PowerShell 内联
+      会被参数切分转义破坏。正解三段式=宿主写 .ps1 → copyFileFromHostToGuest
+      灌入 → runProgramInGuest powershell -File <guest 本地路径> 执行
+      (结果写 guest 本地文件) → copyFileFromGuestToHost 拉回宿主。
+      runProgramInGuest 的程序路径必须完整(powershell 全路径
+      C:\Windows\System32\WindowsPowerShell\v1.0\)。
+  - id: hgfs_share_visibility
+    note: >-
+      共享夹在 guest 内的正确判读与两个假阴性陷阱(2026-10-13 排障实证):
+      ①**宿主 Bash/工具层写含反斜杠的 .ps1 会被吃掉一个 `\`**(`\\vmware-host`
+      落盘成 `\vmware-host`)——宿主写脚本走 Python/PowerShell 文件写入,
+      Bash heredoc 内联必污染,AGENTS 转义纪律的又一实证;被污染的探测
+      报"错误 67 找不到网络名"是假信号。②**runProgramInGuest 默认走
+      Session 0**,HGFS UNC provider 挂在交互会话——服务会话内 Test-Path
+      报 False 也是假阴性;-interactive 标志可指定交互会话(需用户已登录)。
+      真实判读:UNC 地址栏 `\\vmware-host\Shared Folders\hostshare` 人工/
+      Test-Path 可见全部文件=共享在线;`net use Z:` 映射盘符报"错误 64
+      网络名不再可用"是 HGFS provider 不支持 net use 会话绑定的已知形态,
+      **不代表共享故障**——日常用法走 UNC 地址或 vmrun copyFile 三段式,
+      不依赖盘符映射。诊断共享在线性的机器通道=guest 内
+      VMwareHgfsClient.exe(返回共享名清单,不受名字解析影响)。
   - id: version_probe_no_gui
     note: >-
       查版本不要用 `vmware.exe --version`——GUI 二进制不打印退出,会拉起
