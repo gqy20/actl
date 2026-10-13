@@ -101,7 +101,7 @@ ValuePattern 读回恒空(安全控件特性):`set-value --verify-value` 报 ASS
 
 装机期 Bridged 导致 guest 只拿到 169.254(APIPA)——本宿主 12 块网卡(物理有线口未插线、WLAN、TAP/Wintun×2/Sangfor×2/FlClash/ZeroTier/VMnet1/8),Bridged 自动选择器桥到不可用适配器。**修法 = VM Settings 改 NAT**(比 Configure Adapters 钉物理网卡更稳:不依赖任何物理网卡在位,宿主换 Wi-Fi/网线/地点都不用重配——评测基线的结构性稳定)。
 
-2026-10-14 实测核验(vmrun 三段式带外探测):guest 拿 DHCP `192.168.92.128/24`(网关/DNS `192.168.92.2`);guest→宿主 ping VMnet8(`192.168.92.1`)通;ping 1.1.1.1 78–88ms、HTTP connect test 200——**外网全通,且出站透明继承宿主 FlClash 代理(DNS 应答为 fake-ip 段 198.18.x)**。三条含义:①Web 类题可用;②涉网 verifier 结果受宿主代理栈影响,代理开关状态进评测环境头;③NAT 网络在 guest 判为"网络/Public profile"——本轮已设 Private 并加 ICMP 放行规则 `ACTL-Eval-Ping`(profile=any),host↔guest 双向 ping 实测通;host→guest 的 TCP 入站(MCP)仍须按端口单独放行。
+2026-10-14 实测核验(vmrun 三段式带外探测):guest 拿 DHCP `192.168.92.128/24`(网关/DNS `192.168.92.2`);guest→宿主 ping VMnet8(`192.168.92.1`)通;ping 1.1.1.1 78–88ms、HTTP connect test 200——**外网全通,且出站透明继承宿主 FlClash 代理(DNS 应答为 fake-ip 段 198.18.x)**。三条含义变四条(2026-10-14 谷歌探测补):①Web 类题可用(实测 `https://www.google.com/generate_204` 返 204,经宿主代理链**真实可达**);②涉网 verifier 结果受宿主代理栈影响,代理开关状态进评测环境头;③**guest 内 ICMP ping 不可作可达性判定**——域名解析被 fake-ip 接管(google.com→198.18.1.0),ping 由代理栈本地应答(实测 <1ms/TTL=128;FlClash 在跑即"通",上游节点死活不感知,属假阳性生成通道,与 HGFS Test-Path 假阴性同族的判定陷阱),可达性断言一律 TCP/HTTP 级;④NAT 网络在 guest 判为"网络/Public profile"——本轮已设 Private 并加 ICMP 放行规则 `ACTL-Eval-Ping`(profile=any),host↔guest 双向 ping 实测通;host→guest 的 TCP 入站(MCP)仍须按端口单独放行。
 
 收口收尾:**base 快照过时问题已解决**——旧 `base`(2026-10-13 23:25,早于 NAT 生效 23:58)已删,新基线 **`base-nat`**(关机态建,NAT+Private+ICMP 规则全部入基线)于 10-14 经 CLI 就位(§4.7);guest 用户目录的历轮探测残件(probe*/diag*/hgfs* 18 个)在建立基线前已清理。
 

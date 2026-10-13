@@ -94,6 +94,10 @@ quirks:
       guest 判为 Public profile:需 host→guest 入站(MCP/诊断)时先
       Set-NetConnectionProfile 设 Private,ICMP 另加放行规则(默认不回
       ping 不代表链路不通——host→guest 的 TCP 入站按端口单独放行)。
+      宿主跑 TUN 代理(FlClash)时 guest 域名解析为 fake-ip(198.18.x),
+      ICMP ping 由代理栈本地应答(<1ms/TTL=128)——guest 内 ping 通≠
+      真实可达,可达性/verifier 断言一律 TCP/HTTP 级;宿主代理栈状态
+      属评测环境头字段。
   - id: whp_mode_host
     note: >-
       宿主 WSL2 常驻(HypervisorPresent=true)→ VMware 走 Host VBS Mode
