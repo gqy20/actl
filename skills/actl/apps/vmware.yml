@@ -21,8 +21,32 @@ quirks:
       (shell 内建不行),输出重定向类命令用 -noWait + 参数逐个传,或写结果
       到共享夹由宿主读回。captureScreen 截 guest 屏幕(1.5MB PNG 实测),
       PowerShell 复杂命令走 runProgramInGuest powershell.exe -Command。
-      常用:revertToSnapshot(秒级复位,revert 后挂起态需 start 接力)/
-      clone linked(多 lane)/addSharedFolder(跨边界主通道)。
+      常用:revertToSnapshot(复位主通道:运行中调用=自动硬关机+revert,
+      终态=建快照时的电源态,关机态快照后需 start 接力)/snapshot(关机态
+      建=离线基线最干净)/deleteSnapshot(报错≠未生效,突变后 listSnapshots
+      核验)/clone linked(多 lane)/addSharedFolder(跨边界主通道)。
+  - id: snapshot_auth_strict_vvp
+    note: >-
+      vmrun 对 -vp 全命令类严格校验(错误密码在 Power/GUEST/snapshot 类
+      一律 "Incorrect password"),无 GUI 凭据缓存顶包。认证失败先查调用
+      形态再怀疑密码:宿主侧 vmrun 一律写 PS 脚本文件执行,禁 Bash 内联
+      (内联转义污染曾致 snapshot 类认证失败并同窗伴生 UNC 反斜杠吞噬)。
+      密码记录值即真值;向导密码框掩码点数≠字符长度,勿以点数反推。
+  - id: offline_snapshot_headless_lock
+    note: >-
+      关机态 snapshot 命令先返回成功,但拉起的 headless vmware-vmx 进程
+      持 vmx 配置锁短暂不释——紧跟的突变类操作(deleteSnapshot 等)可能
+      报 "Cannot read the virtual machine configuration file";该报错
+      ≠操作未生效(deleteSnapshot 实证:报此错但快照已删)。突变类操作
+      (snapshot/deleteSnapshot/revertToSnapshot)后一律 listSnapshots
+      或 .vmsd 核验实际状态再决定是否重放。
+  - id: guest_ready_two_levels
+    note: >-
+      guest 就绪分两层:Tools 带外通道(start 后极快,fileExistsInGuest/
+      runProgramInGuest Session 0 即通)远早于桌面就绪;-interactive 与
+      依赖桌面的操作仍需用户已登录。评测 harness 的等待谓词=有界轮询
+      fileExistsInGuest,不用裸 sleep;guest 固件不支持休眠,无 Fast
+      Startup,每次都是真冷启。
   - id: guest_io_three_stage
     note: >-
       guest 复杂命令标准模式(实测 vmrun 通道的坑与正解):guest 程序的

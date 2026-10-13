@@ -12,9 +12,9 @@
 | 硬件 | 4 vCPU / 6144 MB / 64 GB NVMe / NAT(e1000e,2026-10-14 由 Bridged 改) / EFI+安全启动 |
 | vTPM | Present+部分加密(`vmx.encryptionType="partial"`,密码见 G:\vm\eval-win11-26h2-credentials.txt) |
 | Tools | 13.1.5 已装,vmtoolsd 在跑 |
-| 宿主↔guest 通道 | vmrun 全凭据链通:copyFile 双向 / runProgramInGuest / captureScreen / 共享夹(UNC) |
+| 宿主↔guest 通道 | vmrun 全凭据链通:copyFile 双向 / runProgramInGuest / captureScreen / snapshot·revert·deleteSnapshot / 共享夹(UNC) |
 | ISO 归档 | `G:\vm\iso\26200.6584...CLIENTENTERPRISEEVAL...zh-cn.iso`(6.9 GB) |
-| 遗留 | Snapshot 类 vmrun 命令 CLI 认证失败(见 §4.7;guest 外网已修,见 §4.6) |
+| 遗留 | 无阻塞:外网已修(§4.6)/snapshot CLI 已复活(§4.7)/基线 `base-nat` 就位;涉网 verifier 受宿主代理栈影响(§4.6) |
 
 ## 1. 全流程(六阶段,可复放)
 
@@ -63,7 +63,7 @@
 | `runProgramInGuest` | ✅ | stdout **不回传**(只回 exit code)——复杂命令走三段式:宿主写 .ps1 → copyFile 灌 → `-File` 执行(结果写 guest 本地)→ copyFile 拉回;程序路径必须全路径 |
 | `captureScreen` | ✅ | 截 **guest 屏幕**(不依赖 Workstation 窗口焦点),1.5 MB PNG 实测;评测的独立观察眼 |
 | 共享夹(UNC) | ✅(人工) | guest 资源管理器 `\\vmware-host\Shared Folders\hostshare` ↔ 宿主 `G:\vm\shared`;`net use` 盘符映射报错误 64(HGFS provider 不支持 net use 会话绑定,已知行为非故障);诊断共享在线性用 `VMwareHgfsClient.exe`(返回共享名,不受名字解析影响) |
-| Snapshot 类 CLI | ❌ | `snapshot`/`listSnapshots` 带 `-vp` 报 "Authentication for encrypted virtual machine failed"(同密码对 Power/GUEST 类全过)——见 §5 |
+| Snapshot 类 CLI(snapshot/revertToSnapshot/deleteSnapshot) | ✅(2026-10-14 判别后全通,§4.7) | 历史失败定谳为 Bash 内联调用形态污染,非密码/VM 问题;关机态建快照后 headless vmx 短持配置锁;**报错≠未生效,突变后必须 listSnapshots 核验** |
 
 ## 3. guest 内人工入口姿势
 
@@ -103,17 +103,26 @@ ValuePattern 读回恒空(安全控件特性):`set-value --verify-value` 报 ASS
 
 2026-10-14 实测核验(vmrun 三段式带外探测):guest 拿 DHCP `192.168.92.128/24`(网关/DNS `192.168.92.2`);guest→宿主 ping VMnet8(`192.168.92.1`)通;ping 1.1.1.1 78–88ms、HTTP connect test 200——**外网全通,且出站透明继承宿主 FlClash 代理(DNS 应答为 fake-ip 段 198.18.x)**。三条含义:①Web 类题可用;②涉网 verifier 结果受宿主代理栈影响,代理开关状态进评测环境头;③NAT 网络在 guest 判为"网络/Public profile"——本轮已设 Private 并加 ICMP 放行规则 `ACTL-Eval-Ping`(profile=any),host↔guest 双向 ping 实测通;host→guest 的 TCP 入站(MCP)仍须按端口单独放行。
 
-收口遗留:**base 快照(Snapshot1,2026-10-13 23:25)早于 NAT 生效(23:58)**——revert 会回到无网状态且 Private/防火墙规则不在基线内;须在网络收口完成后重打 base(走 GUI,snapshot CLI 认证问题见 §4.7)。guest 用户目录的历轮探测残件(probe*/diag*/hgfs* 18 个)已清理,重打后基线不含诊断垃圾。
+收口收尾:**base 快照过时问题已解决**——旧 `base`(2026-10-13 23:25,早于 NAT 生效 23:58)已删,新基线 **`base-nat`**(关机态建,NAT+Private+ICMP 规则全部入基线)于 10-14 经 CLI 就位(§4.7);guest 用户目录的历轮探测残件(probe*/diag*/hgfs* 18 个)在建立基线前已清理。
 
-### 4.7 Snapshot 类 CLI 认证失败(遗留,开放)
+### 4.7 Snapshot 类 CLI 认证失败(已解,2026-10-14 判别矩阵收口)
 
-同密码 `-vp`:stop/start/runProgramInGuest/captureScreen 全过,`snapshot`/`listSnapshots` 独报 "Authentication for encrypted virtual machine failed"。疑点:向导密码框掩码 15 点 vs 密码 13 字符(type 注入前框被 set-value 写过,可能带残字符)——Power/GUEST 认证或借了 GUI 会话凭据缓存,snapshot 分支强制比对原始密码。**当前快照走 GUI 手打**(必然成功,读凭据管理器);后续修复路径:GUI 里重置加密密码为确知值 → CLI 全链路复活;若 revertToSnapshot 也拒绝,评测"秒级复位"支柱受损,此项升优先级。
+**现象(10-13)**:同密码 `-vp`,stop/start/runProgramInGuest/captureScreen 全过,`snapshot`/`listSnapshots` 独报 "Authentication for encrypted virtual machine failed"。
+
+**10-14 判别矩阵**(单轮多假设,全部经 PS 脚本文件通道):
+
+- `listSnapshots` 记录密码(13 字符)直接通过——**不复现**;日志取证全史仅 2 次失败(vmware-2.log `VIX_E_AUTHENTICATION_FAIL` @10-13 23:23:59/23:24:09,1.5 分钟后 GUI 快照成功),此后跨两次 VMX 进程代、运行/关机两态 20+ 连续成功;
+- 错误密码矩阵:`-vp` 给错值,Power/GUEST/snapshot **全类一律 "Incorrect password"**——vmrun 对每类严格校验,"Power 类借 GUI 凭据缓存顶包"假设证伪;
+- 字节变体矩阵:记录值 ±CR/LF/首尾空格全拒——记录值干净,"向导掩码 15 点 vs 密码 13 字符=带残字符"证伪(掩码点数≠字符数,红鲱鱼);
+- **定谳**:密码正确、VM 无故障、无缓存顶包;唯一支持假设=同会话 Bash 内联转义污染(§4.2 同窗实证的同类机制)。昨天的失败调用串已无法字节级取证,工程上也无需——**修复=调用形态收口**(宿主侧 vmrun 一律 PS 脚本文件、禁 Bash 内联),密码不重置,GUI 不再需要。
+
+**全链路验证(评测复位循环整环一轮通过,本轮墙钟)**:stop soft(~12s)→ **关机态** `snapshot base-nat`(NAT+Private+ICMP+清理后的 guest 全部入基线)→ deleteSnapshot 旧 `base` → start(Tools 带外通道 ~5s 就绪,DHCP 拿回 192.168.92.128)→ 运行中 `revertToSnapshot`(exit 0,实现=自动硬关机+revert,终态关机)→ start 就绪;整环 67s。两坑入 pack:①关机态建快照拉起的 headless vmx 持 vmx 配置锁数十秒,紧跟的突变操作报 "Cannot read the virtual machine configuration file",且 **deleteSnapshot 报错≠未生效**(该次报错实际已删,后续 listSnapshots 证实)——突变类操作后必须 listSnapshots 核验再决定重放;②start 后 ~5s 的 "guest ready" 是 Tools 带外通道就绪(fileExistsInGuest 即通),非桌面就绪——VM 级操作可用,`-interactive` 与桌面依赖操作仍需用户登录(boot 探测:guest 固件不支持休眠,无 Fast Startup,均为真冷启)。
 
 ## 5. 与评测架构的关系(docs/78 执行底座)
 
 - **宿主 = 监考方**:actl 驱动 VMware GUI + vmrun 做 VM 级动作(起停/快照/灌题/收卷/截图观察);
 - **guest = 考场**:被测 agent(路线 A 时 guest 内还需拷入 actl.exe 单二进制 + skills/actl 包——copyFileFromHostToGuest 一条命令,无需工具链);
-- **复位循环**(评测核心):`revertToSnapshot base` → `start` 接力 → 灌题 → 跑 → `copyFileFromGuestToHost` 收卷 → verify-file 断言 → 还原——**依赖 §4.7 修复后才能全 CLI 化**,当前以 GUI 快照过渡;
+- **复位循环**(评测核心,**已全 CLI 验证**,整环墙钟 67s,§4.7):`revertToSnapshot base-nat`(运行中可直调,自动硬关机)→ `start` 接力(Tools 带外通道 ~5s 就绪)→ 灌题 → 跑 → `copyFileFromGuestToHost` 收卷 → verify-file 断言 → 还原;突变类操作(snapshot/delete/revert)报错后以 listSnapshots 核验,不信单一返回码;
 - **观察眼分工**:宿主 actl `screenshot --app` 截 Workstation 窗口(依赖焦点);vmrun `captureScreen` 截 guest 屏幕(不依赖)——评测观察用后者。
 
 ## 6. pack 与凭据档案
