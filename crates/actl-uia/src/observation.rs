@@ -110,12 +110,26 @@ fn collect<T: Clone>(
     let mut entries = Vec::new();
     let mut reasons = Vec::new();
     let mut pending = vec![(root, 0, None)];
+    // 进度行(2026-10-12 交互轮 B):逐节点路径大树遍历合法地可达分钟级,
+    // 间隔 2s 向 stderr 发人读进度(诊断增强,不承诺格式;stdout 信封契约
+    // 不破)。节流设计使快遍历零噪音——2s 内完成即一行不发。物化路径是
+    // 单次 provider 调用无中途点,中断归看门狗、慢完成归 [actl-slow](docs/06)。
+    let started = std::time::Instant::now();
+    let mut last_progress = started;
     while let Some((element, depth, parent)) = pending.pop() {
         actl_core::wait_control::check()?;
         // 进程看门狗心跳:前沿每弹出一个节点 = 进展——全树扫描合法地可达
         // 分钟级(网易云全树 126s 实证),无心跳会被默认期限误杀;单点卡死
         // (children 调用挂起)则心跳停止,照常触顶。
         actl_core::watchdog::reset();
+        if last_progress.elapsed() >= std::time::Duration::from_secs(2) {
+            eprintln!(
+                "[actl-progress] walk nodes={} elapsed={}s",
+                entries.len(),
+                started.elapsed().as_secs()
+            );
+            last_progress = std::time::Instant::now();
+        }
         // UIA 区段重臂:同上——整段 wall clock 口径会误杀合法慢扫描
         // (冷 provider 实证三度 20s 中止);重臂后口径 = 单次跨进程调用。
         crate::watchdog::rearm();
