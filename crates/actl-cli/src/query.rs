@@ -219,6 +219,48 @@ fn property_data(target: &str, info: actl_uia::PropertyInfo) -> Value {
     json!({ "target": target, "properties": props, "unsupported": info.unsupported })
 }
 
+/// find --property 的逐元素读批(2026-10-14 读批轮):对单个命中元素读一个
+/// 属性并按属性名附加到条目(键=value/text/enabled/...)。**单元素读失败
+/// 诚实降级 read_error,不整体失败**——批量采集语义下一条坏不该毁全批
+/// (虚拟化重建/离屏/通道不支持都是元素级事实);成本=每元素一次定位+读
+/// (原生窗百 ms 级;Chromium 慢墙窗实测 ~2s/条,见 docs/83 慢墙观察项)。
+fn attach_property(
+    el: &mut Value,
+    app: Option<&str>,
+    property: &str,
+    read_target: &actl_core::Target,
+) {
+    match actl_uia::read_property(app, read_target, Some(property), None) {
+        Ok(info) => {
+            let v = match property {
+                "name" => info.name.map(|v| json!(v)),
+                "role" => (!info.role.is_empty()).then(|| json!(info.role)),
+                "automation_id" => info.automation_id.map(|v| json!(v)),
+                "offscreen" => info.offscreen.map(|v| json!(v)),
+                "enabled" => info.enabled.map(|v| json!(v)),
+                "selected" => info.selected.map(|v| json!(v)),
+                "value" => info.value.map(|v| json!(v)),
+                "text" => info.text.map(|v| json!(v)),
+                "rect" => info
+                    .rect
+                    .map(|r| json!({"x": r.x, "y": r.y, "width": r.width, "height": r.height})),
+                _ => None,
+            };
+            match v {
+                Some(v) => el[property] = v,
+                // 通道不支持(NOT_ACTIONABLE 的读形态):值面 None=没读到,
+                // 与读失败的 read_error 分开——元素存在,属性不可读
+                None => {
+                    el["read_error"] = json!("property_unreadable");
+                }
+            }
+        }
+        Err(e) => {
+            el["read_error"] = json!(e.code);
+        }
+    }
+}
+
 /// find:条件查元素,复用 snapshot 的 ref 编号(同一 DFS,同一编号空间,
 /// find 的 @eN 与 snapshot 的 @eN 可互换)。至少一个过滤条件,反对全树 dump。
 /// `--capable click|type`:role 表派生的建议性动作兼容过滤(06 §3.6),
@@ -230,6 +272,7 @@ pub(crate) fn find_cmd(
     role: Option<&str>,
     id: Option<&str>,
     capable: Option<&str>,
+    property: Option<&str>,
     app: Option<&str>,
     limit: Option<usize>,
 ) -> Result<CommandOutput, CtlError> {
@@ -237,13 +280,30 @@ pub(crate) fn find_cmd(
     let capability = capable
         .map(actl_core::snapshot::Capability::parse)
         .transpose()?;
+    // 读批属性(--property):白名单与 get 同源(read::PROPS 的 CLI 侧镜像,
+    // clap value_parser 已限值,此处防漂移双保险)
+    let property = property
+        .map(|p| {
+            actl_uia::PROPS.contains(&p).then_some(p).ok_or_else(|| {
+                CtlError::protocol(format!(
+                    "unknown --property {p:?}: expected one of {:?}",
+                    actl_uia::PROPS
+                ))
+            })
+        })
+        .transpose()?;
     if let Some(raw) = target {
         let target = actl_core::parse_target(raw)?;
         let loc = actl_uia::locate(app, &target, None)?;
+        let mut el = json!({
+            "ref":null,"role":loc.role,"name":loc.name,
+            "automation_id":loc.automation_id,"target":target.describe()});
+        if let Some(p) = property {
+            attach_property(&mut el, app, p, &target);
+        }
         return Ok(json!({
             "window":{"title":loc.window_title}, "total":1,
-            "elements":[{"ref":null,"role":loc.role,"name":loc.name,
-                "automation_id":loc.automation_id,"target":target.describe()}],
+            "elements":[el],
             "resolved_by":loc.resolved_by,
         })
         .into());
@@ -271,11 +331,18 @@ pub(crate) fn find_cmd(
                 .iter()
                 .take(limit_n)
                 .map(|h| {
-                    json!({
+                    let mut el = json!({
                         "ref": null, "role": h.role, "name": h.name,
                         "automation_id": h.automation_id,
                         "target": format!("id:{}", id.unwrap_or_default()),
-                    })
+                    });
+                    if let Some(p) = property {
+                        // 快路径命中无 ref,按 id: 语义逐个重读
+                        let t = actl_core::parse_target(&format!("id:{}", id.unwrap_or_default()))
+                            .expect("id target parses");
+                        attach_property(&mut el, app, p, &t);
+                    }
+                    el
                 })
                 .collect();
             return Ok(json!({
@@ -362,8 +429,40 @@ pub(crate) fn find_cmd(
         .take(limit)
         .map(|e| serde_json::to_value(e).expect("element serializes"))
         .collect();
+    // 读批核心(--property):limit 内全部命中逐个读属性,一次往返 N 字段全回。
+    // @eN 与 find 输出同源(刚拍快照,新鲜);每元素一次定位+读是诚实成本,
+    // 原生窗百 ms 级;单元素读失败降级 read_error 不毁全批。
+    if let Some(p) = property {
+        for e in elements.iter_mut() {
+            let Some(n) = e
+                .get("ref")
+                .and_then(|r| r.as_str())
+                .and_then(|r| r.strip_prefix("@e"))
+                .and_then(|d| d.parse::<u32>().ok())
+            else {
+                continue;
+            };
+            attach_property(e, app, p, &actl_core::Target::Ref(n));
+        }
+    }
     if let Some((elem, level)) = virtual_hit {
-        elements.push(serde_json::to_value(&elem).expect("element serializes"));
+        let mut el_v = serde_json::to_value(&elem).expect("element serializes");
+        // 虚拟化命中无 ref:按 id:/name: 语义重读(与命中时同选择器)
+        if let Some(p) = property {
+            let t = elem
+                .automation_id
+                .as_deref()
+                .map(|i| actl_core::Target::Id(i.to_owned()))
+                .or_else(|| {
+                    elem.name
+                        .as_deref()
+                        .map(|n| actl_core::Target::Name(n.to_owned()))
+                });
+            if let Some(t) = t {
+                attach_property(&mut el_v, app, p, &t);
+            }
+        }
+        elements.push(el_v);
         let data = json!({
             "window": {
                 "title": cap.window.title,

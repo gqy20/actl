@@ -676,6 +676,33 @@ fn find_unknown_capable_value_is_protocol() {
 }
 
 #[test]
+fn find_property_batch_harvest_contract() {
+    // 2026-10-14 读批轮(spec):--property 与 get 白名单同源(clap
+    // value_parser 层拒绝,先于任何 UIA 触碰);--property 与 --target 互斥
+    // (target 语义=唯一定位诊断,批量读无集合意义——单目标读走 get)。
+    // 降级语义(单元素 read_error 不毁全批)属真机面,契约只钉参数门控
+    // 与 help 四要素;--target 互斥是 clap 层(不产 envelope)。
+    let (code, _) = actl(&["find", "--name", "anything", "--property", "bogus"]);
+    assert_eq!(code, 2, "unknown --property rejected at clap layer");
+    let (code, stdout) = actl(&["find", "--target", "focused:", "--property", "value"]);
+    assert_eq!(code, 2, "--property conflicts with --target");
+    assert!(
+        stdout.trim().is_empty(),
+        "clap conflict errors carry no envelope"
+    );
+    let (code, stdout) = actl(&["find", "--help"]);
+    assert_eq!(code, 0);
+    assert!(
+        stdout.contains("--property"),
+        "help documents the batch-harvest flag: {stdout}"
+    );
+    assert!(
+        stdout.contains("read_error"),
+        "help documents the per-element degradation: {stdout}"
+    );
+}
+
+#[test]
 fn collect_help_documents_bounded_semantics() {
     // spec:有界收集(枚举主通道+滚动收敛兜底,零注入)、截断如实、items
     // 无 ref 重定向走 find——help 四要素齐备进 after_help 表。

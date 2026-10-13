@@ -169,6 +169,13 @@ find --role button [--name "确定"]   # 条件查元素(带 ref);与 snapshot �
                                      # (type=Edit/Document 文本载体,click=可交互减文本载体)——
                                      # 零额外属性读,滤空即如实空结果;实际能力仍以动作时
                                      # pattern 判定为准(NOT_ACTIONABLE),分类不构成承诺
+find --role edit --property value    # 读批(2026-10-14):limit 内全部命中逐个读该属性并
+                                     # 按属性名附加到条目——N 字段表单一次往返全回(此前
+                                     # find 枚举+逐 get 的 O(N) 往返收口);白名单与 get 同源;
+                                     # 单元素读失败降级 read_error(code)/property_unreadable,
+                                     # 不毁全批(批量采集语义:一条虚拟化重建/离屏/通道不支持
+                                     # 是元素级事实);每元素一次定位+读是诚实成本(原生窗
+                                     # 百 ms 级);--property 与 --target 互斥(单目标读走 get)
 get @e3 [--property p] [--raw]      # 读元素属性;--raw 全量含 pattern 支持(合并原 inspect)
                                      # property 白名单含 text(TextPattern 文档正文专用通道,
                                      # 与 value 分工:Chromium 的 Document Value=URL 会掩盖正文)

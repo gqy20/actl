@@ -916,6 +916,9 @@ pub(crate) enum Command {
         /// Filter by action-compatibility (advisory, role-derived): click | type
         #[arg(long, conflicts_with = "target")]
         capable: Option<String>,
+        /// Read this property on each matched element and attach it to the entry (key = property name) — batch field harvest in one round trip (property whitelist matches get; a per-element read failure degrades to read_error on that entry, never fails the whole find)
+        #[arg(long, value_parser = ["name", "role", "automation_id", "offscreen", "enabled", "selected", "value", "text", "rect"], conflicts_with = "target")]
+        property: Option<String>,
         /// Target window by title substring or hwnd:<n> (default: focused window)
         #[arg(long)]
         app: Option<String>,

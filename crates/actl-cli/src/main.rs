@@ -706,6 +706,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             role,
             id,
             capable,
+            property,
             app,
             limit,
         } => find_cmd(
@@ -714,6 +715,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             role.as_deref(),
             id.as_deref(),
             capable.as_deref(),
+            property.as_deref(),
             app.as_deref(),
             *limit,
         ),
