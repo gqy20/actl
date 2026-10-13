@@ -466,6 +466,25 @@ pub(crate) fn set_clipboard_cmd(text: &str) -> Result<CommandOutput, CtlError> {
     Ok(json!({ "chars": text.chars().count() }).into())
 }
 
+/// clipboard-save / clipboard-restore / clipboard-formats(2026-10-13 剪贴板轮):
+/// RPA 经典坑——粘贴通道毁掉用户剪贴板(UiPath "Restore clipboard" 同款解法)。
+/// 语义边界:恢复是编排层显式决定,paste 不自动恢复(防"agent 粘贴后用户
+/// 新复制的内容被静默覆盖回旧值"的数据丢失事故)。
+pub(crate) fn clipboard_save_cmd(id: &str) -> Result<CommandOutput, CtlError> {
+    let data = actl_uia::clipboard_save(id)?;
+    Ok(data.into())
+}
+
+pub(crate) fn clipboard_restore_cmd(id: &str) -> Result<CommandOutput, CtlError> {
+    let data = actl_uia::clipboard_restore(id)?;
+    Ok(data.into())
+}
+
+pub(crate) fn clipboard_formats_cmd() -> Result<CommandOutput, CtlError> {
+    let data = actl_uia::clipboard_formats()?;
+    Ok(data.into())
+}
+
 #[allow(clippy::too_many_arguments)] // 参数面与 clap 命令定义一一对应
 pub(crate) fn wait_cmd(
     element: Option<&str>,

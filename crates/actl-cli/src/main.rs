@@ -889,6 +889,9 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
         }),
         Command::GetClipboard => get_clipboard_cmd(),
         Command::SetClipboard { text } => set_clipboard_cmd(text),
+        Command::ClipboardSave { id } => clipboard_save_cmd(id),
+        Command::ClipboardRestore { id } => clipboard_restore_cmd(id),
+        Command::ClipboardFormats => clipboard_formats_cmd(),
         Command::Wait {
             element,
             window,

@@ -324,6 +324,19 @@ wait --element 瞬态重试:STALE_REF/INTERNAL 观察瞬态按"尚未出现"继�
 #### 系统(system)
 ```
 get-clipboard / set-clipboard   # 遵守 get-*/set-* 命名规则
+clipboard-save <id> / clipboard-restore <id> / clipboard-formats
+                                     # 剪贴板全格式备份/恢复/清单(2026-10-13 剪贴板轮,
+                                     # RPA 经典坑:粘贴通道毁掉用户剪贴板——type --paste 的
+                                     # EmptyClipboard 清全部格式,用户复制的文件列表/图片一并
+                                     # 丢失;UiPath "Restore clipboard" 同款解法)。save 备份
+                                     # 全格式(文本/CF_HDROP/位图/私有格式,延迟渲染格式如实
+                                     # 登记 skipped_delayed)到状态目录 clipboard/<id>.json;
+                                     # restore 逐格式回放(覆盖性写,与 set-clipboard 同副作用
+                                     # 面)。**恢复是编排层显式决定,paste 永不自动恢复**——
+                                     # agent 粘贴后用户新复制的内容会被静默覆盖回旧值,自动
+                                     # 恢复反而制造数据丢失事故。Win+V 历史/云同步把恢复表现
+                                     # 为新条目,不伪造历史回滚(诚实边界)。formats 只读枚举
+                                     # 当前格式清单(诊断,不读数据内容)。
 get-selection [--app X] [目标] [--max-chars N]
                                      # 读当前用户选区:TextPattern 范围优先(kind=text,逐范围
                                      # 文本;UIA 退化插入点读为空串被过滤——折叠光标如实

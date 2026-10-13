@@ -1216,6 +1216,18 @@ pub(crate) enum Command {
         /// Text to place on the clipboard
         text: String,
     },
+    /// Save ALL clipboard formats to a named backup (RPA-classic: paste channels clobber the user's clipboard — UiPath "Restore clipboard" equivalent)
+    ClipboardSave {
+        /// Backup id: 1-64 chars of [A-Za-z0-9-]
+        id: String,
+    },
+    /// Restore all formats from a clipboard-save backup (explicit orchestration decision, never automatic after paste)
+    ClipboardRestore {
+        /// Backup id from clipboard-save
+        id: String,
+    },
+    /// List the format types currently on the clipboard (diagnostic; reads no data)
+    ClipboardFormats,
     /// Select an option inside a container (SelectionItem pattern; discrete choices)
     Select {
         /// Container target (list / combo box / tab strip that owns the options)
@@ -1404,6 +1416,9 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
         Command::BrowserVerify { .. } => "browser-verify",
         Command::GetClipboard => "get-clipboard",
         Command::SetClipboard { .. } => "set-clipboard",
+        Command::ClipboardSave { .. } => "clipboard-save",
+        Command::ClipboardRestore { .. } => "clipboard-restore",
+        Command::ClipboardFormats => "clipboard-formats",
         Command::Wait { .. } => "wait",
         Command::Batch { .. } => "batch",
     }

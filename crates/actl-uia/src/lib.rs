@@ -38,6 +38,7 @@ mod idle;
 mod input_verify;
 mod locate;
 pub use identity::ReplayGuard;
+mod clipboard_bank;
 pub mod evidence;
 mod native_windows;
 mod observation;
@@ -51,6 +52,7 @@ mod preview_window;
 mod read;
 /// GUI 操作录制会话捕获层(docs/06 R1;钩子+反查+trace)。
 pub mod record;
+pub use clipboard_bank::{clipboard_formats, clipboard_restore, clipboard_save};
 pub use read::focus_report;
 /// 分离式子进程派生前的 stdio 继承守卫(浏览器通道等长命子进程;docs/72)。
 pub mod process_io;

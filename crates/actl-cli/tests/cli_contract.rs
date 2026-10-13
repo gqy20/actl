@@ -816,6 +816,36 @@ fn paste_requires_app_fail_closed() {
 }
 
 #[test]
+fn clipboard_bank_contract() {
+    // 2026-10-13 剪贴板轮(RPA 经典坑:粘贴通道毁掉用户剪贴板):
+    // save/restore 双动词的离线契约面。真机闭环(文本+CF_HDROP 文件列表
+    // 全格式恢复)已另测,这里钉语义层不变量——
+    // ①坏 id(路径穿越/空白/超长)PROTOCOL,id 是文件名安全语法;
+    // ②restore 不存在的 id 诚实 NOT_FOUND(不静默空过);
+    // ③formats 只读诊断,空剪贴板 total:0 也是合法成功(如实)。
+    for bad in ["../etc", "a b", "", "x".repeat(65).as_str()] {
+        let (code, stdout) = actl(&["clipboard-save", bad]);
+        assert_eq!(code, 2, "bad id {bad:?}");
+        let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
+        assert_eq!(
+            v["error"]["code"], "PROTOCOL",
+            "id syntax is protocol-level"
+        );
+    }
+    let (code, stdout) = actl(&["clipboard-restore", "no-such-bank"]);
+    assert_eq!(code, 1, "missing backup is a recoverable business error");
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
+    assert_eq!(v["error"]["code"], "NOT_FOUND");
+    assert!(
+        v["error"]["hint"]
+            .as_str()
+            .unwrap()
+            .contains("clipboard-save"),
+        "hint names the creation verb"
+    );
+}
+
+#[test]
 fn screenshot_region_roundtrip() {
     // 最小区域(4x4):CI 安全(任何桌面都有像素),验证 envelope 形态 + 文件真实落盘
     let out = std::env::temp_dir().join("actl_contract_shot.png");

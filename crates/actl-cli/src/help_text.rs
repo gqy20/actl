@@ -287,7 +287,16 @@ Errors: NOT_FOUND / AMBIGUOUS | NOT_ACTIONABLE no clickable point or occluded"
             "Example:\n  actl get-clipboard\nErrors: NOT_ACTIONABLE clipboard held by another process"
         }
         "set-clipboard" => {
-            "Example:\n  actl set-clipboard 'text to place'\nReplaces current clipboard content (that is the semantics).\nErrors: NOT_ACTIONABLE clipboard held by another process"
+            "Example:\n  actl set-clipboard 'text to place'\nReplaces current clipboard content (that is the semantics). Save first with clipboard-save if the prior content matters (RPA-classic: paste channels clobber the user's clipboard — this verb is no exception).\nErrors: NOT_ACTIONABLE clipboard held by another process"
+        }
+        "clipboard-save" => {
+            "Example:\n  actl clipboard-save before-batch\nBacks up ALL clipboard formats (text, file lists, images, private formats) to %LOCALAPPDATA%\\actl\\clipboard\\<id>.json. Delayed-rendering formats that hold no data at save time are honestly listed in skipped_delayed. Use before paste-heavy batches; pair with clipboard-restore afterwards. Restoration is an explicit orchestration decision — paste never auto-restores (your new copies would be silently rolled back).\nErrors: PROTOCOL bad id | TIMEOUT clipboard locked"
+        }
+        "clipboard-restore" => {
+            "Example:\n  actl clipboard-restore before-batch\nReplays all backed-up formats (overwrites current clipboard, same side-effect class as set-clipboard). Win+V history/cloud sync see the restore as a new entry — this is a restore of content, not a history rollback (honest boundary).\nErrors: NOT_FOUND no such backup | NOT_ACTIONABLE empty backup/all formats failed"
+        }
+        "clipboard-formats" => {
+            "Example:\n  actl clipboard-formats\nRead-only format inventory of the current clipboard (ids + names, no data). Answers \"what type of thing is the user holding right now\" before a paste-heavy sequence.\nErrors: TIMEOUT clipboard locked"
         }
         "wait" => {
             "Example:\n  actl wait --element name:完成 --property value=OK --timeout 8000 --app 应用\n  actl wait --element role:Document --stable --app Edge\n  actl wait --idle 8000 --timeout 120000\nPredicates: value=<expected> | name=<substr> | text=<expected> | checked=on|off; --contains for substring; existence implied.\n--stable waits until the element's observed sample (text > value > name) stops changing\nacross consecutive polls — settle detection after scroll/navigation.\n--idle waits until no keyboard/mouse input system-wide for N ms — the \"console is free\"\ngate before long batches; observes physical input only (UIA-injected input stays invisible).\nErrors: TIMEOUT predicate unmet, element absent, content still changing, or user still active | PROTOCOL bad predicate/flags | ASSERTION_FAILED (--window)"
