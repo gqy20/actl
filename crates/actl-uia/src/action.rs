@@ -557,16 +557,64 @@ pub fn select_option(
             (hits, "exact-name")
         } else if hits.is_empty() {
             let fuzzy = selection_items_under(&loc.element, option, true);
-            if fuzzy.is_empty() {
-                return Err(CtlError::new(
-                    ErrorCode::NotFound,
-                    format!(
-                        "no selectable item named {option:?} under {} (exact and substring)",
-                        container.describe()
-                    ),
+            if !fuzzy.is_empty() {
+                (fuzzy, "substring-name")
+            } else {
+                // 自动 Expand 重试(2026-10-14 select 轮,docs/83 Phase 2 遗项):
+                // 下拉选项未物化(ComboBox 收起态,Win32/Chromium 同形态)时子树
+                // 扫描恒 0——此前直接 NOT_FOUND,agent 得手动 click 展开+重 select
+                // 两步(VMware 硬件页 CPU 下拉实证)。容器支持 ExpandCollapse 就
+                // 展开一次、沉降、重扫;仍空手才报 NOT_FOUND(附 expanded_retried
+                // 证据,agent 可知"展开后仍无此项"≠"没展开")。展开动作走语义
+                // feedback(同 click 的 expand-collapse 路径,零键鼠注入)。
+                let expanded = expand_container_once(&loc.element)?;
+                if !expanded {
+                    return Err(CtlError::with_evidence(
+                        ErrorCode::NotFound,
+                        format!(
+                            "no selectable item named {option:?} under {} (exact and substring)",
+                            container.describe()
+                        ),
+                        // 形态证据(真机实证 2026-10-14):Win32 原生 ComboBox(系统
+                        // 公共对话框,如另存为编码下拉)不暴露 ExpandCollapse——语义
+                        // 展开结构性不可用;agent 判读后走物理通道(press f4/alt+down
+                        // 展开后重试,或 click --physical)。与"展开过仍无此项"的
+                        // expanded_retried 区分,不留空证据
+                        serde_json::json!({ "expand_unsupported": true }),
+                    ));
+                }
+                // 沉降 2×settle(真机实证 2026-10-14:Chromium 下拉展开动画期间
+                // 1×settle(250ms) 偶发重扫 0 命中→误报 NOT_FOUND;翻倍消竞态,
+                // 再加一次"空则再等再扫"的软重试兜住慢动画)
+                std::thread::sleep(std::time::Duration::from_millis(
+                    crate::timing().settle_ms.saturating_mul(2),
                 ));
+                let mut retry = selection_items_under(&loc.element, option, false);
+                if retry.is_empty() {
+                    std::thread::sleep(std::time::Duration::from_millis(crate::timing().settle_ms));
+                    retry = selection_items_under(&loc.element, option, false);
+                }
+                if retry.len() == 1 {
+                    (retry, "exact-name")
+                } else if retry.is_empty() {
+                    let fuzzy_retry = selection_items_under(&loc.element, option, true);
+                    if fuzzy_retry.len() == 1 {
+                        (fuzzy_retry, "substring-name")
+                    } else {
+                        return Err(CtlError::with_evidence(
+                            ErrorCode::NotFound,
+                            format!(
+                                "no selectable item named {option:?} under {} (exact and substring; expanded the collapsed container and re-scan still found none)",
+                                container.describe()
+                            ),
+                            serde_json::json!({ "expanded_retried": true }),
+                        ));
+                    }
+                } else {
+                    // 展开后多命中:落回主路径的 AMBIGUOUS 判定(共用证据面)
+                    (retry, "exact-name")
+                }
             }
-            (fuzzy, "substring-name")
         } else {
             (hits, "exact-name")
         };
@@ -602,6 +650,26 @@ pub fn select_option(
 }
 
 /// 容器子树内收集支持 SelectionItem 且名字匹配的元素。
+/// select 的容器展开 helper(2026-10-14 select 轮):容器支持 ExpandCollapse
+/// 且当前收起时语义展开一次;已展开/不支持返回 false(不重复展开,幂等)。
+/// 走 feedback::semantic(预告/急停/身份复核与 click 的 expand 同款)。
+fn expand_container_once(elem: &UIElement) -> Result<bool, CtlError> {
+    let Ok(pattern) = elem.get_pattern::<UIExpandCollapsePattern>() else {
+        return Ok(false);
+    };
+    let state = pattern.get_state().map_err(internal)?;
+    if matches!(state, uiautomation::types::ExpandCollapseState::Expanded) {
+        return Ok(false);
+    }
+    crate::feedback::semantic(
+        "select-auto-expand",
+        elem,
+        &elem.get_name().unwrap_or_default(),
+        || pattern.expand().map_err(internal),
+    )?;
+    Ok(true)
+}
+
 fn selection_items_under(elem: &UIElement, option: &str, substring: bool) -> Vec<UIElement> {
     let auto = match UIAutomation::new() {
         Ok(a) => a,
@@ -623,8 +691,12 @@ fn selection_items_under(elem: &UIElement, option: &str, substring: bool) -> Vec
             return;
         }
         if let Ok(name) = elem.get_name() {
+            // 子串回退匹配大小写不敏感(2026-10-14 select 轮真机实证:"guang"
+            // 匹配不上 "Guangzhou")——对齐 UI 惯例(Win32 CB_SELECTSTRING 同款):
+            // 选项名是显示文本不是标识符,用户口径的"含这个词"不看大小写;
+            // 精确匹配保持 case-sensitive(选项名即所选即所得)
             let hit = if substring {
-                name.contains(option)
+                name.to_lowercase().contains(&option.to_lowercase())
             } else {
                 name == option
             };

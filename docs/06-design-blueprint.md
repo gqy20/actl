@@ -561,7 +561,7 @@ L2  actl commands     机器 schema:全命令+参数的 JSON(agent 自发现入�
 | `find` vs `collect` | 定向找**一个**(唯一性纪律)vs 定向要**全部**(虚拟化列表的有界收集,条目无 ref) |
 | `find` vs `find-image` | UIA 树内定位(语义选择器,provider 暴露即可达)vs 像素模板匹配(UIA 失明目标的兜底:自绘/frameless/canvas;返回坐标非 ref,须 `click xy: --physical` 消费) |
 | `scroll` vs `press pgdn` | 容器内滚动(UIA Scroll pattern)vs 焦点键滚动 |
-| `select` vs `set-value` | 离散选项 vs 文本值(combo box 用 select) |
+| `select` vs `set-value` | 离散选项 vs 文本值(combo box 用 select)。select 选项未物化时**自动展开重试一次**(2026-10-14:容器支持 ExpandCollapse 则零注入展开→沉降→重扫;evidence 区分 `expand_unsupported`(Win32 原生 ComboBox 不暴露 ExpandCollapse,agent 走 press f4/alt+down 或物理点击)与 `expanded_retried`(展开过仍无此项);子串回退大小写不敏感(显示文本语义,Win32 CB_SELECTSTRING 惯例),多命中 AMBIGUOUS 附候选) |
 | `toggle` vs `click` | Toggle pattern 直调(无点击副作用、可读状态)vs 点击语义 |
 | `launch` vs `focus-window` | launch 默认启动**新实例**(不做已运行检测);前置已有窗口是 focus-window 的职责 |
 
