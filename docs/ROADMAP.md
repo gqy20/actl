@@ -44,9 +44,8 @@
 - [ ] 浏览器 CDP 工程余量（[72 §13](72-browser-cdp-integration.md)）：UIA 轨路线固化（browser.yml 3 verified/5 manual/2 unverified,随应用轮渐进）；深水层终态吸收已完成（2026-10-13:全动词上骨干,cdp.rs/tungstenite 退役,证据 docs/72 §13）
 - [ ] word-note-typography 的 popup_ignores 声明路径重验（随下次 Word 轮顺带,不专跑）
 - [ ] preview-choice computer-use 真机鼠标点击验收（[46](46-target-preview.md)：两轮 "window is not a usable app window" 失败如实保留）
-- [ ] decide 真机收口轮（2026-10-13 登记需桌面空闲,约 10 分钟一批）:①AMBIGUOUS 实机烟雾（前台化计算器→`click name:清除` 触发真信封→`decide --task` 消歧→resolved 重放;此前被计算器 UWP 后台挂起+NVIDIA Overlay 压信号条→写门禁全闸阻塞）;②explore-decide-answer.yml workflow 真机验收（协议预检已过,decide 链路已单独实证,差 flow 步级端到端）
-- [ ] popup 门禁 XAML 常驻表面误报裁定（2026-10-13 计算器轮实证:标题栏窗+主窗在 in_tree 是 unknown+带按钮的常驻表面,前台态确定性拦截 `popup_pending:clear`;首过纯因锚窗非前台走原生快门——前台态相关的间歇行为。候选:calc pack 加 popup_ignores 声明或门禁 spec 化收紧;Word 轮 popup_ignores 同族）
-- [ ] decide front 判读真实信封低置信形态的使用观察（2026-10-13 无桌面烟雾:常驻表面/崩溃框方向全对但 conf 0.32-0.37<0.5 门槛,日常形态=弃权+top_choice 照报——owned 层只带标题无全文的信号差;若实际使用过保守,考虑判读咨询位局部降门槛或带 in_tree 全文的调用形态,不动全局阈值）
+- [ ] popup 门禁 XAML 常驻表面误报裁定（2026-10-13 双态实证:计算器标题栏窗+主窗在 in_tree 是 unknown+带按钮的常驻表面——后台态原生快门放行(首过形态),**前台态确定性拦截 `popup_pending:clear`**(显示就绪下复现);两表面同名"计算器"含 31 键面按钮,词法无差别。候选:calc pack 加 popup_ignores 声明或门禁 spec 化收紧;Word 轮 popup_ignores 同族——真实弹窗与常驻表面的判别已可由 decide front 形态辅助(benign_surface 倾向),门禁自动化接线待裁定）
+- [ ] decide front 判读真实信封低置信形态的使用观察（2026-10-13 双态实测:常驻表面/崩溃框方向全对但真实信封 conf 0.32-0.37<0.5 门槛,日常形态=弃权+top_choice 照报——owned 层只带标题无全文的信号差;若实际使用过保守,考虑判读咨询位局部降门槛或带 in_tree 全文的调用形态,不动全局阈值）
 
 
 

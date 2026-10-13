@@ -48,7 +48,7 @@
 | [inspect-desktop-native.yml](inspect-desktop-native.yml) | 只读系统状态与 Win32 原生窗口清单；无需应用、输入或资源准备，输出窗口数量；清单不代表任务资源归属 | 预检与两步只读现场执行通过（2026-10-02）；用于桌面检查和显示层起止演示，不证明 UIA 查询正常 |
 | [release-review-draft.yml](release-review-draft.yml) | 读取已打开的 actl Releases 页(Chrome),在 Word 新文档生成核对草稿并落盘 | 协议预检通过;读段与时效拒绝路径真机验证;写段联测待执行。验证记录见开发仓库 docs/43(技能包不含 docs) |
 | [notepad-save-handoff.yml](notepad-save-handoff.yml) | 记事本另存为路径交接:点加号新建空标签,录入内容后文件名框直填完整绝对路径保存并磁盘核验;输入 save_path | 干净现场全链真机通过(2026-10-12 handoff-03:8 步零重试 40s,文件逐字节一致);前置纪律与 TabState 治理见文件头注释与 apps/notepad.yml |
-| [explore-decide-answer.yml](explore-decide-answer.yml) | 探索运行决策卡的模型应答步(decide --run + choice/confidence 输出保存);输入 run_id/min_confidence;协议细节见 SKILL.md 探索节与文件头注释 | 协议预检通过(2026-10-13);decide 链路真机已实证(探索平局卡→Kev 应答→回填 goal_met completed);workflow 级真机验收待桌面空闲 |
+| [explore-decide-answer.yml](explore-decide-answer.yml) | 探索运行决策卡的模型应答步(decide --run + choice/confidence 输出保存);输入 run_id/min_confidence;协议细节见 SKILL.md 探索节与文件头注释 | 全链真机通过(2026-10-13:探索平局卡→decide 步 outputs c1/0.848→回填 goal_met completed;--set run_id 内联传参同轮实证;首轮验收抓到 pointer 层级 bug——flow 步 outputs 相对 data 体,已修) |
 | [word-note-typography.yml](word-note-typography.yml) | Word 笔记样式排版:独立 DOCX 内按笔记样式逐段排版核验;输入 program 等(见文件 inputs);popup_handlers 声明「目录名无效」error 处置 | 随 Word 轮渐进验收;popup_ignores/handler 声明路径重验挂 ROADMAP(随下次 Word 轮顺带,不专跑) |
 
 ### release-review-draft.yml

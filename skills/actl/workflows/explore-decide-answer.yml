@@ -20,5 +20,7 @@ steps:
       command: decide
       args: [--run, {input: run_id}, --min-confidence, {input: min_confidence}]
     outputs:
-      choice: {pointer: /data/choice, type: string}
-      confidence: {pointer: /data/confidence, type: number}
+      # pointer 相对 data 体(flow 步的 execute_output 返回 output.data,
+      # 不是完整信封——/data/* 是信封层级,真机验收实证修正)
+      choice: {pointer: /choice, type: string}
+      confidence: {pointer: /confidence, type: number}
