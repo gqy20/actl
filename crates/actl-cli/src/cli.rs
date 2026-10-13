@@ -156,6 +156,10 @@ pub(crate) enum FlowCommand {
         /// Save the plan and start paused for inspection
         #[arg(long)]
         paused: bool,
+        /// Exploration runs: answer decision cards via the configured decision
+        /// provider until completed or an abstain hands back to a human
+        #[arg(long)]
+        auto_decide: bool,
     },
     /// Inspect durable workflow state and whether its executor is alive
     #[command(name = "flow-status")]

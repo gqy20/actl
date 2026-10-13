@@ -532,6 +532,39 @@ fn build_request(card: &DecisionCard) -> (Option<SystemOneRequest<'_>>, usize) {
     (Some(request), dangerous_count)
 }
 
+/// flow `--auto-decide` 的内环应答入口(2026-10-13 用户授权):读配置、
+/// 走 answer_card 同一管线(危险剥离/none 强制/conf 门槛全部继承),
+/// 审计标 responder=auto_decide。**任何弃权都原样返回**——调用方
+/// (flow/auto.rs)见 abstain 即停循环交回人,此函数不重试不兜底。
+pub(crate) fn answer_pending_auto(card: &DecisionCard) -> Result<Decision, CtlError> {
+    let dir = std::env::var_os("LOCALAPPDATA")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir)
+        .join("actl");
+    let config = load_config(&dir.join("decision.json"))?;
+    let api_key = config
+        .api_key_env
+        .as_deref()
+        .and_then(|name| std::env::var(name).ok())
+        .or_else(|| config.api_key.clone());
+    let provider = UreqProvider {
+        endpoint: &config.endpoint,
+        api_key: api_key.as_deref(),
+        timeout: Duration::from_millis(config.timeout_ms.clamp(1, actl_core::watchdog::DEFAULT_MS)),
+    };
+    let result = answer_card(card, &provider, config.min_confidence);
+    match &result {
+        Ok(decision) => append_audit(&dir, decision, None, Some("auto_decide")),
+        Err(error) => append_audit(
+            &dir,
+            &empty_audit_decision(&card.card_id, 0),
+            Some(error),
+            Some("auto_decide"),
+        ),
+    }
+    result
+}
+
 /// 核心应答函数(为将来 flow 内环 --auto-decide 复用保持函数边界:
 /// 纯决策逻辑,不读 argv/不落盘)。
 pub(crate) fn answer_card(
@@ -655,7 +688,13 @@ pub(crate) fn answer_card(
 }
 
 /// 审计追加(旁路:失败仅 stderr 警告,不影响命令语义)。>4 MiB 轮换 .old。
-fn append_audit(dir: &std::path::Path, decision: &Decision, error: Option<&CtlError>) {
+/// `responder` 区分应答来源(CLI decide 判读 / flow --auto-decide 自动)。
+fn append_audit(
+    dir: &std::path::Path,
+    decision: &Decision,
+    error: Option<&CtlError>,
+    responder: Option<&str>,
+) {
     let path = dir.join("decision-audit.jsonl");
     let rotate = std::fs::metadata(&path).is_ok_and(|m| m.len() > AUDIT_MAX_BYTES);
     if rotate && let Err(error) = std::fs::rename(&path, dir.join("decision-audit.jsonl.old")) {
@@ -670,6 +709,9 @@ fn append_audit(dir: &std::path::Path, decision: &Decision, error: Option<&CtlEr
         "candidates_sent": decision.candidates_sent,
         "dangerous_filtered": decision.dangerous_filtered,
     });
+    if let Some(responder) = responder {
+        line["responder"] = serde_json::json!(responder);
+    }
     if let Some(choice) = &decision.choice {
         line["choice"] = serde_json::json!(choice);
     }
@@ -795,7 +837,7 @@ pub(crate) fn run(args: DecideArgs) -> Result<serde_json::Value, CtlError> {
     if let Some(input) = &front {
         if input.front_clear || input.surface_count == 0 {
             let decision = front_consult(input, &NeverProvider, min_confidence)?;
-            append_audit(&dir, &decision, None);
+            append_audit(&dir, &decision, None, None);
             return serde_json::to_value(&decision)
                 .map_err(|e| CtlError::internal(format!("decision encode failed: {e}")));
         }
@@ -815,9 +857,9 @@ pub(crate) fn run(args: DecideArgs) -> Result<serde_json::Value, CtlError> {
         };
         let result = front_consult(input, &provider, min_confidence);
         match &result {
-            Ok(decision) => append_audit(&dir, decision, None),
+            Ok(decision) => append_audit(&dir, decision, None, None),
             Err(error) => {
-                append_audit(&dir, &empty_audit_decision("d-front", 0), Some(error));
+                append_audit(&dir, &empty_audit_decision("d-front", 0), Some(error), None);
             }
         }
         return result
@@ -846,7 +888,7 @@ pub(crate) fn run(args: DecideArgs) -> Result<serde_json::Value, CtlError> {
             provider_ms: None,
             model: None,
         };
-        append_audit(&dir, &decision, None);
+        append_audit(&dir, &decision, None, None);
         return serde_json::to_value(&decision)
             .map_err(|e| CtlError::internal(format!("decision encode failed: {e}")));
     };
@@ -885,11 +927,12 @@ pub(crate) fn run(args: DecideArgs) -> Result<serde_json::Value, CtlError> {
         (result, _) => result,
     };
     match &result {
-        Ok(decision) => append_audit(&dir, decision, None),
+        Ok(decision) => append_audit(&dir, decision, None, None),
         Err(error) => append_audit(
             &dir,
             &empty_audit_decision(&card.card_id, dangerous_filtered),
             Some(error),
+            None,
         ),
     }
     result

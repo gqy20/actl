@@ -1,4 +1,5 @@
 //! CLI adapter: preflight every invocation, then execute through the existing dispatcher.
+mod auto;
 mod validate;
 
 pub use validate::validate;
@@ -968,9 +969,23 @@ pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
             set,
             id,
             paused,
+            auto_decide,
         } => {
             let (plan, resources) = load_plan(file, inputs, set, &root, id)?;
             validate(&plan)?;
+            // --auto-decide 预检(创建任何状态之前拒绝,不留半注册 run):
+            // 仅探索运行(静态流程的应答是 flow-resume --retry-step 语义,
+            // 与决策卡无关);与 --paused 互斥(暂停让行是人类保留位)。
+            if *auto_decide && plan.explore.is_none() {
+                return Err(CtlError::protocol(
+                    "auto-decide requires an exploration plan; static flows have no decision cards",
+                ));
+            }
+            if *auto_decide && *paused {
+                return Err(CtlError::protocol(
+                    "--auto-decide conflicts with --paused (pause hands control to a human)",
+                ));
+            }
             let store = Store::at(&root, id)?;
             let _global = store.lock(true)?;
             if store.dir.exists() {
@@ -1006,6 +1021,9 @@ pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
                 host.publish(&run);
             } else if let Some(spec) = &plan.explore {
                 actl_flow::explore::execute(spec, &mut run, &store, &mut host, None, None)?;
+                if *auto_decide {
+                    auto::auto_decide(&plan, &store, &mut run, &mut host)?;
+                }
             } else {
                 engine::execute(&plan, &mut run, &store, &mut host, None, None)?;
             }

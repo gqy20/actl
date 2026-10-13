@@ -100,11 +100,14 @@ reason 为 output_freshness_failed。不要修改时间或从头重跑；先核�
 - 已完成步骤跳过；running/verifying/uncertain 先核验结果，核验成功则不重做动作。
 - resume_check 用于恢复时检查会话、接收人、当前页面等业务上下文；首次运行不执行它，首次必要条件放 before。
 - needs_review 时先观察。只有明确需要重复、后置核验返回 ASSERTION_FAILED，且用户授权后，才使用 `flow-resume --id report-01 --retry-step step-id`。
-- 探索运行的 `reason=decision_pending`（悬挂决策卡）有两类应答方式，回填通道唯一：
-  人/agent 读 `flow-status` 的 `data.decision_card` 自选，或经 `actl decide`（`--run <id>` 直读悬挂卡，
+- 探索运行的 `reason=decision_pending`（悬挂决策卡）有三类应答方式，回填通道唯一：
+  人/agent 读 `flow-status` 的 `data.decision_card` 自选；经 `actl decide`（`--run <id>` 直读悬挂卡，
   或管道 `actl flow-status --id <run> | actl decide`）问配置的决策端点拿 `{choice, confidence}`——
-  危险候选构造前已剥离、低于置信门槛即弃权（弃权=裁决权交回人）。
-  应答统一经 `flow-resume --id <run> --decision <choice_id>` 回填；decide 只生成应答，不执行、不续跑。
+  危险候选构造前已剥离、低于置信门槛即弃权（弃权=裁决权交回人）；或
+  `flow-run --auto-decide`（2026-10-13 授权，探索专属）：run 停卡时 actl 自问自答续跑直至终态，
+  任何弃权/停止/暂停/预算耗尽停下交回人。
+  手工应答统一经 `flow-resume --id <run> --decision <choice_id>` 回填；decide 只生成应答，不执行、不续跑
+  （auto-decide 的续跑=引擎同一校验链逐次回填）。
   配套流程：`workflows/explore-decide-answer.yml`（decide 步+输出保存，回填仍归编排层）。
 - 核验本身失败或结果未知（result_observation_failed）时，即使 --retry-step 也不重放。断言失败也不能单独证明原写入未发生。
 - status 返回 interrupted=true 时，旧 running 状态不能证明进程仍在执行。恢复以最新状态和执行器锁为准。

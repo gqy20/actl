@@ -599,3 +599,87 @@ fn stats_validation_rejects_bad_shapes() {
     let (code, result) = s.invoke(&["flow-validate", "--file", &ok]);
     assert_eq!(code, 0, "{result}");
 }
+
+/// flow-run --auto-decide 预检(2026-10-13 用户授权):拒绝发生在任何 run
+/// 状态创建之前——静态流程与决策卡无关,--paused 是人类保留位。
+#[test]
+fn auto_decide_preflight_rejects_static_and_paused() {
+    let s = Sandbox::new();
+    let static_flow = s.file(
+        "version: 1\nname: static-demo\nsteps:\n  - id: read\n    title: r\n    run:\n      command: status\n",
+    );
+    let (code, result) = s.invoke(&[
+        "flow-run",
+        "--file",
+        &static_flow,
+        "--id",
+        "auto-static",
+        "--auto-decide",
+    ]);
+    assert_eq!(code, 2, "{result}");
+    assert_eq!(result["error"]["code"], "PROTOCOL", "{result}");
+    assert!(
+        result["error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("exploration plan"),
+        "names the requirement: {result}"
+    );
+    // 预检先于 run 创建:无半注册状态
+    assert!(
+        !s.root
+            .join("actl")
+            .join("flows")
+            .join("auto-static")
+            .exists(),
+        "no half-registered run"
+    );
+    let explore = s.file(
+        "version: 1\nname: explore-demo\nexplore:\n  task: T\n  app: 不存在的唯一窗口标题-xyz\n  keywords: [k]\n  goal: {command: verify, args: [--exists, 'name:x', --app, 不存在的唯一窗口标题-xyz]}\n",
+    );
+    let (code, result) = s.invoke(&[
+        "flow-run",
+        "--file",
+        &explore,
+        "--id",
+        "auto-paused",
+        "--auto-decide",
+        "--paused",
+    ]);
+    assert_eq!(code, 2, "{result}");
+    assert!(
+        result["error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("--paused"),
+        "names the conflict: {result}"
+    );
+}
+
+/// --auto-decide 在探索运行上:无 decision.json(沙箱 LOCALAPPDATA 空)时
+/// provider 配置缺失以 PROTOCOL 传播,run 如实停在观察失败终态(该计划
+/// 用不存在的窗口标题驱动,不碰真桌面)——模型调用失败绝不静默降级,
+/// 原子语义与手工应答一致。
+#[test]
+fn auto_decide_explore_without_config_is_honest_protocol() {
+    let s = Sandbox::new();
+    let explore = s.file(
+        "version: 1\nname: explore-noconfig\nexplore:\n  task: T\n  app: 不存在的唯一窗口标题-abc\n  keywords: [k]\n  goal: {command: verify, args: [--exists, 'name:x', --app, 不存在的唯一窗口标题-abc]}\n",
+    );
+    let (code, result) = s.invoke(&[
+        "flow-run",
+        "--file",
+        &explore,
+        "--id",
+        "auto-nocfg",
+        "--auto-decide",
+    ]);
+    // 窗口预检硬失败先于任何决策(NOT_FOUND 信封,exit 1):auto 循环从未
+    // 启动,审计无污染——flag 不改变既有语义,没有卡可答时诚实传播。
+    assert_eq!(code, 1, "{result}");
+    assert_eq!(result["error"]["code"], "NOT_FOUND", "{result}");
+    assert!(
+        !s.root.join("actl").join("decision-audit.jsonl").exists(),
+        "auto-decide never asked the provider: no audit lines"
+    );
+}

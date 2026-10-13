@@ -122,7 +122,7 @@ actl verify --value <target> "<期望>" --app <app> # 确认:立即断言
 桌面:minimize-window restore-window desktop-prepare desktop-restore display-start display-status execution-status execution-recover
 验证:verify(--exists/--value/--contains/--checked) extract(--table)
 系统:app-register(--pattern) app-list app-remove get-clipboard set-clipboard
-流程:flow-validate(--set) flow-run(--paused/--set) flow-status flow-pause flow-resume(--retry-step/--decision) flow-revise(--accept-rerun/--resume/--set,修订续跑) flow-evidence(--step,失败采集包) flow-clean
+流程:flow-validate(--set) flow-run(--paused/--set/--auto-decide,末者探索自动应答) flow-status flow-pause flow-resume(--retry-step/--decision) flow-revise(--accept-rerun/--resume/--set,修订续跑) flow-evidence(--step,失败采集包) flow-clean
 决策:decide(--run/--card/--task/--dry-run,只读;读决策卡/AMBIGUOUS/front-report 信封问配置的决策模型,唯一出网命令) explore-writeback
 录制:record-start(--id/--max-seconds) record-worker record-stop(--id) record-status(--id)——草稿改写见 references/record-rewrite.md
 
@@ -236,12 +236,15 @@ uncertain 步变更即重试授权，谱系经 flow-status 的 revisions 可见�
 2. **只有 unverified 或无路线** → 不得直接执行,走探索引擎:flow 文件写 `explore:`
    段(task/app/keywords/goal 四要素,见 docs/06 探索节),`flow-run` 启动;决策卡
    经 flow-status 的 `data.decision_card` 读取(或 `actl decide --run <id>` 直读
-   悬挂卡)。应答两条路:**人/agent 自答**(读卡选 id);或**模型辅助**——
-   `actl flow-status --id <run> | actl decide` / `actl decide --run <id>` 问配置的
-   决策端点(decision.json),返回 `{choice, confidence}` 或弃权(危险候选构造前
-   已剥离、低于置信门槛即弃权,弃权=裁决权交回人)。回填统一走
-   `flow-resume --id <run> --decision <choice_id>`——decide 只生成应答,不执行
-   不续跑。完成后 `explore-writeback --id <run>` 抽路线片段,合并进
+   悬挂卡)。应答三条路,回填通道唯一(**人/agent 自答**——读卡选 id,交回时用;
+   **模型辅助**——`actl flow-status --id <run> | actl decide` / `actl decide --run
+   <id>` 问配置的决策端点拿 `{choice, confidence}`,危险候选构造前已剥离、低于
+   置信门槛即弃权;**全自动**——`flow-run --auto-decide`(2026-10-13 授权,探索
+   专属):run 停 decision_pending 时 actl 自问自答续跑直至终态,弃权/停止/暂停/
+   预算耗尽全部停下交回人,适合冷启动建 pack 的多卡任务)。
+   回填统一走 `flow-resume --id <run> --decision <choice_id>`——decide 只生成
+   应答,不执行不续跑(auto-decide 的续跑=引擎自身的同一校验链)。完成后
+   `explore-writeback --id <run>` 抽路线片段,合并进
    pack(恒 unverified,人工复核转 verified)——下次同类任务即走分岔 1,闭环。
 
 操作 Excel/Word/微信前先读对应档案:`apps/excel.yml`、`apps/word.yml`、`apps/wechat.yml`(含路线

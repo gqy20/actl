@@ -1193,6 +1193,8 @@ Plan 新增可选 `explore` 段；存在时 `steps` 必须为空（可省略键�
 
 应答协议：`flow-resume --id <id> --decision <choice_id>`，choice 必须属于卡内候选 id 集，否则 PROTOCOL；`--confidence`（≤32 字符，requires --decision）仅入报告。应答后引擎按「首选 + 卡内其余非危险候选按序」组成排序回退队列——首选无效果时自动推进，不产生新卡（危险候选永不自动回退，显式选择即授权）。静态流程传 --decision 为 PROTOCOL；探索运行传 --retry-step 为 PROTOCOL；悬挂卡未带 --decision 续跑为 PROTOCOL。
 
+**`flow-run --auto-decide`**（2026-10-13 用户授权，PRD §1.3）：run 停 `decision_pending` 时 actl 自问配置的决策 provider（decision.json）并逐次回填续跑直至终态。授权红线与手工应答完全一致——危险候选构造前剥离（provider 物理不可见）、任何弃权（dangerous_only/provider_none/low_confidence）停止循环交回人（run 留 decision_pending，decision_card 照常暴露）、回填走 explore::execute 同一校验链（成员校验/预算/急停/暂停逐应答边界让行）、decisions 预算封顶循环（防御 cap=预算+1，撞上 INTERNAL 如实报 bug）、每答审计 `responder=auto_decide`。预检先于 run 创建：静态流程 PROTOCOL（无决策卡语义）、与 --paused 互斥（暂停让行是人保留位）；provider 配置缺失/不可达如实传播，绝不静默降级为无模型行为。实现 `crates/actl-cli/src/flow/auto.rs`；真机 A/B 双臂验收（confident 自动完成/弃权交回人工 resume）见 CHANGELOG。
+
 终态语义：goal 满足 → completed；预算耗尽 → needs_review（reason `budget_exhausted:actions|decisions|wall`）；无候选（放宽后仍空）→ needs_review `no_candidates`；观察失败 → needs_review `observation_failed` 且错误如实传播（错误码原样返回调用方）；目标断言本身报错 → needs_review `goal_check_failed`。急停/暂停在任何边界生效（先持久化后返回），与静态流程同语义。显示端 needs_review 动作对探索显示 resume（静态流程仍为 recheck）。
 
 ### 路线回写、先验与目标重试

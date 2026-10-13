@@ -92,6 +92,16 @@ actl 内子命令→cli 位置）：actl-cli 新增 decide 动词，读决策卡
 两轮 18 载荷（本地 Kev-4B）。flow 内环自动应答（--auto-decide）与任务模式闭环
 不在本授权内，另行评审。
 
+2026-10-13 用户授权 flow-run `--auto-decide`（「这两个一起做了吧」——上条的
+另行评审项落地）：仅探索运行（静态流程 PROTOCOL、与 --paused 互斥，预检先于
+run 创建）；run 停 decision_pending 时 actl 问配置的决策 provider 并在
+confident 应答后续跑直至终态。**授权红线与手工应答完全一致**：危险候选构造前
+剥离、任何弃权（dangerous_only/provider_none/low_confidence）停循环交回人、
+逐次回填走 explore::execute 同一校验链、停止/暂停每次应答边界让行、decisions
+预算封顶循环；每答审计 responder=auto_decide。配置缺失/端点不可达如实传播不
+静默降级。协议见 [06 §7.9](06-design-blueprint.md)；真机 A/B 双臂验收（自动
+完成/弃权交回）见 CHANGELOG。任务模式闭环仍待数据立项，不在本授权内。
+
 ---
 
 ## 2. 用户与场景
