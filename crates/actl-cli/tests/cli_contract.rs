@@ -745,6 +745,33 @@ fn window_commands_without_selector_is_protocol() {
     );
     let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
     assert_eq!(v["error"]["code"], "PROTOCOL");
+    // maximize-window 同族门控:无锚 PROTOCOL(离线,不触桌面)
+    let (code, stdout) = actl(&["maximize-window"]);
+    assert_eq!(code, 2, "maximize without anchor");
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope json");
+    assert_eq!(v["error"]["code"], "PROTOCOL");
+    // resize-window:无锚 PROTOCOL;双锚互斥 PROTOCOL(部分字段语义——
+    // --x/--y 可选,仅尺寸也合法,窗口几何读写闭环,docs/83 §8 后续)
+    let (code, _) = actl(&["resize-window", "--width", "800", "--height", "600"]);
+    assert_eq!(code, 2, "resize without anchor");
+    let (code, stdout) = actl(&[
+        "resize-window",
+        "记事本",
+        "--hwnd",
+        "12345",
+        "--width",
+        "800",
+        "--height",
+        "600",
+    ]);
+    // clap 参数层拒绝(conflicts_with):exit 2 + 人类可读错误(stderr),
+    // 不产 envelope(ADR-002 例外面与未知子命令同款)——与语义层
+    // PROTOCOL envelope 区分,两者都 exit 2 但 stdout 形态不同
+    assert_eq!(code, 2, "resize with both anchors is clap-rejected");
+    assert!(
+        stdout.trim().is_empty(),
+        "clap arg errors carry no envelope (stdout stays empty)"
+    );
 }
 
 #[test]

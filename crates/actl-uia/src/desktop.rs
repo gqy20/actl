@@ -109,6 +109,50 @@ pub fn set_minimized(r: crate::WindowRef<'_>, minimize: bool) -> Result<Value, C
         json!({"hwnd":hwnd.0 as isize,"window":win.get_name().unwrap_or_default(),"minimized":minimize,"input_effects":{"keyboard":"none","pointer":"none","clipboard":"untouched","focus":true}}),
     )
 }
+
+/// maximize-window(2026-10-13 窗口几何轮,docs/83 §8 后续):与 minimize/
+/// restore 三态对称的窗口管理器最大化(SW_MAXIMIZE)——填满所在显示器
+/// 工作区不遮任务栏;应用内全屏(F11/VMware 全屏)是应用状态非窗口状态,
+/// 不在本动词管辖(诚实边界,与 Selenium 的 fullscreen 特权 API 不同,
+/// 原生桌面无窗口管理器级全屏)。ordinary 守卫/输入锁/预告/急停与
+/// set_minimized 同款;已最大化幂等返回 already:true。
+pub fn set_maximized(r: crate::WindowRef<'_>) -> Result<Value, CtlError> {
+    let win = crate::window::resolve_window(r)?;
+    let hwnd =
+        crate::window::hwnd_of(&win).ok_or_else(|| unavailable("window has no native handle"))?;
+    if !ordinary(hwnd) {
+        return Err(unavailable(
+            "only ordinary unowned application windows can be maximized",
+        ));
+    }
+    if unsafe { IsZoomed(hwnd) }.as_bool() {
+        return Ok(
+            json!({"hwnd":hwnd.0 as isize,"window":win.get_name().unwrap_or_default(),"maximized":true,"already":true}),
+        );
+    }
+    let _lock = crate::input::InputLock::acquire(crate::timing().lock_wait_ms)?;
+    let mut action = crate::feedback::window_action("maximize-window", &win, true)?;
+    unsafe { ShowWindowAsync(hwnd, SW_MAXIMIZE) }
+        .ok()
+        .map_err(crate::internal)?;
+    // 有界等待 IsZoomed 生效(窗口管理器异步;与 wait_iconic 同款 2s 上界)
+    let start = std::time::Instant::now();
+    while !unsafe { IsZoomed(hwnd) }.as_bool() {
+        if start.elapsed() >= std::time::Duration::from_secs(2) {
+            return Err(unavailable(
+                "window did not report maximized within the bounded wait",
+            ));
+        }
+        crate::feedback::check_stop()?;
+        std::thread::sleep(std::time::Duration::from_millis(
+            crate::timing().fast_poll_ms,
+        ));
+    }
+    action.delivered();
+    Ok(
+        json!({"hwnd":hwnd.0 as isize,"window":win.get_name().unwrap_or_default(),"maximized":true,"already":false,"input_effects":{"keyboard":"none","pointer":"none","clipboard":"untouched","focus":true}}),
+    )
+}
 fn path(token: &str) -> Result<std::path::PathBuf, CtlError> {
     if token.is_empty()
         || !token

@@ -140,6 +140,9 @@ Errors: PROTOCOL invalid HWND | ASSERTION_FAILED original instance remains | NOT
         "minimize-window" => {
             "Example:\n  actl minimize-window --hwnd 12345\nExactly one title, --pid or --hwnd. Only ordinary unowned windows.\nErrors: PROTOCOL missing selector | NOT_FOUND | AMBIGUOUS | NOT_ACTIONABLE | ABORTED"
         }
+        "maximize-window" => {
+            "Example:\n  actl maximize-window --hwnd 12345\nWindow-manager maximize (fills the monitor work area, taskbar visible) — the third state verb beside minimize/restore, same anchor set. Idempotent: already-maximized returns already:true. App-internal fullscreen (F11/VMware fullscreen) is application state, not window state — out of scope for window verbs.\nErrors: PROTOCOL missing selector | NOT_FOUND | AMBIGUOUS | NOT_ACTIONABLE not ordinary/never zoomed within bounded wait | ABORTED"
+        }
         "restore-window" => {
             "Example:\n  actl restore-window --hwnd 12345\nExactly one title, --pid or --hwnd. Restores the selected window.\nErrors: PROTOCOL missing selector | NOT_FOUND | AMBIGUOUS | NOT_ACTIONABLE | ABORTED"
         }
@@ -257,7 +260,7 @@ Errors: NOT_FOUND / AMBIGUOUS | NOT_ACTIONABLE no clickable point or occluded"
             "Example:\n  actl key-up shift --app Notepad\nMust be the same expression as the paired key-down.\nErrors: PROTOCOL --app required | PERM_DENIED foreground guard"
         }
         "resize-window" => {
-            "Example:\n  actl resize-window 记事本 --width 800 --height 600\nErrors: NOT_FOUND / AMBIGUOUS window | NOT_ACTIONABLE no native handle"
+            "Example:\n  actl resize-window 记事本 --width 800 --height 600\n  actl resize-window --hwnd 9439288 --width 1280 --height 720 --x 100 --y 100\nWindow geometry write-side with partial-field semantics (Selenium setRect style): --x/--y optional (omitted = keep position, backward compatible); all given = read/write closed loop — take `get --property rect` output, tweak, feed back in, zero unit conversion (all physical pixels). Anchor = title substring or --hwnd (survives title drift). Minimized windows are restored first (SetWindowPos on iconic is undefined); size floor 120px.\nErrors: NOT_FOUND / AMBIGUOUS window | NOT_ACTIONABLE no native handle | PROTOCOL missing anchor"
         }
         "verify" => {
             "Example:\n  actl verify --value id:CalculatorResults '56,877' --property name --contains --app 计算器\nImmediate assertion (vs wait): fails now, not later; failure carries expected/actual/target/channel. --normalize-lines compares complete text after CRLF/CR normalization and trimming trailing LF. --url-query KEY compares exactly one percent-decoded query value (literal plus, UTF-8, duplicate keys rejected); conflicts with --property/--contains/--normalize-lines. --property name|value|text selects an explicit channel; omitted uses Value then Text fallback.\nErrors: ASSERTION_FAILED | NOT_FOUND / AMBIGUOUS | PROTOCOL bad flags"

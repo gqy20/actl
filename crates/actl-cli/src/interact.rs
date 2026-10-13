@@ -721,18 +721,36 @@ pub(crate) fn key_half_cmd(
     .into())
 }
 
+/// resize-window:窗口几何写面(x/y/w/h 部分字段语义,Selenium setRect 同款)
+/// ——全空 anchor = 协议错误;--x/--y 缺省=保位置(向后兼容),全给=读写闭环
+/// (`get --property rect` 的输出改一改就是本命令输入,零单位换算)。
+/// 锚面 pattern/--hwnd 互斥(clap 强制),hwnd 锚在标题漂移后仍稳定
+/// (Broadcom 轮同款痛点:页面导航标题三变)。
 pub(crate) fn resize_window_cmd(
-    pattern: &str,
+    pattern: Option<&str>,
+    hwnd: Option<&str>,
     width: i32,
     height: i32,
+    x: Option<i32>,
+    y: Option<i32>,
 ) -> Result<CommandOutput, CtlError> {
-    let title = actl_uia::resize_window(pattern, width, height)?;
-    Ok(json!({
+    let r = window_ref_of(pattern, None, hwnd)?;
+    let out = actl_uia::resize_window_rect(r, width, height, x, y)?;
+    let mut entry = json!({
         "action": "resize-window",
-        "window": title,
-        "size": [width, height],
-    })
-    .into())
+        "window": out.window_title,
+        "width": width,
+        "height": height,
+        "moved": x.is_some() || y.is_some(),
+        "input_effects": { "keyboard": "none", "pointer": "none", "clipboard": "untouched", "focus": false },
+    });
+    if let Some(x) = x {
+        entry["x"] = json!(x);
+    }
+    if let Some(y) = y {
+        entry["y"] = json!(y);
+    }
+    Ok(entry.into())
 }
 
 pub(crate) fn window_ref_of<'a>(

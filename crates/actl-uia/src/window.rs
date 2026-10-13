@@ -946,46 +946,6 @@ fn post_close(
     ))
 }
 
-/// resize-window:标题唯一匹配窗口 → SetWindowPos(不动位置,只改尺寸)。
-pub fn resize_window(pattern: &str, width: i32, height: i32) -> Result<String, CtlError> {
-    use windows::Win32::Foundation::{HWND, RECT};
-    use windows::Win32::UI::WindowsAndMessaging::{
-        GetWindowRect, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOZORDER, SetWindowPos,
-    };
-
-    let auto = UIAutomation::new().map_err(internal)?;
-    let walker = auto.create_tree_walker().map_err(internal)?;
-    let win = find_window(&auto, &walker, pattern)?;
-    let mut action = crate::feedback::window_action("resize-window", &win, false)?;
-    let title = win.get_name().unwrap_or_default();
-    let Some(hwnd) = native_hwnd(&win) else {
-        return Err(CtlError::new(
-            ErrorCode::NotActionable,
-            format!("window {pattern:?} has no native handle"),
-        ));
-    };
-    // 保持当前左上角不动;目标尺寸裁到系统最小限制之上
-    let mut rect = RECT::default();
-    unsafe { GetWindowRect(hwnd, &mut rect) }
-        .map_err(|e| CtlError::internal(format!("GetWindowRect: {e}")))?;
-    let w = width.max(120);
-    let h = height.max(120);
-    unsafe {
-        SetWindowPos(
-            hwnd,
-            Some(HWND(std::ptr::null_mut())),
-            rect.left,
-            rect.top,
-            w,
-            h,
-            SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
-        )
-    }
-    .map_err(|e| CtlError::internal(format!("SetWindowPos: {e}")))?;
-    action.delivered();
-    Ok(title)
-}
-
 /// check_snapshot_freshness 的按模式入口:解析窗口后比对 RuntimeId。
 pub fn check_snapshot_freshness_by_pattern(
     snapshot_id: &str,

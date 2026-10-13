@@ -61,6 +61,7 @@ pub use table::{TableResult, extract_table};
 /// UIA 调用看门狗(有界 COM 调用;docs/81 §8 僵尸事故根治)。
 pub mod watchdog;
 mod window;
+mod window_geometry;
 pub use window::front_report;
 pub use window::residue_report;
 pub mod window_check;
@@ -104,9 +105,9 @@ pub use window::{
     CaptureResult, MAX_DEPTH, MAX_ELEMENTS, WindowEntry, WindowInfo, WindowRef, capture,
     capture_hwnd, check_snapshot_freshness, check_snapshot_freshness_by_pattern, close_window,
     close_window_by, focus_window, focus_window_by, foreground_window, list_windows, parse_hwnd,
-    persist_snapshot, resize_window, resolve_app_path, wait_new_window, wait_window,
-    window_identities,
+    persist_snapshot, resolve_app_path, wait_new_window, wait_window, window_identities,
 };
+pub use window_geometry::{ResizeOutcome, resize_window_rect};
 
 use actl_core::{CtlError, ErrorCode};
 

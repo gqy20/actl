@@ -97,6 +97,15 @@ pub(crate) enum DesktopCommand {
         #[arg(long, conflicts_with_all = ["pattern", "pid"])]
         hwnd: Option<String>,
     },
+    /// Maximize one ordinary application window (window-manager maximize; app-internal fullscreen like F11 is app state, out of scope)
+    MaximizeWindow {
+        #[arg(conflicts_with_all = ["pid", "hwnd"])]
+        pattern: Option<String>,
+        #[arg(long, conflicts_with_all = ["pattern", "hwnd"])]
+        pid: Option<u32>,
+        #[arg(long, conflicts_with_all = ["pattern", "pid"])]
+        hwnd: Option<String>,
+    },
     /// Restore one window from minimized state
     RestoreWindow {
         #[arg(conflicts_with_all = ["pid", "hwnd"])]
@@ -716,13 +725,23 @@ pub(crate) enum Command {
     /// Resize a window (keeps its position)
     ResizeWindow {
         /// Window title substring (must match exactly one window)
-        pattern: String,
-        /// New width in pixels
+        #[arg(conflicts_with = "hwnd")]
+        pattern: Option<String>,
+        /// Window by native handle (decimal or 0x-hex; survives title changes)
+        #[arg(long, conflicts_with = "pattern")]
+        hwnd: Option<String>,
+        /// New width in physical pixels
         #[arg(long)]
         width: i32,
-        /// New height in pixels
+        /// New height in physical pixels
         #[arg(long)]
         height: i32,
+        /// Optional new top-left X (physical, negative = left monitor); omit to keep position
+        #[arg(long)]
+        x: Option<i32>,
+        /// Optional new top-left Y; omit to keep position
+        #[arg(long)]
+        y: Option<i32>,
     },
     /// Immediate assertion (unlike wait): exists / value / checked
     VerifyFile {
@@ -1328,6 +1347,7 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
         Command::Desktop(DesktopCommand::DisplayStart) => "display-start",
         Command::Desktop(DesktopCommand::DisplayStop { .. }) => "display-stop",
         Command::Desktop(DesktopCommand::MinimizeWindow { .. }) => "minimize-window",
+        Command::Desktop(DesktopCommand::MaximizeWindow { .. }) => "maximize-window",
         Command::Desktop(DesktopCommand::RestoreWindow { .. }) => "restore-window",
         Command::Desktop(DesktopCommand::DesktopPrepare { .. }) => "desktop-prepare",
         Command::Desktop(DesktopCommand::DesktopRestore { .. }) => "desktop-restore",

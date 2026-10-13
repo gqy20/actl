@@ -354,6 +354,14 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             )
             .map(Into::into)
         }
+        Command::Desktop(DesktopCommand::MaximizeWindow { pattern, pid, hwnd }) => {
+            actl_uia::desktop::set_maximized(window_ref_of(
+                pattern.as_deref(),
+                *pid,
+                hwnd.as_deref(),
+            )?)
+            .map(Into::into)
+        }
         Command::Desktop(DesktopCommand::DesktopPrepare { all, hwnd }) => {
             if !all && hwnd.is_empty() {
                 return Err(CtlError::protocol(
@@ -615,9 +623,12 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
         Command::KeyUp { keys, app } => key_half_cmd("key-up", keys, app.as_deref(), None, false),
         Command::ResizeWindow {
             pattern,
+            hwnd,
             width,
             height,
-        } => resize_window_cmd(pattern, *width, *height),
+            x,
+            y,
+        } => resize_window_cmd(pattern.as_deref(), hwnd.as_deref(), *width, *height, *x, *y),
         Command::Verify {
             value,
             expected,
