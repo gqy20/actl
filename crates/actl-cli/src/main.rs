@@ -46,6 +46,9 @@ impl From<Value> for CommandOutput {
 }
 
 fn main() {
+    // 坐标系不变量先行(docs/83 补遗,2026-10-13):整进程 PMv2 物理像素。
+    // 必须在 clap 解析与任何 UIA/DC 调用之前(设置过窗口后被拒)。
+    actl_uia::ensure_process_pmv2();
     // clap 树注入 after_help 后再 parse(Example/Errors 进 -h;06 §3.5)
     let matches = crate::cli::build_cli().get_matches();
     let cli = match Cli::from_arg_matches(&matches) {

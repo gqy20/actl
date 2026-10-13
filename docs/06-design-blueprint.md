@@ -547,6 +547,7 @@ L2  actl commands     机器 schema:全命令+参数的 JSON(agent 自发现入�
 - `get` 保留成功读取的空字符串；`value` 仅在 ValuePattern 明确不支持时回退 TextPattern，读取失败不回退。
 - `get --property` 白名单含 `enabled`（UIA IsEnabled）：禁用态此前只在写动作失败后可见，门户预填锁定字段的写前判读现为只读一步。
 - `get --property selected`（2026-10-13 VMware 向导轮实证补）：RadioButton/CheckBox/MenuItem 选定态读回——SelectionItem `IsSelected` 优先、无该 pattern 时回退 ToggleState（`On`⇒true）；两 pattern 均不可用为 None（非可选控件，诚实降级不伪装）。选择/勾选动作后不再需要截图确认。
+- **坐标系不变量（2026-10-13 进程级 PMv2 修复兑现）**：actl.exe 全进程 Per-Monitor V2 感知——`get rect`、find 证据、preview bounds、focus-report、snapshot 树几何、`click xy:` 与 `screenshot --rect` 全部同为**物理像素**，缩放屏无逻辑/物理混排。修复根因：双 200% 缩放屏实测 `get rect` 曾回逻辑坐标（与 list-windows/find-image 恰差 2×），"PMv2 物理"宣称在 rect 读取路径为假；现进程入口一次设置（signal 显示端同款先例），散点线程 guard 保留为无害冗余。设置失败仅 stderr 诊断，坐标回退逻辑值不静默。
 - 默认 `get` 的 data 增加 `unsupported` 属性名数组（如 `["value","text"]`），表示已确认不支持的读取通道；空数组表示本次没有不支持项。其他读取错误使命令失败，不能输出看似完整的成功结果。
 - 显式 `get --property value|text`、verify 和属性等待遇到不支持通道返回 NOT_ACTIONABLE，evidence.reason=`pattern_unsupported`；value 的 get/自动等待允许上述双通道，而 `verify --property value` 严格读取 ValuePattern。
 - UIA 元素失效映射 STALE_REF，访问拒绝映射 PERM_DENIED，其余 provider/属性读取错误映射 INTERNAL；evidence 带 channel、native_code（原生错误存在时）。观察失败不能等同空值、断言不满足或稳定。

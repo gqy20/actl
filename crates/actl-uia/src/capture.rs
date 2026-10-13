@@ -79,6 +79,28 @@ fn retain_shots(dir: &std::path::Path) {
 /// pub(crate):坐标点击(pointer_at_physical)复用——截图与坐标守卫同坐标系。
 pub(crate) struct Pmv2Guard(windows::Win32::UI::HiDpi::DPI_AWARENESS_CONTEXT);
 
+/// 进程级 PMv2(2026-10-13 坐标系一致性修复,docs/83 补遗):actl.exe 主入口
+/// 调用一次,整进程坐标(含无散点 guard 的 read/preview/pointer/locate 矩形
+/// 路径)统一物理像素。实测根因:双 200% 缩放屏上 `get --property rect` 回
+/// 逻辑坐标(1913,-7,1549×973)而 find-image/list-windows 回物理
+/// (3827,-13,3098×1946),恰好 2×——两半管道单位不一致,agent 被迫当
+/// 人肉换算器且物理点击被窗口边界守卫误拒。散点 guard 保留为无害冗余防御。
+/// 失败仅 stderr 诊断(坐标回退旧逻辑值,不静默;stdout 契约不变)。
+pub fn ensure_process_pmv2() {
+    use windows::Win32::UI::HiDpi::{
+        DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext,
+    };
+    // SAFETY: 进程级上下文设置,无 COM/句柄参数;main 入口无窗口无 DC,
+    // 语义确定(signal 显示端子进程同款调用先例,shell.rs/controls.rs)。
+    if let Err(e) =
+        unsafe { SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) }
+    {
+        eprintln!(
+            "[actl-dpi] process PMv2 setup failed ({e:?}); coordinates may report logical (scaled) values"
+        );
+    }
+}
+
 impl Pmv2Guard {
     pub(crate) fn enter() -> Self {
         use windows::Win32::UI::HiDpi::{

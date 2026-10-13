@@ -77,7 +77,8 @@ pub use window::persist_snapshot_scoped;
 pub mod kbd;
 pub mod mouse;
 pub use capture::{
-    ShotResult, screenshot_element, screenshot_rect, screenshot_screen, screenshot_window,
+    ShotResult, ensure_process_pmv2, screenshot_element, screenshot_rect, screenshot_screen,
+    screenshot_window,
 };
 pub use collect::{CollectOptions, CollectReport, collect};
 pub use native_windows::{native_window, native_windows};

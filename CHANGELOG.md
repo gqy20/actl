@@ -7,6 +7,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **[BC] 坐标系统一进程级 PMv2——`get rect` 在缩放屏曾回逻辑坐标(spec,2026-10-13 docs/83 §8 补遗,[06 §3.7 坐标系不变量](docs/06-design-blueprint.md))**:actl.exe 入口一次 `SetProcessDpiAwarenessContext(PMv2)`,整进程坐标兑现"PMv2 物理"宣称。实测根因:双 200% 缩放屏同一窗口,`get rect` 回逻辑 (1913,-7,1549×973) 而 list-windows/find-image 回物理 (3827,-13,3098×1946)——恰好 2×,两半管道单位不一致;agent 被迫人肉换算、物理点击被窗口边界守卫误拒(xy: 吃物理、guard 比对逻辑),AGENTS"缩放屏采错区域"教训(2026-10-12)同根因。修复后真机复验三通道对齐(get rect 3827,-13,3098×1946 ≡ list-windows;与 find-image 客户区仅差边框)。**[BC] 影响面**:缩放屏上 `get rect`/find 证据/preview bounds/focus-report/snapshot 几何的输出值从逻辑变物理(100% 屏无感知);下游以 rect 值做换算的编排脚本需复核。signal 显示端子进程本就进程级 PMv2(shell.rs/controls.rs 先例),不受影响;散点线程 guard 保留为无害冗余;设置失败仅 stderr 诊断不静默。
+
 ### Added
 
 - **`set-value` 宿主容器信号 `host_control`(spec,docs/83 Phase 2,[06 §5.2](docs/06-design-blueprint.md))**:目标是 ComboBox 子 Edit 时 envelope 附 `host_control:"ComboBox"`——Win32 形态下直写子 Edit 不一定被宿主采纳(焦点离开才提交 ValuePattern,VMware 硬件页 CPU 核数实证:set-value 读回 4 而摘要栏不动,5 步排查后 type+tab 才生效);agent 据此在值未生效时先 `press tab` 或改 `select`,不再盲写。探测是直系 parent 两次 COM 往返,失败静默降级 None(信号是建议非判定,不阻断写结果);非 ComboBox 子 Edit 字段缺省(写入即生效)。help/docs §5.2 同步;vmware.yml quirk `combo_value_needs_tab_commit` 更新为信号指引。

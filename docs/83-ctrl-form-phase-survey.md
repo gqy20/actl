@@ -91,3 +91,13 @@ docs/78 是 L4 真实标本(预填禁用 + SPA 重渲染 + companion 版本门�
 - docs/78 §5 L4 陷阱题:产生 bug 样本的题目
 - docs/83(本文件):样本背后的能力缺口与 spec 边界
 - 后续 spec PR:实现 docs/83 Phase 1 的三个契约点
+
+## 八、补遗(2026-10-13 同日晚,坐标系统一根因与修复)
+
+VMware 会话"缩放换算太绕"复盘时发现比 Phase 1-3 更基础的正确性缺陷,补记于此:
+
+**实测根因**:双 200% 缩放屏上同一窗口,`get --property rect` 回逻辑坐标(1913,-7,1549×973),而 list-windows/find-image 回物理(3827,-13,3098×1946)——**恰好 2×,两半管道单位不一致**。docs/06 与 help 宣称"rect = PMv2 物理像素"在 rect 读取路径为假(read.rs 无 DPI guard,散点 guard 只盖了 capture/find_image/native_windows/feedback)。当晚 find-image 模板裁剪的手工换算、物理点击被窗口边界守卫误拒(xy: 用物理、guard 拿逻辑比对),皆源于此;AGENTS"缩放屏采错区域"教训(2026-10-12)同根因。
+
+**修复(Fix A,spec)**:actl.exe 进程入口一次 `SetProcessDpiAwarenessContext(PMv2)`(signal 显示端子进程同款先例),整进程坐标统一物理——`get rect`/find 证据/preview bounds/focus-report/snapshot 几何全部兑现"PMv2 物理"宣称。真机复验:修复前 (1913,-7,1549×973) → 修复后 (3827,-13,3098×1946),与 list-windows 完全对齐。散点 guard 保留为无害冗余。
+
+**后续(Fix B/C)**:`xyw:` 窗口客户区相对寻址 + `screenshot --wrect`(消灭截图→模板→点击链的最后换算);find-image evidence 附 scale/客户区原点入 ROADMAP 观察项。Phase 2 原"模板制作辅助不进代码"的裁定由 `--wrect` 替代兑现。
