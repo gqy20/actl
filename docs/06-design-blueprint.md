@@ -546,6 +546,7 @@ L2  actl commands     机器 schema:全命令+参数的 JSON(agent 自发现入�
 
 - `get` 保留成功读取的空字符串；`value` 仅在 ValuePattern 明确不支持时回退 TextPattern，读取失败不回退。
 - `get --property` 白名单含 `enabled`（UIA IsEnabled）：禁用态此前只在写动作失败后可见，门户预填锁定字段的写前判读现为只读一步。
+- `get --property selected`（2026-10-13 VMware 向导轮实证补）：RadioButton/CheckBox/MenuItem 选定态读回——SelectionItem `IsSelected` 优先、无该 pattern 时回退 ToggleState（`On`⇒true）；两 pattern 均不可用为 None（非可选控件，诚实降级不伪装）。选择/勾选动作后不再需要截图确认。
 - 默认 `get` 的 data 增加 `unsupported` 属性名数组（如 `["value","text"]`），表示已确认不支持的读取通道；空数组表示本次没有不支持项。其他读取错误使命令失败，不能输出看似完整的成功结果。
 - 显式 `get --property value|text`、verify 和属性等待遇到不支持通道返回 NOT_ACTIONABLE，evidence.reason=`pattern_unsupported`；value 的 get/自动等待允许上述双通道，而 `verify --property value` 严格读取 ValuePattern。
 - UIA 元素失效映射 STALE_REF，访问拒绝映射 PERM_DENIED，其余 provider/属性读取错误映射 INTERNAL；evidence 带 channel、native_code（原生错误存在时）。观察失败不能等同空值、断言不满足或稳定。
@@ -612,7 +613,7 @@ L2  actl commands     机器 schema:全命令+参数的 JSON(agent 自发现入�
 | `TIMEOUT` | wait/谓词或 UIA 提供程序明确超时（`UIA_E_TIMEOUT`） | 重估前置状态 |
 | `AMBIGUOUS` | 匹配到多个元素(附候选 evidence,含可重放 @eN;**重复标签附 `context`**=最近具名祖先文本——所在行/容器,8 跳有界 120 字符截断;无具名祖先时为 null。唯一标签不带 context 控制证据体积) | 收紧条件 / `--near` 锚点 / `role:X#N` 序数 |
 | `NOT_ACTIONABLE` | 元素存在但不可操作(offscreen/通道不支持),或动作准备期校验拒绝。**同码分型**（2026-10-13 Broadcom 门户轮收口：一码三态曾共用一句 message,只读 message 的 agent 会误诊）:`target_disabled`=预填锁定字段不可写(message="target is disabled at action time",写前可 `get --property enabled` 判读,重试无效);`target_identity_changed`=准备期身份漂移(message="target changed during action preparation",重拍快照重解析);display `version_mismatch`=companion 版本失配(hint 指向 display-stop/start 配对重启)。各分型 hint 独立给恢复路径 | 按 message/evidence.reason 选恢复路径,勿盲重试 |
-| `ASSERTION_FAILED` | `verify`/`--expect` 断言未成立 | 检查前置步骤(`--expect` 默认 2s 轮询后判定) |
+| `ASSERTION_FAILED` | `verify`/`--expect` 断言未成立。**读回核验三态**（2026-10-13 VMware 密码框轮收口）：evidence.`readback`=`mismatch`（读回可读但不等，真失败——检查 expected/actual）；`empty`（读回恒空，reason=`readback_empty`——密码框/provider 背书 Edit 不暴露内容，写入可能已生效，hint 指向 screenshot 核验，勿盲重放）；通道不可读为 NOT_ACTIONABLE(`pattern_unsupported`) | 按证据三态选恢复路径:mismatch 查差异;empty 走截图/他通道断言;不可读换通道 |
 | `PROTOCOL` | 协议/参数错误(不可恢复) | 修正命令参数 |
 | `INTERNAL` | 内部/UIA/系统层错误(非协议非目标问题) | 重试一次;持续出现附 evidence 报 issue |
 | `ABORTED` | 本调用停止代次已失效，或流程被明确暂停/停止 | 核验结果后新建调用或显式恢复流程；新写操作在开始/继续时确认，禁止自动重放 |
@@ -662,7 +663,9 @@ L2  actl commands     机器 schema:全命令+参数的 JSON(agent 自发现入�
 - `type <target> <text> --app X [--paste] [--snapshot ID] [--verify-value <expected>]`：
   可选在原控件上最多等待 2000ms，ValuePattern 优先、不可用时 TextPattern，精确比较完整字符串，
   包括空串；换行在比较前折叠为 \n（\r、\r\n、\n 三种表示在剪贴板/UIA 提供方之间等价），语义为行内容精确比较、表示无关，不重复输入。成功新增 `focus_verified:true`，`value_verified:true`；
-  未要求读回时后者为 null。读回不符/不可读返回 `ASSERTION_FAILED`；实例改变返回 `STALE_REF`。
+  未要求读回时后者为 null。读回不符返回 `ASSERTION_FAILED`（evidence.`readback`=`mismatch`）；读回**通道工作但恒空**
+  （密码框/provider 背书 Edit，reason=`readback_empty`，hint 指向截图核验——2026-10-13 VMware 向导轮实证，写入可能
+  已生效勿盲重放）；通道不可读为 `NOT_ACTIONABLE`；实例改变返回 `STALE_REF`。
   错误 evidence 含 delivered/value_verified/expected/actual/comparison（newline_folded_exact）；输入可能已经生效，调用方先核实，不能直接重放。
 - `press <keys> --app X [--target <selector>] [--snapshot ID]`：`--snapshot` 要求 `--target`。
   指定目标时只断言其已拥有焦点，不切换窗口、不 SetFocus、不猜测首个 Edit；不符返回

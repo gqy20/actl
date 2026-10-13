@@ -198,6 +198,9 @@ fn property_data(target: &str, info: actl_uia::PropertyInfo) -> Value {
     if let Some(v) = info.enabled {
         props.insert("enabled".into(), json!(v));
     }
+    if let Some(v) = info.selected {
+        props.insert("selected".into(), json!(v));
+    }
     if let Some(v) = &info.value {
         props.insert("value".into(), json!(v));
     }
@@ -1111,6 +1114,7 @@ mod property_contract_tests {
                 automation_id: None,
                 offscreen: None,
                 enabled: None,
+                selected: None,
                 value: Some(String::new()),
                 value_via: Some("value-pattern"),
                 text: None,
@@ -1134,6 +1138,7 @@ mod property_contract_tests {
                 automation_id: None,
                 offscreen: None,
                 enabled: Some(true),
+                selected: None,
                 value: None,
                 value_via: None,
                 text: None,
@@ -1161,6 +1166,7 @@ mod property_contract_tests {
                 automation_id: None,
                 offscreen: Some(false),
                 enabled: Some(false),
+                selected: Some(true),
                 value: Some("Qingyu".into()),
                 value_via: Some("value-pattern"),
                 text: None,
@@ -1168,6 +1174,7 @@ mod property_contract_tests {
                 unsupported: Vec::new(),
             },
         );
+        assert_eq!(data["properties"]["selected"], true);
         assert_eq!(data["properties"]["enabled"], false);
         assert_eq!(data["properties"]["offscreen"], false);
         // None 保持省略语义:未观察不伪装缺席

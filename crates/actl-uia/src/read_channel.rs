@@ -2,7 +2,7 @@
 use actl_core::{CtlError, ErrorCode};
 use uiautomation::{
     UIElement,
-    patterns::{UITextPattern, UITogglePattern, UIValuePattern},
+    patterns::{UISelectionItemPattern, UITextPattern, UITogglePattern, UIValuePattern},
     types::UIProperty,
 };
 use windows::Win32::{
@@ -100,6 +100,26 @@ pub(crate) fn toggle(element: &UIElement) -> Result<Option<String>, CtlError> {
                 .map_err(|e| failure("toggle-pattern", e))
         },
     )
+}
+
+/// 2026-10-13: 选定态读取——RadioButton/MenuItem(Toggle/SelectionItem IsSelected)
+/// 用于 Phase 1 Phase 1.1("选择态读回,不再截图确认")。SelectionItemPattern
+/// 优先(Radio/列表项),仅当该 pattern 不可用时回退 TogglePattern(CheckBox);
+/// 两个都不可用时按"通道不支持读回"降级——不报失败,直接 None。
+pub(crate) fn selected(element: &UIElement) -> Result<Option<bool>, CtlError> {
+    if let Ok(p) = element.get_pattern::<UISelectionItemPattern>() {
+        return p
+            .is_selected()
+            .map(Some)
+            .map_err(|e| failure("selection", e));
+    }
+    if let Ok(p) = element.get_pattern::<UITogglePattern>() {
+        return p
+            .get_toggle_state()
+            .map(|s| Some(matches!(s, uiautomation::types::ToggleState::On)))
+            .map_err(|e| failure("toggle-state", e));
+    }
+    Ok(None)
 }
 pub(crate) fn require<T>(value: Option<T>, channel: &str) -> Result<T, CtlError> {
     value.ok_or_else(|| {

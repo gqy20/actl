@@ -5,7 +5,11 @@
 0.x 期间破坏性变更在条目中以 **[BC]** 标注。条目只记"变了什么与为什么"；
 过程细节与归因在 git 提交信息与 docs/ 里，不在此重复。
 
+## [Unreleased]
+
 ### Added
+
+- **`get --property selected` + `--verify-value` 读回三态(spec,2026-10-13 VMware 向导轮实证收口;[83 控件缺口评估](docs/83-ctrl-form-phase-survey.md) Phase 1,[06 §3.7/§4/§5.2](docs/06-design-blueprint.md))**:控件语义层两项补强,消除实战两类系统性误判。①**选定态读回**:RadioButton/CheckBox/MenuItem 不再只能截图确认——SelectionItem `IsSelected` 优先、ToggleState 回退(`On`⇒true),两 pattern 均不可用时为 None(非可选控件诚实降级);VMware 向导 8 项选择/勾选曾逐项截图核验。②**读回核验三态**:`--verify-value` 失败的 evidence.`readback` 字段区分 `mismatch`(读回可读但不等,真失败,保持旧消息与 readable:true)/`empty`(通道工作但恒空,reason=`readback_empty`,hint 指向 screenshot 核验勿盲重放——密码框/provider 背书 Edit 不暴露内容,**写入可能已生效**;VMware Configure Encryption 实证:掩码点 15 个已出现而旧语义报"读回不匹配",误导两轮排查)/通道不可读(NOT_ACTIONABLE `pattern_unsupported`,原语义不变)。golden `readback_empty_envelope.json` 钉死 empty 分型信封。测试:input_verify 单测 5(含 golden)+query.rs selected 序列化断言。
 
 - **front-report owned 子窗文本信号增强(spec,2026-10-13,ROADMAP front 观察项候选①兑现)**:owned 原生弹窗表面新增 `texts[]/buttons[]`——`owned_child_texts`(actl-uia,EnumChildWindows+GetWindowText 纯 Win32 直采,不进 UIA provider,前台快门路径同样可用;文本 ≤16 行×240 字符、按钮 ≤12,去重截断)。动机:#32770 类弹窗全文在子窗 Static/Button,owned 只带标题是 decide 判读咨询置信贫困(conf 0.32-0.37<门槛)的根因;decide/front.rs 渲染行拼接 texts(≤4 行×240,判读 state 预算内)。**A/B 实测(真 Kev)**:同一 WMExternal Fail Fast 崩溃框信封,不带文本 conf 0.32 弃权 → 带子窗全文 conf **0.622 跨过 0.5 门槛**,family=crash 判读成立——「信号补全即恢复」预测证实;新式另存为(Explorer 壳,子窗是浏览器噪声)判读 unknown 属诚实行为,如实入册。真机链路:记事本 ctrl+s 真对话框 owned 层拿到完整 texts/buttons(另存为/编码/保存按钮族)。测试:单测 +1+契约 +1(texts 入 state/入 consult request);help front-report 四要素更新。无 golden 冲突(owned texts 可选字段,旧信封兼容)。
 

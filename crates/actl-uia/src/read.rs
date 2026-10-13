@@ -25,6 +25,7 @@ pub const PROPS: &[&str] = &[
     "automation_id",
     "offscreen",
     "enabled",
+    "selected",
     "value",
     "text",
     "rect",
@@ -47,6 +48,11 @@ pub struct PropertyInfo {
     /// UIA IsEnabled(2026-10-13 补:门户预填锁定字段禁用态此前只在写动作
     /// 失败后可见,`get --property enabled` 让写前判读成为只读一步)。
     pub enabled: Option<bool>,
+    /// 2026-10-13 补 Phase 1.1:RadioButton/CheckBox/MenuItem 选定态——
+    /// SelectionItem 优先(读 `IsSelected`),无时回退 ToggleState
+    /// (`On` ⇒ true),两 pattern 均不可用时为 None(通道不支持/非可选
+    /// 控件,诚实降级——不伪装"已读回")。
+    pub selected: Option<bool>,
     pub value: Option<String>,
     /// value 的读取通道；仅 ValuePattern 不支持时回退 TextPattern。
     pub value_via: Option<&'static str>,
@@ -175,6 +181,11 @@ pub fn read_property(
                     .is_enabled()
                     .map_err(|e| crate::read_channel::failure("enabled", e))?,
             )
+        } else {
+            None
+        },
+        selected: if want("selected") {
+            crate::read_channel::selected(&loc.element)?
         } else {
             None
         },
