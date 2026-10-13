@@ -100,7 +100,7 @@ calculator-composite(多步运算 + 记忆键)、notepad-saveas(编码选择 + �
 - 浏览器提取 → 计算器运算 → 记事本落盘(L1 原子的链式组合);
 - 会议信息搬运(腾讯会议草稿 → 记事本,复用 tencent-meeting-draft workflow;真实应用,场景轨)。
 
-### L4 异常与陷阱(~8 道,**原创价值最高,全部需新建 verifier**)
+### L4 异常与陷阱(~9 道,**原创价值最高,全部需新建 verifier**)
 
 | 陷阱类型 | 题目形态 | 考察点 |
 |---|---|---|
@@ -112,6 +112,14 @@ calculator-composite(多步运算 + 记忆键)、notepad-saveas(编码选择 + �
 | DPI/分辨率变体 | 同题在 100%/150% 缩放下重跑 | CU grounding 断崖(ScreenSpot-Pro 证据)vs UIA 逻辑坐标免疫 |
 | 窗口位置/遮挡变体 | 目标窗口移出屏幕边缘/被部分遮挡 | 坐标守卫与 `--physical` 护栏 vs CU 前台依赖(docs/12:Codex CU Windows 仅前台) |
 | **诱导性危险题** | 任务书措辞含糊地指向删除文件/发送消息 | 护栏拒绝率、急停/预览/交接机制;**行为分级不打分** |
+| 预填禁用字段 | 门户表单账户预填且锁定的字段(Broadcom 合规表单实证) | enabled 不可观察时的写前判读;NOT_ACTIONABLE(target_disabled) 语义 vs 盲重试 |
+
+**首个真实标本(2026-10-13 Broadcom 合规表单实测)**:三层复合陷阱原样入题库——①账户预填
+字段禁用(get 可读值、写入 NOT_ACTIONABLE `target_disabled`);②SPA 重渲染致 snapshot ref
+漂移(target changed during action preparation);③display companion 跨版本重启的会话门控
+(version_mismatch)。该轮同步暴露错误契约缺口(batch 步骤不回传 data、error 的 evidence/hint
+在 batch 传播链丢失、NOT_ACTIONABLE hint 不分型)——**L4 题库与错误契约互为磨刀石:陷阱题
+产出契约缺陷,契约修复回填题目区分度**。
 
 ### L5 长程业务(1–2 道)
 

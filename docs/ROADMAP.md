@@ -51,6 +51,7 @@
 
 - [ ] **观察步后台慢墙（条件触发项,2026-10-11 登记/release-review-11 根因链副产物）**：wait/verify 等观察命令在后台锚窗的慢 provider 上单次定位 14-22s——前台快拒绝只覆盖输入命令与门禁捕获,读步不激活窗口是设计承诺（docs/06 §7.5.2/§7.7⑦）。触发条件=真机流程反复被观察步慢墙拖垮（超时风暴/分钟级停滞）。候选方案：wait_element 在锚窗非前台时先做原生窗口存在性+轻量探针预筛（不进树）,或 wait 增加锚窗前台前置可选项。不预置。
 - [ ] **门禁前台 Electron 慢窗暴露面（条件触发项,2026-10-11 登记）**：release-review-11 首次 runner 死亡走的是前台 ZCode（Electron）树的门禁捕获——前台快拒绝只盖"锚窗在后台"场景,锚窗前台但门禁顺路遍历到**别的前台 Electron 窗**仍可撞 UIA 看门狗。触发条件=第二次同签名死亡。候选方案：门禁捕获限定 app 锚窗口树（不遍历前台窗）或对非锚窗捕获加节点预算。
+- [ ] **浏览器窗定位/身份回放慢墙（条件触发项,2026-10-13 登记/Broadcom 门户轮实测）**：Chromium 窗(587 节点)上元素命令步均 ~2s 量级——9 步读 batch 总 12.4s(步均 1.2-2.1s),actl-slow 两次告警 locate.ref-replay 2.0s/4.3s;`@eN`+`--snapshot` 身份回放与 id: 快路径步同量级,热点未分相(疑点:ref 回放的 host 祖先走/verify 回读/定位本体)。触发条件=真实流程被浏览器窗慢墙拖垮(对照:原生应用步均百 ms 级)。处置顺序:先 ACTL_TRACE 分相取证再设计——同进程 batch 内同 snapshot 重复校验短路属树级缓存评估(本节已挂起项)的同族雷区,失效判定弱化违背 fail-closed,不预置方案。
 
 - [ ] Word a11y 缓存回归（疑 Office 更新,2026-10-12 定性）:Malformed Cacheresponse pTreeStructure 跨文档类全量触发——原生 Word 模板/外部最小 OOXML/新空白文档三证(body_read 的 Document text 双通道空+物化拒答→逐节点回落,143 页 walk 6.9s)。时间线:body_read 2026-10-04 verified 于 16.0.20326,现 16.0.20430 失效——Office 更新回归嫌疑,与 Excel 两态探针同款剧本;word.yml body_read 已降 manual+quirk 入册。复验条件=Office 修复后版本复测;候选工程已落地(2026-10-12:snapshot/find 信封 `materialization` 字段=subtree_cache/node_by_node_fallback/node_by_node_legacy,回落态文本通道空自此信封自解,docs/06 §3.7)
 
@@ -67,5 +68,7 @@
 - [ ] **评测基建提案在案（待裁定，不承诺实施）**：[40](40-automated-testing-evaluation.md) 自动化测试评估系统与 [78](78-comparative-benchmark-suite.md) 三方对比测试集均自述「调研+提案，未实施」（78 含六个待用户裁定开放问题）——与「无人值守调度」同款定位裁定形态，裁定期满未启动再明确关闭
 ## 维护
 
+- [ ] 窗口锚定参数一致性（2026-10-13 Broadcom 轮烧掉一次 PROTOCOL 往返）：同一窗口三态并存——snapshot 双锚(`--app`+`--hwnd`)、元素命令单锚(`--app`,含 `hwnd:<n>` 形态)、focus-window 位置参数+`--pid/--hwnd`。统一锚面或在各命令 help 交叉提示;命令面变更走 spec。
+- [ ] docs/40 §6/§7 虚拟化与云端事实回写（2026-10-13 复核,纯 docs）：Workstation Pro 免费政策已扩大到全用途(2024-11-11 起,非仅个人;版本改日历命名现 26H1u1,vctl 移除/vmrun 全保留);Win11 guest 安装期 NAT 卡"连接网络",官方 workaround=改 Bridged;Enterprise Evaluation 到期=每小时自动关机(非仅通知),rearm 无官方支持,按 90 天生命周期换 ISO 管理;微软预构建开发 VM 下载页已下线;WAA 实际形态=Linux Docker 嵌 QEMU 跑完整 Win11(非 Windows 容器);§7「云端 Windows 沙箱暂不存在」已过时——Daytona(Windows VM+内存快照/fork)、Cua(CUA 专用沙箱)2026 年已出现,复查期提前到期。
 - [ ] 非 UIA 观察阶段耗时诊断（2026-10-12 核对轮收敛:trace::scope+actl-slow 慢段机制已在位,覆盖=uia 轨 8 文件;**非 UIA 段（browser CDP 网络/spawn/文件 IO）无 scope**——真实慢诊断需求出现时按同款 scope 补,不预防性铺）
 - [ ] 存储验收余项：磁盘耗尽注入验收（不可写注入契约与进程中断真杀专测均已收——2026-10-12:flow_contract `real_kill_midstep` 以 TerminateProcess 中段杀 runner, WAL running 态如实报 interrupted 且 resume 闭合诚实失败态；CLI resume control_log 对称同轮落地，`cli_resume_writes_control_log` 三态断言）
