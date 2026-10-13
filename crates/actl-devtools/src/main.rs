@@ -32,7 +32,7 @@ fn main() -> std::process::ExitCode {
     let args: Vec<_> = std::env::args().skip(1).collect();
     if args.first().is_some_and(|s| s == "--help") {
         println!(
-            "Usage: cargo xtask fixture CASE | diagnose KIND | regress | timing KIND | package [OPTIONS] | install --label ID (--zip PATH | --release) [--home DIR]\nOptions: --actl PATH --output NEW_DIRECTORY; regress --list --suite SUITE --case ID --unattended; timing profile|sweep (interactive desktop, plain-call latency); install links the release layout into ~/.local (bin hardlinks + current junction + skills junctions, no admin)\nExample: cargo xtask regress --list; cargo xtask timing sweep; cargo xtask install --label v0.2.2 --zip dist/actl-0.2.2.zip\nErrors: PROTOCOL invalid arguments; ASSERTION_FAILED failed verification; NOT_ACTIONABLE preflight blocked (locked desktop / existing Notepad); INTERNAL capture failure"
+            "Usage: cargo xtask fixture CASE | diagnose KIND | regress | timing KIND | package [OPTIONS] | install --label ID (--zip PATH | --release) [--home DIR]\nOptions: --actl PATH --output NEW_DIRECTORY; regress --list --suite SUITE --case ID --unattended; timing profile|sweep (interactive desktop, plain-call latency); install links the release layout into ~/.local (bin hardlinks + current junction + skills junctions, no admin)\nExample: cargo xtask regress --list; cargo xtask timing sweep; cargo xtask install --label v0.2.3 --zip dist/actl-0.2.3.zip\nErrors: PROTOCOL invalid arguments; ASSERTION_FAILED failed verification; NOT_ACTIONABLE preflight blocked (locked desktop / existing Notepad); INTERNAL capture failure"
         );
         return std::process::ExitCode::SUCCESS;
     }
