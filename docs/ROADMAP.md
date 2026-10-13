@@ -26,7 +26,7 @@
 - [ ] WebView2 专项验收（键盘跨原生/网页、屏幕阅读器、多屏 DPI、缺失运行时回退）
 - [ ] 中央任务提示余项：接管暂停（人工接管→继续→业务核验）、跨屏 DPI 与真实减少动态设置（[75](75-action-start-notification.md)）；急停余量：急停落于 resume 重查窗口内的严格时点、飞行中调用 ABORTED 实测、OS 重启后急停语义保持（[35](35-stop-lifecycle.md)/[39](39-flow-observation-recovery.md)，2026-10-12 真按钮轮已收主链：菜单路径停止记录五字段/暂停期不完成/旧代次 35ms ABORTED/修复解除/失败通知含中文名目视两验）；显示层 UX：详情窗「继续/急停」视觉权重差与修复操作无可见反馈（2026-10-12 观察，两起实证同源于该窗）
 - [ ] agent 自驱授权白名单通道（仅真实需求时立项，[32](32-desktop-handoff.md)）
-- [ ] 决策模型内环与任务模式（[08 §13 增补](08-agent-cli-jev-design-proposal.md)）——**外置应答层已落地**（2026-10-13:`actl decide` 五输入通道:探索卡 flow-status/`--run`、AMBIGUOUS 消歧、front-report 判读咨询;危险候选构造前剥离、conf 门槛弃权、PROVIDER_UNAVAILABLE;System One 协议 Jev/Kev/laya 族通吃;真机端到端+飞轮实证已完成,证据见 CHANGELOG/06 §7.9 decide 节）。剩余两级:**① flow 内环 `--auto-decide`**（引擎决策点直调 decide,冷启动建 pack 陪跑的兑现——PRD §1.3 登记为授权外,**待用户拍板立项**;`answer_card` 函数边界已预留）;**②任务模式闭环**（仅真实需求时立项,08 §3.2——外置层积累的应答数据是立项/否决的依据;弱完成证据不采纳立场不变）
+- [ ] 决策模型任务模式闭环（仅真实需求时立项，[08 §3.2/§13](08-agent-cli-jev-design-proposal.md)）——**应答层全形态已落地**（2026-10-13:`actl decide` 五输入通道 + `flow-run --auto-decide` 探索内环自动应答,后者真机 A/B 双臂验收:confident 自动续跑至 goal_met/门槛拦下即停 decision_pending 交回人,审计 responder=auto_decide;危险候选构造前剥离、弃权/停止/暂停/预算四停机制,证据见 CHANGELOG/06 §7.9/PRD §1.3）。剩余仅任务模式闭环:外置层与 auto-decide 积累的应答数据是立项/否决的依据;弱完成证据不采纳立场不变
 - [ ] MCP 远程访问适配——剩余：**跨设备真实客户端接入验收**（等用户场景）+ 模式 B（SSH/stdio）与 tasks 扩展（可选轮 3）;已建成部分见 [82](82-mcp-adapter-research.md) / [06 §7.8](06-design-blueprint.md)
 - [ ] 本地 serve 与增量观察
 - [ ] 游戏场景（Minecraft 命令通道）——含指针原语缺口（[17 §3](17-game-scenarios.md) M3 候选，「手工搭」路线才需要）：`mouse-move dx,dy` 增量移动（前置 GLFW raw-input spike）、鼠标按键 down/up 拆分带时长（按住挖掘）、节奏敏感动作时窗参数
@@ -44,7 +44,6 @@
 - [ ] 浏览器 CDP 工程余量（[72 §13](72-browser-cdp-integration.md)）：UIA 轨路线固化（browser.yml 3 verified/5 manual/2 unverified,随应用轮渐进）；深水层终态吸收已完成（2026-10-13:全动词上骨干,cdp.rs/tungstenite 退役,证据 docs/72 §13）
 - [ ] word-note-typography 的 popup_ignores 声明路径重验（随下次 Word 轮顺带,不专跑）
 - [ ] preview-choice computer-use 真机鼠标点击验收（[46](46-target-preview.md)：两轮 "window is not a usable app window" 失败如实保留）
-- [ ] popup 门禁 XAML 常驻表面误报裁定（2026-10-13 双态实证:计算器标题栏窗+主窗在 in_tree 是 unknown+带按钮的常驻表面——后台态原生快门放行(首过形态),**前台态确定性拦截 `popup_pending:clear`**(显示就绪下复现);两表面同名"计算器"含 31 键面按钮,词法无差别。候选:calc pack 加 popup_ignores 声明或门禁 spec 化收紧;Word 轮 popup_ignores 同族——真实弹窗与常驻表面的判别已可由 decide front 形态辅助(benign_surface 倾向),门禁自动化接线待裁定）
 - [ ] decide front 判读真实信封低置信形态的使用观察（2026-10-13 双态实测:常驻表面/崩溃框方向全对但真实信封 conf 0.32-0.37<0.5 门槛,日常形态=弃权+top_choice 照报——owned 层只带标题无全文的信号差;若实际使用过保守,考虑判读咨询位局部降门槛或带 in_tree 全文的调用形态,不动全局阈值）
 
 
@@ -61,7 +60,7 @@
 
 - [ ] companion_unresponsive 复发观察（机制已实测澄清:显示端消息泵 500ms 往返+lease 心跳,历史事件全落污染期——诊断详情见 git 历史与 [41](41-logging-metadata.md)）。复发条件=干净现场再现;届时怀疑方向=显示端 UI 线程被合法工作阻塞 >1s,500ms 泵窗口为固定常量不为猜测调参
 
-- [ ] UIA 观察长阻塞的**根因定位**（防护已落地：进程级看门狗 + UIA 区段看门狗双保险；根因——60s NOT_FOUND 未复现、故障提供程序未确认，见 [41](41-logging-metadata.md)、[65](65-observation-blocking-diagnosis.md)）
+- [ ] UIA 观察长阻塞的**根因定位**（防护已落地：进程级看门狗 + UIA 区段看门狗双保险；根因——60s NOT_FOUND 未复现、故障提供程序未确认，见 [41](41-logging-metadata.md)、[65](65-observation-blocking-diagnosis.md)。**2026-10-13 僵尸 9936 新实证**：另一会话 `get` 挂在对活跃 Chrome 的 UIA RPC 上——诊断 `WaitReason=UserRequest`/ThreadCount=1（看门狗线程已消亡）但主线程 COM 等待未解除、进程存活 25min+，TerminateProcess 未收割、taskkill/Stop-Process 全部无效（用户态无权威可强拆等待中线程）——看门狗已开火但未收尸的形态，根因归此项；对端浏览器常驻不关=无自然解药，镜像 delete-pending 锁波及构建与 lint-packs。**缓解已机制化**：xtask lint-packs 走 CARGO_TARGET_DIR（隔离目录=开发循环标准逃生通道，gate 已实证不受主 target 锁影响））
 - [ ] UWP 挂起恢复（类配对后疑似绕开，更长放置待证）
 
 - [ ] **树级缓存（「第二次观察免费」）——设计再评估后挂起（2026-10-06）**：原设想以窗口 RuntimeId 键控缓存已观察树 + 失效判定。设计推演结论:① 节点级缓存无 COM 代理 → 无法做 locate 缓存式的元素级 RuntimeId 复核,失效判定只剩 WinEvent 钩子(需消息泵线程,工程量大)或有界 TTL(陈旧风险违背 fail-closed);② 主要重复观察方（探索引擎/flow verify）**语义上就需要新鲜帧**（差分/断言）,缓存反而破坏语义;真实重复收益集中在 batch 的连续 find/snapshot——频次低。**结论:价值窄于最初评估,等真实重复消费方出现再立项**;轻量替代（定位缓存/属性预取/provider 快路径）已覆盖主要痛点。

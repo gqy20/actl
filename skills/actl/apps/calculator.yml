@@ -19,6 +19,14 @@ quirks:
     note: CalculatorResults 的结果在 Name 通道，verify --value 返回 actual=null。使用 verify --property name、get --property name 或 wait 的 name 谓词；中文界面的值为“显示为 5”等。
   - id: nested_output_not_resolved
     note: 快照里出现的 NormalOutput 不保证 get/wait 语义定位可解析。优先使用 CalculatorResults，不把快照出现等同于选择器可定位。
+# 常驻表面认领(降噪,2026-10-13 门禁误报裁定):计算器前台时 in_tree 出现两个
+# 同名「计算器」表面(标题栏窗 ApplicationFrameTitleBarWindow + 主窗键面,31 个
+# 按钮),朴素分类 unknown+带按钮 → popup 门禁确定性拦写步(popup_pending);
+# 后台态走原生快门放行,行为随前台态翻转。窄声明只认领名字含「计算器」的
+# 自体常驻表面;真瞬态弹窗标题不同(错误框/另存为等)仍由门禁上抛。
+popup_ignores:
+  - app: "计算器"
+    name_contains: "计算器"
 routes:
   - id: keyboard_arithmetic_example
     description: 在中文标准模式下整段输入已验证算式，输入前清空当前计算
