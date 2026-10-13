@@ -206,7 +206,7 @@ S3 真机闭环验收通过:回写(证据收集)、人工复核迁移(用户裁�
 
 ## 路线 #4/#5 首轮（2026-10-11，让行中断——边界发现入档，续跑留探针窗）
 
-- **#5 计算器（XAML 形态）——引擎形态边界实证**：①按钮序列与差分前沿语义不匹配——四运算按钮（七/八/乘以/等于,name 唯一命中）首帧全量进前沿（决策卡平局）,应答「七」点击后**前沿空**（no_candidates——静态按钮点击不产生 added 元素,XAML 计算器无 DOM 增量）——按钮序列场景超出 v1 前沿差分语义;②texts 原语无全局键盘形态（schema 只收元素选择器,focused: 拒绝）——而 CLI type focused: "7*8=" 键盘通道组件验证**通过**（显示变「显示为 56」,乘号编译 Shift+8）。两条改进候选：前沿语义扩展（点击型任务）/texts 支持 focused 键。显示区形态：Text「显示为 N」唯一命中（LiveRegion）。
+- **#5 计算器（XAML 形态）——引擎形态边界实证**：①按钮序列与差分前沿语义不匹配——四运算按钮（七/八/乘以/等于,name 唯一命中）首帧全量进前沿（决策卡平局）,应答「七」点击后**前沿空**（no_candidates——静态按钮点击不产生 added 元素,XAML 计算器无 DOM 增量）——按钮序列场景超出 v1 前沿差分语义;②texts 原语无全局键盘形态（schema 只收元素选择器,focused: 拒绝）——而 CLI type focused: "7*8=" 键盘通道组件验证**通过**（显示变「显示为 56」,乘号编译 Shift+8）。两条改进候选：前沿语义扩展（点击型任务）/texts 支持 focused 键。显示区形态：Text「显示为 N」唯一命中（LiveRegion）。**两候选均已落地（2026-10-12）**:texts `focused:` 键(dangerous 标注永不自动,应答显式裁决);前沿 tried 资格化过滤(dead/no_effect 出局、**reveals 保持可重选**——序列任务的同按钮重复点击恢复,MockHost clicks=[b1,b2,b1] 实证),详见 docs/06 explore.texts 与 CHANGELOG。
 - **#4 资源管理器（进展到组件验证）**：探针窗（tmp 目录）就绪;地址栏 Edit **双命中歧义**（name:地址栏 ×2、id:TextBox ×2——breadcrumb 双 Edit 形态,列筛选框 System.* id 群是另一族）;ctrl+l 键盘聚焦通道待验（前台守卫正确让行——用户接管桌面）。探针窗保留（hwnd 5246866,后台）,下轮续。
 
 ## 路线 #4 三步闭环（2026-10-11,run explorer-route4-02 + replay-explorer-back-01）

@@ -54,7 +54,7 @@
 
 - [ ] Word a11y 缓存回归（疑 Office 更新,2026-10-12 定性）:Malformed Cacheresponse pTreeStructure 跨文档类全量触发——原生 Word 模板/外部最小 OOXML/新空白文档三证(body_read 的 Document text 双通道空+物化拒答→逐节点回落,143 页 walk 6.9s)。时间线:body_read 2026-10-04 verified 于 16.0.20326,现 16.0.20430 失效——Office 更新回归嫌疑,与 Excel 两态探针同款剧本;word.yml body_read 已降 manual+quirk 入册。复验条件=Office 修复后版本复测;候选工程=快照 envelope 显式标注 materialization 回落态(spec 裁定)
 
-- [ ] 探索引擎形态边界与改进候选（[77](77-exploration-s2-acceptance.md)）:①差分前沿语义×无增量应用（XAML 计算器按钮序列点击无 added 元素——前沿语义扩展候选）;④跨进程 picker 形态（记事本另存为+画图打开双证否=同进程 32770,待照片类 Store 应用场景验证 RuntimeBroker 放宽判据）;⑤UCB 真机对照轮（v2 机制已落地冷启动回落,待 quirks 计数积累后对比无统计基线:死候选自动压后/预算下降）。②③已收（2026-10-12:texts `focused:`/`focused:<Role>` 键——合成候选 dangerous 永不自动执行、应答显式裁决授权;frontier 同帧重复 id 按观察序 `#N` 序数唯一化,name 子串保持裸形交 CLI AMBIGUOUS 如实上报）
+- [ ] 探索引擎形态边界与改进候选（[77](77-exploration-s2-acceptance.md)）:④跨进程 picker 形态（记事本另存为+画图打开双证否=同进程 32770,待照片类 Store 应用场景验证 RuntimeBroker 放宽判据）;⑤UCB 真机对照轮（v2 机制已落地冷启动回落,待 quirks 计数积累后对比无统计基线:死候选自动压后/预算下降）。②③①已收（2026-10-12:②texts `focused:` 键 dangerous 永不自动、应答显式裁决;③frontier 同帧重复 id `#N` 序数唯一化;①tried 资格化过滤——dead/no_effect 出局、**reveals 保持可重选**,XAML 按钮序列不再「应答七后前沿空」,MockHost 序列测试 clicks=[b1,b2,b1] 实证）
 
 - [ ] companion_unresponsive 复发观察（机制已实测澄清:显示端消息泵 500ms 往返+lease 心跳,历史事件全落污染期——诊断详情见 git 历史与 [41](41-logging-metadata.md)）。复发条件=干净现场再现;届时怀疑方向=显示端 UI 线程被合法工作阻塞 >1s,500ms 泵窗口为固定常量不为猜测调参
 

@@ -1390,3 +1390,59 @@ fn ambiguous_existence_goal_is_met() {
     assert_eq!(run.reason.as_deref(), Some("goal_check_failed"));
     let _ = std::fs::remove_dir_all(&root);
 }
+
+#[test]
+fn revealed_stays_eligible_for_button_sequences() {
+    // ① 收口(2026-10-12,docs/77 #5):XAML 无增量应用点击不产生 added
+    // 元素——tried 一刀切曾把已证有效的按钮逐出前沿(应答「七」后前沿空
+    // no_candidates)。新语义:reveals 保持可重选,第二张卡重新包含 a1,
+    // 序列任务(七七/七八)得以经应答者编排。
+    // 「显示为」入词表:显示区必须在投影帧内,否则 changed 不进 diff
+    // (docs/77 #5 现场形态:显示区 Text 唯一命中)。
+    let mut spec = spec(&["保存", "显示为"], "name:显示为 77");
+    spec.budgets.actions = 6;
+    let (root, store, mut run) = setup(&spec);
+    let mut host = MockHost::new(vec![
+        vec![
+            el("Button", "七", Some("b1")),
+            el("Button", "八", Some("b2")),
+            el("Text", "显示为 0", Some("display")),
+        ],
+        // 点七 → 显示 7(元素集不变,无增量——changed 归因 reveals)
+        vec![
+            el("Button", "七", Some("b1")),
+            el("Button", "八", Some("b2")),
+            el("Text", "显示为 7", Some("display")),
+        ],
+    ]);
+    host.transitions.insert("id:b1".into(), Some(1));
+    execute(&spec, &mut run, &store, &mut host, None, None).expect("externalize");
+    let state = load(&store).unwrap().expect("state");
+    let c1 = state
+        .pending
+        .as_ref()
+        .expect("card")
+        .card
+        .candidates
+        .iter()
+        .find(|c| c.selector == "id:b1")
+        .expect("b1 on first card")
+        .id
+        .clone();
+    // 应答「七」:点击落地,显示 0→7(diff.changed)→ 归因 reveals;
+    // 前沿重建时 b1 仍具资格 → 与 b2 平局 → 卡内含 b1 → 应答者再次选 b1
+    // (序列编排);第三次点击无显示变化 → 归因 no_effect 出局 → 诚实
+    // no_candidates 终态。旧语义下 b1 首点后即出局,clicks=[b1,b2] 而
+    // 非本测试的 [b1,b2,b1]。
+    execute(&spec, &mut run, &store, &mut host, Some(&c1), None).expect("answered");
+    assert_eq!(state.actions, 0, "first phase only externalized");
+    assert_eq!(
+        host.clicks,
+        vec!["id:b1", "id:b2", "id:b1"],
+        "revealed button stays re-selectable for sequences: {:?}",
+        host.clicks
+    );
+    assert_eq!(run.status, Status::NeedsReview);
+    assert_eq!(run.reason.as_deref(), Some("no_candidates"));
+    let _ = std::fs::remove_dir_all(&root);
+}

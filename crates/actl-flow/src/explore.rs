@@ -531,6 +531,17 @@ fn batch_probe_liveness(
     Ok(())
 }
 
+/// 前沿资格(① 收口,2026-10-12):dead/no_effect 永久出局;**reveals(已证
+/// 有效)保持可重选**——按钮序列任务(七七八八)要求同一按钮重复点击,XAML
+/// 无增量应用点击不产生 added 元素,reveals 是"有效"的唯一证据(docs/77 #5:
+/// 应答「七」后前沿空 no_candidates 的根因即 tried 一刀切)。
+fn candidate_eligible(tried: &std::collections::BTreeMap<String, String>, selector: &str) -> bool {
+    !matches!(
+        tried.get(selector).map(String::as_str),
+        Some("dead") | Some("no_effect")
+    )
+}
+
 fn log_action(
     state: &mut ExploreState,
     selector: &str,
@@ -943,7 +954,7 @@ pub fn execute(
         // P3 队列存活性预检:卡发出到应答之间世界可能已变——批量探测把
         // 确定性死亡的候选出队,避免每个死项白耗一轮观察(~450ms/项)。
         batch_probe_liveness(spec, &mut state, host, &queue)?;
-        queue.retain(|selector| !state.tried.contains_key(selector));
+        queue.retain(|selector| candidate_eligible(&state.tried, selector));
         state.queue = queue;
         if state.answers.len() < ANSWER_CAP {
             state.answers.push(AnswerRecord {
@@ -1229,7 +1240,7 @@ pub fn execute(
         }
         let candidates: Vec<ScoredCandidate> = candidates
             .into_iter()
-            .filter(|c| !state.tried.contains_key(&c.selector))
+            .filter(|c| candidate_eligible(&state.tried, &c.selector))
             .collect();
         if state.seen.len() < SEEN_CAP {
             state
