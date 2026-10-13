@@ -1,0 +1,19 @@
+version: 1
+name: v9 nested lease probe
+steps:
+  - id: type1
+    title: First keystroke
+    run:
+      command: type
+      args: ["role:Document", "A", "--app", "hwnd:10423632", "--paste"]
+    verify:
+      command: verify
+      args: ["--value", "role:Document", "A", "--property", "text", "--contains", "--app", "hwnd:10423632"]
+  - id: type2
+    title: Second keystroke
+    run:
+      command: type
+      args: ["role:Document", "B", "--app", "hwnd:10423632", "--paste"]
+    verify:
+      command: verify
+      args: ["--value", "role:Document", "AB", "--property", "text", "--contains", "--app", "hwnd:10423632"]

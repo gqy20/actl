@@ -37,6 +37,18 @@ history-final.json/final-summary.json：开始 1 次，资格转交 6 次、归�
 原有网页内容未修改，无新增浏览器窗口、标签或需清理的应用资源；结束前台 Chrome。中途空白 Chrome HWND 332704 已消失，NOT_FOUND 保留，不记为通过。
 以上只验收前台切换，不代表小红书采集或其他业务通过。人工接管和进程内嵌套动作的真机矩阵仍需补充；Windows 可拒绝合法请求，不能承诺无条件前台切换。
 
+## 真机矩阵补全（2026-10-12，v9 收口）
+
+三场景全过，任务 `v9-lease-20261012-01`（嵌套租约）与 `v9-takeover-20261012-01`（接管/恢复），fixture `fixtures/flows/v9-nested-lease.yml` / `v9-takeover.yml`，记事本载体（脏内容经不保存白名单清理，无残留）。
+
+**S1 嵌套租约**：flow 两步键盘写入，审计 foreground_transfer ×2 + foreground_return ×2——每动作一租一还（v9「进程内下一动作重新领取」语义）。**首次转交被 Windows 拒绝（0x80070005，3ms 后授权落账）→ 重试转交 accepted=true**——「Windows 可拒绝合法请求」活体发生且被机制正确处理：拒绝如实入档、授权后重试成功、无误报通过。
+
+**S2 人工接管**：三步键入 C/D/E 进行中用户物理抢键鼠——`type_c` completed、`type_d` **uncertain + NOT_ACTIONABLE**（注入被打断，如实报不确定，未假装成功）、`type_e` pending（交接闸门挡下）、run paused **reason=human_takeover_or_grant_expired**。审计侧 input_monitor 计数器记录外部输入增量（external_events 156740→158675）。
+
+**S3 接管恢复**：面板「继续」→ consent 重签（expiring）→ signal_control resume 链 requested/dispatching/accepted/child_returned + CLI 侧 control_log requested/accepted（source=cli——同日 control_log 对称修复的首次真机实证）→ uncertain 步恢复核查 verify-contains D 失败 → **needs_review/result_unconfirmed，禁止盲目重放**（docs/39「已写入但结果无法观察」语义活体形态）。
+
+矩阵收口结论：v9 的「guard 绑定完整动作+最外层归还+下一动作重领」在嵌套、接管、恢复三面全部实证；Windows 前台拒绝路径（0x80070005）为已知边界而非缺陷——拒绝如实入档+授权重试。
+
 ## 最终检查与安装
 
 `cargo xtask gate` 通过，日志 target/foreground-v9-gate-final.log：file-lines、fmt、Clippy、workspace tests、11 个 pack/296 步静态检查均通过。中间新增测试模块放置触发 Clippy，已修正，原日志 foreground-v9-gate.log 保留。

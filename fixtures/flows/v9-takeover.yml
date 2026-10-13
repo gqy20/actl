@@ -1,0 +1,27 @@
+version: 1
+name: v9 takeover probe
+steps:
+  - id: type_c
+    title: Type C
+    run:
+      command: type
+      args: ["role:Document", "C", "--app", "hwnd:10423632", "--paste"]
+    verify:
+      command: verify
+      args: ["--value", "role:Document", "C", "--property", "text", "--contains", "--app", "hwnd:10423632"]
+  - id: type_d
+    title: Type D
+    run:
+      command: type
+      args: ["role:Document", "D", "--app", "hwnd:10423632", "--paste"]
+    verify:
+      command: verify
+      args: ["--value", "role:Document", "D", "--property", "text", "--contains", "--app", "hwnd:10423632"]
+  - id: type_e
+    title: Type E
+    run:
+      command: type
+      args: ["role:Document", "E", "--app", "hwnd:10423632", "--paste"]
+    verify:
+      command: verify
+      args: ["--value", "role:Document", "E", "--property", "text", "--contains", "--app", "hwnd:10423632"]
