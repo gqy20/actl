@@ -983,68 +983,80 @@ pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
             confidence,
             pick,
         } => {
-            let source = actl_core::control_log::source();
-            actl_core::signal_session::flow_event(
-                "flow_resume_requested",
-                json!({"run_id":id,"request_id":actl_core::control_log::request_id(),"source":source,"source_verified":false,"retry_step":retry_step,"decision":decision,"pick":pick}),
-            );
-            let store = Store::at(&root, id)?;
-            let _global = store.lock(true)?;
-            let (plan, mut run) = store.load()?;
-            // Revalidate saved schema and commands before trusting disk state.
-            let plan = actl_flow::parse(
-                &serde_json::to_string(&plan).map_err(|e| CtlError::internal(e.to_string()))?,
-            )?;
-            validate(&plan)?;
-            if let Some(spec) = &plan.explore {
-                if retry_step.is_some() {
-                    return Err(CtlError::protocol(
-                        "exploration runs do not support --retry-step",
-                    ));
+            // control_log 对称(2026-10-12 维护轮):显示端 resume 侧记录
+            // requested/dispatching/child_returned,CLI 侧此前只记 flow_event——
+            // 补齐 control_log record,包住多 return 分支体(与 Pause 同形)。
+            let request = actl_core::control_log::Request::new(id, "resume");
+            request.record("requested", None);
+            let result = (|| -> Result<Value, CtlError> {
+                let source = actl_core::control_log::source();
+                actl_core::signal_session::flow_event(
+                    "flow_resume_requested",
+                    json!({"run_id":id,"request_id":actl_core::control_log::request_id(),"source":source,"source_verified":false,"retry_step":retry_step,"decision":decision,"pick":pick}),
+                );
+                let store = Store::at(&root, id)?;
+                let _global = store.lock(true)?;
+                let (plan, mut run) = store.load()?;
+                // Revalidate saved schema and commands before trusting disk state.
+                let plan = actl_flow::parse(
+                    &serde_json::to_string(&plan).map_err(|e| CtlError::internal(e.to_string()))?,
+                )?;
+                validate(&plan)?;
+                if let Some(spec) = &plan.explore {
+                    if retry_step.is_some() {
+                        return Err(CtlError::protocol(
+                            "exploration runs do not support --retry-step",
+                        ));
+                    }
+                    if pick.is_some() {
+                        return Err(CtlError::protocol(
+                            "exploration runs do not support --pick; use --decision",
+                        ));
+                    }
+                    let active = store.lock(false)?;
+                    actl_core::stop::check_current()?;
+                    store.clear_pause()?;
+                    actl_flow::explore::execute(
+                        spec,
+                        &mut run,
+                        &store,
+                        &mut Adapter {
+                            plan: &plan,
+                            store: &store,
+                        },
+                        decision.as_deref(),
+                        confidence.as_deref(),
+                    )?;
+                    drop(active);
+                    return outcome(&store, &run);
                 }
-                if pick.is_some() {
+                if decision.is_some() {
                     return Err(CtlError::protocol(
-                        "exploration runs do not support --pick; use --decision",
+                        "--decision answers an exploration run; this run is a static flow",
                     ));
                 }
                 let active = store.lock(false)?;
                 actl_core::stop::check_current()?;
                 store.clear_pause()?;
-                actl_flow::explore::execute(
-                    spec,
+                engine::execute(
+                    &plan,
                     &mut run,
                     &store,
                     &mut Adapter {
                         plan: &plan,
                         store: &store,
                     },
-                    decision.as_deref(),
-                    confidence.as_deref(),
+                    retry_step.as_deref(),
+                    pick.as_deref(),
                 )?;
                 drop(active);
-                return outcome(&store, &run);
-            }
-            if decision.is_some() {
-                return Err(CtlError::protocol(
-                    "--decision answers an exploration run; this run is a static flow",
-                ));
-            }
-            let active = store.lock(false)?;
-            actl_core::stop::check_current()?;
-            store.clear_pause()?;
-            engine::execute(
-                &plan,
-                &mut run,
-                &store,
-                &mut Adapter {
-                    plan: &plan,
-                    store: &store,
-                },
-                retry_step.as_deref(),
-                pick.as_deref(),
-            )?;
-            drop(active);
-            outcome(&store, &run)
+                outcome(&store, &run)
+            })();
+            request.record(
+                if result.is_ok() { "accepted" } else { "failed" },
+                result.as_ref().err().map(|e: &CtlError| e.code),
+            );
+            result
         }
         // flow-revise(运行时治理第二轮):版本化修订——旧计划字节归档、
         // 版本谱系只追加、完成写步规格变更需显式 --accept-rerun、修订后

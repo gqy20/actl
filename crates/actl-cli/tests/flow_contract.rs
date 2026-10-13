@@ -590,7 +590,9 @@ fn validate_checkpoint_resume_and_saved_plan_contract() {
     assert_eq!(result["data"]["run"]["status"], "completed");
     assert_eq!(result["data"]["run"]["steps"][0]["attempts"], 1);
     let (_, history) = s.invoke(&["history", "--task", "test"]);
-    assert_eq!(history["data"]["calls"].as_array().unwrap().len(), 2);
+    // 2026-10-12 维护轮:CLI resume 补齐 control_log 对称——journal 从
+    // 3(run+两子调用)变 4(+resume control record),与 Pause 同形。
+    assert_eq!(history["data"]["calls"].as_array().unwrap().len(), 4);
 }
 #[test]
 fn validation_rejects_side_effect_retries_and_nested_control() {
@@ -704,6 +706,102 @@ fn live_pause_and_process_death_are_distinguished() {
     std::fs::write(path, stored.to_string()).unwrap();
     let (_, status) = s.invoke(&["flow-status", "--id", "live"]);
     assert_eq!(status["data"]["interrupted"], true);
+}
+
+#[test]
+fn cli_resume_writes_control_log_requested_accepted_and_failed() {
+    // control_log 对称(2026-10-12 维护轮):显示端 resume 记录
+    // requested/dispatching/child_returned 在位,CLI 侧补齐同形 record——
+    // 成功路径落 requested+accepted(source=cli),失败路径落 failed。
+    let s = Sandbox::new();
+    let file = s.file(SIMPLE);
+    let (code, result) = s.invoke(&["flow-run", "--file", &file, "--id", "resumelog", "--paused"]);
+    assert_eq!(code, 0, "{result}");
+    let (code, result) = s.invoke(&["flow-resume", "--id", "resumelog"]);
+    assert_eq!(code, 0, "{result}");
+    let (_, journal) = s.invoke(&["history", "--task", "resumelog"]);
+    let events: Vec<_> = journal["data"]["calls"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|c| c["events"].as_array().unwrap())
+        .collect();
+    for stage in ["requested", "accepted"] {
+        let hit = events.iter().find(|e| {
+            e["event"] == "control_request"
+                && e["data"]["action"] == "resume"
+                && e["data"]["stage"] == stage
+                && e["data"]["source"] == "cli"
+        });
+        assert!(
+            hit.is_some(),
+            "missing resume control_request stage {stage}"
+        );
+    }
+    // 失败路径对称:unknown id 的 resume 也落 failed record(不静默)
+    let (code, _) = s.invoke(&["flow-resume", "--id", "resumelog-ghost"]);
+    assert_ne!(code, 0);
+    let (_, journal) = s.invoke(&["history", "--task", "resumelog-ghost"]);
+    let events: Vec<_> = journal["data"]["calls"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|c| c["events"].as_array().unwrap())
+        .collect();
+    let failed = events.iter().find(|e| {
+        e["event"] == "control_request"
+            && e["data"]["action"] == "resume"
+            && e["data"]["stage"] == "failed"
+    });
+    assert!(
+        failed.is_some(),
+        "missing failed control_request for ghost resume"
+    );
+}
+
+#[test]
+fn real_kill_midstep_reports_interrupted_and_resume_closes_honestly() {
+    // 进程中断中段验收(2026-10-12 维护轮):真实 TerminateProcess(模拟断电/
+    // 崩溃),非文件模拟——WAL 落盘的 running 态必须诚实报 interrupted,恢复
+    // 路径闭合为诚实失败态而非 completed。
+    let s = Sandbox::new();
+    let file = s.file("version: 1\nname: Slow\nsteps:\n - id: slow\n   title: Slow\n   run: {command: wait, args: [--window, ACTL-NONEXISTENT-KILL-4711, --timeout, '3000']}\n");
+    let mut child = s
+        .command()
+        .args(["flow-run", "--file", &file, "--id", "killed"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let path = s.root.join("actl/flows/killed/state.json");
+    let started = std::time::Instant::now();
+    loop {
+        let state = std::fs::read(&path)
+            .ok()
+            .and_then(|b| serde_json::from_slice::<Value>(&b).ok());
+        if state
+            .as_ref()
+            .is_some_and(|v| v["steps"][0]["status"] == "running")
+        {
+            break;
+        }
+        if started.elapsed().as_secs() > 10 {
+            let _ = child.kill();
+            panic!("runner did not start");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    child.kill().unwrap();
+    let _ = child.wait();
+    let (_, status) = s.invoke(&["flow-status", "--id", "killed"]);
+    assert_eq!(status["data"]["interrupted"], true, "{status}");
+    let (_, result) = s.invoke(&["flow-resume", "--id", "killed"]);
+    assert_ne!(result["data"]["run"]["status"], "completed", "{result}");
+    assert!(
+        !result["data"]["run"]["steps"][0]["error_code"].is_null()
+            || result["data"]["run"]["status"] == "paused",
+        "{result}"
+    );
 }
 
 #[test]
