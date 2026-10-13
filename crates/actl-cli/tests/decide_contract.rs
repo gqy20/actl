@@ -331,3 +331,109 @@ fn invalid_card_is_protocol_not_provider_fault() {
     assert_eq!(code, 2);
     assert_eq!(envelope["error"]["code"], "PROTOCOL");
 }
+
+/// AMBIGUOUS 错误信封固件:两个同名「浏览」按钮,context 消歧行不同
+/// (docs/12 §4 结构化候选的 decide 消费形态)。
+fn ambiguous_envelope_json() -> String {
+    json!({
+        "version": "1", "ok": false, "command": "click",
+        "error": {
+            "code": "AMBIGUOUS",
+            "message": "name:浏览 matches 2 elements in the window",
+            "evidence": { "candidates": [
+                {"ref": "@e3", "role": "Button", "name": "浏览", "automation_id": "btnLocal", "context": "位于文件名输入框右侧"},
+                {"ref": "@e7", "role": "Button", "name": "浏览", "automation_id": "btnOnline", "context": "联机图片选项卡内"}
+            ]}
+        }
+    })
+    .to_string()
+}
+
+#[test]
+fn ambiguous_envelope_without_task_is_protocol_with_hint() {
+    let sandbox = Sandbox::new();
+    sandbox.write_config("http://127.0.0.1:9/v1/systemone");
+    let card = sandbox.write("ambiguous.json", &ambiguous_envelope_json());
+    let (code, envelope) = sandbox.invoke(&["decide", "--card", card.to_str().unwrap()]);
+    assert_eq!(code, 2, "PROTOCOL exits 2: {envelope}");
+    assert_eq!(envelope["error"]["code"], "PROTOCOL");
+    assert_eq!(
+        envelope["error"]["evidence"]["reason"], "task_missing",
+        "evidence names the missing intent: {envelope}"
+    );
+    assert!(
+        envelope["error"]["hint"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("--task"),
+        "hint points at --task: {envelope}"
+    );
+}
+
+#[test]
+fn ambiguous_envelope_answers_with_resolved_replay_meta() {
+    let sandbox = Sandbox::new();
+    let addr = stub_once(Box::leak(ok_pick("c2", 0.88).into_boxed_str()));
+    sandbox.write_config(&format!("http://{addr}/v1/systemone"));
+    let card = sandbox.write("ambiguous.json", &ambiguous_envelope_json());
+    let (code, envelope) = sandbox.invoke(&[
+        "decide",
+        "--card",
+        card.to_str().unwrap(),
+        "--task",
+        "open the ONLINE picture search",
+    ]);
+    assert_eq!(code, 0, "{envelope}");
+    assert_eq!(envelope["data"]["choice"], "c2");
+    // resolved 回显:可重放元数据,调用方不必回读错误信封
+    assert_eq!(envelope["data"]["resolved"]["ref"], "@e7");
+    assert_eq!(envelope["data"]["resolved"]["automation_id"], "btnOnline");
+    assert_eq!(envelope["data"]["resolved"]["context"], "联机图片选项卡内");
+    // context 进判别描述(消歧信息抵达 provider)
+    // ——由 stub 不校验;请求形态由单测 ambiguous_envelope_requires_task_and_maps_candidates 钉住
+}
+
+#[test]
+fn ambiguous_envelope_low_confidence_resolves_top_choice() {
+    let sandbox = Sandbox::new();
+    let addr = stub_once(Box::leak(ok_pick("c1", 0.30).into_boxed_str()));
+    sandbox.write_config(&format!("http://{addr}/v1/systemone"));
+    let card = sandbox.write("ambiguous.json", &ambiguous_envelope_json());
+    let (code, envelope) = sandbox.invoke(&[
+        "decide",
+        "--card",
+        card.to_str().unwrap(),
+        "--task",
+        "open the local file picker",
+    ]);
+    assert_eq!(code, 0, "abstain is success: {envelope}");
+    assert_eq!(envelope["data"]["abstain"], "low_confidence");
+    assert_eq!(envelope["data"]["top_choice"], "c1");
+    assert_eq!(
+        envelope["data"]["resolved"]["ref"], "@e3",
+        "top_choice also carries replay meta for human review: {envelope}"
+    );
+}
+
+#[test]
+fn task_on_plain_card_is_rejected() {
+    let sandbox = Sandbox::new();
+    sandbox.write_config("http://127.0.0.1:9/v1/systemone");
+    let card = sandbox.write("card.json", &card_json());
+    let (code, envelope) = sandbox.invoke(&[
+        "decide",
+        "--card",
+        card.to_str().unwrap(),
+        "--task",
+        "点击保存",
+    ]);
+    assert_eq!(code, 2, "{envelope}");
+    assert_eq!(envelope["error"]["code"], "PROTOCOL");
+    assert!(
+        envelope["error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("--task"),
+        "error names the misused flag: {envelope}"
+    );
+}

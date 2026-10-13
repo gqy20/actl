@@ -283,6 +283,9 @@ pub(crate) enum Command {
         /// Decision card JSON file (bare card or flow-status envelope); omit to read stdin
         #[arg(long)]
         card: Option<String>,
+        /// Task intent for AMBIGUOUS error-envelope disambiguation (required for that form)
+        #[arg(long)]
+        task: Option<String>,
         /// Config file override (default: %LOCALAPPDATA%/actl/decision.json)
         #[arg(long)]
         config: Option<String>,

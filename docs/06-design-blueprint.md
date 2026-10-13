@@ -1226,7 +1226,9 @@ goal 核验的查询类故障（INTERNAL）**不判死运行**：计 errors 如�
 
 ### decide:决策卡的模型应答（System One provider）
 
-`actl decide [--card <文件>] [--config <文件>] [--endpoint <URL>] [--min-confidence F64] [--timeout-ms N] [--dry-run]`（只读，不做任何桌面动作）。actl 命令面上唯一的出站网络触点：读入决策卡（裸卡 JSON 或管道传入的 flow-status envelope，`actl flow-status --id <run> | actl decide` 一线直连），向显式配置的 System One 决策端点提问，返回应答或弃权。**判别式决策模型协议**（choice/confidence 类型化问答，Jev/Kev/laya/openjev 族 `/v1/systemone`）——非生成式 LLM，「不内置 LLM 客户端」的 PRD 非目标边界不变；出站载荷=决策卡本身的判别性字段（截断名/无全树/无窗口标题之外的额外数据），防注入固定行随 state 携带。
+`actl decide [--card <文件>] [--task <意图>] [--config <文件>] [--endpoint <URL>] [--min-confidence F64] [--timeout-ms N] [--dry-run]`（只读，不做任何桌面动作）。actl 命令面上唯一的出站网络触点：读入决策卡，向显式配置的 System One 决策端点提问，返回应答或弃权。**判别式决策模型协议**（choice/confidence 类型化问答，Jev/Kev/laya/openjev 族 `/v1/systemone`）——非生成式 LLM，「不内置 LLM 客户端」的 PRD 非目标边界不变；出站载荷=决策卡本身的判别性字段（截断名/无全树/无窗口标题之外的额外数据），防注入固定行随 state 携带。
+
+输入三形态：**裸决策卡 JSON** / **flow-status envelope**（`data.decision_card`，`actl flow-status --id <run> | actl decide` 管道）/ **AMBIGUOUS 错误信封**（`error.code=="AMBIGUOUS"` + `evidence.candidates`，须配 `--task` 意图——错误信封不带意图，缺 --task 即 PROTOCOL 附 `task_missing` 证据与专属 hint；docs/12 §4 结构化候选的消费闭环：模型免重取 snapshot 直接裁决）。AMBIGUOUS 形态映射为合成卡：候选 id c1..cN 按证据序、dangerous 由词法闸独立重算、`context` 消歧上下文行进候选判别描述；应答与低置信 top_choice 附 **resolved 回显块**（`{ref,role,name,automation_id,context}` 可重放元数据，调用方不必回读错误信封）。卡形态配 --task 为 PROTOCOL（意图只对消歧形态有意义）。
 
 安全不变量（结构性，非提示词约定）：**危险候选在请求构造前剥离**——模型物理不可见，dangerous_only 卡直接 abstain 不触网；`none` 强制入选项（模型有真实弃权出口）；provider 返回非 offering 集的 choice → PROVIDER_UNAVAILABLE（`choice_not_offered`，模型不能幻觉出目标）；confidence < 门槛（默认 0.5）→ abstain `low_confidence` 附 top_choice，**弃权不是错误**——run 保持 needs_review，裁决权交回人/上层 agent。decide 永不代答危险候选、永不 auto-resume：回填仍走 `flow-resume --decision`，授权语义一寸不移动。
 

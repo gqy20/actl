@@ -319,6 +319,11 @@ pub struct CardCandidate {
     /// 该选择器历史动作的效果标注(reveals | no_effect),来自引擎学习。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effect: Option<String>,
+    /// 消歧上下文(AMBIGUOUS 消歧形态专属,decide 合成卡使用):最近具名
+    /// 祖先文本——进 criteria 判别描述,不参与身份字段。探索卡不填,
+    /// 序列化输出不变(golden 无扰动)。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<String>,
     pub score: u32,
     pub dangerous: bool,
 }
@@ -453,6 +458,7 @@ pub fn build_card(input: &CardInput) -> Result<DecisionCard, CtlError> {
                     .as_deref()
                     .map(|id| clip(id, stage.name_chars)),
                 effect: input.effects.get(&c.selector).cloned(),
+                context: None,
                 score: c.score,
                 dangerous: c.dangerous,
             })

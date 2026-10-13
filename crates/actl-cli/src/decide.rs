@@ -66,12 +66,36 @@ pub(crate) struct Decision {
     /// 弃权时的头部答案(供人工判读,不构成应答)。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub top_choice: Option<String>,
+    /// AMBIGUOUS 消歧形态的所选候选回显({ref,role,name,automation_id,
+    /// context})——调用方拿到即可重放,无需回读错误信封。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resolved: Option<serde_json::Value>,
     pub candidates_sent: usize,
     pub dangerous_filtered: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider_ms: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+}
+
+/// 输入形态:裸决策卡 / flow-status 信封 / AMBIGUOUS 错误信封(docs/12 §4:
+/// 结构化候选使决策模型免重取 snapshot 直接裁决)。
+#[derive(Debug)]
+enum InputForm {
+    Card(DecisionCard),
+    /// 合成消歧卡 + 候选元数据(答案回显用)。
+    Ambiguous(DecisionCard, Vec<ResolvedMeta>),
+}
+
+/// AMBIGUOUS 候选的可重放元数据(evidence 原样字段)。
+#[derive(Debug, Clone)]
+struct ResolvedMeta {
+    id: String,
+    ref_id: String,
+    role: String,
+    name: Option<String>,
+    automation_id: Option<String>,
+    context: Option<String>,
 }
 
 /// System One wire 请求(判别式协议,/v1/systemone):`questions` 是问题
@@ -215,27 +239,137 @@ fn provider_unavailable(message: &str, detail: Option<&str>, hint: Option<&str>)
     }
 }
 
-/// 解析输入卡:裸 DecisionCard 或 flow-status envelope(data.decision_card)——
-/// 支持 `actl flow-status .. | actl decide` 一键管道。
-fn parse_card(text: &str) -> Result<DecisionCard, CtlError> {
+/// 解析输入三种形态(docs/06 decide):裸 DecisionCard / flow-status envelope
+/// (data.decision_card)/ AMBIGUOUS 错误信封(须配 --task 意图)。管道形态支持
+/// `actl flow-status .. | actl decide` 与 `actl click .. | actl decide --task ..`。
+fn parse_input(text: &str, task: Option<&str>) -> Result<InputForm, CtlError> {
     let invalid = |message: String| {
         CtlError::protocol(format!(
-            "{message}; expected a decision card JSON or a flow-status envelope"
+            "{message}; expected a decision card JSON, a flow-status envelope, or an AMBIGUOUS error envelope (--task)"
         ))
     };
     if let Ok(card) = serde_json::from_str::<DecisionCard>(text) {
-        return Ok(card);
+        if task.is_some() {
+            return Err(CtlError::protocol(
+                "--task is only valid for AMBIGUOUS error envelopes",
+            ));
+        }
+        return Ok(InputForm::Card(card));
     }
     let value: serde_json::Value =
         serde_json::from_str(text).map_err(|e| invalid(format!("input is not valid JSON: {e}")))?;
+    // AMBIGUOUS 错误信封:错误码即形态判据;意图在信封外(--task 必填)。
+    if value.pointer("/error/code").and_then(|c| c.as_str()) == Some("AMBIGUOUS") {
+        let task = task.ok_or_else(|| {
+            CtlError::with_evidence_hint(
+                ErrorCode::Protocol,
+                "AMBIGUOUS envelopes carry candidates but no task intent; --task is required",
+                serde_json::json!({"reason":"task_missing"}),
+                "pass --task \"<what you are trying to click or use>\" so the model can disambiguate",
+            )
+        })?;
+        return ambiguous_card(&value, task)
+            .map(|(card, metas)| InputForm::Ambiguous(card, metas))
+            .map_err(|mut e| {
+                e.message = format!("{}; expected an AMBIGUOUS error envelope", e.message);
+                e
+            });
+    }
     let Some(card_value) = value
         .pointer("/data/decision_card")
         .or_else(|| value.get("decision_card"))
     else {
         return Err(invalid("input contains no decision card".into()));
     };
+    if task.is_some() {
+        return Err(CtlError::protocol(
+            "--task is only valid for AMBIGUOUS error envelopes",
+        ));
+    }
     serde_json::from_value(card_value.clone())
+        .map(InputForm::Card)
         .map_err(|e| invalid(format!("decision card payload invalid: {e}")))
+}
+
+/// AMBIGUOUS 错误信封 → 合成消歧卡:候选 id c1..cN(证据顺序),dangerous
+/// 由词法闸独立重算(与探索同口径),context 进候选判别字段;score 全 0
+/// (无先验,顺序即证据序)。任务一句话截 160B(卡纪律)。
+fn ambiguous_card(
+    envelope: &serde_json::Value,
+    task: &str,
+) -> Result<(DecisionCard, Vec<ResolvedMeta>), CtlError> {
+    let raw = envelope
+        .pointer("/error/evidence/candidates")
+        .and_then(|c| c.as_array())
+        .ok_or_else(|| CtlError::protocol("AMBIGUOUS envelope has no evidence.candidates"))?;
+    if raw.is_empty() {
+        return Err(CtlError::protocol("AMBIGUOUS envelope has zero candidates"));
+    }
+    let clip = |text: &str, max: usize| text.chars().take(max).collect::<String>();
+    let mut metas = Vec::with_capacity(raw.len());
+    let mut candidates = Vec::with_capacity(raw.len());
+    for (index, entry) in raw.iter().enumerate() {
+        let id = format!("c{}", index + 1);
+        let ref_id = entry
+            .get("ref")
+            .and_then(|r| r.as_str())
+            .unwrap_or_default()
+            .to_string();
+        let role = entry
+            .get("role")
+            .and_then(|r| r.as_str())
+            .unwrap_or_default()
+            .to_string();
+        let name = entry
+            .get("name")
+            .and_then(|n| n.as_str())
+            .map(|n| clip(n, 64));
+        let automation_id = entry
+            .get("automation_id")
+            .and_then(|a| a.as_str())
+            .map(|a| clip(a, 64));
+        let context = entry
+            .get("context")
+            .and_then(|c| c.as_str())
+            .map(|c| clip(c, 64));
+        let dangerous = actl_core::decision::dangerous(name.as_deref(), automation_id.as_deref());
+        metas.push(ResolvedMeta {
+            id: id.clone(),
+            ref_id,
+            role: role.clone(),
+            name: name.clone(),
+            automation_id: automation_id.clone(),
+            context: context.clone(),
+        });
+        candidates.push(actl_core::decision::CardCandidate {
+            id,
+            selector: metas.last().map(|m| m.ref_id.clone()).unwrap_or_default(),
+            role,
+            name,
+            automation_id,
+            effect: None,
+            context,
+            score: 0,
+            dangerous,
+        });
+    }
+    let card = DecisionCard {
+        version: 1,
+        card_id: "d-ambiguous".into(),
+        task: clip(task, 160),
+        app: "unknown".into(),
+        goal: "pick the candidate that matches the task intent".into(),
+        step: 0,
+        diff: actl_core::decision::CardDiff {
+            added: 0,
+            removed: 0,
+            changed: 0,
+            added_names: vec![],
+            removed_names: vec![],
+        },
+        candidates,
+    };
+    Ok((card, metas))
 }
 
 /// 读配置:文件缺省/JSON 失败都是 PROTOCOL(带 recovery 提示,不留静默默认)。
@@ -284,16 +418,23 @@ fn build_request(card: &DecisionCard) -> (Option<SystemOneRequest<'_>>, usize) {
     for candidate in &safe {
         let name = candidate.name.as_deref().unwrap_or("-");
         lines.push_str(&format!(
-            "{} | {} | {} | {} | {}\n",
+            "{} | {} | {} | {} | {}",
             candidate.id,
             candidate.role,
             name,
             candidate.score,
             candidate.effect.as_deref().unwrap_or("-")
         ));
+        if let Some(context) = &candidate.context {
+            lines.push_str(&format!(" | in: {context}"));
+        }
+        lines.push('\n');
         let mut description = format!("{} {}", candidate.role, name);
         if let Some(effect) = &candidate.effect {
             description.push_str(&format!(" (previous effect: {effect})"));
+        }
+        if let Some(context) = &candidate.context {
+            description.push_str(&format!(" (located in: {context})"));
         }
         criteria.insert(candidate.id.as_str(), description);
     }
@@ -330,6 +471,7 @@ pub(crate) fn answer_card(
             abstain: Some("dangerous_only".into()),
             confidence: None,
             top_choice: None,
+            resolved: None,
             candidates_sent: 0,
             dangerous_filtered,
             provider_ms: None,
@@ -359,6 +501,7 @@ pub(crate) fn answer_card(
             abstain: Some("provider_none".into()),
             confidence: Some(confidence),
             top_choice: None,
+            resolved: None,
             candidates_sent: offered.len() - 1,
             dangerous_filtered,
             provider_ms: Some(provider_ms),
@@ -372,6 +515,7 @@ pub(crate) fn answer_card(
             abstain: Some("low_confidence".into()),
             confidence: Some(confidence),
             top_choice: Some(choice),
+            resolved: None,
             candidates_sent: offered.len() - 1,
             dangerous_filtered,
             provider_ms: Some(provider_ms),
@@ -384,6 +528,7 @@ pub(crate) fn answer_card(
         abstain: None,
         confidence: Some(confidence),
         top_choice: None,
+        resolved: None,
         candidates_sent: offered.len() - 1,
         dangerous_filtered,
         provider_ms: Some(provider_ms),
@@ -445,6 +590,8 @@ fn append_audit(dir: &std::path::Path, decision: &Decision, error: Option<&CtlEr
 /// CLI 入口。
 pub(crate) struct DecideArgs {
     pub card: Option<String>,
+    /// AMBIGUOUS 错误信封形态必填:任务意图(错误信封不带意图,消歧判据)。
+    pub task: Option<String>,
     pub config: Option<String>,
     pub endpoint: Option<String>,
     pub min_confidence: Option<f64>,
@@ -464,7 +611,10 @@ pub(crate) fn run(args: DecideArgs) -> Result<serde_json::Value, CtlError> {
             buffer
         }
     };
-    let card = parse_card(&text)?;
+    let (card, metas) = match parse_input(&text, args.task.as_deref())? {
+        InputForm::Card(card) => (card, None),
+        InputForm::Ambiguous(card, metas) => (card, Some(metas)),
+    };
     let dir = std::env::var_os("LOCALAPPDATA")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(std::env::temp_dir)
@@ -514,6 +664,7 @@ pub(crate) fn run(args: DecideArgs) -> Result<serde_json::Value, CtlError> {
             abstain: Some("dangerous_only".into()),
             confidence: None,
             top_choice: None,
+            resolved: None,
             candidates_sent: 0,
             dangerous_filtered,
             provider_ms: None,
@@ -537,6 +688,26 @@ pub(crate) fn run(args: DecideArgs) -> Result<serde_json::Value, CtlError> {
         timeout: Duration::from_millis(timeout_ms),
     };
     let result = answer_card(&card, &provider, min_confidence);
+    // AMBIGUOUS 消歧形态的答案装饰:应答/低置信头部候选附 resolved
+    // (可重放元数据,调用方不必回读错误信封)。
+    let result = match (result, metas) {
+        (Ok(mut decision), Some(metas)) => {
+            let picked = decision.choice.clone().or(decision.top_choice.clone());
+            if let Some(choice) = picked {
+                decision.resolved = metas.iter().find(|m| m.id == choice).map(|m| {
+                    serde_json::json!({
+                        "ref": m.ref_id,
+                        "role": m.role,
+                        "name": m.name,
+                        "automation_id": m.automation_id,
+                        "context": m.context,
+                    })
+                });
+            }
+            Ok(decision)
+        }
+        (result, _) => result,
+    };
     match &result {
         Ok(decision) => append_audit(&dir, decision, None),
         Err(error) => append_audit(
@@ -547,6 +718,7 @@ pub(crate) fn run(args: DecideArgs) -> Result<serde_json::Value, CtlError> {
                 abstain: None,
                 confidence: None,
                 top_choice: None,
+                resolved: None,
                 candidates_sent: request.questions.pick.criteria.len() - 1,
                 dangerous_filtered,
                 provider_ms: None,
@@ -598,6 +770,7 @@ mod tests {
             name: Some(name.into()),
             automation_id: None,
             effect: None,
+            context: None,
             score,
             dangerous,
         }
@@ -723,18 +896,80 @@ mod tests {
     }
 
     #[test]
-    fn parse_card_accepts_bare_and_envelope_forms() {
+    fn parse_input_accepts_bare_and_envelope_forms() {
         let bare = card(vec![candidate("c1", "保存", false, 8)]);
         let text = serde_json::to_string(&bare).unwrap();
-        assert_eq!(parse_card(&text).unwrap().card_id, "d-test");
+        assert!(matches!(
+            parse_input(&text, None).unwrap(),
+            InputForm::Card(_)
+        ));
         let envelope = serde_json::json!({
             "command": "flow-status",
             "data": { "decision_card": serde_json::to_value(&bare).unwrap() }
         });
-        let parsed = parse_card(&envelope.to_string()).unwrap();
+        let parsed = parse_input(&envelope.to_string(), None).unwrap();
+        let InputForm::Card(parsed) = parsed else {
+            panic!("envelope form must parse as card");
+        };
         assert_eq!(parsed.card_id, "d-test");
-        assert!(parse_card("{}").is_err());
-        assert!(parse_card("not json").is_err());
+        assert!(parse_input("{}", None).is_err());
+        assert!(parse_input("not json", None).is_err());
+        // 卡形态配 --task = PROTOCOL(意图只对 AMBIGUOUS 形态有意义)
+        assert!(parse_input(&text, Some("点击保存")).is_err());
+    }
+
+    #[test]
+    fn ambiguous_envelope_requires_task_and_maps_candidates() {
+        let envelope = serde_json::json!({
+            "version": "1", "ok": false, "command": "click",
+            "error": {
+                "code": "AMBIGUOUS",
+                "message": "name:浏览 matches 2 elements",
+                "evidence": { "candidates": [
+                    {"ref": "@e3", "role": "Button", "name": "浏览", "automation_id": "btnBrowse1", "context": "文件名行"},
+                    {"ref": "@e7", "role": "Button", "name": "浏览", "automation_id": "btnBrowse2", "context": "联机图片区"}
+                ]}
+            }
+        });
+        let text = envelope.to_string();
+        // 无 --task:PROTOCOL + 结构化 evidence + 专属 hint
+        let error = parse_input(&text, None).unwrap_err();
+        assert_eq!(error.code, ErrorCode::Protocol);
+        assert_eq!(error.evidence.unwrap()["reason"], "task_missing");
+        // 有 --task:合成卡,候选序即证据序,context 保留
+        let InputForm::Ambiguous(card, metas) =
+            parse_input(&text, Some("打开本地文件选择器")).unwrap()
+        else {
+            panic!("ambiguous form expected");
+        };
+        assert_eq!(card.candidates.len(), 2);
+        assert_eq!(card.candidates[0].id, "c1");
+        assert_eq!(card.candidates[0].context.as_deref(), Some("文件名行"));
+        assert_eq!(card.candidates[0].selector, "@e3");
+        assert_eq!(metas[1].ref_id, "@e7");
+        // 危险词法闸独立重算:危险候选入卡但带 dangerous 位(构造侧剥离)
+        let envelope = serde_json::json!({
+            "error": {
+                "code": "AMBIGUOUS",
+                "evidence": { "candidates": [
+                    {"ref": "@e1", "role": "Button", "name": "删除"},
+                    {"ref": "@e2", "role": "Button", "name": "保存"}
+                ]}
+            }
+        });
+        let InputForm::Ambiguous(card, _) =
+            parse_input(&envelope.to_string(), Some("保存文档")).unwrap()
+        else {
+            panic!("ambiguous form expected");
+        };
+        assert!(card.candidates[0].dangerous);
+        assert!(!card.candidates[1].dangerous);
+        // 零候选/缺 evidence = PROTOCOL
+        assert!(parse_input(
+            &serde_json::json!({"error": {"code": "AMBIGUOUS", "evidence": {"candidates": []}}}).to_string(),
+            Some("t")
+        )
+        .is_err());
     }
 
     #[test]
