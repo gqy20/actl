@@ -696,11 +696,18 @@ fn validate_explore(explore: &ExploreSpec) -> Result<(), CtlError> {
             .strip_prefix("id:")
             .or_else(|| selector.strip_prefix("name:"))
             .unwrap_or_default();
-        if selector.len() < 4 || selector.len() > 96 || semantic.is_empty() {
+        // focused: 键(docs/77 已知限制②收口,2026-10-12):键入 OS 键盘焦点
+        // 元素,不指向树内定位目标——裸 `focused:` 或 `focused:<Role>`(角色
+        // 核验 fail-closed 由 CLI type 承担);不接受序数/空白形态。
+        let focused = selector == "focused:"
+            || selector.strip_prefix("focused:").is_some_and(|role| {
+                !role.is_empty() && role.chars().all(|c| c.is_ascii_alphanumeric())
+            });
+        if selector.len() < 4 || selector.len() > 96 || (semantic.is_empty() && !focused) {
             return Err(schema::error(
                 "explore.texts",
                 None,
-                "text keys require full semantic selectors (id:/name:, 3-92 byte value)",
+                "text keys require semantic selectors (id:/name: with 3-92 byte value) or focused:/focused:<Role>",
             ));
         }
         if text.is_empty() || text.len() > 4096 || text.contains('\0') {

@@ -399,6 +399,10 @@ fn parse_goal_fold(spec: &ExploreSpec) -> Option<(FoldTarget, FoldAssertion)> {
 fn effective_keywords(spec: &ExploreSpec) -> Vec<String> {
     let mut list = spec.keywords.clone();
     for key in spec.texts.keys() {
+        // focused: 键不指向树内定位目标,不贡献投影关键词(焦点是运行时状态)。
+        if key.starts_with("focused:") {
+            continue;
+        }
         let value = key
             .strip_prefix("id:")
             .or_else(|| key.strip_prefix("name:"))
@@ -499,6 +503,9 @@ fn batch_probe_liveness(
     }
     let calls: Vec<Invocation> = selectors
         .iter()
+        // focused: 键不参与定位预检——焦点是运行时状态,find 探测无意义;
+        // 键入时 CLI type 的焦点/角色核验是权威 fail-closed。
+        .filter(|selector| !selector.starts_with("focused:"))
         .map(|selector| {
             let (flag, value) = probe_args(selector)?;
             Ok(invocation(
@@ -508,7 +515,14 @@ fn batch_probe_liveness(
         })
         .collect::<Result<Vec<_>, CtlError>>()?;
     let results = host.execute_probes(&calls);
-    for (selector, result) in selectors.iter().zip(results) {
+    let mut results = results.into_iter();
+    for selector in selectors {
+        if selector.starts_with("focused:") {
+            continue;
+        }
+        let result = results
+            .next()
+            .expect("probe result per non-focused selector");
         if probe_is_definitively_dead(&result) {
             state.errors += 1;
             state.tried.insert(selector.clone(), "dead".into());
@@ -565,9 +579,16 @@ fn act(
     // (find 对 flyout 间歇失明,发现 #6)。陈旧上下文(应答回退队列等
     // 不在当前帧的候选)保持 probe-before-act 原语义(docs/42 §4.1:
     // 死控件不进动作路径,不消耗动作预算)。
-    let framed = frame_element(&state.last_elements, selector);
+    // focused: 键不入帧(键盘焦点是运行时状态,树定位无意义)——跳过帧
+    // 背书与探测;可达性由 CLI type focused: 的角色核验 fail-closed。
+    let focused_entry = selector.starts_with("focused:");
+    let framed = if focused_entry {
+        None
+    } else {
+        frame_element(&state.last_elements, selector)
+    };
     let vouched = framed.is_some();
-    if !vouched {
+    if !vouched && !focused_entry {
         let (flag, value) = probe_args(selector)?;
         let anchor = current_anchor(spec, state);
         let probe = invocation("find", vec!["--app".into(), anchor, flag, value]);
@@ -1183,16 +1204,33 @@ pub fn execute(
             })
             .filter_map(decision::selector_of)
             .collect();
-        let candidates: Vec<ScoredCandidate> = decision::frontier(
+        let mut candidates: Vec<ScoredCandidate> = decision::frontier(
             &state.last_elements,
             &effective_keywords(spec),
             &added_selectors,
             &spec.priors,
             &spec.stats,
-        )
-        .into_iter()
-        .filter(|c| !state.tried.contains_key(&c.selector))
-        .collect();
+        );
+        // focused: 合成候选(② 收口,2026-10-12):texts 键入 OS 键盘焦点
+        // 元素,不依赖帧内元素。dangerous=true——焦点可被任意窗口持有,
+        // 键入永不自动执行,只能经应答者显式裁决授权(与危险词法闸同规)。
+        for key in spec.texts.keys().filter(|k| k.starts_with("focused:")) {
+            if candidates.iter().any(|c| c.selector == *key) {
+                continue;
+            }
+            candidates.push(ScoredCandidate {
+                dangerous: true,
+                selector: key.clone(),
+                role: "Edit".into(),
+                name: None,
+                automation_id: None,
+                score: 1,
+            });
+        }
+        let candidates: Vec<ScoredCandidate> = candidates
+            .into_iter()
+            .filter(|c| !state.tried.contains_key(&c.selector))
+            .collect();
         if state.seen.len() < SEEN_CAP {
             state
                 .seen

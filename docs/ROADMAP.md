@@ -54,7 +54,7 @@
 
 - [ ] Word 新文档物化拒答边界（2026-10-11 release-review-08 实证）：五层修复治的是兼容模式文档（012 场景），**全新空白文档**上 MSAA 桥仍报 Malformed Cacheresponse→自动回落逐节点（不挂但慢，14.8s 慢扫）——回落兜底是设计的，根因（cache-only 元素边界）诊断轮待正常速度日
 
-- [ ] 探索引擎形态边界与改进候选（[77](77-exploration-s2-acceptance.md)）:①差分前沿语义×无增量应用（XAML 计算器按钮序列点击无 added 元素——前沿语义扩展候选）;②texts 原语无全局键盘形态（focused: 不收,而 CLI type focused: 已验证——texts focused 键支持候选）;③automation_id 歧义场景（对话框控件 id 随宿主变异——记事本 1001 双命中/画图 1148,稳健定位 role+name;引擎歧义收紧策略候选）;④跨进程 picker 形态（记事本另存为+画图打开双证否=同进程 32770,待照片类 Store 应用场景验证 RuntimeBroker 放宽判据）;⑤UCB 真机对照轮（v2 机制已落地冷启动回落,待 quirks 计数积累后对比无统计基线:死候选自动压后/预算下降）
+- [ ] 探索引擎形态边界与改进候选（[77](77-exploration-s2-acceptance.md)）:①差分前沿语义×无增量应用（XAML 计算器按钮序列点击无 added 元素——前沿语义扩展候选）;④跨进程 picker 形态（记事本另存为+画图打开双证否=同进程 32770,待照片类 Store 应用场景验证 RuntimeBroker 放宽判据）;⑤UCB 真机对照轮（v2 机制已落地冷启动回落,待 quirks 计数积累后对比无统计基线:死候选自动压后/预算下降）。②③已收（2026-10-12:texts `focused:`/`focused:<Role>` 键——合成候选 dangerous 永不自动执行、应答显式裁决授权;frontier 同帧重复 id 按观察序 `#N` 序数唯一化,name 子串保持裸形交 CLI AMBIGUOUS 如实上报）
 
 - [ ] companion_unresponsive 复发观察（机制已实测澄清:显示端消息泵 500ms 往返+lease 心跳,历史事件全落污染期——诊断详情见 git 历史与 [41](41-logging-metadata.md)）。复发条件=干净现场再现;届时怀疑方向=显示端 UI 线程被合法工作阻塞 >1s,500ms 泵窗口为固定常量不为猜测调参
 
@@ -71,6 +71,5 @@
 
 ## 维护
 
-- [ ] 显示端 resume 的 control_log 对称（2026-10-12 核对轮收敛:pause 链完整——CLI/显示端均 Request record requested→accepted/failed+引擎 flow_pause_observed 消费 request_id;显示端 resume 侧 requested/dispatching/child_returned 在位,request_id 经 env 同源;**剩=CLI flow-resume 分支无 control_log record**——子进程段只记 flow_event;补 accepted/failed 需包住多 return 分支体,非顺手量级,待下轮）
 - [ ] 非 UIA 观察阶段耗时诊断（2026-10-12 核对轮收敛:trace::scope+actl-slow 慢段机制已在位,覆盖=uia 轨 8 文件;**非 UIA 段（browser CDP 网络/spawn/文件 IO）无 scope**——真实慢诊断需求出现时按同款 scope 补,不预防性铺）
-- [ ] 存储目录不可写/磁盘耗尽/进程中断验收（**2026-10-12 首块收口**:不可写注入契约落地并拆出真 bug——存储不可用时 list-windows 曾误报 NOT_ACTIONABLE"requires repair"误导修复路径,stop.rs 错误构造已三分 corrupt/infra/json 修,见 CHANGELOG;**剩=进程中断(断电/杀进程)中段验收**——WAL 已有引擎落盘与恢复语义,缺专测）
+- [ ] 存储验收余项：磁盘耗尽注入验收（不可写注入契约与进程中断真杀专测均已收——2026-10-12:flow_contract `real_kill_midstep` 以 TerminateProcess 中段杀 runner, WAL running 态如实报 interrupted 且 resume 闭合诚实失败态；CLI resume control_log 对称同轮落地，`cli_resume_writes_control_log` 三态断言）

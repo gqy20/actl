@@ -207,12 +207,37 @@ pub fn frontier(
             })
         })
         .collect();
+    // automation_id 歧义收紧(docs/77 发现③,2026-10-12):对话框控件 id 随
+    // 宿主变异(记事本 1001 双命中/画图 1148),同帧同 id 的裸 `id:` 选择器
+    // 定位歧义(AMBIGUOUS 或误点第一个)。帧内出现重复 id 即按观察序追加
+    // `#N` 序数(CLI `id:<Id>#N` 与 role 序数同机制);唯一者保持裸形——
+    // tried/priors/stats 键跨帧稳定。name 选择器不做(子串语义,#N 会被
+    // 当作匹配文本;歧义交 CLI AMBIGUOUS 如实上报)。
+    disambiguate_id_selectors(&mut candidates);
     candidates.sort_by(|a, b| {
         b.score
             .cmp(&a.score)
             .then_with(|| a.selector.cmp(&b.selector))
     });
     candidates
+}
+
+fn disambiguate_id_selectors(candidates: &mut [ScoredCandidate]) {
+    let mut totals: std::collections::BTreeMap<String, u32> = std::collections::BTreeMap::new();
+    for candidate in candidates.iter() {
+        *totals.entry(candidate.selector.clone()).or_insert(0) += 1;
+    }
+    let mut seen: std::collections::BTreeMap<String, u32> = std::collections::BTreeMap::new();
+    for candidate in candidates.iter_mut() {
+        let is_id = candidate.selector.starts_with("id:");
+        let duplicated = totals.get(&candidate.selector).copied().unwrap_or(0) > 1;
+        if !(is_id && duplicated) {
+            continue;
+        }
+        let ordinal = seen.entry(candidate.selector.clone()).or_insert(0);
+        *ordinal += 1;
+        candidate.selector = format!("{}#{}", candidate.selector, ordinal);
+    }
 }
 
 /// 熵门(docs/42 §3 降决策次数):头部非危险候选领先次名 ≥ GATE_MARGIN 时
@@ -496,6 +521,65 @@ mod tests {
             automation_id: id.map(str::to_string),
             depth: 1,
         }
+    }
+
+    #[test]
+    fn frontier_disambiguates_duplicate_ids_with_ordinals() {
+        // ③ automation_id 歧义收紧(2026-10-12):同帧同 id(对话框控件 id
+        // 随宿主变异,记事本 1001 双命中)→ 裸 id: 选择器定位歧义。帧内重复
+        // id 按观察序追加 #N 序数;唯一 id 与 name 选择器保持裸形。
+        let elements = vec![
+            el("Button", Some("确定"), Some("1001")),
+            el("Button", Some("取消"), Some("1001")),
+            el("Button", Some("帮助"), Some("1002")),
+            el("Edit", Some("文件名"), None),
+        ];
+        let candidates = frontier(
+            &elements,
+            &[],
+            &Default::default(),
+            &Default::default(),
+            &Default::default(),
+        );
+        let selectors: Vec<&str> = candidates.iter().map(|c| c.selector.as_str()).collect();
+        assert!(
+            selectors.contains(&"id:1001#1") && selectors.contains(&"id:1001#2"),
+            "duplicate ids get ordinals: {selectors:?}"
+        );
+        assert!(
+            selectors.contains(&"id:1002") && selectors.contains(&"name:文件名"),
+            "unique selectors stay bare: {selectors:?}"
+        );
+        // 计数不丢:两个序数候选都在,角色/名册保留
+        assert_eq!(candidates.len(), 4);
+        // 单元素帧不引入序数(跨帧键稳定)
+        let single = frontier(
+            &[el("Button", Some("确定"), Some("1001"))],
+            &[],
+            &Default::default(),
+            &Default::default(),
+            &Default::default(),
+        );
+        assert_eq!(single[0].selector, "id:1001");
+        // name 重复不序数化(子串语义,#N 会被当作匹配文本)
+        let dup_names = frontier(
+            &[
+                el("Button", Some("确定"), None),
+                el("Button", Some("确定"), None),
+            ],
+            &[],
+            &Default::default(),
+            &Default::default(),
+            &Default::default(),
+        );
+        assert!(
+            dup_names.iter().all(|c| c.selector == "name:确定"),
+            "name duplicates stay bare (CLI AMBIGUOUS reports honestly): {:?}",
+            dup_names
+                .iter()
+                .map(|c| c.selector.clone())
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]

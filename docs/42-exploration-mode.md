@@ -172,7 +172,7 @@ S2 落地范围：`actl-core/decision.rs`（决策协议）+ `actl-flow/explore.
 ### 10.3 已知限制（S3/后续）
 
 - 效果归因不做跨窗检测；点击打开新窗口时同窗差分为空可能误标 no_effect（预算与 tried 集仍保证有界与不循环；真机实证 S2/S3c）。
-- 探索动作只有 click；无滚动/键盘动作，长列表场景靠词表命中与 skeleton 放宽兜底。
+- 探索动作有 click 与 texts 键入（type 通道,含非 ASCII 自动 --paste）;`texts.focused:`/`focused:<Role>` 键入 OS 键盘焦点元素已落地（2026-10-12:合成候选 dangerous 标注永不自动执行,应答显式裁决授权,docs/06 explore.texts）。滚动与 press 类动作仍无,长列表场景靠词表命中与 skeleton 放宽兜底。
 - goal 断言的目标元素在窗口形态变化后可能不可解析（真机实证 2026-10-03：计算器置顶/导航形态下 `CalculatorResults` 消失）→ `goal_check_failed` 失败闭合是规格行为，有界重试/形态感知是 S3 候选（[77](77-exploration-s2-acceptance.md) 发现 1）。
 - 卡候选排序无效果风险先验：含窗口重构类候选（置顶/导航/退格）的队列可能先触 `goal_check_failed` 而非预算终态（两者都诚实；先验排序属 S3 quirks 剪枝范畴）。
 - pack 回写（L0 命中重放、quirks 统计剪枝）属 S3。
