@@ -183,32 +183,33 @@ fn scan(hay: &Gray, needle: &Gray, threshold: f32) -> Vec<Match> {
     out
 }
 
-/// 直接 ZNCC(精修层用,单位置)。
-fn zncc_at(hay: &Gray, needle: &Gray, x: usize, y: usize) -> f32 {
+/// 直接 ZNCC(精修层用,单位置)。模板均值/方差由调用方预算一次传入
+/// (精修循环内每位置省 O(needle) 的重复统计)。
+fn zncc_at(hay: &Gray, needle: &Gray, t_mean: f64, t_norm: f64, x: usize, y: usize) -> f32 {
     let (tw, th) = (needle.w, needle.h);
     if x + tw > hay.w || y + th > hay.h {
         return -1.0;
     }
-    let (t_mean, t_var) = mean_var(needle);
-    let t_norm = (t_var * (tw * th) as f64).sqrt();
     if t_norm < 1e-6 {
         return -1.0;
     }
     let n = (tw * th) as f64;
-    let mut s = 0.0f64;
-    let mut q = 0.0f64;
+    let mut s = 0u64;
+    let mut q = 0u64;
     let mut cross = 0.0f64;
     for ty in 0..th {
+        let hrow = (y + ty) * hay.w + x;
+        let trow = ty * tw;
         for tx in 0..tw {
-            let hv = hay.data[(y + ty) * hay.w + x + tx] as f64;
-            let tv = needle.data[ty * tw + tx] as f64;
+            let hv = hay.data[hrow + tx] as u64;
+            let tv = needle.data[trow + tx] as f64;
             s += hv;
             q += hv * hv;
-            cross += hv * (tv - t_mean);
+            cross += hv as f64 * (tv - t_mean);
         }
     }
-    let h_mean = s / n;
-    let h_var = (q / n - h_mean * h_mean).max(0.0);
+    let h_mean = s as f64 / n;
+    let h_var = (q as f64 / n - h_mean * h_mean).max(0.0);
     let h_norm = (h_var * n).sqrt();
     if h_norm < 1e-6 {
         return -1.0;
@@ -251,17 +252,58 @@ pub fn find(hay: &Gray, needle: &Gray, threshold: f32) -> Vec<Match> {
     if degenerate(needle) {
         return Vec::new();
     }
-    const FACTOR: usize = 4;
-    let (cw, ch) = (hay.w / FACTOR, hay.h / FACTOR);
-    let (nw, nh) = (needle.w / FACTOR, needle.h / FACTOR);
-    let coarse = if cw >= 8 && ch >= 8 && nw >= 3 && nh >= 3 {
-        let hay_c = downsample(hay, FACTOR);
-        let needle_c = downsample(needle, FACTOR);
+    // 粗筛两级金字塔(性能优化,语义不变):先试 8×(大模板粗层面缩 1/64),
+    // 粗层无候选再回退 4×(细纹理在 8× 盒采样下会特征坍缩——棋盘 16px
+    // 周期模板的回归实证)。两级都空才走全分辨率兜底。候选携带来源因子,
+    // 精修按各自因子换算坐标与邻域。
+    let try_coarse = |factor: usize| -> Option<Vec<(Match, usize)>> {
+        let (cw, ch) = (hay.w / factor, hay.h / factor);
+        let (nw, nh) = (needle.w / factor, needle.h / factor);
+        if cw < 8 || ch < 8 || nw < 3 || nh < 3 {
+            return None;
+        }
+        let hay_c = downsample(hay, factor);
+        let needle_c = downsample(needle, factor);
         // 粗层用稍宽阈值捞候选,精修层按真阈值裁决
-        scan(&hay_c, &needle_c, (threshold - 0.08).clamp(-1.0, 1.0))
-    } else {
-        Vec::new()
+        let hits = scan(&hay_c, &needle_c, (threshold - 0.08).clamp(-1.0, 1.0));
+        Some(hits.into_iter().map(|m| (m, factor)).collect())
     };
+    let mut coarse: Vec<(Match, usize)> = if needle.w >= 128 && needle.h >= 128 {
+        match try_coarse(8) {
+            Some(hits) if !hits.is_empty() => hits,
+            _ => try_coarse(4).unwrap_or_default(),
+        }
+    } else {
+        try_coarse(4).unwrap_or_default()
+    };
+    // 精修候选治理(性能优化,语义不变):分数降序 + 元组 NMS 去重叠(因子
+    // 随命中保对) + top-K 限流——精修是 O(K·pad²·needle²),64 足够一切
+    // 实用场景。
+    const REFINE_TOP_K: usize = 64;
+    coarse.sort_by(|a, b| {
+        b.0.score
+            .partial_cmp(&a.0.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    let mut kept: Vec<(Match, usize)> = Vec::new();
+    for entry in coarse {
+        let (m, _) = entry;
+        let overlaps = kept.iter().any(|(k, _)| {
+            let ix = k.x.max(m.x)..(k.x + k.w).min(m.x + m.w);
+            let iy = k.y.max(m.y)..(k.y + k.h).min(m.y + m.h);
+            if ix.is_empty() || iy.is_empty() {
+                return false;
+            }
+            let inter = (ix.end - ix.start) * (iy.end - iy.start);
+            let smaller = (k.w * k.h).min(m.w * m.h);
+            smaller > 0 && inter * 2 > smaller
+        });
+        if !overlaps {
+            kept.push(entry);
+        }
+    }
+    kept.truncate(REFINE_TOP_K);
+    let coarse = kept;
     let mut refined: Vec<Match> = Vec::new();
     if coarse.is_empty() {
         // 粗层无候选(模板过小或降采样丢特征):全分辨率直扫兜底(小窗可承受)
@@ -270,10 +312,13 @@ pub fn find(hay: &Gray, needle: &Gray, threshold: f32) -> Vec<Match> {
         }
         return refined;
     }
-    let pad = FACTOR * 2;
-    for c in coarse {
-        let cx = c.x * FACTOR;
-        let cy = c.y * FACTOR;
+    // 模板统计提升出循环(zncc_at 逐位置复用)
+    let (t_mean, t_var) = mean_var(needle);
+    let t_norm = (t_var * (needle.w * needle.h) as f64).sqrt();
+    for (c, factor) in coarse {
+        let pad = factor * 2;
+        let cx = c.x * factor;
+        let cy = c.y * factor;
         let x0 = cx.saturating_sub(pad);
         let y0 = cy.saturating_sub(pad);
         let x1 = (cx + pad).min(hay.w.saturating_sub(needle.w));
@@ -281,7 +326,7 @@ pub fn find(hay: &Gray, needle: &Gray, threshold: f32) -> Vec<Match> {
         let mut best: Option<Match> = None;
         for y in y0..=y1 {
             for x in x0..=x1 {
-                let score = zncc_at(hay, needle, x, y);
+                let score = zncc_at(hay, needle, t_mean, t_norm, x, y);
                 if score >= threshold && best.is_none_or(|b: Match| score > b.score) {
                     best = Some(Match {
                         x,
@@ -370,6 +415,27 @@ mod tests {
         let mut pts: Vec<_> = matches.iter().map(|m| (m.x, m.y)).collect();
         pts.sort();
         assert_eq!(pts, vec![(10, 10), (80, 30)]);
+    }
+
+    /// 大模板(≥128px)走 8× 粗层的回归钉:自适应降采样因子不丢命中位置。
+    #[test]
+    fn large_template_finds_via_deep_coarse_layer() {
+        // 256×256 模板 → 8× 粗层(≥128 触发);hay 1280×800 模拟真实窗口面
+        let mut needle = canvas(256, 256, 90);
+        // 大模板要有内部结构(粗层特征),棋盘纹
+        for y in 0..256 {
+            for x in 0..256 {
+                if (x / 16 + y / 16) % 2 == 0 {
+                    needle.data[y * 256 + x] = 200;
+                }
+            }
+        }
+        let mut hay = canvas(1280, 800, 40);
+        patch(&mut hay, 700, 300, &needle);
+        let matches = find(&hay, &needle, 0.85);
+        assert_eq!(matches.len(), 1, "{matches:?}");
+        assert_eq!((matches[0].x, matches[0].y), (700, 300));
+        assert!(matches[0].score > 0.95, "score={}", matches[0].score);
     }
 
     #[test]

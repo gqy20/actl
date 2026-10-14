@@ -29,6 +29,9 @@ pub mod find_image;
 /// 昂贵 locate 前先廉价原生核对+两级激活,仍非前台让行。
 mod foreground_gate;
 mod handoff;
+/// find-image 搜索范围可视化(2026-10-14):红框画在目标窗口面,Drop 擦除。
+#[allow(unsafe_op_in_unsafe_fn)]
+mod search_frame;
 /// 流程执行器注入计划指纹的窄通道(始终信任此流程)。
 pub fn set_plan_hash(hash: Option<String>) {
     handoff::set_plan_hash(hash);

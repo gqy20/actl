@@ -218,7 +218,11 @@ find-image --template <png> [--app X] [--threshold 0.85] [--all] [--limit N] [--
                                      # 像素精确:目标机 screenshot --element/--rect
                                      # 裁取,主题/DPI 变更需重采。零新依赖(WIC 解码
                                      # 复用截图编码同栈)。算法在 actl-core(纯逻辑
-                                     # 单测),原生胶合在 actl-uia
+                                     # 单测),原生胶合在 actl-uia。**搜索范围可视化
+                                     # (2026-10-14)**:搜索期间目标窗口画红色边框
+                                     # (best-effort,绘制失败不阻塞匹配),结束自动
+                                     # 擦除;window 字段附 origin(窗口客户面原点,
+                                     # 物理像素)——失败信封可完整重建已扫窗面
 ```
 
 #### 交互(interact)

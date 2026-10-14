@@ -86,6 +86,9 @@ pub fn find_image(spec: FindImageSpec<'_>) -> Result<Value, CtlError> {
             "template is uniform (zero variance) — ZNCC is undefined for flat images; crop a distinctive region",
         ));
     }
+    // 搜索范围可视化(2026-10-14 用户现场反馈):搜索期间窗口画红框,Drop 擦除;
+    // best-effort(绘制失败静默跳过,不影响匹配语义)
+    let _frame = crate::search_frame::SearchFrameGuard::enter(win.hwnd);
 
     let factors: &[f32] = if spec.scales { &SCALE_FACTORS } else { &[1.0] };
     let mut pooled: Vec<(Match, f32)> = Vec::new();
@@ -142,7 +145,7 @@ pub fn find_image(spec: FindImageSpec<'_>) -> Result<Value, CtlError> {
             "center": [win.origin_x + m.x as i32 + (m.w as i32) / 2, win.origin_y + m.y as i32 + (m.h as i32) / 2],
         })
     };
-    let window = json!({"title": win.title, "hwnd": win.hwnd, "width": hw, "height": hh});
+    let window = json!({"title": win.title, "hwnd": win.hwnd, "width": hw, "height": hh, "origin": [win.origin_x, win.origin_y]});
     if total == 0 {
         return Err(CtlError::with_evidence(
             ErrorCode::NotFound,
