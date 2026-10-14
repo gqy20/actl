@@ -13,7 +13,19 @@ quirks:
       Shell_TrayWnd:托盘图标在 UIA 树可见(automation_id=NotifyItemIcon,name 带
       前导空格如" 微信"),click(UIA Invoke)单次即唤起主窗,不经物理命中检查、
       遮挡免疫。物理路线对任务栏结构性不可达:任务栏 Win32 根标题为空,命中检查
-      按根标题比对必然失配——勿以物理重试唤起
+      按根标题比对必然失配——勿以物理重试唤起。autohide 任务栏(ABM_GETSTATE
+      bit0=1 实测常态)藏起时图标树退 4 元素壳(Shell 懒物化,非 XAML 死亡,
+      勿 explorer 重启):hover 底缘露条(隐藏态 rect 只露 1px,xy 取主屏
+      物理高-1,--app 任务栏 锚定守卫)顶出后满树恢复(4→73);序列必须单
+      batch——任务栏数秒自动收回,跨进程调用间必有收回窗口(STALE_REF 竞态
+      实证:报错时窗可能已弹出,先核对再重放)
+  - id: tray_overflow_lane
+    note: >-
+      折叠托盘图标在溢出窗(TopLevelWindowForOverflowXamlIsland,title=系统托盘
+      溢出窗口。):chevron=find --name 显示隐藏的图标 --property rect 取中心,
+      --physical 点击弹出;弹出窗同懒物化,指针须停在任务栏/溢出窗上否则瞬收
+      (1 元素壳假象),满树后图标全具名(NotifyItemIcon,Invoke 与可见区同语义);
+      光标移开不收窗,再点 chevron 开关收起
   - id: current_execution_contract
     note: 发送前核对明确授权、会话身份和完整草稿；发送后核对新消息及发送状态，输入框清空不是成功凭据。所有 *_ref 为完整 @eN，与对应 *_snapshot_id 成对；moments 来自发现页快照。bubble_selector/target 为现场唯一语义选择器；不支持快照绑定的命令执行前重新观察。physical 点击仍须显式参数，失败先核验是否送达。
   - id: physical_click_required
@@ -163,10 +175,14 @@ quirks:
       窗口归属与当前值
 routes:
   - id: tray_wake
-    description: 后台托盘唤起(任务栏快照→按 ref 点图标→等主窗;不重启进程)
+    description: >-
+      后台托盘唤起(autohide 任务栏须先 hover 底缘露条顶出(幂等:已显示时
+      无害);可见区图标直接 Invoke;折叠图标先走 tray_overflow_lane;
+      整序列单 batch——指针须全程停在任务栏上)
     status: verified
     verify: 主窗出现且 foreground=true;未出现先核对是否误启多实例(list-windows 查重复 pid 族),不盲目重试
     steps:
+      - ["hover", "xy:{edge_x},{edge_y}", "--app", "任务栏"]
       - ["snapshot", "--app", "任务栏"]
       - ["click", "{tray_ref}", "--app", "任务栏", "--snapshot", "{tray_snapshot_id}"]
       - ["wait", "--window", "{window}", "--timeout", "6000"]

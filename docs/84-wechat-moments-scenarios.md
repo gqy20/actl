@@ -72,7 +72,10 @@ diff 非顶部集中,「说明层」假说否证)——像素验证须同态基�
 
 ## 6. 开放项
 
-- 托盘唤醒遇 XAML 树退化(4 元素壳)——display_change_guard 的恢复
-  路线(explorer 重启)未在本轮执行,留待下次真机会话验证;
+- ~~托盘唤醒遇 XAML 树退化~~ 已定谳(2026-10-14 追轮):4 元素壳非 XAML
+  死亡,是 **autohide 任务栏懒物化**(ABM_GETSTATE bit0=1 常态)——hover
+  底缘露条即满树恢复(4→73);溢出层同法验证(chevron 物理点击→31 元素
+  14 图标全具名)。路线已入 wechat pack(tray_wake 前置步+tray_overflow_lane
+  quirk);explorer 重启仅保留给真 XAML 死亡形态。
 - image-regions --motion 的真机阳性(实际视频帖)尚未采集:本轮视频帖
   滚出视野,判别逻辑由合成单测覆盖,见 ROADMAP 观察项。
