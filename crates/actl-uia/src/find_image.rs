@@ -93,6 +93,8 @@ pub fn find_image(spec: FindImageSpec<'_>) -> Result<Value, CtlError> {
     let factors: &[f32] = if spec.scales { &SCALE_FACTORS } else { &[1.0] };
     let mut pooled: Vec<(Match, f32)> = Vec::new();
     for &f in factors {
+        // --scales 六档逐档可见(单尺度时整个循环即一次 find.pyramid)
+        let _t = actl_core::trace::scope("find.pyramid");
         let scaled = if (f - 1.0).abs() < 1e-6 {
             needle.clone()
         } else {

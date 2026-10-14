@@ -146,7 +146,7 @@ pub fn drag(paths: &Paths, spec: DragSpec<'_>) -> Result<Value, CtlError> {
             Ok::<(), String>(())
         }
     };
-    let result = bridge::block_on(dispatch, budget)
+    let result = bridge::block_on("drag-dispatch", dispatch, budget)
         .and_then(|inner| inner.map_err(|msg| CtlError::internal(format!("browser-drag: {msg}"))));
     result?;
 

@@ -230,6 +230,7 @@ pub(crate) fn capture(
     let params = builder.build();
     let page_owned = page.clone();
     bridge::block_on(
+        "screenshot",
         async move {
             page_owned
                 .screenshot(params)

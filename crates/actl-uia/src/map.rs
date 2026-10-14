@@ -30,7 +30,11 @@ pub fn map(app: &str, duration_ms: u64) -> Result<Value, CtlError> {
     let root = find_window(&auto, &walker, app)?;
     let mut entries: Vec<MapEntry> = Vec::new();
     let mut truncated = false;
-    collect(&root, 0, &mut entries, &mut truncated);
+    {
+        // 树遍历是本命令的耗时主体(千元素级 rect+role 逐读)
+        let _t = actl_core::trace::scope("map.walk");
+        collect(&root, 0, &mut entries, &mut truncated);
+    }
     if entries.is_empty() {
         return Err(CtlError::new(
             ErrorCode::NotFound,
@@ -38,10 +42,14 @@ pub fn map(app: &str, duration_ms: u64) -> Result<Value, CtlError> {
         ));
     }
     let interactive_count = entries.iter().filter(|e| e.interactive).count();
-    let frame = SearchFrameGuard::enter_with_boxes(
-        root_hwnd(&root)?,
-        entries.iter().map(|e| (e.rect, e.interactive)).collect(),
-    );
+    let frame = {
+        // overlay 绘制(enter_with_boxes 逐框像素直写;失败 None 走 shown:false)
+        let _t = actl_core::trace::scope("map.draw");
+        SearchFrameGuard::enter_with_boxes(
+            root_hwnd(&root)?,
+            entries.iter().map(|e| (e.rect, e.interactive)).collect(),
+        )
+    };
     let shown = frame.is_some();
     // 展示窗:有界时长,逐 100ms 片过急停(与 key-down --duration 同纪律)
     let deadline = std::time::Instant::now() + std::time::Duration::from_millis(duration);

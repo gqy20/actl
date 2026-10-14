@@ -32,12 +32,16 @@ fn runtime() -> Result<&'static tokio::runtime::Runtime, CtlError> {
 }
 
 /// 在受控 runtime 上执行 future,调用线程限时阻塞等待结果。
+/// label 进 trace(breakdown `browser.<label>`):CDP 往返是网络路径,
+/// launch/settle/solve-轮询各自的耗时方差在此可见。
 /// 超时→Timeout;任务 panic/早退→Internal(fail-closed,不静默)。
-pub(crate) fn block_on<T, F>(future: F, timeout: Duration) -> Result<T, CtlError>
+pub(crate) fn block_on<T, F>(label: &str, future: F, timeout: Duration) -> Result<T, CtlError>
 where
     T: Send + 'static,
     F: Future<Output = T> + Send + 'static,
 {
+    let stage: String = format!("browser.{label}");
+    let _t = actl_core::trace::scope_owned(stage);
     let (tx, rx) = sync_channel::<T>(1);
     runtime()?.handle().spawn(async move {
         let _ = tx.send(future.await);
@@ -62,6 +66,7 @@ where
 pub(crate) fn connect(ws_url: &str, timeout: Duration) -> Result<chromiumoxide::Browser, CtlError> {
     let url = ws_url.to_string();
     let result = block_on(
+        "connect",
         async {
             chromiumoxide::Browser::connect(url)
                 .await
@@ -146,6 +151,7 @@ pub(crate) fn open_lane(
         }
     };
     match block_on(
+        "open-lane",
         work,
         timeout + Duration::from_millis(DISCOVERY_SETTLE_MAX_MS),
     ) {
@@ -183,6 +189,7 @@ pub(crate) fn eval_json(
         .map_err(|e| CtlError::protocol(format!("evaluate params: {e}")))?;
     let page_owned = page.clone();
     let text = block_on(
+        "evaluate",
         async move {
             let response = page_owned
                 .execute(params)
@@ -261,7 +268,7 @@ pub(crate) fn navigate_and_wait(
             }
         }
     };
-    match block_on(work, timeout) {
+    match block_on("navigate", work, timeout) {
         Ok(Ok(pair)) => Ok(pair),
         Ok(Err(msg)) if msg.starts_with("net_error:") => Err(CtlError::with_evidence(
             ErrorCode::Internal,
@@ -333,7 +340,7 @@ pub(crate) fn find_iframe_context(
         }
         Err("context stream ended".to_string())
     };
-    match block_on(work, timeout) {
+    match block_on("iframe-context", work, timeout) {
         Ok(Ok(pair)) => Ok(pair),
         Ok(Err(msg)) => Err(CtlError::with_evidence(
             ErrorCode::NotFound,
@@ -350,13 +357,14 @@ mod tests {
 
     #[test]
     fn block_on_returns_future_output() {
-        let value = block_on(async { 21 * 2 }, Duration::from_secs(10)).unwrap();
+        let value = block_on("test", async { 21 * 2 }, Duration::from_secs(10)).unwrap();
         assert_eq!(value, 42);
     }
 
     #[test]
     fn block_on_timeout_maps_to_timeout_code() {
         let err = block_on(
+            "test",
             async {
                 tokio::time::sleep(Duration::from_secs(30)).await;
             },
@@ -369,6 +377,7 @@ mod tests {
     #[test]
     fn panicking_task_maps_to_internal() {
         let err = block_on(
+            "test",
             async { panic!("deep-lane task panicked") },
             Duration::from_secs(10),
         )

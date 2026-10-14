@@ -415,6 +415,7 @@ pub fn launch(paths: &Paths, spec: LaunchSpec) -> Result<Value, CtlError> {
     let url_for_page = url.clone();
     let ws_path_for_lane = browser_ws_path.clone();
     let (target_id,) = bridge::block_on(
+        "launch",
         async move {
             let (browser, mut handler) = chromiumoxide::Browser::connect(format!(
                 "ws://127.0.0.1:{}{}",
@@ -1047,6 +1048,7 @@ pub fn close(paths: &Paths, session_id: &str, timeout_ms: Option<u64>) -> Result
     match bridge::connect(&ws_url, Duration::from_secs(5)) {
         Ok(browser) => {
             bridge::block_on(
+                "close",
                 async move {
                     let mut browser = browser;
                     browser.close().await.map_err(|e| format!("Browser.close: {e}"))

@@ -82,6 +82,30 @@ pub fn scope(stage: &'static str) -> TraceScope {
     }
 }
 
+/// 动态标签版(scope 的 owned 镜像):调用侧拼接阶段名(browser.<label>
+/// 按调用方归位)——非 'static 场景用;语义/Drop 纪律与 scope 完全同款。
+pub struct TraceScopeOwned {
+    stage: String,
+    started: Instant,
+}
+
+pub fn scope_owned(stage: String) -> TraceScopeOwned {
+    if enabled() || file_path().is_some() {
+        emit(&format!("[actl-trace] {stage} begin"));
+    }
+    TraceScopeOwned {
+        stage,
+        started: Instant::now(),
+    }
+}
+
+impl Drop for TraceScopeOwned {
+    fn drop(&mut self) {
+        stage(&self.stage, self.started);
+        slow_phase_notice(&self.stage, self.started);
+    }
+}
+
 impl Drop for TraceScope {
     fn drop(&mut self) {
         stage(self.stage, self.started);

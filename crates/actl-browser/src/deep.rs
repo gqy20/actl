@@ -20,6 +20,7 @@ pub fn targets(paths: &Paths, session_id: &str) -> Result<Value, CtlError> {
     );
     let browser = bridge::connect(&url, Duration::from_secs(10))?;
     let infos = bridge::block_on(
+        "targets",
         async move {
             let mut b = browser;
             let infos = b
@@ -173,7 +174,7 @@ pub fn netlog(paths: &Paths, spec: NetlogSpec<'_>) -> Result<Value, CtlError> {
     };
     // 窗口 + 余量(attach/enable/沉降/收尾),单次 block_on 覆盖全程
     let budget = Duration::from_millis(window + 15_000);
-    let (requests, truncated) = bridge::block_on(work, budget).and_then(|inner| {
+    let (requests, truncated) = bridge::block_on("netlog", work, budget).and_then(|inner| {
         inner.map_err(|msg| {
             // 目标不在场→会话失效(与浅层 verify_target_alive 同判);其余按内部错误
             if msg.contains("bound target not among live pages") {

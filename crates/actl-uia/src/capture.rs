@@ -197,6 +197,9 @@ fn release_dc_safe(hdc: windows::Win32::Graphics::Gdi::HDC) -> i32 {
 pub(crate) unsafe fn blt_window(
     hwnd: windows::Win32::Foundation::HWND,
 ) -> Result<(Vec<u8>, i32, i32), CtlError> {
+    // 像素族共享热路径(screenshot/find-image/image-regions 全走此):PrintWindow
+    // 在自绘/DWM 应用上耗时方差大,入 breakdown(slow_phase_notice >2s 自动冒头)
+    let _t = actl_core::trace::scope("capture.blt");
     use windows::Win32::Foundation::RECT;
     use windows::Win32::UI::WindowsAndMessaging::{GetWindowRect, IsIconic};
     // windows 0.62 bindings 未生成 PrintWindow(user32 实有)——手写声明,常量 PW_RENDERFULLCONTENT=2
