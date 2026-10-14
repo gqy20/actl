@@ -114,7 +114,9 @@ quirks:
   - id: esc_semantics
     note: >-
       键名是 esc 非 escape(旧 route 的 "escape" 是无效键名);朋友圈页按 esc
-      会连主窗一起藏回托盘(单键双效),恢复走 tray_wake
+      会连主窗一起藏回托盘(单键双效),恢复走 tray_wake——但图片查看器
+      打开时 esc 只关查看器、主窗保留(2026-10-14 实证:查看器打开态按 esc
+      后主窗仍在且 feed 还原)
   - id: mention_object
     note: >-
       @人引用以 U+FFFC 内嵌对象插入,输入框 Value 读回显示为对象符非纯文本——
@@ -133,6 +135,30 @@ quirks:
       键盘仍需前台)。采集/扫描类长任务 = wait --idle + --no-activate 点击;
       UI 驱动段与 wechat-ui-collector 并存时按 docs/09 §6.2 共享
       actl-input-lock 锁约定
+  - id: moments_thumb_blind
+    note: >-
+      朋友圈帖子缩略图 UIA 盲(sns_list ListItem 只有复合 name,子内容零暴露,
+      preview-map 同窗画框确认)——定位走截图+方形组件扫描(高方差连通域,
+      本 DPI 缩略图为 160×160 px 方块)或 find-image 实渲染模板;点击物理坐标
+  - id: moments_viewer_overlay
+    note: >-
+      朋友圈图片查看器是窗内覆盖层:不创建新 HWND、UIA 树零新元素(mmui::XMenu
+      同款自绘)——打开判据=list-windows 无新窗+快照无新元素+区域像素大改,
+      勿因 UIA 不可见误判未打开;关闭唯一通道 esc。与聊天图片查看器(独立窗
+      mmui::PreviewWindow,UIA 全可见)是两种形态,勿混用判据
+  - id: moments_paging
+    note: >-
+      朋友圈查看器翻页:left/right 在帖内照片间顺序导航、两端钳制不回绕
+      (实证 3 图帖:right 两次同态落点 diff 0.2,钳制后 diff ≤1.5);
+      打开态与翻页后呈现不同(缩放/说明排版)——像素验证须同态基线,
+      打开态≠翻页态的全带均匀 diff 是呈现变化非照片错乱;esc 关闭还原
+      feed(时间戳文本自更新有小 diff,布局像素一致)
+  - id: settings_panel
+    note: >-
+      设置是独立窗(title:设置);导航行可点,toggle 状态读回走
+      find --property selected;ComboBox 是自绘下拉——Expand 未实现,
+      expand 报 expand_unsupported 属能力边界非故障;改通用设置项先核
+      窗口归属与当前值
 routes:
   - id: tray_wake
     description: 后台托盘唤起(任务栏快照→按 ref 点图标→等主窗;不重启进程)
@@ -334,7 +360,7 @@ routes:
     status: manual
     steps:
       - ["snapshot", "--app", "{window}", "--skeleton"]
-      - ["screenshot", "--element", "{bubble_selector}", "--sapp", "{window}"]
+      - ["screenshot", "--element", "{bubble_selector}", "--app", "{window}"]
       # 之后的视觉模型调用由上层 agent 完成(把 PNG 路径喂给多模态)
   - id: capture_context_menu
     description: 右键菜单捕获(菜单是 mmui overlay,UIA 不可见;截 point 右下区域给视觉)
@@ -343,4 +369,46 @@ routes:
     steps:
       - ["right-click", "{target}", "--app", "{window}"]
       - ["screenshot", "--rect", "{menu_x},{menu_y},{menu_w},{menu_h}"]
+      - ["press", "esc", "--app", "{window}"]
+  - id: chat_image_open
+    description: 聊天图片查看(图片气泡点击→独立窗 图片和视频 mmui::PreviewWindow,UIA 全可见;esc 关闭)
+    status: verified
+    verify: list-windows 出现 mmui::PreviewWindow(与主窗同 pid 族);内容判读可另走 decide 视觉咨询(0.97+);关闭后核对窗口消失
+    steps:
+      - ["find", "--name", "图片", "--role", "ListItem", "--property", "rect", "--app", "{window}"]
+      # 缩略图在气泡 rect 内但 ref-replay 落点可能在文字/空白——用 find-image 实渲染模板或组件扫描定缩略图中心
+      - ["click", "xy:{thumb_point}", "--app", "{window}", "--physical"]
+      - ["wait", "--window", "图片和视频", "--timeout", "6000"]
+      - ["press", "esc", "--app", "图片和视频"]
+  - id: settings_open
+    description: 打开设置(更多弹层→设置按钮 Invoke 可用→设置独立窗;toggle 读回 selected;ComboBox 下拉不可展开见 quirks)
+    status: verified
+    verify: 设置窗出现且 foreground;修改 toggle 后 find --property selected 读回核对
+    steps:
+      - ["click", "id:MainView.main_tabbar.tabbar_setting", "--app", "{window}", "--physical"]
+      - ["find", "--name", "设置", "--app", "{window}"]
+      - ["click", "{settings_menu_ref}", "--app", "{window}", "--snapshot", "{settings_menu_snapshot_id}"]
+      - ["wait", "--window", "设置", "--timeout", "6000"]
+      - ["snapshot", "--app", "设置"]
+      - ["find", "--name", "{toggle_name}", "--property", "selected", "--app", "设置"]
+      - ["press", "esc", "--app", "设置"]
+  - id: moments_thumbnail_open
+    description: 朋友圈帖子缩略图查看(缩略图 UIA 盲→截图组件扫描定位→物理点击→窗内覆盖层查看器→esc)
+    status: verified
+    verify: 打开判据=无新窗+区域像素大改(对比打开前后同 rect 截图 diff>5);关闭后同 rect diff 回落至时间戳级
+    steps:
+      - ["find", "--id", "sns_list", "--property", "rect", "--app", "{window}"]
+      - ["screenshot", "--rect", "{sns_x},{sns_y},{sns_w},{sns_h}"]
+      # agent 步:方形组件扫描(160×160 高方差块)或 find-image 实渲染模板得 {thumb_point}(屏幕物理坐标)
+      - ["click", "xy:{thumb_point}", "--app", "{window}", "--physical"]
+      - ["screenshot", "--rect", "{sns_x},{sns_y},{sns_w},{sns_h}"]
+      - ["press", "esc", "--app", "{window}"]
+  - id: moments_photo_paging
+    description: 朋友圈查看器翻页(right/left 帖内导航、两端钳制;像素验证须同态基线见 quirks)
+    status: verified
+    verify: 翻页前后同 rect 截图 diff>5(呈现变化);连按过末端后 diff≤1.5(钳制)
+    steps:
+      - ["press", "right", "--app", "{window}", "--repeat", "{n}"]
+      - ["screenshot", "--rect", "{sns_x},{sns_y},{sns_w},{sns_h}"]
+      - ["press", "left", "--app", "{window}", "--repeat", "{n}"]
       - ["press", "esc", "--app", "{window}"]
