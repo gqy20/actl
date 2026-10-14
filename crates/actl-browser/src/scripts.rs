@@ -179,3 +179,67 @@ pub(crate) fn scroll_page_script() -> String {
      at_bottom:at_bottom});})()"
         .into()
 }
+
+/// 元素包围盒脚本(browser-screenshot/challenge-solve 的坐标面):唯一
+/// 匹配的 getBoundingClientRect(CSS px,视口系)+ 视口尺寸。0/多命中
+/// 如实上报(唯一语义与 read/click 同判)。
+pub(crate) fn element_box_script(kind: SelectorKind, value: &str) -> String {
+    let embedded = serde_json::to_string(value).unwrap_or_default();
+    let locate = match kind {
+        SelectorKind::Css => format!("document.querySelectorAll({embedded})"),
+        SelectorKind::Xpath => format!(
+            "document.evaluate({embedded},document,null,\
+             XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,null)"
+        ),
+    };
+    format!(
+        "(function(){{\
+         var root={locate};\
+         var n=(root&&root.length!==undefined)?root.length:\
+         (root&&root.snapshotLength!==undefined?root.snapshotLength:0);\
+         if(n===0)return JSON.stringify({{matches:0}});\
+         if(n>1)return JSON.stringify({{matches:n}});\
+         var e=(root.length!==undefined)?root[0]:root.snapshotItem(0);\
+         var r=e.getBoundingClientRect();\
+         return JSON.stringify({{matches:1,\
+         x:Math.round(r.x*100)/100,y:Math.round(r.y*100)/100,\
+         width:Math.round(r.width*100)/100,height:Math.round(r.height*100)/100,\
+         vw:window.innerWidth,vh:window.innerHeight}});}})()"
+    )
+}
+
+/// 挑战信号采集脚本(browser-verify --challenge / challenge-solve):
+/// title + script/iframe src 清单(有界) + 预置 DOM 标记命中。标记选择器
+/// 全集与 actl_core::challenge::MARKER_IDS 两侧同步演进(表侧单测钉住)。
+/// `window._cf_chl_opt` 是脚本环境标记,经 in 检查取布尔。
+pub(crate) fn challenge_scan_script() -> String {
+    let markers: Vec<String> = actl_core::challenge::MARKER_IDS
+        .iter()
+        .map(|(id, selector)| {
+            let probe = if selector.starts_with("window.") {
+                format!("({selector}!==undefined)")
+            } else {
+                // 选择器以 JSON 字面量嵌入(serde 转义——表内含单引号属性
+                // 选择器,裸单引号包裹会撞 JS 语法)
+                format!(
+                    "!!document.querySelector({})",
+                    serde_json::to_string(selector).unwrap_or_default()
+                )
+            };
+            format!("'{id}':{probe}")
+        })
+        .collect();
+    format!(
+        "(function(){{\
+         var scripts=[];var ss=document.querySelectorAll('script[src]');\
+         for(var i=0;i<ss.length&&scripts.length<120;i++)\
+         scripts.push(String(ss[i].src).slice(0,512));\
+         var iframes=[];var fs=document.querySelectorAll('iframe[src]');\
+         for(var j=0;j<fs.length&&iframes.length<60;j++)\
+         iframes.push(String(fs[j].src).slice(0,512));\
+         var markers={{{}}};\
+         return JSON.stringify({{title:document.title||'',\
+         scripts:scripts,iframes:iframes,markers:markers}});}})()",
+        markers.join(",")
+    )
+}

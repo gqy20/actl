@@ -7,6 +7,7 @@
 
 mod browser;
 mod cli;
+mod cli_help;
 mod condition;
 mod decide;
 mod file_check;
@@ -25,7 +26,8 @@ use actl_core::{CtlError, Envelope, ErrorEnvelope};
 use clap::FromArgMatches;
 use serde_json::{Value, json};
 
-use crate::cli::{Cli, Command, DesktopCommand, app_of, command_name};
+use crate::cli::{Cli, Command, DesktopCommand, app_of};
+use crate::cli_help::command_name;
 use crate::{interact::*, query::*};
 
 /// 命令执行产物:data 进 envelope,`snapshot_id` 存在时附加到顶层(06 §4)。
@@ -50,7 +52,7 @@ fn main() {
     // 必须在 clap 解析与任何 UIA/DC 调用之前(设置过窗口后被拒)。
     actl_uia::ensure_process_pmv2();
     // clap 树注入 after_help 后再 parse(Example/Errors 进 -h;06 §3.5)
-    let matches = crate::cli::build_cli().get_matches();
+    let matches = crate::cli_help::build_cli().get_matches();
     let cli = match Cli::from_arg_matches(&matches) {
         Ok(cli) => cli,
         Err(error) => error.exit(),
@@ -600,6 +602,8 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             app,
             near,
             to_near,
+            human,
+            seed,
         } => drag_cmd(
             target,
             to,
@@ -607,6 +611,8 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             app.as_deref(),
             near.as_deref(),
             to_near.as_deref(),
+            *human,
+            *seed,
         ),
         Command::Scroll {
             target,
@@ -822,6 +828,69 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
         Command::BrowserClose { session, timeout } => browser::close_cmd(session, *timeout),
         Command::BrowserList => browser::list_cmd(),
         Command::BrowserTargets { session } => browser::targets_cmd(session),
+        Command::BrowserScreenshot {
+            session,
+            css,
+            xpath,
+            iframe,
+            target,
+            out,
+            timeout,
+        } => browser::screenshot_cmd(browser::ScreenshotArgs {
+            session,
+            css: css.as_deref(),
+            xpath: xpath.as_deref(),
+            iframe: *iframe,
+            target: target.as_deref(),
+            out: out.as_deref(),
+            timeout: *timeout,
+        }),
+        Command::BrowserDrag {
+            session,
+            from,
+            to,
+            human,
+            seed,
+            target,
+            timeout,
+        } => browser::drag_cmd(browser::DragArgs {
+            session,
+            from,
+            to,
+            human: *human,
+            seed: *seed,
+            target: target.as_deref(),
+            timeout: *timeout,
+        }),
+        Command::ChallengeSolve {
+            session,
+            track_css,
+            piece_css,
+            handle_css,
+            success_css,
+            template,
+            threshold,
+            attempts,
+            no_human,
+            seed,
+            iframe,
+            target,
+            timeout,
+        } => browser::solve_cmd(browser::SolveArgs {
+            session,
+            track_css,
+            piece_css,
+            handle_css,
+            success_css,
+            template: template.as_deref(),
+            threshold: *threshold,
+            attempts: *attempts,
+            human: !*no_human,
+            seed: *seed,
+            iframe: *iframe,
+            target: target.as_deref(),
+            timeout: *timeout,
+        }),
         Command::AppRegister {
             name,
             path,
@@ -873,6 +942,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             contains,
             no_popups,
             popup_selector,
+            challenge,
             none,
             newest_alive,
             timeout,
@@ -885,6 +955,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             contains: contains.as_deref(),
             no_popups: *no_popups,
             popup_selector: popup_selector.as_deref(),
+            challenge: *challenge,
             none: *none,
             newest_alive: *newest_alive,
             timeout: *timeout,

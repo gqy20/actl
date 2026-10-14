@@ -10,11 +10,14 @@
 //! - 会话文件落 actl 数据目录,launcher 保证 user-data-dir 绝对化与调试端口出现,
 //!   否则启动即失败(docs/72 §11 不变量:自启实例必须总能经 CDP 优雅关闭)。
 
+pub mod challenge;
 pub mod collect;
 pub mod deep;
+pub mod input;
 pub mod ops;
 mod scripts;
 pub mod session;
+pub mod shot;
 pub mod verify;
 
 mod bridge;

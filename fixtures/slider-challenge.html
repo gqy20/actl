@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>slider fixture</title>
+<style>
+  body { font-family: sans-serif; background: #fafafa; margin: 40px; }
+  #challenge { position: relative; width: 420px; user-select: none; }
+  .track { position: relative; width: 420px; height: 180px; border: 1px solid #ccc; }
+  .handle { position: absolute; width: 48px; height: 48px; background: #2196f3; border-radius: 4px; top: 70px; left: 0; cursor: pointer; }
+  .piece { position: absolute; width: 48px; height: 48px; top: 66px; left: 0; }
+  #challenge-success { display: none; color: #2e7d32; font-size: 20px; margin-top: 20px; }
+  #challenge-fail { display: none; color: #c62828; margin-top: 10px; }
+</style>
+</head>
+<body>
+<div id="challenge">
+  <div class="track">
+    <canvas class="track-canvas" width="420" height="180" style="width:420px;height:180px"></canvas>
+    <div class="piece">
+      <canvas class="piece-canvas" width="48" height="48" style="width:48px;height:48px"></canvas>
+    </div>
+    <div class="handle"></div>
+  </div>
+</div>
+<div id="challenge-success">challenge solved</div>
+<div id="challenge-fail">failed — try again</div>
+<script>
+(function () {
+  // Deterministic from URL ?seed=N (default 7): the same seed → the same gap
+  var seed = 7;
+  try { var m = /[?&]seed=(\d+)/.exec(location.search); if (m) seed = parseInt(m[1], 10) || 7; } catch (e) {}
+  var rng = (function () { var s = seed; return function () { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; }; })();
+  var TRACK_W = 420, TRACK_H = 180, PIECE = 48;
+  var GAP_X = Math.floor(80 + rng() * (TRACK_W - PIECE - 90)); // 80..(W-58)
+  var GAP_Y = 66; // top of piece in track
+
+  // Noise background: light gray base + deterministic speckle; the piece area
+  // (where the piece sits at x=0) carries a distinctive pattern duplicated at
+  // the gap position — ZNCC finds the piece pattern at the gap.
+  var bg = document.querySelector('.track-canvas');
+  var ctx = bg.getContext('2d');
+  ctx.fillStyle = '#efefef'; ctx.fillRect(0, 0, TRACK_W, TRACK_H);
+  for (var i = 0; i < 900; i++) {
+    var v = Math.floor(200 + rng() * 55);
+    ctx.fillStyle = 'rgba(' + v + ',' + v + ',' + v + ',0.5)';
+    ctx.fillRect(Math.floor(rng() * TRACK_W), Math.floor(rng() * TRACK_H), 3, 3);
+  }
+  // The distinctive patch (piece graphic, drawn at x=0 and re-stamped at the gap):
+  // a 48×48 gradient square with a dark border and internal crossbars
+  function drawPatch(c2, x, y) {
+    var g = c2.createLinearGradient(x, y, x + PIECE, y + PIECE);
+    g.addColorStop(0, '#c62828'); g.addColorStop(1, '#7b1fa2');
+    c2.fillStyle = g; c2.fillRect(x, y, PIECE, PIECE);
+    c2.strokeStyle = '#212121'; c2.lineWidth = 2; c2.strokeRect(x, y, PIECE, PIECE);
+    c2.beginPath();
+    c2.moveTo(x, y); c2.lineTo(x + PIECE, y + PIECE);
+    c2.moveTo(x + PIECE, y); c2.lineTo(x, y + PIECE);
+    c2.stroke();
+  }
+  // Gap: faint hole outline at GAP_X + the patch (ZNCC target)
+  ctx.fillStyle = 'rgba(0,0,0,0.12)'; ctx.fillRect(GAP_X, GAP_Y, PIECE, PIECE);
+  drawPatch(ctx, GAP_X, GAP_Y);
+  // Piece at origin x=0 (the same patch → template match succeeds at the gap)
+  var piece = document.querySelector('.piece-canvas');
+  var pctx = piece.getContext('2d');
+  drawPatch(pctx, 0, 0);
+
+  // Drag mechanics: pointer events on the handle; dx moves piece+handle;
+  // release checks |piece_x - GAP_X| <= 3 → #challenge-success appears.
+  var handle = document.querySelector('.handle');
+  var pieceEl = document.querySelector('.piece');
+  var dragging = false, startX = 0, originLeft = 0;
+  function currentLeft(el) { return parseFloat(el.style.left || '0'); }
+  function setLeft(el, v) { el.style.left = v + 'px'; }
+  handle.addEventListener('pointerdown', function (ev) {
+    dragging = true; startX = ev.clientX; originLeft = currentLeft(handle);
+    handle.setPointerCapture(ev.pointerId);
+  });
+  window.addEventListener('pointermove', function (ev) {
+    if (!dragging) return;
+    var dx = ev.clientX - startX;
+    var next = Math.max(0, Math.min(TRACK_W - PIECE, originLeft + dx));
+    setLeft(handle, next); setLeft(pieceEl, next);
+  });
+  window.addEventListener('pointerup', function () {
+    if (!dragging) return;
+    dragging = false;
+    var landed = currentLeft(pieceEl);
+    if (Math.abs(landed - GAP_X) <= 3) {
+      document.getElementById('challenge-success').style.display = 'block';
+      document.getElementById('challenge-fail').style.display = 'none';
+    } else {
+      document.getElementById('challenge-fail').style.display = 'block';
+      // reset for a retry
+      setLeft(handle, 0); setLeft(pieceEl, 0);
+    }
+  });
+})();
+</script>
+</body>
+</html>

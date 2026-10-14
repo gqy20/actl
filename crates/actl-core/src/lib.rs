@@ -6,6 +6,7 @@
 use serde::{Deserialize, Serialize};
 
 pub mod activity;
+pub mod challenge;
 pub mod collect;
 pub mod control_log;
 pub mod decision;
@@ -29,6 +30,7 @@ pub mod target;
 pub mod template_match;
 pub mod timing;
 pub mod trace;
+pub mod trajectory;
 pub mod wait_control;
 pub mod watchdog;
 

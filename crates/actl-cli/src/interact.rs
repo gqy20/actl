@@ -578,6 +578,8 @@ pub(crate) fn parse_waypoints(raw: &[String]) -> Result<Vec<(i32, i32)>, CtlErro
         .collect()
 }
 
+// clap 变体字段直转链路上的函数,参数即命令面(与 browser.rs 适配层同豁免)
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn drag_cmd(
     from_raw: &str,
     to_raw: &str,
@@ -585,10 +587,20 @@ pub(crate) fn drag_cmd(
     app: Option<&str>,
     near: Option<&str>,
     to_near: Option<&str>,
+    human: bool,
+    seed: Option<u64>,
 ) -> Result<CommandOutput, CtlError> {
     let from = actl_core::parse_target(from_raw)?;
     let to = actl_core::parse_target(to_raw)?;
     let waypoints = parse_waypoints(path)?;
+    if human && !waypoints.is_empty() {
+        return Err(CtlError::protocol(
+            "--human generates the trajectory itself; --path waypoints are mutually exclusive",
+        ));
+    }
+    if human && seed.is_none() {
+        // 缺省种子=时间戳:同次调用不可复放;确定性回放传显式 --seed
+    }
     if matches!(from, actl_core::Target::CoordRel(..))
         || matches!(to, actl_core::Target::CoordRel(..))
     {
@@ -603,11 +615,16 @@ pub(crate) fn drag_cmd(
             actl_core::Target::Coord(_, _)
         )
     );
-    if !waypoints.is_empty() || coord_pair {
-        let drag = actl_uia::drag_path_physical(app, &from, &to, &waypoints)?;
+    if human || !waypoints.is_empty() || coord_pair {
+        let human_seed = if human {
+            Some(seed.unwrap_or_else(|| actl_core::state::unix_ms() as u64))
+        } else {
+            None
+        };
+        let drag = actl_uia::drag_path_physical(app, &from, &to, &waypoints, human_seed)?;
         return Ok(json!({
             "action": "drag",
-            "mode": "path",
+            "mode": if human { "human" } else { "path" },
             "from": drag.from,
             "to": to.describe(),
             "waypoints": waypoints.len(),

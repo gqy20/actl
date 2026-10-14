@@ -1,10 +1,9 @@
 //! cli —— clap 参数面:命令/参数定义。
 //! help 文本英文、三处输出(L0/L1/L2)从本文件的 doc comment 同源生成(06 §3.5);
 //! `commands` 自发现命令读的也是这棵树(schema 与 help 单一事实来源)。
+//! help 注入(build_cli)拆至 cli_help.rs(file-lines 治理)。
 
-use clap::{CommandFactory, Parser, Subcommand};
-
-use crate::help_text::after_help_for;
+use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(
@@ -684,6 +683,14 @@ pub(crate) enum Command {
         /// Anchor disambiguation for the destination
         #[arg(long)]
         to_near: Option<String>,
+        /// Human-shaped trajectory (actl-core trajectory shaper: velocity profile with
+        /// peak at ~72% travel, overshoot+pullback, arm drift, seeded determinism) —
+        /// mutually exclusive with --path
+        #[arg(long, requires = "app")]
+        human: bool,
+        /// Seed for --human (deterministic replay; default = timestamp)
+        #[arg(long, value_name = "N", requires = "human")]
+        seed: Option<u64>,
     },
     /// Scroll an element (UIA Scroll pattern first, physical wheel fallback)
     Scroll {
@@ -1145,6 +1152,96 @@ pub(crate) enum Command {
         #[arg(long)]
         session: String,
     },
+    /// Capture pixels from the session page as a PNG (element clip or full viewport; read-only observation — vision consumption is the caller's decision)
+    BrowserScreenshot {
+        /// Session id from browser-launch
+        #[arg(long)]
+        session: String,
+        /// Clip to this element's bounding rect (CSS px, viewport-intersected; unique-match hard rule)
+        #[arg(long, id = "bs_css", conflicts_with = "bs_xpath")]
+        css: Option<String>,
+        /// Clip to this XPath element's bounding rect
+        #[arg(long, id = "bs_xpath", conflicts_with = "bs_css")]
+        xpath: Option<String>,
+        /// Resolve the selector inside the first cross-origin iframe
+        #[arg(long)]
+        iframe: bool,
+        /// Address a specific CDP target instead of the bound tab (see browser-targets)
+        #[arg(long)]
+        target: Option<String>,
+        /// Output PNG path (default: %LOCALAPPDATA%\actl\browser\shots, keep-20)
+        #[arg(long)]
+        out: Option<String>,
+        /// Timeout in milliseconds (default 10000)
+        #[arg(long)]
+        timeout: Option<u64>,
+    },
+    /// Dispatch a CDP Input drag (viewport CSS px; machine line default, --human for shaped trajectory) — a write action with stop-generation checks
+    BrowserDrag {
+        /// Session id from browser-launch
+        #[arg(long)]
+        session: String,
+        /// Start point X,Y (viewport CSS pixels)
+        #[arg(long = "from", value_name = "X,Y")]
+        from: String,
+        /// End point X,Y (viewport CSS pixels)
+        #[arg(long = "to", value_name = "X,Y")]
+        to: String,
+        /// Human-shaped trajectory (actl-core trajectory shaper: velocity peak ~72%, overshoot+pullback, arm drift; seeded determinism)
+        #[arg(long)]
+        human: bool,
+        /// Seed for --human (deterministic replay; default = timestamp)
+        #[arg(long, value_name = "N", requires = "human")]
+        seed: Option<u64>,
+        /// Address a specific CDP target (see browser-targets)
+        #[arg(long)]
+        target: Option<String>,
+        /// Timeout in milliseconds (default 10000)
+        #[arg(long)]
+        timeout: Option<u64>,
+    },
+    /// Solve a presented slider challenge (detect → ZNCC gap → human-shaped drag → validate; bounded retries, honest failure)
+    ChallengeSolve {
+        /// Session id from browser-launch
+        #[arg(long)]
+        session: String,
+        /// Track element (the strip image containing the gap; unique-match hard rule)
+        #[arg(long = "track-css", value_name = "S")]
+        track_css: String,
+        /// Piece element (the draggable puzzle piece — also the displacement origin)
+        #[arg(long = "piece-css", value_name = "S")]
+        piece_css: String,
+        /// Handle element (the slider control to press and drag)
+        #[arg(long = "handle-css", value_name = "S")]
+        handle_css: String,
+        /// Success predicate selector (e.g. #challenge-success; validation is the completion criterion — required)
+        #[arg(long = "success-css", value_name = "S")]
+        success_css: String,
+        /// Template PNG override (default: piece element screenshot; use when the piece renders differently from the track content)
+        #[arg(long)]
+        template: Option<String>,
+        /// ZNCC threshold (0,1]; default 0.75 (gap edges are soft — find-image's 0.85 would miss)
+        #[arg(long)]
+        threshold: Option<f64>,
+        /// Max attempts (1..=2; default 1 — failures feed the risk engine, no blind retries)
+        #[arg(long)]
+        attempts: Option<u64>,
+        /// Human-shaped drag trajectory (default on for solving; pass --no-human for machine-line debugging)
+        #[arg(long = "no-human")]
+        no_human: bool,
+        /// Seed for the human trajectory (deterministic replay; default = timestamp)
+        #[arg(long, value_name = "N")]
+        seed: Option<u64>,
+        /// Resolve selectors inside the first cross-origin iframe
+        #[arg(long)]
+        iframe: bool,
+        /// Address a specific CDP target (see browser-targets)
+        #[arg(long)]
+        target: Option<String>,
+        /// Timeout in milliseconds (default 10000)
+        #[arg(long)]
+        timeout: Option<u64>,
+    },
     /// Register a local application path (stable) or pattern (Store apps with version wildcards)
     AppRegister {
         /// Short name for the app (1-64 [a-zA-Z0-9_-])
@@ -1197,11 +1294,18 @@ pub(crate) enum Command {
         #[arg(long, requires = "session")]
         contains: Option<String>,
         /// Popup-surface predicate: with --session, assert ZERO visible in-page popup surfaces
-        #[arg(long, requires = "session", id = "bv_popups", conflicts_with_all = ["alive", "bv_gone", "bv_css", "bv_xpath"])]
+        #[arg(long, requires = "session", id = "bv_popups", conflicts_with_all = ["alive", "bv_gone", "bv_css", "bv_xpath", "bv_challenge"])]
         no_popups: bool,
         /// With --no-popups: replace the default popup selector (dialog[open], role=dialog/alertdialog, aria-modal)
         #[arg(long, requires = "bv_popups")]
         popup_selector: Option<String>,
+        /// Challenge predicate: with --session, assert ZERO known human-verification
+        /// signatures on the page (Cloudflare/geetest/TCaptcha/aliyun/dingxiang/yidun/
+        /// recaptcha/hcaptcha/arkose/datadome family table, actl-core); hits →
+        /// ASSERTION_FAILED with family evidence — flow when/unless composes the
+        /// "challenge detected → solve/pause" branch
+        #[arg(long, requires = "session", id = "bv_challenge", conflicts_with_all = ["alive", "bv_gone", "bv_css", "bv_xpath", "bv_popups"])]
+        challenge: bool,
         /// Assert zero active sessions (post-close in a flow-owned lifecycle)
         #[arg(long, conflicts_with_all = ["session"])]
         none: bool,
@@ -1328,138 +1432,4 @@ pub(crate) fn app_of(cmd: &Command) -> Option<String> {
         | Command::Collect { app, .. } => app.clone(),
         _ => None,
     }
-}
-
-/// envelope 的 command 字段(06 §4)。
-pub(crate) fn command_name(cmd: &Command) -> &'static str {
-    match cmd {
-        Command::Commands => "commands",
-        Command::Status => "status",
-        Command::Decide { .. } => "decide",
-        Command::Preview { .. } => "preview",
-        Command::Desktop(DesktopCommand::DisplayStatus) => "display-status",
-        Command::Desktop(DesktopCommand::ExecutionStatus) => "execution-status",
-        Command::Desktop(DesktopCommand::FocusReport) => "focus-report",
-        Command::Desktop(DesktopCommand::GetSelection { .. }) => "get-selection",
-        Command::Desktop(DesktopCommand::FrontReport { .. }) => "front-report",
-        Command::Desktop(DesktopCommand::ResidueReport) => "residue-report",
-        Command::Desktop(DesktopCommand::ExecutionRecover) => "execution-recover",
-        Command::Desktop(DesktopCommand::TaskArchive { .. }) => "task-archive",
-        Command::Flow(FlowCommand::Validate { .. }) => "flow-validate",
-        Command::Flow(FlowCommand::Run { .. }) => "flow-run",
-        Command::Flow(FlowCommand::Status { .. }) => "flow-status",
-        Command::Flow(FlowCommand::Evidence { .. }) => "flow-evidence",
-        Command::Flow(FlowCommand::Pause { .. }) => "flow-pause",
-        Command::Flow(FlowCommand::Resume { .. }) => "flow-resume",
-        Command::Flow(FlowCommand::Revise { .. }) => "flow-revise",
-        Command::Flow(FlowCommand::Clean { .. }) => "flow-clean",
-        Command::Flow(FlowCommand::Writeback { .. }) => "explore-writeback",
-        Command::Record(RecordCommand::Start { .. }) => "record-start",
-        Command::Record(RecordCommand::Worker { .. }) => "record-worker",
-        Command::Record(RecordCommand::Stop { .. }) => "record-stop",
-        Command::Record(RecordCommand::Status { .. }) => "record-status",
-        Command::Desktop(DesktopCommand::History { .. }) => "history",
-        Command::Desktop(DesktopCommand::DisplayStart) => "display-start",
-        Command::Desktop(DesktopCommand::DisplayStop { .. }) => "display-stop",
-        Command::Desktop(DesktopCommand::MinimizeWindow { .. }) => "minimize-window",
-        Command::Desktop(DesktopCommand::MaximizeWindow { .. }) => "maximize-window",
-        Command::Desktop(DesktopCommand::RestoreWindow { .. }) => "restore-window",
-        Command::Desktop(DesktopCommand::DesktopPrepare { .. }) => "desktop-prepare",
-        Command::Desktop(DesktopCommand::DesktopRestore { .. }) => "desktop-restore",
-        Command::Snapshot { .. } => "snapshot",
-        Command::Click { .. } => "click",
-        Command::Focus { .. } => "focus",
-        Command::Get { .. } => "get",
-        Command::Launch { .. } => "launch",
-        Command::Type { .. } => "type",
-        Command::Press { .. } => "press",
-        Command::Paste { .. } => "paste",
-        Command::FindImage { .. } => "find-image",
-        Command::Screenshot { .. } => "screenshot",
-        Command::SetValue { .. } => "set-value",
-        Command::RightClick { .. } => "right-click",
-        Command::DoubleClick { .. } => "double-click",
-        Command::Hover { .. } => "hover",
-        Command::MiddleClick { .. } => "middle-click",
-        Command::TripleClick { .. } => "triple-click",
-        Command::Drag { .. } => "drag",
-        Command::Scroll { .. } => "scroll",
-        Command::KeyDown { .. } => "key-down",
-        Command::KeyUp { .. } => "key-up",
-        Command::ResizeWindow { .. } => "resize-window",
-        Command::Verify { .. } => "verify",
-        Command::VerifyFile { .. } => "verify-file",
-        Command::VerifyRows { .. } => "verify-rows",
-        Command::VerifyOwner { .. } => "verify-owner",
-        Command::VerifyClosed { .. } => "verify-closed",
-        Command::VerifyWindow { .. } => "verify-window",
-        Command::VerifyClipboard { .. } => "verify-clipboard",
-        Command::Extract { .. } => "extract",
-        Command::Select { .. } => "select",
-        Command::Toggle { .. } => "toggle",
-        Command::FocusWindow { .. } => "focus-window",
-        Command::CloseWindow { .. } => "close-window",
-        Command::ListWindows { .. } => "list-windows",
-        Command::Find { .. } => "find",
-        Command::Collect { .. } => "collect",
-        Command::BrowserLaunch { .. } => "browser-launch",
-        Command::BrowserNavigate { .. } => "browser-navigate",
-        Command::BrowserRead { .. } => "browser-read",
-        Command::BrowserCollect { .. } => "browser-collect",
-        Command::BrowserNetlog { .. } => "browser-netlog",
-        Command::BrowserType { .. } => "browser-type",
-        Command::BrowserClick { .. } => "browser-click",
-        Command::BrowserClose { .. } => "browser-close",
-        Command::BrowserList => "browser-list",
-        Command::BrowserTargets { .. } => "browser-targets",
-        Command::AppRegister { .. } => "app-register",
-        Command::AppList => "app-list",
-        Command::AppLocate { .. } => "app-locate",
-        Command::AppRemove { .. } => "app-remove",
-        Command::BrowserVerify { .. } => "browser-verify",
-        Command::GetClipboard => "get-clipboard",
-        Command::SetClipboard { .. } => "set-clipboard",
-        Command::ClipboardSave { .. } => "clipboard-save",
-        Command::ClipboardRestore { .. } => "clipboard-restore",
-        Command::ClipboardFormats => "clipboard-formats",
-        Command::Wait { .. } => "wait",
-        Command::Batch { .. } => "batch",
-    }
-}
-
-/// 带注入的 clap 树:-h/--help 渲染 after_help(Example/Errors);与
-/// `Cli::parse()` 的差异仅此(参数校验逻辑完全同源)。
-pub(crate) fn build_cli() -> clap::Command {
-    let mut root = Cli::command();
-    for sub in root.get_subcommands_mut() {
-        if let Some(text) = after_help_for(sub.get_name()) {
-            let selector_help = if matches!(
-                sub.get_name(),
-                "find"
-                    | "click"
-                    | "get"
-                    | "type"
-                    | "set-value"
-                    | "select"
-                    | "toggle"
-                    | "right-click"
-                    | "double-click"
-                    | "triple-click"
-                    | "hover"
-                    | "drag"
-                    | "scroll"
-                    | "extract"
-                    | "press"
-                    | "screenshot"
-                    | "verify"
-                    | "wait"
-            ) {
-                "\nStrict UIA target syntax: see `actl find --help`"
-            } else {
-                ""
-            };
-            *sub = std::mem::take(sub).after_help(format!("{text}{selector_help}"));
-        }
-    }
-    root
 }

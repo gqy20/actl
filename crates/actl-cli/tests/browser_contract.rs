@@ -619,3 +619,166 @@ fn target_override_rejects_malformed_ids_before_session_lookup() {
         assert_eq!(v["error"]["code"], "PROTOCOL");
     }
 }
+
+// ===== 挑战面三命令(2026-10-14 spec):browser-screenshot/browser-drag/
+// challenge-solve/browser-verify --challenge 契约。真机行为(截图像素/
+// 拖拽派发/解题闭环)走场景验收轨——fixture 实测见 docs/CHANGELOG。 =====
+
+#[test]
+fn challenge_commands_help_has_four_elements() {
+    for cmd in ["browser-screenshot", "browser-drag", "challenge-solve"] {
+        let out = support::IsolatedCommand::new()
+            .command
+            .args([cmd, "--help"])
+            .output()
+            .unwrap();
+        assert_eq!(out.status.code(), Some(0), "{cmd} --help must exit 0");
+        let text = String::from_utf8_lossy(&out.stdout);
+        assert!(text.contains("Usage:"), "{cmd} help lacks Usage");
+        assert!(text.contains("Example:"), "{cmd} help lacks Example");
+        assert!(text.contains("Errors:"), "{cmd} help lacks Errors");
+    }
+}
+
+#[test]
+fn challenge_commands_appear_in_self_description() {
+    let (code, stdout) = actl(&["commands"]);
+    assert_eq!(code, 0);
+    let v: Value = serde_json::from_str(&stdout).unwrap();
+    let names: Vec<&str> = v["data"]["commands"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["name"].as_str().unwrap())
+        .collect();
+    for cmd in ["browser-screenshot", "browser-drag", "challenge-solve"] {
+        assert!(names.contains(&cmd), "{cmd} missing from commands surface");
+    }
+}
+
+#[test]
+fn screenshot_requires_session_and_rejects_unknown() {
+    let (code, stdout) = actl(&["browser-screenshot", "--css", ".x"]);
+    assert_eq!(code, 2, "missing --session is PROTOCOL: {stdout}");
+
+    let (code, stdout) = actl(&["browser-screenshot", "--session", "nope123", "--css", ".x"]);
+    assert_eq!(code, 1, "unknown session is NOT_FOUND: {stdout}");
+    let v: Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(v["error"]["code"], "NOT_FOUND");
+}
+
+#[test]
+fn drag_validates_points_before_session() {
+    let (code, stdout) = actl(&[
+        "browser-drag",
+        "--session",
+        "nope123",
+        "--from",
+        "100",
+        "--to",
+        "200,300",
+    ]);
+    assert_eq!(code, 2, "malformed --from is PROTOCOL: {stdout}");
+    let v: Value = serde_json::from_str(&stdout).unwrap();
+    assert!(
+        v["error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("--from"),
+        "{stdout}"
+    );
+}
+
+#[test]
+fn solve_requires_success_predicate_and_all_selectors() {
+    // 四选择器齐但成功谓词属于必需参数(clap 层)——这里钉互斥与校验序
+    let (code, stdout) = actl(&[
+        "challenge-solve",
+        "--session",
+        "nope123",
+        "--track-css",
+        ".t",
+        "--piece-css",
+        ".p",
+        "--handle-css",
+        ".h",
+        "--success-css",
+        "#ok",
+        "--threshold",
+        "1.5",
+    ]);
+    assert_eq!(code, 2, "threshold out of (0,1] is PROTOCOL: {stdout}");
+
+    let (code, stdout) = actl(&[
+        "challenge-solve",
+        "--session",
+        "nope123",
+        "--track-css",
+        ".t",
+        "--piece-css",
+        ".p",
+        "--handle-css",
+        ".h",
+        "--success-css",
+        "#ok",
+        "--attempts",
+        "5",
+    ]);
+    // attempts 钳到 2 不拒——校验语义见 envelope;会话未知先失败(NOT_FOUND)
+    let v: Value = serde_json::from_str(&stdout).unwrap();
+    assert!(code == 1 || code == 2, "unknown session / clamp: {stdout}");
+    assert!(
+        v["error"]["code"] == "NOT_FOUND" || v["error"]["code"] == "PROTOCOL",
+        "{stdout}"
+    );
+}
+
+#[test]
+fn verify_challenge_mode_conflicts_with_others() {
+    let (code, stdout) = actl(&[
+        "browser-verify",
+        "--session",
+        "nope123",
+        "--challenge",
+        "--no-popups",
+    ]);
+    assert_eq!(code, 2, "mode conflict is clap PROTOCOL: {stdout}");
+}
+
+#[test]
+fn verify_challenge_unknown_session_is_not_found() {
+    let (code, stdout) = actl(&["browser-verify", "--session", "nope123", "--challenge"]);
+    assert_eq!(code, 1, "{stdout}");
+    let v: Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(v["error"]["code"], "NOT_FOUND");
+}
+
+#[test]
+fn drag_human_requires_seed_pairing_and_drag_cli_conflicts() {
+    // drag(CDP 轨)--seed 无 --human 拒;物理轨 drag --human 与 --path 互斥
+    let (code, stdout) = actl(&[
+        "browser-drag",
+        "--session",
+        "nope123",
+        "--from",
+        "1,2",
+        "--to",
+        "3,4",
+        "--seed",
+        "7",
+    ]);
+    assert_eq!(code, 2, "--seed requires --human: {stdout}");
+
+    let (code, stdout) = actl(&[
+        "drag",
+        "xy:1,2",
+        "--to",
+        "xy:3,4",
+        "--app",
+        "NoSuchWin",
+        "--human",
+        "--path",
+        "2,3",
+    ]);
+    assert_eq!(code, 2, "--human conflicts with --path: {stdout}");
+}

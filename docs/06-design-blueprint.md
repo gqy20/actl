@@ -248,6 +248,14 @@ drag xy:100,100 xy:400,300 --app X --path 200,200 --path 300,150
                                                    # 轨迹拖拽:路径点(绝对物理px,≤64)8px 线性
                                                    # 插值成一批 MOVE(画布/签名);无 --path 保持
                                                    # 既有直线四事件行为零变更(docs/74)
+drag xy:100,100 xy:400,300 --app X --human [--seed N]
+                                                   # 人类轨迹拖拽(2026-10-14,滑块解题的物理
+                                                   # 轨执行面):actl-core 轨迹整形器(纯函数,
+                                                   # 种子确定)替换路径——峰值速度 ~72% 行程+
+                                                   # 过冲回拉+y 轴臂漂移 ±2px+事件间隔按轨迹
+                                                   # 时间轴(≤50ms 分片睡眠,每片急停核验;
+                                                   # 中断即抬起已按下的键并 ABORTED 如实报);
+                                                   # 终点精确落位;与 --path 互斥,需 --app
 ```
 
 #### 断言(assert)
@@ -480,13 +488,55 @@ browser-targets --session <id>   # CDP target 只读枚举(--target 寻址的发
                                      # 读写);扩展弹层写链第一步=物理开弹窗
                                      # (UIA --physical)→此处枚举→--target
                                      # <target_id> 读写其 DOM
+browser-screenshot --session <id> [--css S | --xpath X] [--iframe] [--target T] [--out P] [--timeout ms]
+                                     # 像素捕获(只读观察,同 read 分类):clip=
+                                     # 元素 bbox(CSS px,视口求交,唯一匹配
+                                     # 硬规则;--iframe 进跨源 iframe);省略=
+                                     # 整视口。envelope 只带 path+clip+bytes
+                                     # (视觉消费是调用方的决定:decide 视觉
+                                     # 咨询文档/challenge-solve/人工复核);
+                                     # 图像像素尺寸随设备缩放,**不承诺与
+                                     # clip CSS 尺寸 1:1**——消费侧自标定
+                                     # (challenge-solve 内建 图像宽/clip宽
+                                     # 自标定)。默认落 shots 目录(keep-20)
+browser-drag --session <id> --from X,Y --to X,Y [--human] [--seed N] [--target T] [--timeout ms]
+                                     # CDP Input 拖拽(写操作:停止核验前置
+                                     # +动作卡):坐标=视口 CSS px(与定位链
+                                     # 同系)。默认直线插值(机器形态,如实);
+                                     # --human 走 actl-core 轨迹整形器
+                                     # (峰值速度 ~72% 行程+过冲回拉+臂漂移
+                                     # ±2px+事件间隔按时间轴,种子确定可回放);
+                                     # 效果归调用方谓词,本命令只报送达
+browser-verify --session <id> --challenge
+                                     # 挑战存在性断言(2026-10-14):扫描页面
+                                     # (title/script src/iframe src/DOM 标记)
+                                     # 对已知签名表分型——cloudflare 全页/
+                                     # turnstile/geetest/TCaptcha/aliyun/
+                                     # dingxiang/yidun/recaptcha/hcaptcha/
+                                     # arkose/datadome;零命中=通过,命中=
+                                     # ASSERTION_FAILED 带 families 证据
+                                     # (when/unless 组「检测到挑战→解/停」
+                                     # 分支)。**只识别不断言**:命中=形似
+                                     # 已知挑战,未命中≠无挑战(自绘在表外)
+challenge-solve --session <id> --track-css S --piece-css S --handle-css S --success-css S
+               [--template P] [--threshold F] [--attempts 1..=2] [--no-human] [--seed N] [--iframe] [--target T] [--timeout ms]
+                                     # 滑块解题循环(写+读复合):检测(上下文)
+                                     # →截轨道/件元素(ZNCC:件=模板,轨道=
+                                     # 搜索面;件当前邻域自匹配过滤)→位移
+                                     # (图像→CSS 自标定)→人类轨迹拖拽→
+                                     # --success-css 存在性轮询(≤4s)→有界
+                                     # 重试(默认 1,上限 2——失败回灌风控)。
+                                     # 证据截图随信封;**边界:只解「呈现在
+                                     # 面前的挑战」**(真实浏览器+真实输入
+                                     # 事件+确定性感知),不做隐身/指纹伪装
+                                     # /打码服务;失败如实上报带证据
 --target <target_id>             # browser-read/type/click 的寻址覆盖:默认会
                                      # 绑 tab;指定后绑定重核/弹层门禁全部落在
                                      # 覆盖目标(写护栏不因寻址放宽);id 来自
                                      # browser-targets;覆盖时 envelope 回显
                                      # target 字段
 ```
-**显示层协同**:browser 的写与生命周期命令(launch/navigate/click/type/collect/close)在信号流声明动作卡(kind/effects/target)——**不经显示租约门**(CDP 写非桌面物理输入,展示是透明性而非权限门;急停仍经停止代次核验压过一切写);`InputEffects` 全空如实申报;target 只带 `cdp:<session>` 标记,不含选择器/URL/文本(动作日志内容省略纪律)。观察命令(read/list/verify/netlog/targets)不声明动作,与 UIA 轨观察同规。
+**显示层协同**:browser 的写与生命周期命令(launch/navigate/click/type/collect/close/drag)在信号流声明动作卡(kind/effects/target)——**不经显示租约门**(CDP 写非桌面物理输入,展示是透明性而非权限门;急停仍经停止代次核验压过一切写);`InputEffects` 全空如实申报;target 只带 `cdp:<session>` 标记,不含选择器/URL/文本(动作日志内容省略纪律)。观察命令(read/list/verify/netlog/targets/screenshot)不声明动作,与 UIA 轨观察同规。
 **YAML 流程接入**:browser 命令进 flow 的治理模型走三件套——① `browser-launch` 是生命周期命令,不能带 outputs(outputs 只允许只读生产者);② 会话句柄经 `browser-list` 以观察者身份产出(outputs.pointer=/sessions/0/session_id),后续步骤 `bind` 注入 `--session` 值位(下标须指向值字面量,不能指到旗标上);③ 有副作用的步骤必须带 verify——`browser-verify` 族即为此而生(launch→--newest-alive,click→--session X --alive,close→--none)。
 **背景观察步**(`background: true`,2026-10-13):只读观察命令(如 `browser-netlog` 的窗口期)与后续步骤**并发**的流程一等形态——引擎派发后不等待,流程退出前统一收割(join),结果入 StepRecord.background_result(状态文件可查,bind 结构性不可用)。语义边界:run 必须只读,禁 verify/outputs/pause_before/ensure/resume_check/otherwise/recovery/retry(观察者不是流程控制点),违反即 PROTOCOL;收割失败=步骤失败,Completed 改判 Failed(`background_failed:<step>`)。背景观察不受暂停观察点约束(有界自终),中断恢复时重派发即重开窗。
 **持久 profile 治理**:flow 中 `browser-launch --profile <name>` 必须在

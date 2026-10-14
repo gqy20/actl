@@ -30,6 +30,11 @@ pub enum PointerSpec {
     DragPath {
         points: Vec<(i32, i32)>,
     },
+    /// 定时轨迹拖拽(--human):事件间隔按 TimedPoint 时间轴睡眠,
+    /// 速度剖面(行为面)由 actl-core 轨迹整形器携带;终点精确落位。
+    DragTimed {
+        points: Vec<actl_core::trajectory::TimedPoint>,
+    },
     Wheel {
         notches: i32,
     },
@@ -259,6 +264,13 @@ fn inject_pointer_at(
             let last = points.last().copied().unwrap_or((px, py));
             ("drag", false, Some([last.0, last.1]))
         }
+        PointerSpec::DragTimed { points } => {
+            let last = points
+                .last()
+                .map(|point| (point.x, point.y))
+                .unwrap_or((px, py));
+            ("drag", false, Some([last.0, last.1]))
+        }
         PointerSpec::Wheel { .. } => ("scroll", false, None),
     };
     let mut action = crate::feedback::prepare(
@@ -290,7 +302,7 @@ fn inject_pointer_at(
     let saved_cursor = bg_hwnd.is_some().then(mouse::cursor_pos).flatten();
     let is_drag = matches!(
         spec,
-        PointerSpec::Drag { .. } | PointerSpec::DragPath { .. }
+        PointerSpec::Drag { .. } | PointerSpec::DragPath { .. } | PointerSpec::DragTimed { .. }
     );
     action.executing();
     match spec {
@@ -310,6 +322,7 @@ fn inject_pointer_at(
         PointerSpec::Hover => mouse::move_to(px, py)?,
         PointerSpec::Drag { to: (tx, ty) } => mouse::drag_to(px, py, tx, ty)?,
         PointerSpec::DragPath { points } => mouse::drag_path(&points)?,
+        PointerSpec::DragTimed { points } => mouse::drag_timed(&points)?,
         PointerSpec::Wheel { notches } => mouse::wheel_at(px, py, notches)?,
     }
     action.delivered();
@@ -563,6 +576,7 @@ pub fn drag_path_physical(
     from: &Target,
     to: &Target,
     waypoints: &[(i32, i32)],
+    human_seed: Option<u64>,
 ) -> Result<DragPathOutcome, CtlError> {
     if waypoints.is_empty() && !matches!((from, to), (Target::Coord(_, _), Target::Coord(_, _))) {
         return Err(CtlError::protocol(
@@ -611,31 +625,30 @@ pub fn drag_path_physical(
     points.push(start);
     points.extend_from_slice(waypoints);
     points.push(end);
-    inject_pointer_at(
-        start.0,
-        start.1,
-        PointerSpec::DragPath { points },
-        &window,
-        None,
-        || {
-            crate::feedback::check_stop()?;
-            // 与坐标点击同源的准备期复核:窗口未动且路径点仍在窗内
-            let current = window_bounds_by_title(&window)?;
-            for (x, y) in waypoints {
-                if *x < current.left
-                    || *x >= current.right
-                    || *y < current.top
-                    || *y >= current.bottom
-                {
-                    return Err(CtlError::new(
-                        ErrorCode::NotActionable,
-                        "window moved: a drag waypoint now lies outside the target window",
-                    ));
-                }
-            }
-            Ok(())
+    // --human:轨迹整形器替换直线/waypoints(种子确定;终点精确落位),
+    // 事件间隔按时间轴睡眠(mouse::drag_timed)。waypoints 与 --human
+    // 互斥由 CLI 层裁决。
+    let spec = match human_seed {
+        Some(seed) => PointerSpec::DragTimed {
+            points: actl_core::trajectory::human_drag(start, end, seed),
         },
-    )?;
+        None => PointerSpec::DragPath { points },
+    };
+    inject_pointer_at(start.0, start.1, spec, &window, None, || {
+        crate::feedback::check_stop()?;
+        // 与坐标点击同源的准备期复核:窗口未动且路径点仍在窗内
+        let current = window_bounds_by_title(&window)?;
+        for (x, y) in waypoints {
+            if *x < current.left || *x >= current.right || *y < current.top || *y >= current.bottom
+            {
+                return Err(CtlError::new(
+                    ErrorCode::NotActionable,
+                    "window moved: a drag waypoint now lies outside the target window",
+                ));
+            }
+        }
+        Ok(())
+    })?;
     Ok(DragPathOutcome {
         from: from.describe(),
         start,

@@ -221,6 +221,13 @@ fn capture_window(app: Option<&str>) -> Result<WindowPixels, CtlError> {
     })
 }
 
+/// PNG 解码的安全封装(BGRA top-down + 宽高):供跨 crate 消费
+/// (actl-browser 的挑战解题循环对 CDP 截图做 ZNCC);WIC COM 收敛在
+/// 本 crate 的 unsafe 豁免内,对外保持安全面。
+pub fn decode_png_file(path: &Path) -> Result<(Vec<u8>, u32, u32), CtlError> {
+    unsafe { decode_png(path) }
+}
+
 /// WIC PNG 解码 → BGRA top-down(与 encode_png 对称;MTA 公寓纪律同规)。
 unsafe fn decode_png(path: &Path) -> Result<(Vec<u8>, u32, u32), CtlError> {
     use windows::Win32::Graphics::Imaging::{

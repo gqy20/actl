@@ -724,7 +724,7 @@ pub(crate) fn batch_cmd(json_str: &str) -> Result<CommandOutput, CtlError> {
             ));
         }
         actl_core::signal_session::step(
-            crate::cli::command_name(&sub.command),
+            crate::cli_help::command_name(&sub.command),
             crate::cli::app_of(&sub.command).as_deref(),
             i + 1,
             cmds.len(),

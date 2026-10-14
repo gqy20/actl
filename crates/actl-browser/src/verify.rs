@@ -40,6 +40,12 @@ pub enum VerifyMode {
         session: String,
         selector: Option<String>,
     },
+    /// 挑战存在性断言(2026-10-14 spec):扫描页面对已知人机验证签名分型
+    /// (actl-core 签名表)。零命中=通过(页面干净);命中=ASSERTION_FAILED
+    /// 带 families 证据——flow 的 when/unless 组合出「检测到挑战→暂停/解题」
+    /// 分支。检测只识别(命中=形似已知挑战,未命中≠无挑战——自绘挑战
+    /// 不在表内),如实边界。
+    Challenge { session: String },
 }
 
 /// 默认弹层枚举选择器:标准弹层结构(<dialog open>/ARIA dialog/
@@ -238,6 +244,32 @@ pub fn verify(paths: &Paths, mode: VerifyMode, timeout_ms: Option<u64>) -> Resul
                 "assertion": "no_popups",
                 "passed": true,
                 "selector": sel,
+                "total": 0,
+                "session_id": session,
+            }))
+        }
+        VerifyMode::Challenge { session } => {
+            let scanned = crate::challenge::scan(paths, &session, None, timeout_ms)?;
+            let total = scanned
+                .pointer("/challenges/total")
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
+            if total > 0 {
+                return Err(CtlError::with_evidence(
+                    ErrorCode::AssertionFailed,
+                    format!(
+                        "{total} known challenge famil(y/ies) detected on the page (heuristic match)"
+                    ),
+                    json!({
+                        "assertion": "no_challenge",
+                        "challenges": scanned.get("challenges").cloned().unwrap_or(Value::Null),
+                        "session_id": session,
+                    }),
+                ));
+            }
+            Ok(json!({
+                "assertion": "no_challenge",
+                "passed": true,
                 "total": 0,
                 "session_id": session,
             }))

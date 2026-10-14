@@ -222,6 +222,7 @@ pub(crate) struct VerifyArgs<'a> {
     pub newest_alive: bool,
     pub no_popups: bool,
     pub popup_selector: Option<&'a str>,
+    pub challenge: bool,
     pub timeout: Option<u64>,
 }
 
@@ -238,6 +239,7 @@ pub(crate) fn verify_cmd(args: VerifyArgs<'_>) -> Result<CommandOutput, CtlError
         newest_alive,
         no_popups,
         popup_selector,
+        challenge,
         timeout,
     } = args;
     let mode = match (
@@ -249,36 +251,165 @@ pub(crate) fn verify_cmd(args: VerifyArgs<'_>) -> Result<CommandOutput, CtlError
         none,
         newest_alive,
         no_popups,
+        challenge,
     ) {
-        (Some(id), true, false, None, None, false, false, false) => {
+        (Some(id), true, false, None, None, false, false, false, false) => {
             VerifyMode::SessionAlive(id.to_string())
         }
-        (Some(id), false, true, None, None, false, false, false) => {
+        (Some(id), false, true, None, None, false, false, false, false) => {
             VerifyMode::SessionGone(id.to_string())
         }
-        (Some(id), false, false, Some(css), None, false, false, false) => VerifyMode::Selector {
-            session: id.to_string(),
-            kind: SelectorKind::Css,
-            value: css.to_string(),
-            contains: contains.map(str::to_string),
-        },
-        (Some(id), false, false, None, Some(xpath), false, false, false) => VerifyMode::Selector {
-            session: id.to_string(),
-            kind: SelectorKind::Xpath,
-            value: xpath.to_string(),
-            contains: contains.map(str::to_string),
-        },
-        (Some(id), false, false, None, None, false, false, true) => VerifyMode::NoPopups {
+        (Some(id), false, false, Some(css), None, false, false, false, false) => {
+            VerifyMode::Selector {
+                session: id.to_string(),
+                kind: SelectorKind::Css,
+                value: css.to_string(),
+                contains: contains.map(str::to_string),
+            }
+        }
+        (Some(id), false, false, None, Some(xpath), false, false, false, false) => {
+            VerifyMode::Selector {
+                session: id.to_string(),
+                kind: SelectorKind::Xpath,
+                value: xpath.to_string(),
+                contains: contains.map(str::to_string),
+            }
+        }
+        (Some(id), false, false, None, None, false, false, true, false) => VerifyMode::NoPopups {
             session: id.to_string(),
             selector: popup_selector.map(str::to_string),
         },
-        (None, false, false, None, None, true, false, false) => VerifyMode::NoneActive,
-        (None, false, false, None, None, false, true, false) => VerifyMode::NewestAlive,
+        (Some(id), false, false, None, None, false, false, false, true) => VerifyMode::Challenge {
+            session: id.to_string(),
+        },
+        (None, false, false, None, None, true, false, false, false) => VerifyMode::NoneActive,
+        (None, false, false, None, None, false, true, false, false) => VerifyMode::NewestAlive,
         _ => {
             return Err(CtlError::protocol(
-                "browser-verify requires exactly one mode: --newest-alive | --none | --session+--alive | --session+--gone | --session+--css/--xpath [--contains] | --session+--no-popups [--popup-selector]",
+                "browser-verify requires exactly one mode: --newest-alive | --none | --session+--alive | --session+--gone | --session+--css/--xpath [--contains] | --session+--no-popups [--popup-selector] | --session+--challenge",
             ));
         }
     };
     actl_browser::verify::verify(&paths(), mode, timeout).map(Into::into)
+}
+
+/// browser-screenshot 的 CLI 参数束。
+pub(crate) struct ScreenshotArgs<'a> {
+    pub session: &'a str,
+    pub css: Option<&'a str>,
+    pub xpath: Option<&'a str>,
+    pub iframe: bool,
+    pub target: Option<&'a str>,
+    pub out: Option<&'a str>,
+    pub timeout: Option<u64>,
+}
+
+pub(crate) fn screenshot_cmd(args: ScreenshotArgs<'_>) -> Result<CommandOutput, CtlError> {
+    let selector = match (args.css, args.xpath) {
+        (Some(value), None) => Some((SelectorKind::Css, value)),
+        (None, Some(value)) => Some((SelectorKind::Xpath, value)),
+        (None, None) => None,
+        _ => {
+            return Err(CtlError::protocol(
+                "pass at most one of --css or --xpath (omit both for a full-viewport capture)",
+            ));
+        }
+    };
+    actl_browser::shot::screenshot(
+        &paths(),
+        actl_browser::shot::ShotSpec {
+            session_id: args.session,
+            selector,
+            iframe: args.iframe,
+            target: args.target,
+            out: args.out,
+            timeout_ms: args.timeout,
+        },
+    )
+    .map(Into::into)
+}
+
+/// browser-drag 的 CLI 参数束。
+pub(crate) struct DragArgs<'a> {
+    pub session: &'a str,
+    pub from: &'a str,
+    pub to: &'a str,
+    pub human: bool,
+    pub seed: Option<u64>,
+    pub target: Option<&'a str>,
+    pub timeout: Option<u64>,
+}
+
+/// X,Y 解析(视口 CSS px;与 --path waypoint 同族小函数,无坐标守卫——
+/// CDP 轨的守卫是元素唯一匹配,不是窗口边界)。
+fn parse_viewport_point(raw: &str, label: &str) -> Result<(f64, f64), CtlError> {
+    let Some((x, y)) = raw.split_once(',') else {
+        return Err(CtlError::protocol(format!(
+            "{label} must be X,Y (viewport CSS pixels), got {raw:?}"
+        )));
+    };
+    let parse = |value: &str| -> Result<f64, CtlError> {
+        value.trim().parse::<f64>().map_err(|_| {
+            CtlError::protocol(format!("{label} coordinate must be numeric, got {value:?}"))
+        })
+    };
+    Ok((parse(x)?, parse(y)?))
+}
+
+pub(crate) fn drag_cmd(args: DragArgs<'_>) -> Result<CommandOutput, CtlError> {
+    let from = parse_viewport_point(args.from, "--from")?;
+    let to = parse_viewport_point(args.to, "--to")?;
+    actl_browser::input::drag(
+        &paths(),
+        actl_browser::input::DragSpec {
+            session_id: args.session,
+            from,
+            to,
+            human: args.human,
+            seed: args.seed,
+            target: args.target,
+            timeout_ms: args.timeout,
+        },
+    )
+    .map(Into::into)
+}
+
+/// challenge-solve 的 CLI 参数束(v1 CSS-only——真实挑战的选择器面
+/// 是 CSS 惯例;XPath 需要时按 spec 扩)。
+pub(crate) struct SolveArgs<'a> {
+    pub session: &'a str,
+    pub track_css: &'a str,
+    pub piece_css: &'a str,
+    pub handle_css: &'a str,
+    pub success_css: &'a str,
+    pub template: Option<&'a str>,
+    pub threshold: Option<f64>,
+    pub attempts: Option<u64>,
+    pub human: bool,
+    pub seed: Option<u64>,
+    pub iframe: bool,
+    pub target: Option<&'a str>,
+    pub timeout: Option<u64>,
+}
+
+pub(crate) fn solve_cmd(args: SolveArgs<'_>) -> Result<CommandOutput, CtlError> {
+    actl_browser::challenge::solve(
+        &paths(),
+        actl_browser::challenge::SolveSpec {
+            session_id: args.session,
+            track: (SelectorKind::Css, args.track_css),
+            piece: (SelectorKind::Css, args.piece_css),
+            handle: (SelectorKind::Css, args.handle_css),
+            success: Some((SelectorKind::Css, args.success_css)),
+            template: args.template,
+            threshold: args.threshold,
+            attempts: args.attempts,
+            human: args.human,
+            seed: args.seed,
+            target: args.target,
+            iframe: args.iframe,
+            timeout_ms: args.timeout,
+        },
+    )
+    .map(Into::into)
 }

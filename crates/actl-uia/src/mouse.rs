@@ -203,6 +203,58 @@ pub fn drag_path(points: &[(i32, i32)]) -> Result<(), CtlError> {
     result
 }
 
+/// 定时轨迹拖拽(--human):按下→按 `TimedPoint` 时间轴逐事件移动→抬起。
+/// 与 drag_path 的整批直发不同,**事件间隔按时间轴睡眠**——速度剖面
+/// (行为指纹面)由时间轴携带;睡眠按 ≤50ms 分片,每片前过停止代次核验
+/// (key-down --duration 同纪律):急停即抬起已按下的键并报 ABORTED
+/// (消息如实说明已释放)。
+pub fn drag_timed(points: &[actl_core::trajectory::TimedPoint]) -> Result<(), CtlError> {
+    let Some(&first) = points.first() else {
+        return Err(CtlError::protocol("timed drag requires at least one point"));
+    };
+    let Some(&last) = points.last() else {
+        return Err(CtlError::protocol("timed drag requires at least one point"));
+    };
+    let (fx, fy) = normalize(first.x, first.y);
+    send_all(&[
+        mouse_event(abs(MOUSEEVENTF_MOVE), fx, fy, 0),
+        mouse_event(abs(MOUSEEVENTF_LEFTDOWN), fx, fy, 0),
+    ])?;
+    let release = |x: i32, y: i32| {
+        let (nx, ny) = normalize(x, y);
+        let _ = send_raw(&[mouse_event(MOUSEEVENTF_LEFTUP, nx, ny, 0)]);
+    };
+    let mut last_ms = 0u32;
+    for point in points {
+        let wait = point.t_ms.saturating_sub(last_ms);
+        last_ms = point.t_ms;
+        if let Err(error) = sleep_sliced_with_stop(wait) {
+            release(last.x, last.y);
+            return Err(error);
+        }
+        let (nx, ny) = normalize(point.x, point.y);
+        if let Err(error) = send_all(&[mouse_event(abs(MOUSEEVENTF_MOVE), nx, ny, 0)]) {
+            release(last.x, last.y);
+            return Err(error);
+        }
+    }
+    release(last.x, last.y);
+    Ok(())
+}
+
+/// 分片睡眠(≤50ms 片,每片前急停核验):0ms 直接过(key-down --duration
+/// 的 100ms 分片在此收紧到 50ms——轨迹事件间隔本身 5-40ms 量级)。
+fn sleep_sliced_with_stop(total_ms: u32) -> Result<(), CtlError> {
+    let mut remain = total_ms;
+    while remain > 0 {
+        actl_core::stop::check_current()?;
+        let slice = remain.min(50);
+        std::thread::sleep(std::time::Duration::from_millis(slice as u64));
+        remain -= slice;
+    }
+    Ok(())
+}
+
 /// 滚轮:notches 为正向上滚、负向下滚(每格 120)。
 pub fn wheel_at(x: i32, y: i32, notches: i32) -> Result<(), CtlError> {
     let (nx, ny) = normalize(x, y);

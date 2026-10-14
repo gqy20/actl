@@ -22,6 +22,8 @@
 
 ### 流程与集成
 
+- [ ] **挑战解题阶段 C——辅助人工通道（验证面收尾轮，条件触发）**：可解类（滑块/点选/图形网格，已落地 `challenge-solve`+`browser-drag --human`+`decide` 视觉咨询）之外的登录态类（短信 OTP/手机扫码/passkey），人工 10 秒形态的**面板密钥输入通道**——显示协议扩展：验证码由用户在 actl-signal 面板输入（密钥不进任何日志/证据/transcript，Operator take-over 模式同款隐私纪律）→ CLI 注入页面 → `resume_check` 谓词自动续跑。估算 ~600-900 行（显示协议版本 bump+signal UI+CLI 密钥通道+协议测试）。**触发条件：真实短信 OTP 场景出现**（现状：用户直接在页面输入已可用，`browser-login-session.yml` 暂停点形态覆盖大部分需求——面板通道是体验增益而非能力空档，不预防性铺）
+- [ ] 挑战解题真站验收（阶段 A/B 已落地：挑战签名表+`browser-verify --challenge`、`browser-screenshot`、`browser-drag --human`、`challenge-solve` 闭环+本地 fixture `fixtures/slider-challenge.html` 一次通过——ZNCC 0.90/DPR 2× 自标定/28 事件人类轨迹/7.1s 全绿，证据 CHANGELOG）：剩余=真实站点（极验等）选站验收，含 a) 轨迹形态真站调参（本地轨迹参数来自公开行为研究统计，真站阈值待实测校准）b) 点选类（prompt 栏+题图双截图→decide 视觉咨询选格）路线接入——真实场景出现再立项
 - [ ] 流程扩展（嵌套分支——**缓办**，无真实场景，出现再立项；循环已落地 for_each 形态，2026-10-11）
 - [ ] WebView2 专项验收（键盘跨原生/网页、屏幕阅读器、多屏 DPI、缺失运行时回退）
 - [ ] 中央任务提示余项：接管暂停（人工接管→继续→业务核验）、跨屏 DPI 与真实减少动态设置（[75](75-action-start-notification.md)）；急停余量：急停落于 resume 重查窗口内的严格时点、飞行中调用 ABORTED 实测、OS 重启后急停语义保持（[35](35-stop-lifecycle.md)/[39](39-flow-observation-recovery.md)，2026-10-12 真按钮轮已收主链：菜单路径停止记录五字段/暂停期不完成/旧代次 35ms ABORTED/修复解除/失败通知含中文名目视两验）；显示层 UX：详情窗「继续/急停」视觉权重差与修复操作无可见反馈（2026-10-12 观察，两起实证同源于该窗）
