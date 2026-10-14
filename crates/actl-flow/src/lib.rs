@@ -7,6 +7,7 @@ pub mod explore;
 pub mod for_each;
 pub mod freshness;
 pub mod inputs;
+pub mod packs;
 pub mod record;
 pub mod recovery;
 pub mod resources;

@@ -335,6 +335,75 @@ fn url_query_assertion_contract() {
 }
 
 #[test]
+fn pack_ref_expands_route_steps_and_rejects_inline_tokens() {
+    // P2(2026-10-14):步级 pack_ref 声明——应用路线装载期展开为普通步骤;
+    // 整值 {X} 按名绑定 input,内插 token 诚实 PROTOCOL(带证据)。
+    let s = Sandbox::new();
+    std::fs::create_dir_all(s.root.join("apps")).unwrap();
+    std::fs::write(
+        s.root.join("apps").join("demo.yml"),
+        "routes:
+  - id: scan
+    description: session scan
+    status: verified
+    steps:
+      - [snapshot, --app, \"{window}\", --skeleton]
+      - [find, --name, ok, --app, \"{window}\"]
+  - id: interp
+    steps:
+      - [click, \"xy:{a},{b}\", --app, w]
+",
+    )
+    .unwrap();
+    // 整值占位符:展开+绑定
+    let good = s.file(
+        "version: 1
+name: R
+inputs: {window: {default: 微信}}
+steps:
+ - id: scan
+   pack_ref: demo.scan
+",
+    );
+    let (code, value) = s.invoke(&["flow-validate", "--file", &good, "--emit-plan"]);
+    assert_eq!(code, 0, "{value}");
+    let plan = &value["data"]["plan"];
+    let ids: Vec<&str> = plan["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|x| x["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        ids,
+        ["scan-p0", "scan-p1"],
+        "route steps expand under the parent id"
+    );
+    assert_eq!(
+        plan["steps"][0]["run"]["args"][1], "微信",
+        "whole {{window}} binds the input default"
+    );
+    // 内插 token:PROTOCOL 带证据
+    let bad = s.file(
+        "version: 1
+name: B
+steps:
+ - id: x
+   pack_ref: demo.interp
+",
+    );
+    let (code, value) = s.invoke(&["flow-validate", "--file", &bad]);
+    assert_eq!(code, 2);
+    assert_eq!(value["error"]["code"], "PROTOCOL");
+    assert!(
+        value["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("inline interpolation")
+    );
+}
+
+#[test]
 fn bookends_expand_into_step_list() {
     // P0-2 prologue/epilogue(2026-10-14 YAML 审计轮):流程级准备/收尾
     // 样板声明,validate 期展开为全量 steps——冻结计划/指纹/revise 零改动。

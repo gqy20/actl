@@ -271,7 +271,7 @@ routes:
   - id: forward_merged
     description: 合并转发(多选→勾 ≥2 条→合并转发→选择器→confirm;产出聊天记录卡片)
     status: verified
-    verify: 卡片气泡 name=聊天记录\\n<作者>的聊天记录\\n<作者>: [文件]...;底栏按钮须坐标点击(元素锚物理点击不响应)
+    verify: '卡片气泡 name=聊天记录\\n<作者>的聊天记录\\n<作者>: [文件]...;底栏按钮须坐标点击(元素锚物理点击不响应)'
     steps:
       - ["right-click", "{bubble_xyw_point}", "--app", "{window}"]
       - ["wait", "--window", "Weixin", "--timeout", "4000"]

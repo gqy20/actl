@@ -798,6 +798,9 @@ fn load_plan(
     id: &str,
 ) -> Result<(Plan, actl_flow::resources::Prepared), CtlError> {
     let text = actl_flow::store::read_text(std::path::Path::new(file))?;
+    // P2(2026-10-14):pack_ref 步装载期展开——run/validate 共用本装载点,
+    // 展开后即普通步骤,后续 resources/inputs/schema 全零感知
+    let text = actl_flow::packs::expand_refs_in_text(&text, std::path::Path::new(file))?;
     let prepared = actl_flow::resources::prepare(
         &text,
         std::path::Path::new(file),
@@ -1132,6 +1135,10 @@ pub fn dispatch(command: &FlowCommand) -> Result<Value, CtlError> {
         } => {
             let text = std::fs::read_to_string(file.as_str())
                 .map_err(|e| CtlError::internal(format!("revision file unreadable: {e}")))?;
+            // P2(2026-10-14):修订文件与 flow-run 同形——pack_ref 步同样
+            // 装载期展开(否则与冻结计划的展开形态 diff 误报规格变化)
+            let text =
+                actl_flow::packs::expand_refs_in_text(&text, std::path::Path::new(file.as_str()))?;
             // input 引用解析(2026-10-11 工具链缺口①收口):修订文件与 flow-run
             // 同形——resources 块经 prepare 剥离,{"input":...} 引用经 declared
             // defaults(或 --inputs 值文件)解析为具体值后再 schema 校验。

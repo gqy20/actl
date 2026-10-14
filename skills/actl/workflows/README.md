@@ -28,8 +28,9 @@
 - agent 先读索引及相关应用档案，核对用户授权、接收人等关键条件，再准备执行计划；控件身份需在执行现场重新观察。
 - 公共文件不写真实联系人、账号、私人路径、固定 HWND/ref 或本次运行的坐标。个人任务的具体计划和输入留在本地，不提交到技能目录。
 - 当前 v1 支持只读步骤的显式输出保存和后续完整参数绑定；绑定无法解析时停止，不执行占位值。支持即时只读条件 when/unless/otherwise；未知结果停止，已派发路线恢复先核验。不支持参数插值、嵌套分支、循环或子流程调用。任务输入通过 inputs 声明传入——`--inputs` 值文件或可重复 `--set key=value` 内联覆盖（语义权威见 [references/flows.md](../references/flows.md)），args 中使用 {input: name} 绑定完整参数；解析后统一预检，恢复读取保存的具体计划。
-- 应用档案供 agent 参考，当前引擎不支持 YAML 自动引用 pack 路线。未来加入复用能力前须先修订协议、测试和文档。
+- 应用档案供 agent 参考;pack_ref 步引用(2026-10-14 起)由 CLI 装载层展开为普通步骤(整值 token 绑定 input;内插路线须显式写步骤)——引擎层仍不读 pack,协议修订已随 spec 完成。
 - 对会过期的业务输出设置 `max_age_ms`。恢复报告 `output_freshness_failed` 时，先核对已完成动作，再准备后续计划；不要修改保存时间或盲目从头重跑。时间未过期仍需 before/verify 核验目标身份和业务状态。
+- **pack_ref 路线引用**(2026-10-14):步级 `pack_ref: <app>.<route>` 引用应用 pack 路线,装载期展开为普通步骤——路线修正单点落 pack,引用流程零改动。整值 `{X}` 按名绑定 input;内插 token(`xy:{a},{b}`)按 v1 无插值纪律 PROTOCOL 拒,该类路线须显式写步骤。pack 解析根=模板目录的 `../apps` 与 `./apps`。
 - **prologue/epilogue 样板**(2026-10-14):流程级准备/收尾样板声明,解码期展开为普通步骤(顺序 prologue→steps→epilogue);失败停在失败步 epilogue 不跑;与 explore 互斥、三段 id 唯一。launch/verify-owner/close/verify-file 这类每流程必抄的治理样板由此单点书写。
 - **写步幂等先检后写**：可读回当前值的写步（type/set-value/编辑类）按"前置检查 → 派发 → 读回收口"三段组织——`ensure:`（或 before）断言现值**未达**目标才派发，已达标直接短路跳过（防重放/续跑把文本注入两遍）；写后用 `verify --value` / `verify-file` 收口。注意 `type --verify-value` 只做事后读回，不构成前置检查；已发送未确认的写步是 uncertain，恢复走 resume_check 重核，不是重放。范例见 [edit-value.yml](edit-value.yml)（previous 前置核对 + value 后核验）。
 - 需要恢复前核对当前页面、会话或接收人时声明 `resume_check`；首次执行条件仍放 before。只读目标失效可设 `retry: stale_read`，最多重新查询三次。`result_observation_failed` 表示结果尚不明确，不能通过 --retry-step 绕过；先解决观察问题。用法见 [流程恢复说明](../references/flows.md#暂停与恢复)。
