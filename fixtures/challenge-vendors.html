@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>challenge vendors fixture</title>
+<style>
+  body { font-family: sans-serif; margin: 30px; }
+  .vendor { border: 1px solid #ccc; padding: 12px; margin: 14px 0; min-height: 90px; }
+  .vendor h3 { margin: 0 0 8px; }
+</style>
+<!-- 真实厂商 CDN 脚本(公开测试 sitekey,官方文档明示供集成测试):
+     验收对象是检测签名表对真实组件 script/iframe/DOM 的识别,非求解 -->
+<script src="https://static.geetest.com/v4/gt4.js"></script>
+<script src="https://turing.captcha.qcloud.com/TJCaptcha.js"></script>
+<script src="https://www.google.com/recaptcha/api.js" async defer></script>
+<script src="https://js.hcaptcha.com/1/api.js" async defer></script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+</head>
+<body>
+<h2>challenge vendors fixture</h2>
+
+<div class="vendor" id="v-geetest">
+  <h3>GeeTest v4 (script-only — no captchaId, url-signal verification)</h3>
+</div>
+
+<div class="vendor" id="v-tencent">
+  <h3>Tencent TCaptcha (script-only — no appid, url-signal verification)</h3>
+</div>
+
+<div class="vendor" id="v-recaptcha">
+  <h3>reCAPTCHA v2 (official automated-test sitekey)</h3>
+  <div class="g-recaptcha" data-sitekey="6LeIxAcTAAAAAJcZVRqyHh71UMUMGNH84zJb9_c"></div>
+</div>
+
+<div class="vendor" id="v-hcaptcha">
+  <h3>hCaptcha (official always-passes test sitekey)</h3>
+  <div class="h-captcha" data-sitekey="10000000-ffff-ffff-ffff-000000000001"></div>
+</div>
+
+<div class="vendor" id="v-turnstile">
+  <h3>Cloudflare Turnstile (official always-passes visible test sitekey)</h3>
+  <div class="cf-turnstile" data-sitekey="1x00000000000000000000AA"></div>
+</div>
+
+</body>
+</html>
