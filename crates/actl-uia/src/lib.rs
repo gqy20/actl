@@ -34,6 +34,8 @@ pub mod image_regions;
 /// preview-map:全窗组件画框(先看见再设计;layered overlay 多 rect 绘制)。
 #[allow(unsafe_op_in_unsafe_fn)]
 pub mod map;
+/// 自身进程资源快照(诊断旁路;trace 消费,不进信封)。
+pub mod resource;
 /// find-image 搜索范围可视化(2026-10-14):红框画在目标窗口面,Drop 擦除。
 #[allow(unsafe_op_in_unsafe_fn)]
 mod search_frame;

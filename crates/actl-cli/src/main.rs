@@ -30,6 +30,47 @@ use crate::cli::{Cli, Command, DesktopCommand, app_of};
 use crate::cli_help::command_name;
 use crate::{interact::*, query::*};
 
+/// panic 兜底(2026-10-14 日志盘点轮第二层):运行路径的 panic 兜底信封
+/// ——硬规则 3「失败必须有错误码」的最后防线(此前 panic=裸 stderr+无信封,
+/// 调用方 stdout 解析直接失败)。两阶段注册:main 第一行装 hook(越早越稳),
+/// 此时命令未知 → "unknown";clap 解析出命令后 `PANIC_COMMAND.set` 精化。
+/// hook 内不 unwind——析构链上有无界阻塞面(COM 代理跨进程 Release),
+/// 直接 flush stderr 现场 + stdout INTERNAL 信封 + TerminateProcess
+/// (与 finish 同纪律)。退出码 1(INTERNAL 族):三值契约(0/1/2)不变,
+/// panic 判别靠 evidence.panic_location 与 stderr [actl-panic] 行。
+fn install_panic_hook() {
+    std::panic::set_hook(Box::new(|info| {
+        let command = actl_core::PANIC_COMMAND.get().copied().unwrap_or("unknown");
+        let payload = info
+            .payload()
+            .downcast_ref::<&str>()
+            .map(|s| s.to_string())
+            .or_else(|| info.payload().downcast_ref::<String>().cloned())
+            .unwrap_or_else(|| "non-string panic payload".to_string());
+        let location = info
+            .location()
+            .map(|l| format!("{}:{}", l.file(), l.line()))
+            .unwrap_or_else(|| "unknown".to_string());
+        // panic 现场保 stderr(与信封同内容,人类第一现场);信封走 stdout。
+        eprintln!("[actl-panic] {command} {location} {payload}");
+        let err = CtlError::with_evidence(
+            actl_core::ErrorCode::Internal,
+            format!("panic: {payload}"),
+            json!({"panic_location": location, "hint": "internal bug — never a caller error; report with the [actl-panic] stderr line"}),
+        );
+        let elapsed = actl_core::BOOT
+            .get()
+            .map(|b| b.elapsed().as_millis() as u64)
+            .unwrap_or(0);
+        let env = ErrorEnvelope::new(command, &err, elapsed);
+        if let Ok(text) = serde_json::to_string(&env) {
+            println!("{text}");
+            let _ = std::io::Write::flush(&mut std::io::stdout());
+        }
+        actl_uia::watchdog::hard_exit_after_envelope(1);
+    }));
+}
+
 /// 命令执行产物:data 进 envelope,`snapshot_id` 存在时附加到顶层(06 §4)。
 /// 字段 crate 可见:flow Adapter 的快照通道需要捕获 snapshot_id
 /// (探索引擎 ref 绑定动作,docs/06 帧背书/ref 绑定增补)。
@@ -48,6 +89,10 @@ impl From<Value> for CommandOutput {
 }
 
 fn main() {
+    // OnceLock 语义:首 set 生效即返回 Ok;重入(测试多进程不存在)是 Err,
+    // 静默忽略——main 单进程一次,不存在竞争路径
+    let _ = actl_core::BOOT.set(Instant::now());
+    install_panic_hook();
     // 坐标系不变量先行(docs/83 补遗,2026-10-13):整进程 PMv2 物理像素。
     // 必须在 clap 解析与任何 UIA/DC 调用之前(设置过窗口后被拒)。
     actl_uia::ensure_process_pmv2();
@@ -58,6 +103,8 @@ fn main() {
         Err(error) => error.exit(),
     };
     let command_name = command_name(&cli.command);
+    // panic 兜底第二阶段:hook 已在第一行,此处才知命令名(解析前 unknown)
+    let _ = actl_core::PANIC_COMMAND.set(command_name);
     let started = Instant::now();
     // 进程看门狗(运行时治理第三轮,docs/06 §7.7):UIA 跨进程挂起族的
     // 进程级防护——语义是"无进展"(引擎按步、等待按轮询、录制按事件重置),
@@ -70,6 +117,11 @@ fn main() {
     {
         std::thread::sleep(std::time::Duration::from_millis(hang_ms));
         return;
+    }
+    // 测试缝:制造确定性 panic,供兜底信封的契约测试使用(ACTL_TEST_PANIC
+    // 存在即触发;非测试环境不设此变量)。
+    if std::env::var_os("ACTL_TEST_PANIC").is_some() {
+        panic!("test panic seam: ACTL_TEST_PANIC is set");
     }
     if let Err(error) = flow::configure_task() {
         finish(command_name, Err(error), 0);
@@ -1039,6 +1091,14 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
 }
 
 fn finish(command_name: &'static str, result: Result<CommandOutput, CtlError>, duration_ms: u64) {
+    // 资源快照(诊断旁路,信封前一行):CPU-bound(扫描)与纯等待(睡眠)
+    // 的定性数据;WorkingSet 峰值给像素命令族的内存剖面归因。trace 无
+    // 消费者时跳过采样(两次系统调用省掉)。
+    if actl_core::trace::routed()
+        && let Ok(snap) = actl_uia::resource::self_snapshot()
+    {
+        actl_core::trace::resource(&snap);
+    }
     match result {
         Ok(out) => {
             let mut env = Envelope::success(command_name, Some(out.data), duration_ms);

@@ -371,6 +371,56 @@ fn batch_failure_carries_partial_steps_in_evidence() {
 }
 
 #[test]
+fn panic_produces_internal_envelope_on_stdout() {
+    // panic 兜底信封(2026-10-14 日志盘点轮):硬规则 3 的最后防线——
+    // panic 不得让 stdout 空手而归。测试缝 ACTL_TEST_PANIC 触发真 panic。
+    let out = support::IsolatedCommand::new()
+        .command
+        .args(["status"])
+        .env("ACTL_TEST_PANIC", "1")
+        .output()
+        .expect("spawn actl");
+    // 退出码 1(INTERNAL 族;三值契约不变,panic 判别靠 evidence)
+    assert_eq!(out.status.code(), Some(1));
+    let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+    let v: serde_json::Value =
+        serde_json::from_str(stdout.trim()).expect("panic still yields a JSON envelope");
+    assert_eq!(v["ok"], false);
+    assert_eq!(v["error"]["code"], "INTERNAL");
+    assert!(v["error"]["message"].as_str().unwrap().contains("panic"));
+    let loc = v["error"]["evidence"]["panic_location"].as_str().unwrap();
+    assert!(!loc.is_empty(), "panic location recorded");
+    assert_eq!(v["command"], "status", "command name refined post-parse");
+    let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+    assert!(
+        stderr.contains("[actl-panic] status"),
+        "stderr keeps the human-first panic line"
+    );
+}
+
+#[test]
+fn trace_carries_self_resource_snapshot() {
+    // 第一层资源打点:ACTL_TRACE=1 时 stderr 带 self.rss(WorkingSet/CPU
+    // 累计);stdout 仍是纯信封(旁路纪律)。
+    let out = support::IsolatedCommand::new()
+        .command
+        .args(["status"])
+        .env("ACTL_TRACE", "1")
+        .output()
+        .expect("spawn actl");
+    assert_eq!(out.status.code(), Some(0));
+    let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+    let v: serde_json::Value = serde_json::from_str(stdout.trim()).expect("stdout is pure JSON");
+    assert_eq!(v["ok"], true);
+    let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+    assert!(stderr.contains("self.rss"), "resource snapshot in trace");
+    assert!(
+        stderr.contains("working_set_kb"),
+        "working set carried in snapshot"
+    );
+}
+
+#[test]
 fn actl_trace_goes_to_stderr_and_stdout_stays_pure() {
     // ACTL_TRACE=1:诊断进 stderr;stdout 仍是一个合法 envelope(ADR-002 不变量)
     let out = support::IsolatedCommand::new()

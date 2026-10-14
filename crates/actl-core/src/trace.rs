@@ -65,6 +65,20 @@ pub(crate) fn detail(stage: &str, data: &serde_json::Value) {
     }
 }
 
+/// 资源快照打点(`[actl-trace] self.rss {...}`):命令退出前一次,
+/// WorkingSet/峰值/CPU 累计(创建以来,含启动+COM/UIA 初始化底噪)。
+/// 与 detail 的差异:走 file 落盘路由(ACTL_TRACE_FILE 环境保留全证据)。
+pub fn resource(data: &serde_json::Value) {
+    if enabled() || file_path().is_some() {
+        emit(&format!("[actl-trace] self.rss {data}"));
+    }
+}
+
+/// 旁路是否有消费者(stderr env 或 file):调用方避免无谓的采样开销。
+pub fn routed() -> bool {
+    enabled() || file_path().is_some()
+}
+
 /// 区间计时 guard:`let _t = trace::scope("locate.dfs");` 离开作用域自动打点。
 /// 未启用时 Drop 内不输出(构造开销一次 Instant,纳秒级)。
 pub struct TraceScope {

@@ -725,6 +725,15 @@ L2  actl commands     机器 schema:全命令+参数的 JSON(agent 自发现入�
 
 ### 错误码(初版枚举)
 
+- **panic 兜底信封(2026-10-14)**:运行路径 panic 由 main 两阶段 hook
+  (解析前 unknown,解析后按命令名精化)兜底为 stdout 的 `INTERNAL`
+  信封——evidence 带 `panic_location`(file:line),stderr 同步一行
+  `[actl-panic] <command> <location> <payload>`;退出码 1(三值契约
+  不变,panic 判别靠 evidence 而非新退出码)。stdout 不变量由此完备:
+  **成功、业务失败、panic 三态都有信封,调用方解析永不落空**(硬规则 3
+  的最后防线;hook 内不 unwind,flush 后 TerminateProcess 与 finish
+  同纪律——析构链的 COM Release 是无界阻塞面)。
+
 | 码 | 含义 | agent 的恢复动作 |
 |---|---|---|
 | `STALE_REF` | ref 失效(fallback 链已穷尽) | 重新 snapshot(错误里已附变化线索) |

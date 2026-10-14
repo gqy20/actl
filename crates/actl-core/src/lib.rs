@@ -5,6 +5,13 @@
 
 use serde::{Deserialize, Serialize};
 
+/// 进程启动时刻(panic 兜底信封的 duration 用;main 第一行写入)。
+pub static BOOT: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+
+/// panic 兜底信封的命令名(两阶段:hook 装在解析前,解析后 set 精化;
+/// 未知期 "unknown"——诚实标注而非猜)。
+pub static PANIC_COMMAND: std::sync::OnceLock<&'static str> = std::sync::OnceLock::new();
+
 pub mod activity;
 pub mod challenge;
 pub mod collect;
