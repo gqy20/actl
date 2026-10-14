@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>settle noise fixture</title>
+</head>
+<body>
+<h1>settle noise fixture</h1>
+<!-- 目标元素:正文恒定;埋两个良性噪声源(视觉不可见/无关) -->
+<div id="target" aria-label="稳定目标">正文内容恒定不变</div>
+<!-- 噪声1:隐藏状态文本持续变(常见:A/B 计数器、会话心跳) -->
+<div id="noise-hidden" style="display:none">tick:0</div>
+<!-- 噪声2:title 属性持续翻转(无视觉影响) -->
+<div id="noise-title" title="a">title 噪声元素</div>
+<script>
+  var n = 0;
+  setInterval(function () {
+    n++;
+    document.getElementById('noise-hidden').textContent = 'tick:' + n;
+    document.getElementById('noise-title').setAttribute('title', n % 2 ? 'a' : 'b');
+  }, 200);
+</script>
+</body>
+</html>
