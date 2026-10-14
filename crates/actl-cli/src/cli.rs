@@ -382,6 +382,15 @@ pub(crate) enum Command {
         #[arg(long, default_value_t = 3000)]
         duration: u64,
     },
+    /// Map ALL UIA components of a window with colored boxes (orange = interactive, thin dark = other); read-only, auto-expires — the see-before-design view
+    PreviewMap {
+        /// Target window title substring or hwnd:<n>
+        #[arg(long)]
+        app: String,
+        /// Display duration in milliseconds, 500..30000
+        #[arg(long, default_value_t = 3000)]
+        duration: u64,
+    },
     /// Click an element (UIA Invoke by default; --physical for a real mouse click)
     Click {
         /// Target: uia:<JSON> (strict match/within/scope) | @eN or e<N> (needs --app) | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | focused:[<Type>] (OS keyboard focus element; role-checked, fail-closed) | xy:<x>,<y> (physical-only; needs --app)
@@ -1412,6 +1421,7 @@ pub(crate) enum Command {
 pub(crate) fn app_of(cmd: &Command) -> Option<String> {
     match cmd {
         Command::Preview { app, .. } => Some(app.clone()),
+        Command::PreviewMap { app, .. } => Some(app.clone()),
         Command::Click { app, .. }
         | Command::Focus { app, .. }
         | Command::Get { app, .. }

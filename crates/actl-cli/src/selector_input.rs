@@ -79,6 +79,11 @@ pub(crate) fn validate(command: &Command) -> Result<(), CtlError> {
             actl_uia::preview::validate(&target, snapshot.as_deref(), message, *duration)?;
             actl_uia::preview::validate_candidates(&target, candidate, snapshot.as_deref())?;
         }
+        Command::PreviewMap { app, .. } => {
+            if app.trim().is_empty() {
+                return Err(CtlError::protocol("preview-map requires a nonempty --app"));
+            }
+        }
         Command::Click { target, near, .. }
         | Command::Get { target, near, .. }
         | Command::Type { target, near, .. }

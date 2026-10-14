@@ -48,6 +48,7 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
         Command::Status => "status",
         Command::Decide { .. } => "decide",
         Command::Preview { .. } => "preview",
+        Command::PreviewMap { .. } => "preview-map",
         Command::Desktop(DesktopCommand::DisplayStatus) => "display-status",
         Command::Desktop(DesktopCommand::ExecutionStatus) => "execution-status",
         Command::Desktop(DesktopCommand::FocusReport) => "focus-report",

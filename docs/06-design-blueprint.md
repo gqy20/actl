@@ -223,6 +223,18 @@ find-image --template <png> [--app X] [--threshold 0.85] [--all] [--limit N] [--
                                      # (best-effort,绘制失败不阻塞匹配),结束自动
                                      # 擦除;window 字段附 origin(窗口客户面原点,
                                      # 物理像素)——失败信封可完整重建已扫窗面
+preview-map --app <X> [--duration 3000]
+                                     # 全窗组件画框(「先看见再设计」视图,
+                                     # 2026-10-14):轻量树遍历只读
+                                     # BoundingRectangle+ControlType,layered
+                                     # overlay 按物理 rect 绘框——交互元素
+                                     # 橙色 3px/其他暗青 1px,点击穿透不抢
+                                     # 焦点,--duration(500..30000)后自动消散;
+                                     # 只读零授权。预算 1000 元素/40 深(与观察
+                                     # 上限同深),truncated:true 如实标注截断;
+                                     # 信封带 elements/interactive 计数。用法
+                                     # =UIA 盲区判读(空区=自绘,走截图路线)
+                                     # 与选择器设计的现场可视化
 ```
 
 #### 交互(interact)

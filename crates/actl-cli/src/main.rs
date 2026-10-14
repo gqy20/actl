@@ -89,6 +89,7 @@ fn main() {
                 | crate::cli::FlowCommand::Pause { .. }
                 | crate::cli::FlowCommand::Writeback { .. },
         ) | Command::Preview { .. }
+            | Command::PreviewMap { .. }
             | Command::Decide { .. }
             | Command::Desktop(DesktopCommand::ExecutionStatus | DesktopCommand::ExecutionRecover)
             | Command::Record(
@@ -172,6 +173,7 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             }
             actl_uia::preview::show(app, &target, message, *duration).map(Into::into)
         }
+        Command::PreviewMap { app, duration } => actl_uia::map::map(app, *duration).map(Into::into),
         Command::Flow(command) => flow::dispatch(command).map(Into::into),
         Command::Record(command) => record::dispatch(command).map(Into::into),
         Command::VerifyWindow { app, state } => {

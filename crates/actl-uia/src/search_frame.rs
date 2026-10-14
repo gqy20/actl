@@ -80,6 +80,29 @@ impl SearchFrameGuard {
             thread: Some(thread),
         })
     }
+
+    /// 多框静态覆盖(preview-map):元素 rect 集合一次绘入 overlay——
+    /// interactive=橙色(BGR 0x00A5FF)3px、其他=暗青色 1px;无闪烁
+    /// (与 find-image 的红框闪烁是两种消费形态)。rect 为屏幕物理坐标,
+    /// 由调用方换算到 overlay 本地坐标系(窗口原点差)。
+    pub(crate) fn enter_with_boxes(
+        hwnd: isize,
+        boxes: Vec<([i32; 4], bool)>,
+    ) -> Option<SearchFrameGuard> {
+        let atom = register_class()?;
+        let stop = Arc::new(AtomicBool::new(false));
+        let stop_thread = Arc::clone(&stop);
+        let thread = std::thread::Builder::new()
+            .name("actl-map-frame".into())
+            .spawn(move || {
+                boxes_loop(hwnd, atom, &boxes, &stop_thread);
+            })
+            .ok()?;
+        Some(Self {
+            stop,
+            thread: Some(thread),
+        })
+    }
 }
 
 impl Drop for SearchFrameGuard {
@@ -198,6 +221,133 @@ fn overlay_loop(hwnd_target: isize, atom: u16, stop: &AtomicBool) {
             }
             let _ = ShowWindow(overlay, SW_HIDE);
             std::thread::sleep(Duration::from_millis(HIDE_MS));
+        }
+        let _ = DestroyWindow(overlay);
+        let _ = SelectObject(mem_dc, old);
+        let _ = DeleteObject(HGDIOBJ::from(dib));
+        let _ = DeleteDC(mem_dc);
+        let _ = ReleaseDC(None, screen_dc);
+    }
+}
+
+/// preview-map 的静态多框覆盖:元素 rect 集一次绘入,不闪烁,stop 置位
+/// (guard Drop)后销毁。绘制色彩:interactive 橙(BGR 0x00A5FF)3px、
+/// 其他暗青(BGR 0x8A8A00→视觉暗黄绿调低饱和;实际取青系 0xCCCC00)
+/// 1px。rect 物理坐标 → overlay 本地(减窗口原点)。
+fn boxes_loop(hwnd_target: isize, atom: u16, boxes: &[([i32; 4], bool)], stop: &AtomicBool) {
+    unsafe {
+        let target = HWND(hwnd_target as *mut _);
+        let mut rect = RECT::default();
+        if GetWindowRect(target, &mut rect).is_err() {
+            return;
+        }
+        let (x, y, w, h) = (
+            rect.left,
+            rect.top,
+            rect.right - rect.left,
+            rect.bottom - rect.top,
+        );
+        if w <= 0 || h <= 0 {
+            return;
+        }
+        let Ok(overlay) = CreateWindowExW(
+            WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
+            windows::core::PCWSTR(atom as usize as *const u16),
+            w!("actl-search-frame"),
+            WS_POPUP,
+            x,
+            y,
+            w,
+            h,
+            None,
+            None,
+            None,
+            None,
+        ) else {
+            return;
+        };
+        let screen_dc = GetDC(None);
+        if screen_dc.is_invalid() {
+            let _ = DestroyWindow(overlay);
+            return;
+        }
+        let mem_dc = CreateCompatibleDC(Some(screen_dc));
+        let bmi = BITMAPINFO {
+            bmiHeader: BITMAPINFOHEADER {
+                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth: w,
+                biHeight: -h,
+                biPlanes: 1,
+                biBitCount: 32,
+                biCompression: BI_RGB.0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut bits: *mut core::ffi::c_void = core::ptr::null_mut();
+        let Ok(dib) = CreateDIBSection(Some(mem_dc), &bmi, DIB_RGB_COLORS, &mut bits, None, 0)
+        else {
+            let _ = DestroyWindow(overlay);
+            return;
+        };
+        let old = SelectObject(mem_dc, HGDIOBJ::from(dib));
+        let bits = bits as *mut u8;
+        let stride = w as usize * 4;
+        // 逐框描边(像素直写;框间重叠取或——多框密度下视觉可辨即可)
+        for ([bx, by, bw, bh], interactive) in boxes {
+            // 物理屏幕坐标 → overlay 本地
+            let lx0 = (*bx - x).max(0) as usize;
+            let ly0 = (*by - y).max(0) as usize;
+            let lw = (*bw as usize).min((w as usize).saturating_sub(lx0));
+            let lh = (*bh as usize).min((h as usize).saturating_sub(ly0));
+            let thickness = if *interactive { 3 } else { 1 };
+            let (b, g, r) = if *interactive {
+                (0x00, 0xA5, 0xFF)
+            } else {
+                (0xCC, 0xCC, 0x00)
+            };
+            let paint = |px: usize, py: usize| {
+                if px < w as usize && py < h as usize {
+                    let p = bits.add(py * stride + px * 4);
+                    *p = b;
+                    *p.add(1) = g;
+                    *p.add(2) = r;
+                    *p.add(3) = 0xFF;
+                }
+            };
+            for t in 0..thickness {
+                for cx in lx0..(lx0 + lw) {
+                    paint(cx, ly0 + t);
+                    paint(cx, ly0 + lh.saturating_sub(1 + t));
+                }
+                for cy in ly0..(ly0 + lh) {
+                    paint(lx0 + t, cy);
+                    paint(lx0 + lw.saturating_sub(1 + t), cy);
+                }
+            }
+        }
+        let size = SIZE { cx: w, cy: h };
+        let point = POINT { x: 0, y: 0 };
+        let blend = BLENDFUNCTION {
+            BlendOp: AC_SRC_OVER as u8,
+            BlendFlags: 0,
+            SourceConstantAlpha: 255,
+            AlphaFormat: AC_SRC_ALPHA as u8,
+        };
+        let _ = windows::Win32::UI::WindowsAndMessaging::UpdateLayeredWindow(
+            overlay,
+            Some(screen_dc),
+            None,
+            Some(&size),
+            Some(mem_dc),
+            Some(&point),
+            COLORREF(0),
+            Some(&blend),
+            ULW_ALPHA,
+        );
+        let _ = ShowWindow(overlay, SW_SHOWNOACTIVATE);
+        while !stop.load(Ordering::Acquire) {
+            std::thread::sleep(Duration::from_millis(50));
         }
         let _ = DestroyWindow(overlay);
         let _ = SelectObject(mem_dc, old);

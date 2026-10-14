@@ -62,6 +62,8 @@ fn read_only(cmd: &Command) -> bool {
             | Command::BrowserRead { .. }
             | Command::BrowserNetlog { .. }
             | Command::BrowserVerify { .. }
+            | Command::BrowserScreenshot { .. }
+            | Command::PreviewMap { .. }
     )
 }
 

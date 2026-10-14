@@ -29,6 +29,9 @@ pub mod find_image;
 /// 昂贵 locate 前先廉价原生核对+两级激活,仍非前台让行。
 mod foreground_gate;
 mod handoff;
+/// preview-map:全窗组件画框(先看见再设计;layered overlay 多 rect 绘制)。
+#[allow(unsafe_op_in_unsafe_fn)]
+pub mod map;
 /// find-image 搜索范围可视化(2026-10-14):红框画在目标窗口面,Drop 擦除。
 #[allow(unsafe_op_in_unsafe_fn)]
 mod search_frame;

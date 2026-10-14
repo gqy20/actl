@@ -1256,3 +1256,33 @@ fn list_windows_monitors_topology() {
         assert_eq!(dpi.len(), 2, "dpi is [x,y]");
     }
 }
+
+#[test]
+fn preview_map_contract() {
+    // preview-map(2026-10-14,先看见再设计视图):help 四要素+自描述+参数校验。
+    let (code, text) = actl(&["preview-map", "--help"]);
+    assert_eq!(code, 0);
+    for element in ["Usage", "Example", "Errors", "--duration"] {
+        assert!(text.contains(element), "help missing {element}");
+    }
+    let (_code, stdout) = actl(&["commands"]);
+    let v: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    let names: Vec<&str> = v["data"]["commands"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["name"].as_str().unwrap())
+        .collect();
+    assert!(
+        names.contains(&"preview-map"),
+        "preview-map in self-description"
+    );
+    // 空 --app 在 clap 层缺参即 PROTOCOL;坏 duration 钳制语义(500..30000)
+    let (code, _) = actl(&["preview-map"]);
+    assert_eq!(code, 2, "missing --app rejected");
+    // 未知窗 NOT_FOUND(只读,零授权)
+    let (code, stdout) = actl(&["preview-map", "--app", "NoSuchWindowXYZ"]);
+    assert_eq!(code, 1);
+    let v: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(v["error"]["code"], "NOT_FOUND");
+}
