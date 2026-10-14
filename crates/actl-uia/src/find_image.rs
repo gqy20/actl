@@ -31,14 +31,14 @@ pub struct FindImageSpec<'a> {
 const SCALE_FACTORS: [f32; 6] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 
 /// 窗口像素捕获结果(BGRA top-down + 屏幕物理原点 + 身份)。
-struct WindowPixels {
-    bgra: Vec<u8>,
-    w: i32,
-    h: i32,
-    origin_x: i32,
-    origin_y: i32,
-    title: String,
-    hwnd: isize,
+pub(crate) struct WindowPixels {
+    pub bgra: Vec<u8>,
+    pub w: i32,
+    pub h: i32,
+    pub origin_x: i32,
+    pub origin_y: i32,
+    pub title: String,
+    pub hwnd: isize,
 }
 
 pub fn find_image(spec: FindImageSpec<'_>) -> Result<Value, CtlError> {
@@ -185,7 +185,7 @@ pub fn find_image(spec: FindImageSpec<'_>) -> Result<Value, CtlError> {
 /// 边框偏移(窗宽-位图宽)/2——PrintWindow 渲染的是不含 DWM 扩展边框的
 /// 窗口内容(比 GetWindowRect 小一圈),两者差即边框(真机实证 13px 系统
 /// 偏移;对称近似,不对称标题栏场景残余误差 ≤ 数像素)。
-fn capture_window(app: Option<&str>) -> Result<WindowPixels, CtlError> {
+pub(crate) fn capture_window(app: Option<&str>) -> Result<WindowPixels, CtlError> {
     use windows::Win32::Foundation::RECT;
     use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowRect};
     let r = match app {

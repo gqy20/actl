@@ -1280,8 +1280,42 @@ fn preview_map_contract() {
     // 空 --app 在 clap 层缺参即 PROTOCOL;坏 duration 钳制语义(500..30000)
     let (code, _) = actl(&["preview-map"]);
     assert_eq!(code, 2, "missing --app rejected");
-    // 未知窗 NOT_FOUND(只读,零授权)
-    let (code, stdout) = actl(&["preview-map", "--app", "NoSuchWindowXYZ"]);
+}
+#[test]
+fn image_regions_contract() {
+    // image-regions(2026-10-14,盲区几何提议器):help 四要素+自描述+参数校验。
+    let (code, text) = actl(&["image-regions", "--help"]);
+    assert_eq!(code, 0);
+    for element in ["Usage", "Example", "Errors", "--motion", "--rect"] {
+        assert!(text.contains(element), "help missing {element}");
+    }
+    let (_code, stdout) = actl(&["commands"]);
+    let v: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    let names: Vec<&str> = v["data"]["commands"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["name"].as_str().unwrap())
+        .collect();
+    assert!(
+        names.contains(&"image-regions"),
+        "image-regions in self-description"
+    );
+    // 坏 rect 格式/零宽/越界参数 → PROTOCOL(参数面错误退出码 2,语义面 1)
+    for args in [
+        ["--app", "NoSuchWindowXYZ", "--rect", "1,2"],
+        ["--app", "NoSuchWindowXYZ", "--rect", "1,2,0,9"],
+        ["--app", "NoSuchWindowXYZ", "--threshold", "10"],
+    ] {
+        let mut argv = vec!["image-regions"];
+        argv.extend_from_slice(&args);
+        let (code, stdout) = actl(&argv);
+        assert_eq!(code, 2, "PROTOCOL args {:?} -> exit 2", args);
+        let v: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+        assert_eq!(v["error"]["code"], "PROTOCOL");
+    }
+    // 未知窗 NOT_FOUND(只读,零授权;合法参数走到窗口解析才失败)
+    let (code, stdout) = actl(&["image-regions", "--app", "NoSuchWindowXYZ"]);
     assert_eq!(code, 1);
     let v: serde_json::Value = serde_json::from_str(&stdout).unwrap();
     assert_eq!(v["error"]["code"], "NOT_FOUND");

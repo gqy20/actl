@@ -90,6 +90,7 @@ fn main() {
                 | crate::cli::FlowCommand::Writeback { .. },
         ) | Command::Preview { .. }
             | Command::PreviewMap { .. }
+            | Command::ImageRegions { .. }
             | Command::Decide { .. }
             | Command::Desktop(DesktopCommand::ExecutionStatus | DesktopCommand::ExecutionRecover)
             | Command::Record(
@@ -174,6 +175,24 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             actl_uia::preview::show(app, &target, message, *duration).map(Into::into)
         }
         Command::PreviewMap { app, duration } => actl_uia::map::map(app, *duration).map(Into::into),
+        Command::ImageRegions {
+            app,
+            rect,
+            threshold,
+            min_cells,
+            density,
+            limit,
+            motion,
+        } => actl_uia::image_regions::image_regions(actl_uia::image_regions::ImageRegionsSpec {
+            app: app.as_deref(),
+            rect: rect.as_deref(),
+            threshold: *threshold,
+            min_cells: *min_cells,
+            density: *density,
+            limit: *limit,
+            motion: *motion,
+        })
+        .map(Into::into),
         Command::Flow(command) => flow::dispatch(command).map(Into::into),
         Command::Record(command) => record::dispatch(command).map(Into::into),
         Command::VerifyWindow { app, state } => {

@@ -391,6 +391,30 @@ pub(crate) enum Command {
         #[arg(long, default_value_t = 3000)]
         duration: u64,
     },
+    /// Propose image-like regions on the window surface (UIA-blind geometry: thumbnails, covers, avatars); read-only
+    ImageRegions {
+        /// Window anchor: title substring or hwnd:<n> (default: foreground window)
+        #[arg(long)]
+        app: Option<String>,
+        /// Restrict to this screen region: <x>,<y>,<w>,<h> physical pixels
+        #[arg(long, value_name = "X,Y,W,H")]
+        rect: Option<String>,
+        /// Per-cell gray variance threshold (default 800, range 50..=20000)
+        #[arg(long)]
+        threshold: Option<f64>,
+        /// Minimum cells per region (default 25 ≈ 50x50 px, range 4..=2500)
+        #[arg(long)]
+        min_cells: Option<usize>,
+        /// Minimum in-box cell density 0.0..=1.0 (default 0 = no filter)
+        #[arg(long)]
+        density: Option<f64>,
+        /// Max regions returned (default 64, max 200)
+        #[arg(long)]
+        limit: Option<usize>,
+        /// Capture a second frame after 1s and report per-region motion (0 = static)
+        #[arg(long)]
+        motion: bool,
+    },
     /// Click an element (UIA Invoke by default; --physical for a real mouse click)
     Click {
         /// Target: uia:<JSON> (strict match/within/scope) | @eN or e<N> (needs --app) | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | focused:[<Type>] (OS keyboard focus element; role-checked, fail-closed) | xy:<x>,<y> (physical-only; needs --app)

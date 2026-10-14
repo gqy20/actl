@@ -29,6 +29,8 @@ pub mod find_image;
 /// 昂贵 locate 前先廉价原生核对+两级激活,仍非前台让行。
 mod foreground_gate;
 mod handoff;
+/// image-regions:盲区几何提议器(方差网格+连通域,零语义;算法核在 core)。
+pub mod image_regions;
 /// preview-map:全窗组件画框(先看见再设计;layered overlay 多 rect 绘制)。
 #[allow(unsafe_op_in_unsafe_fn)]
 pub mod map;

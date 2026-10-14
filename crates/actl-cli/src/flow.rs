@@ -64,6 +64,7 @@ fn read_only(cmd: &Command) -> bool {
             | Command::BrowserVerify { .. }
             | Command::BrowserScreenshot { .. }
             | Command::PreviewMap { .. }
+            | Command::ImageRegions { .. }
     )
 }
 

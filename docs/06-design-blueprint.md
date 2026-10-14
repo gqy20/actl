@@ -235,6 +235,26 @@ preview-map --app <X> [--duration 3000]
                                      # 信封带 elements/interactive 计数。用法
                                      # =UIA 盲区判读(空区=自绘,走截图路线)
                                      # 与选择器设计的现场可视化
+image-regions [--app <X>] [--rect X,Y,W,H]
+           [--threshold N] [--min-cells N] [--density F]
+           [--limit N] [--motion]
+                                     # 盲区几何提议器(2026-10-14,确定性零
+                                     # 语义):UIA 盲区(自绘缩略图/封面/头像)
+                                     # 的像素仍在窗口表面——10px 灰度网格
+                                     # 方差(默认 800)+8 连通域,提议图像类
+                                     # 内容候选矩形:屏幕物理坐标+click 可
+                                     # 直接消费的 center+density+cells;
+                                     # --motion 双帧(Δ1s)差标记动画区域
+                                     # (>0=视频/GIF——单帧对任何分类器都
+                                     # 像 photo,motion 才是定性依据);
+                                     # 空结果 NOT_FOUND(平色面无提议是设
+                                     # 计行为,NOT_FOUND 更常见含义=锚错
+                                     # 窗口/子区)。零语义:区域是什么归
+                                     # decide 视觉咨询,精确确认归 find-image
+                                     # ——链:propose→screenshot 裁片→
+                                     # find-image 确认→click/decide。算法
+                                     # 在 actl-core(合成图单测),捕获与
+                                     # find-image 同路(PrintWindow PMv2)
 ```
 
 #### 交互(interact)

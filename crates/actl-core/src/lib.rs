@@ -16,6 +16,7 @@ pub mod handoff;
 pub mod history;
 mod history_index;
 mod history_retention;
+pub mod image_regions;
 pub mod keys;
 pub mod log_health;
 pub mod log_integrity;
