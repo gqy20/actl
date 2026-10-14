@@ -49,6 +49,7 @@ pub(crate) fn command_name(cmd: &Command) -> &'static str {
         Command::Decide { .. } => "decide",
         Command::Preview { .. } => "preview",
         Command::ImageRegions { .. } => "image-regions",
+        Command::VerifyVisual { .. } => "verify-visual",
         Command::PreviewMap { .. } => "preview-map",
         Command::Desktop(DesktopCommand::DisplayStatus) => "display-status",
         Command::Desktop(DesktopCommand::ExecutionStatus) => "execution-status",

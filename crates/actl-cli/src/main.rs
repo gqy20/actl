@@ -170,6 +170,7 @@ fn main() {
         ) | Command::Preview { .. }
             | Command::PreviewMap { .. }
             | Command::ImageRegions { .. }
+            | Command::VerifyVisual { .. }
             | Command::Decide { .. }
             | Command::Desktop(DesktopCommand::ExecutionStatus | DesktopCommand::ExecutionRecover)
             | Command::Record(
@@ -270,6 +271,28 @@ pub(crate) fn dispatch(command: &Command) -> Result<CommandOutput, CtlError> {
             density: *density,
             limit: *limit,
             motion: *motion,
+        })
+        .map(Into::into),
+        Command::VerifyVisual {
+            a,
+            b,
+            baseline,
+            app,
+            rect,
+            changed,
+            unchanged,
+            diff_threshold,
+            ratio_threshold,
+        } => actl_uia::visual_verify::verify_visual(actl_uia::visual_verify::VerifyVisualSpec {
+            a: a.as_deref(),
+            b: b.as_deref(),
+            baseline: baseline.as_deref(),
+            app: app.as_deref(),
+            rect: rect.as_deref(),
+            changed: *changed,
+            unchanged: *unchanged,
+            diff_threshold: *diff_threshold,
+            ratio_threshold: (*ratio_threshold).unwrap_or(0.0),
         })
         .map(Into::into),
         Command::Flow(command) => flow::dispatch(command).map(Into::into),

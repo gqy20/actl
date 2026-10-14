@@ -415,6 +415,36 @@ pub(crate) enum Command {
         #[arg(long)]
         motion: bool,
     },
+    /// Assert visual change between two screenshots, or live window vs baseline (read-only)
+    VerifyVisual {
+        /// First screenshot PNG (with --b: two-file mode)
+        #[arg(long, requires = "b", conflicts_with_all = ["baseline", "app", "vrect"])]
+        a: Option<String>,
+        /// Second screenshot PNG (with --a: two-file mode)
+        #[arg(long, id = "b", requires = "a", conflicts_with_all = ["baseline", "app", "vrect"])]
+        b: Option<String>,
+        /// Baseline PNG to compare the live window against (requires --app)
+        #[arg(long, conflicts_with_all = ["a", "b"])]
+        baseline: Option<String>,
+        /// Live window anchor: title substring or hwnd:<n> (--baseline mode)
+        #[arg(long, requires = "baseline", conflicts_with = "a")]
+        app: Option<String>,
+        /// Restrict the live capture to this screen region: <x>,<y>,<w>,<h> physical pixels
+        #[arg(long, id = "vrect", value_name = "X,Y,W,H", requires = "baseline")]
+        rect: Option<String>,
+        /// Assert the frames DIFFER (pass --unchanged for the inverse)
+        #[arg(long, conflicts_with = "unchanged")]
+        changed: bool,
+        /// Assert the frames are IDENTICAL (within thresholds)
+        #[arg(long, conflicts_with = "changed")]
+        unchanged: bool,
+        /// Mean-abs-diff threshold 0..=255 (0 = don't judge this channel); direction per --changed/--unchanged
+        #[arg(long)]
+        diff_threshold: Option<f64>,
+        /// Changed-cell ratio threshold 0..=1 (0 = don't judge this channel)
+        #[arg(long)]
+        ratio_threshold: Option<f64>,
+    },
     /// Click an element (UIA Invoke by default; --physical for a real mouse click)
     Click {
         /// Target: uia:<JSON> (strict match/within/scope) | @eN or e<N> (needs --app) | name:<substr> | id:<AutomationId> | role:<Type> | role:<Type>#N | focused:[<Type>] (OS keyboard focus element; role-checked, fail-closed) | xy:<x>,<y> (physical-only; needs --app)

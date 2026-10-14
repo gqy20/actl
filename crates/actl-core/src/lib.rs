@@ -39,6 +39,7 @@ pub mod template_match;
 pub mod timing;
 pub mod trace;
 pub mod trajectory;
+pub mod visual_diff;
 pub mod wait_control;
 pub mod watchdog;
 

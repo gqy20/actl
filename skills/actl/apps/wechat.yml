@@ -138,8 +138,10 @@ quirks:
   - id: moments_thumb_blind
     note: >-
       朋友圈帖子缩略图 UIA 盲(sns_list ListItem 只有复合 name,子内容零暴露,
-      preview-map 同窗画框确认)——定位走截图+方形组件扫描(高方差连通域,
-      本 DPI 缩略图为 160×160 px 方块)或 find-image 实渲染模板;点击物理坐标
+      preview-map 同窗画框确认)——定位走 image-regions --rect(方差连通域
+      提议,本 DPI 缩略图为 160×160 px 方块)或 find-image 实渲染模板;点击
+      物理坐标;查看器打开/关闭/翻页的像素断言走 verify-visual(双通道
+      --diff-threshold/--ratio-threshold,时间戳重绘噪声在胞阈之下)
   - id: moments_viewer_overlay
     note: >-
       朋友圈图片查看器是窗内覆盖层:不创建新 HWND、UIA 树零新元素(mmui::XMenu
@@ -355,9 +357,9 @@ routes:
       - ["snapshot", "--app", "{window}"]
       - ["press", "esc", "--app", "{window}"]
   - id: read_image_message
-    description: 图片消息内容读取(UIA 失明兜底:截图+视觉模型;须先打开含图会话)
+    description: 图片消息内容读取(UIA 失明兜底:截图+decide 视觉咨询判读,red_grid/cjk_grid 双图 0.97+ 实证;须先打开含图会话)
 
-    status: manual
+    status: verified
     steps:
       - ["snapshot", "--app", "{window}", "--skeleton"]
       - ["screenshot", "--element", "{bubble_selector}", "--app", "{window}"]
@@ -376,7 +378,7 @@ routes:
     verify: list-windows 出现 mmui::PreviewWindow(与主窗同 pid 族);内容判读可另走 decide 视觉咨询(0.97+);关闭后核对窗口消失
     steps:
       - ["find", "--name", "图片", "--role", "ListItem", "--property", "rect", "--app", "{window}"]
-      # 缩略图在气泡 rect 内但 ref-replay 落点可能在文字/空白——用 find-image 实渲染模板或组件扫描定缩略图中心
+      # 缩略图在气泡 rect 内但 ref-replay 落点可能在文字/空白——用 find-image 实渲染模板或 image-regions --rect 定缩略图中心
       - ["click", "xy:{thumb_point}", "--app", "{window}", "--physical"]
       - ["wait", "--window", "图片和视频", "--timeout", "6000"]
       - ["press", "esc", "--app", "图片和视频"]
@@ -393,20 +395,22 @@ routes:
       - ["find", "--name", "{toggle_name}", "--property", "selected", "--app", "设置"]
       - ["press", "esc", "--app", "设置"]
   - id: moments_thumbnail_open
-    description: 朋友圈帖子缩略图查看(缩略图 UIA 盲→截图组件扫描定位→物理点击→窗内覆盖层查看器→esc)
+    description: 朋友圈帖子缩略图查看(缩略图 UIA 盲→image-regions 定位→物理点击→窗内覆盖层查看器→esc;打开/关闭像素断言)
     status: verified
-    verify: 打开判据=无新窗+区域像素大改(对比打开前后同 rect 截图 diff>5);关闭后同 rect diff 回落至时间戳级
+    verify: verify-visual --baseline 同 rect 截图 --changed --diff-threshold 5(打开大改);esc 后 --unchanged --diff-threshold 3(还原,时间戳级漂移容忍)
     steps:
       - ["find", "--id", "sns_list", "--property", "rect", "--app", "{window}"]
-      - ["screenshot", "--rect", "{sns_x},{sns_y},{sns_w},{sns_h}"]
-      # agent 步:方形组件扫描(160×160 高方差块)或 find-image 实渲染模板得 {thumb_point}(屏幕物理坐标)
+      - ["screenshot", "--rect", "{sns_x},{sns_y},{sns_w},{sns_h}", "--out", "{before_png}"]
+      - ["image-regions", "--app", "{window}", "--rect", "{sns_x},{sns_y},{sns_w},{sns_h}", "--min-cells", "25"]
+      - ["verify-visual", "--baseline", "{before_png}", "--app", "{window}", "--rect", "{sns_x},{sns_y},{sns_w},{sns_h}", "--changed", "--diff-threshold", "5"]
       - ["click", "xy:{thumb_point}", "--app", "{window}", "--physical"]
-      - ["screenshot", "--rect", "{sns_x},{sns_y},{sns_w},{sns_h}"]
+      - ["verify-visual", "--baseline", "{before_png}", "--app", "{window}", "--rect", "{sns_x},{sns_y},{sns_w},{sns_h}", "--changed", "--diff-threshold", "15"]
       - ["press", "esc", "--app", "{window}"]
+      - ["verify-visual", "--baseline", "{before_png}", "--app", "{window}", "--rect", "{sns_x},{sns_y},{sns_w},{sns_h}", "--unchanged", "--diff-threshold", "3"]
   - id: moments_photo_paging
-    description: 朋友圈查看器翻页(right/left 帖内导航、两端钳制;像素验证须同态基线见 quirks)
+    description: 朋友圈查看器翻页(right/left 帖内导航、两端钳制;verify-visual 同态基线断言)
     status: verified
-    verify: 翻页前后同 rect 截图 diff>5(呈现变化);连按过末端后 diff≤1.5(钳制)
+    verify: 翻页=verify-visual --changed --diff-threshold 5;末端钳制=连按后 verify-visual --unchanged(同态照片,呈现不变)
     steps:
       - ["press", "right", "--app", "{window}", "--repeat", "{n}"]
       - ["screenshot", "--rect", "{sns_x},{sns_y},{sns_w},{sns_h}"]

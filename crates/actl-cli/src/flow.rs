@@ -65,6 +65,7 @@ fn read_only(cmd: &Command) -> bool {
             | Command::BrowserScreenshot { .. }
             | Command::PreviewMap { .. }
             | Command::ImageRegions { .. }
+            | Command::VerifyVisual { .. }
     )
 }
 
@@ -526,7 +527,9 @@ impl Host for Adapter<'_> {
         // 始终信任此流程:standing 声明 → 指纹跟随请求(持久信任匹配,
         // 模板变更自动失效);非 standing 不带指纹(不影响其他信任通道)。
         if handoff_policy.approval == actl_core::handoff::Approval::Standing {
-            let hash = actl_core::handoff::plan_fingerprint(
+            // 2026-10-14 结构指纹:inputs(调用方参数)与 auto_resume(策略面)
+            // 剔除出哈希——参数变更不击穿信任集,结构性变更(步骤/处理器)仍失效
+            let hash = actl_core::handoff::plan_structure_fingerprint(
                 &serde_json::to_value(self.plan).unwrap_or(serde_json::Value::Null),
             );
             actl_uia::set_plan_hash(Some(hash));

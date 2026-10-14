@@ -233,6 +233,11 @@ pub fn decode_png_file(path: &Path) -> Result<(Vec<u8>, u32, u32), CtlError> {
     unsafe { decode_png(path) }
 }
 
+/// 同 `decode_png_file`(命名对齐消费语境:verify-visual 按路径读图)。
+pub fn decode_png_file_path(path: &Path) -> Result<(Vec<u8>, u32, u32), CtlError> {
+    decode_png_file(path)
+}
+
 /// WIC PNG 解码 → BGRA top-down(与 encode_png 对称;MTA 公寓纪律同规)。
 unsafe fn decode_png(path: &Path) -> Result<(Vec<u8>, u32, u32), CtlError> {
     use windows::Win32::Graphics::Imaging::{

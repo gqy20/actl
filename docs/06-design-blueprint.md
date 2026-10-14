@@ -305,6 +305,26 @@ verify --value <target> <expected> --property name|value|text [--contains] [--no
 verify --value TARGET EXPECTED --url-query KEY [--app APP]     # URL 查询参数断言(§7.7)
 verify-file / verify-rows / verify-owner / verify-closed / verify-clipboard   # 只读断言族(§7.7)
 verify-window --app <锚> --state <exists|absent|foreground|minimized|visible>  # 窗口态断言(§7.7)
+verify-visual (--a P1 --b P2 | --baseline P --app <锚> [--rect X,Y,W,H]) (--changed|--unchanged) [--diff-threshold N] [--ratio-threshold N]
+                                     # 像素对比断言(2026-10-14,verify 链视觉
+                                     # 末端):双文件(--a/--b 两张同源截图)或
+                                     # 现拍(--baseline 窗口 PrintWindow 捕获,
+                                     # --rect 屏幕物理子区)。双通道判据:
+                                     # mean_abs_diff(采样像素平均绝对灰度差
+                                     # 0-255)与 changed_ratio(10px 胞级差
+                                     # ≥12 的变化胞占比——压缩/亚像素噪声在
+                                     # 胞阈之下不触发);阈值 0=该通道不判,
+                                     # 至少一通道。--changed 断言有变化,
+                                     # --unchanged 断言一致(恢复/关闭类验收,
+                                     # 小漂移可容忍);变化区域=变化胞 8 连通
+                                     # 域 bbox(阅读序,--baseline 模式屏幕
+                                     # 物理坐标)。失败=ASSERTION_FAILED 带
+                                     # 完整 metrics(evidence)。只读零注入。
+                                     # 盲区工作流闭环:propose(image-regions)
+                                     # →confirm(find-image)→act(click)→
+                                     # verify(verify-visual);UIA 盲内容
+                                     # 的验收断言由此 YAML 化(AGENTS 验收
+                                     # 纪律 1 的 flow 表达能力补全)
 ```
 
 #### 窗口/应用(window)

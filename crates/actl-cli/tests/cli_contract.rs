@@ -371,6 +371,56 @@ fn batch_failure_carries_partial_steps_in_evidence() {
 }
 
 #[test]
+fn verify_visual_contract() {
+    // verify-visual(2026-10-14,verify 链视觉末端):help 四要素+自描述+参数门控。
+    let (code, text) = actl(&["verify-visual", "--help"]);
+    assert_eq!(code, 0);
+    for element in ["Usage", "Example", "Errors", "--changed", "--baseline"] {
+        assert!(text.contains(element), "help missing {element}");
+    }
+    let (_code, stdout) = actl(&["commands"]);
+    let v: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    let names: Vec<&str> = v["data"]["commands"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["name"].as_str().unwrap())
+        .collect();
+    assert!(names.contains(&"verify-visual"), "self-description");
+    // 方向互斥:双选 → clap 层 PROTOCOL 信封(exit 2)
+    for args in [
+        vec!["--a", "x.png", "--b", "y.png", "--changed", "--unchanged"],
+        vec!["--a", "x.png", "--b", "y.png"],
+    ] {
+        let mut argv = vec!["verify-visual"];
+        argv.extend_from_slice(&args);
+        let (code, stdout) = actl(&argv);
+        assert_eq!(code, 2, "gate args {:?} -> exit 2", args);
+        let v: serde_json::Value = serde_json::from_str(stdout.trim()).unwrap();
+        assert_eq!(v["error"]["code"], "PROTOCOL");
+    }
+    // 无判定通道 → PROTOCOL(运行路径校验)
+    let (code, stdout) = actl(&["verify-visual", "--a", "x.png", "--b", "y.png", "--changed"]);
+    assert_eq!(code, 2);
+    let v: serde_json::Value = serde_json::from_str(stdout.trim()).unwrap();
+    assert_eq!(v["error"]["code"], "PROTOCOL");
+    // 双文件真实对比:两张不存在文件 → INTERNAL(参数面过了走到读取)
+    let (code, stdout) = actl(&[
+        "verify-visual",
+        "--a",
+        "no-such-a.png",
+        "--b",
+        "no-such-b.png",
+        "--changed",
+        "--diff-threshold",
+        "1",
+    ]);
+    assert_eq!(code, 1);
+    let v: serde_json::Value = serde_json::from_str(stdout.trim()).unwrap();
+    assert_eq!(v["error"]["code"], "INTERNAL");
+}
+
+#[test]
 fn panic_produces_internal_envelope_on_stdout() {
     // panic 兜底信封(2026-10-14 日志盘点轮):硬规则 3 的最后防线——
     // panic 不得让 stdout 空手而归。测试缝 ACTL_TEST_PANIC 触发真 panic。

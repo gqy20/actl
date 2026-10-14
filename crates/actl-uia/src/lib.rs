@@ -39,6 +39,8 @@ pub mod resource;
 /// find-image 搜索范围可视化(2026-10-14):红框画在目标窗口面,Drop 擦除。
 #[allow(unsafe_op_in_unsafe_fn)]
 mod search_frame;
+/// verify-visual:像素对比断言(verify 链视觉末端;算法核在 core::visual_diff)。
+pub mod visual_verify;
 /// 流程执行器注入计划指纹的窄通道(始终信任此流程)。
 pub fn set_plan_hash(hash: Option<String>) {
     handoff::set_plan_hash(hash);
