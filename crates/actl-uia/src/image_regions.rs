@@ -113,8 +113,10 @@ pub fn image_regions(spec: ImageRegionsSpec<'_>) -> Result<Value, CtlError> {
             }
         }
     };
-    // motion:Δ1s 第二帧(同窗口再捕获一次;只对裁剪面算差)
+    // motion:Δ1s 第二帧(同窗口再捕获一次;只对裁剪面算差)。睡眠单独入
+    // breakdown——duration 里分不清是 motion 的固定 Δ 还是捕获变慢
     let second = if spec.motion {
+        let _t = actl_core::trace::scope("regions.motion-sleep");
         std::thread::sleep(std::time::Duration::from_millis(1000));
         let win2 = capture_window(spec.app)?;
         let g2 = to_gray(&win2.bgra, win2.w as usize, win2.h as usize)
@@ -128,14 +130,25 @@ pub fn image_regions(spec: ImageRegionsSpec<'_>) -> Result<Value, CtlError> {
         None
     };
 
-    let regions = image_regions::scan(&full_gray, &params, second.as_ref());
+    // 网格+连通域(全窗 2230px 级 O(面),大窗方差可见)
+    let regions = {
+        let _t = actl_core::trace::scope("regions.grid");
+        image_regions::scan(&full_gray, &params, second.as_ref())
+    };
+    // 裁剪面偏移:crop 时区域坐标是裁剪面本地的,换算屏幕须补回裁剪原点
+    // (= --rect 左上角);漏加会让输出整体偏 (rect-窗口原点) 差值,
+    // click xy: 会点错位置(2026-10-14 真机复现:rect y610 却报出 y475)
+    let (cx, cy) = match crop {
+        Some((x0, y0, _, _)) => (x0, y0),
+        None => (0, 0),
+    };
     let to_json = |r: &actl_core::image_regions::Region| {
         json!({
-            "x": win.origin_x + r.x,
-            "y": win.origin_y + r.y,
+            "x": win.origin_x + cx + r.x,
+            "y": win.origin_y + cy + r.y,
             "w": r.w,
             "h": r.h,
-            "center": [win.origin_x + r.x + r.w / 2, win.origin_y + r.y + r.h / 2],
+            "center": [win.origin_x + cx + r.x + r.w / 2, win.origin_y + cy + r.y + r.h / 2],
             "density": r.density,
             "cells": r.cells,
             "motion": r.motion,
