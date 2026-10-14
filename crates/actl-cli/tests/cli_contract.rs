@@ -736,10 +736,11 @@ fn find_property_batch_harvest_contract() {
     assert_eq!(code, 2, "unknown --property rejected at clap layer");
     let (code, stdout) = actl(&["find", "--target", "focused:", "--property", "value"]);
     assert_eq!(code, 2, "--property conflicts with --target");
-    assert!(
-        stdout.trim().is_empty(),
-        "clap conflict errors carry no envelope"
-    );
+    // 2026-10-14 spec(clap 错误信封化):clap 层错误也吐 PROTOCOL 信封——
+    // stdout 不变量全路径成立(旧断言钉的是裸 stderr 形态)
+    let v: serde_json::Value =
+        serde_json::from_str(stdout.trim()).expect("clap conflict yields envelope");
+    assert_eq!(v["error"]["code"], "PROTOCOL");
     let (code, stdout) = actl(&["find", "--help"]);
     assert_eq!(code, 0);
     assert!(
@@ -845,10 +846,11 @@ fn window_commands_without_selector_is_protocol() {
     // 不产 envelope(ADR-002 例外面与未知子命令同款)——与语义层
     // PROTOCOL envelope 区分,两者都 exit 2 但 stdout 形态不同
     assert_eq!(code, 2, "resize with both anchors is clap-rejected");
-    assert!(
-        stdout.trim().is_empty(),
-        "clap arg errors carry no envelope (stdout stays empty)"
-    );
+    // 2026-10-14 spec(clap 错误信封化):exit 2 不变,stdout 从空变 PROTOCOL
+    // 信封——与语义层 PROTOCOL 同形态,按信封统一消费
+    let v: serde_json::Value =
+        serde_json::from_str(stdout.trim()).expect("clap arg errors yield envelope");
+    assert_eq!(v["error"]["code"], "PROTOCOL");
 }
 
 #[test]
@@ -886,10 +888,11 @@ fn paste_requires_app_fail_closed() {
     // 与未知子命令同款:exit 2,stdout 空)
     let (code, stdout) = actl(&["paste"]);
     assert_eq!(code, 2);
-    assert!(
-        stdout.trim().is_empty(),
-        "clap usage errors stay off stdout"
-    );
+    // 2026-10-14 spec(clap 错误信封化):注入类 fail-closed 不变,stdout 带
+    // PROTOCOL 信封(消费方可程序化判读拒绝原因)
+    let v: serde_json::Value =
+        serde_json::from_str(stdout.trim()).expect("clap usage error yields envelope");
+    assert_eq!(v["error"]["code"], "PROTOCOL");
 }
 
 #[test]
@@ -1044,7 +1047,8 @@ fn app_registry_validation_contract() {
 fn watchdog_terminates_a_stuck_process_with_stderr_marker() {
     // 运行时治理第三轮:UIA 挂起族的进程级防护——ACTL_TEST_HANG_MS 缝
     // 制造确定性无进展,看门狗(800ms)必须在远早于挂起时长内自我终止,
-    // 退出码 1 + stderr 标记(stdout envelope 纪律:主线程已卡本无 envelope)。
+    // 退出码 1 + stderr 标记。2026-10-14 收口:击杀前看门狗线程吐兜底
+    // 信封(挂死也可解析),硬退出走注入的 TerminateProcess。
     let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_actl"));
     command
         .args(["status"])
@@ -1063,6 +1067,51 @@ fn watchdog_terminates_a_stuck_process_with_stderr_marker() {
         stderr.contains("[watchdog]"),
         "stderr marker missing: {stderr}"
     );
+    // 兜底信封:stdout 不再空手而归——挂死路径同样可解析
+    let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+    let v: serde_json::Value =
+        serde_json::from_str(stdout.trim()).expect("watchdog kill still yields a JSON envelope");
+    assert_eq!(v["ok"], false);
+    assert_eq!(v["error"]["code"], "INTERNAL");
+    assert_eq!(v["command"], "status", "command refined pre-hang");
+    assert!(
+        v["error"]["evidence"]["no_progress_ms"].as_u64().is_some(),
+        "no_progress_ms carried in evidence"
+    );
+}
+
+#[test]
+fn clap_parse_error_yields_protocol_envelope() {
+    // 逃逸路径③(2026-10-14):clap 解析错误此前=裸 stderr+stdout 空,
+    // 现转 PROTOCOL 信封+exit 2——与运行路径校验层行为一致,stdout
+    // 不变量全路径成立。--help/--version 例外保留人类文本。
+    let out = support::IsolatedCommand::new()
+        .command
+        .args(["--no-such-flag"])
+        .output()
+        .expect("spawn actl");
+    assert_eq!(out.status.code(), Some(2));
+    let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+    let v: serde_json::Value =
+        serde_json::from_str(stdout.trim()).expect("parse error yields a JSON envelope");
+    assert_eq!(v["ok"], false);
+    assert_eq!(v["error"]["code"], "PROTOCOL");
+    assert!(
+        v["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("--no-such-flag"),
+        "clap diagnostic preserved in message"
+    );
+    // 元命令例外不受影响:--version 人类文本 exit 0
+    let out = support::IsolatedCommand::new()
+        .command
+        .args(["--version"])
+        .output()
+        .expect("spawn actl");
+    assert_eq!(out.status.code(), Some(0));
+    let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+    assert!(!stdout.contains("\"ok\""), "version stays human text");
 }
 
 #[test]

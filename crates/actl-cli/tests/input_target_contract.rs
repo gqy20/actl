@@ -21,7 +21,12 @@ fn guarded_input_flags_are_discoverable_and_snapshot_requires_target() {
         .output()
         .unwrap();
     assert_eq!(out.status.code(), Some(2));
-    assert!(String::from_utf8_lossy(&out.stderr).contains("--target"));
+    // 2026-10-14 spec(clap 错误信封化):clap 诊断从 stderr 迁入 stdout 的
+    // PROTOCOL 信封 message——按信封断言(旧断言钉的是 stderr 形态)
+    let v: serde_json::Value = serde_json::from_str(String::from_utf8_lossy(&out.stdout).trim())
+        .expect("clap usage error yields envelope");
+    assert_eq!(v["error"]["code"], "PROTOCOL");
+    assert!(v["error"]["message"].as_str().unwrap().contains("--target"));
 }
 
 #[test]

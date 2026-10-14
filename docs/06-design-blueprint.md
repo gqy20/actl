@@ -348,8 +348,13 @@ app-locate <名> [--register]:软件位置五通道只读探测(①别名→②A
 list-windows 前台兜底:UIA 桌面子树在 provider 楔死时漏窗(无标题保存框实证),
   前台窗缺失时用 Win32 直读回填——枚举不失明于"当前正挡着什么"
 UIA 看门狗(引擎行为):定位/树观察/焦点查询区段超过 ACTL_UIA_WATCHDOG_MS
-  (默认 20000,0=禁用)时进程带退出码 125 自毙——无界 COM 挂起从"永久僵尸"
-  变"限内诚实失败"(docs/81 §8 僵尸事故根治)
+  (默认 20000,0=禁用)时进程自毙(退出码 1)——无界 COM 挂起从"永久僵尸"
+  变"限内诚实失败"(docs/81 §8 僵尸事故根治)。**进程级看门狗
+  (ACTL_WATCHDOG_MS,默认 120000)同语义**:无进展(非总时长)自毙,
+  2026-10-14 收口——击杀前吐兜底 INTERNAL 信封(evidence.no_progress_ms)
+  + stderr `[watchdog]` 行,硬退出走与 finish 同款 TerminateProcess
+  (std::process::exit 的 CRT 清理在主线程持锁时同样会卡);挂死路径
+  stdout 也可解析
 **区段口径**:树扫描(collect 前沿循环)逐节点 `rearm()` 重臂——区段语义为
   "单次跨进程调用"的有界性(冷 provider 合法慢扫描在整段口径下会被 20s 误杀);
   单槽约束:嵌套 enter/drop 会清零外层区段——嵌套守卫调用之后不得再依赖
@@ -642,7 +647,7 @@ L2  actl commands     机器 schema:全命令+参数的 JSON(agent 自发现入�
 - **三处输出同源生成**:clap doc comment 一处维护,L0/L1/L2 三处渲染,禁止手写 help 字符串;四要素的 Example/Errors 经 after_help 表注入(derive variant 级属性不传播,build_cli() 单点注入),表与 doc comment 同为 help 单一事实来源。
 - **help 文本英文**(docs 保持中文):LLM 对英文 CLI 语义理解与 token 效率最优,与命令名同语言。
 - **单命令 help 四要素**(对齐 §3.1 可理解性验收):一行 USAGE / 参数表 / 一条可直接复制的 EXAMPLE / 该命令特有错误码。
-- **未知子命令**:stderr 人类可读错误 + exit 2(PROTOCOL)。
+- **clap 层参数错误与未知子命令**(2026-10-14 spec 信封化):PROTOCOL 信封 + exit 2(clap 诊断渲染进 message)——与运行路径校验层(如 image-regions 坏 rect)同形态,stdout 不变量全路径成立;`--help/--version` 元命令例外保留人类文本。
 
 ### 3.6 语义边界裁定(近似命令对的分工,防止 agent 选择困难)
 

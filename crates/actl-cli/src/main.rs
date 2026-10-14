@@ -93,11 +93,38 @@ fn main() {
     // 静默忽略——main 单进程一次,不存在竞争路径
     let _ = actl_core::BOOT.set(Instant::now());
     install_panic_hook();
+    // 看门狗硬退出注入(剩余逃逸路径收口):击杀路径与 finish 同款
+    // TerminateProcess——std::process::exit 的 CRT 清理在主线程持锁
+    // 卡死时同样会卡,防挂死机制不得继承挂死模式(13112 签名实证)。
+    actl_core::watchdog::install_hard_exit(actl_uia::watchdog::hard_exit_after_envelope);
     // 坐标系不变量先行(docs/83 补遗,2026-10-13):整进程 PMv2 物理像素。
     // 必须在 clap 解析与任何 UIA/DC 调用之前(设置过窗口后被拒)。
     actl_uia::ensure_process_pmv2();
-    // clap 树注入 after_help 后再 parse(Example/Errors 进 -h;06 §3.5)
-    let matches = crate::cli_help::build_cli().get_matches();
+    // clap 树注入 after_help 后再 parse(Example/Errors 进 -h;06 §3.5)。
+    // 解析失败信封化(2026-10-14 逃逸路径③):--help/--version 是元命令例外
+    // (exit 0 人类文本),其余解析错误转 PROTOCOL 信封 + exit 2——与运行路径
+    // 校验层(image-regions 坏 rect 等)行为一致,stdout 不变量全路径成立
+    // (此前 clap 错误=裸 stderr+stdout 空,消费者解析落空)。try_get_matches
+    // 不内嵌 exit,错误回到本层转信封;错误渲染进 message(stderr 由 clap
+    // 不再自动打印——信封 message 已携带,双流仍完整)。
+    let matches = match crate::cli_help::build_cli().try_get_matches() {
+        Ok(matches) => matches,
+        Err(error) => {
+            use clap::error::ErrorKind;
+            match error.kind() {
+                ErrorKind::DisplayHelp
+                | ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
+                | ErrorKind::DisplayVersion => error.exit(),
+                _ => {
+                    let mut tree = crate::cli_help::build_cli();
+                    let rendered = error.format(&mut tree).to_string();
+                    let err = CtlError::protocol(rendered);
+                    finish("unknown", Err(err), 0);
+                    unreachable!("finish hard-exits")
+                }
+            }
+        }
+    };
     let cli = match Cli::from_arg_matches(&matches) {
         Ok(cli) => cli,
         Err(error) => error.exit(),

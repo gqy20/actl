@@ -5,10 +5,14 @@
 //! 提供程序侧,逐调用点加超时不可行。本模块把界限放在**进程级**:
 //! 语义是"无进展"而非"总时长"——任何进展点(步派发/等待轮询/恢复重试/
 //! 录制事件)重置期限;期限耗尽 = 进程卡在任何不可恢复的等待里,自我
-//! 终止并留证(stderr 诊断行,stdout envelope 纪律不破坏——主线程已卡,
-//! 本就不会再有 envelope)。调用方按既有语义恢复:flow 执行器被杀 →
-//! run 留 Running/中断态 → flow-resume 的 uncertain 重放核对;脚本调用方
-//! 拿到非零退出码 + stderr 标记。
+//! 终止并留证。
+//!
+//! 2026-10-14 收口:击杀前看门狗线程自己吐兜底信封(INTERNAL,
+//! evidence.no_progress_ms)——挂死也可解析;硬退出走宿主注入的
+//! TerminateProcess(std::process::exit 的 CRT 清理在主线程持锁卡死时
+//! 同样会卡,13112 签名实证)。调用方按既有语义恢复:flow 执行器被杀
+//! 则 run 留 Running/中断态,flow-resume 的 uncertain 重放核对;脚本
+//! 调用方拿到非零退出码、stderr 标记与兜底信封。
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
@@ -29,6 +33,27 @@ pub const DEFAULT_MS: u64 = 120_000;
 
 /// 武装看门狗并启动监视线程;`timeout_ms == 0` 显式关闭(调试/诊断用)。
 /// 幂等:重复调用只刷新期限,不叠加线程。
+/// 硬退出回调:main 注入 actl_uia::watchdog::hard_exit_after_envelope
+/// (TerminateProcess,绕过 CRT 清理——看门狗必须用与 finish 同款的死法,
+/// std::process::exit 的 CRT 清理在主线程持锁卡死时同样会卡,13112 签名
+/// 实证)。未注入(单测/非 actl.exe 宿主)时回退 std::process::exit。
+/// 函数指针 + OnceLock:注入一次,看门狗线程按需读。
+static HARD_EXIT: std::sync::OnceLock<fn(i32) -> !> = std::sync::OnceLock::new();
+
+/// 宿主注入硬退出实现(仅 actl.exe main 调用;库消费方保持默认回退)。
+pub fn install_hard_exit(f: fn(i32) -> !) {
+    let _ = HARD_EXIT.set(f);
+}
+
+fn hard_exit(code: i32) -> ! {
+    match HARD_EXIT.get() {
+        Some(f) => f(code),
+        // 回退路径只在无宿主注入时走(单测);std::process::exit 到不了
+        // TerminateProcess 但无注入面也无可绕的锁
+        None => std::process::exit(code),
+    }
+}
+
 pub fn arm(timeout_ms: u64) {
     ARMED_WINDOW_MS.store(timeout_ms, Ordering::Relaxed);
     DEADLINE_MS.store(unix_ms() + timeout_ms, Ordering::Relaxed);
@@ -50,13 +75,36 @@ pub fn arm(timeout_ms: u64) {
                 if now >= deadline {
                     let last = LAST_PROGRESS_MS.load(Ordering::Relaxed);
                     let stuck_ms = now.saturating_sub(last);
-                    // stderr 是诊断通道(ADR-002);主线程已卡,不会有 envelope。
+                    // stderr 诊断行(人类第一现场)
                     eprintln!(
                         "[watchdog] no progress for {stuck_ms}ms; self-terminating — the \
                          process is stuck in an unbounded wait (UIA provider block family, \
                          see docs/06 §7.7); raise ACTL_WATCHDOG_MS if this workload is legit"
                     );
-                    std::process::exit(1);
+                    // 击杀前吐兜底信封(2026-10-14 剩余逃逸路径收口):挂死也
+                    // 可解析——command 取 PANIC_COMMAND(两阶段精化同 panic
+                    // hook),INTERNAL + evidence.no_progress_ms。极窄竞态:主
+                    // 线程死前恰好也在 println 会双信封交错——工程上可忽略,
+                    // 调用方按「stdout 含 ok:false 即失败」消费不受影响。
+                    let command = crate::PANIC_COMMAND.get().copied().unwrap_or("unknown");
+                    let err = crate::CtlError::with_evidence(
+                        crate::ErrorCode::Internal,
+                        format!("watchdog: no progress for {stuck_ms}ms; process stuck in an unbounded wait"),
+                        serde_json::json!({
+                            "no_progress_ms": stuck_ms,
+                            "hint": "the process is stuck in an unbounded wait (UIA provider block family); raise ACTL_WATCHDOG_MS if this workload is legit",
+                        }),
+                    );
+                    let elapsed = crate::BOOT
+                        .get()
+                        .map(|b| b.elapsed().as_millis() as u64)
+                        .unwrap_or(0);
+                    let env = crate::ErrorEnvelope::new(command, &err, elapsed);
+                    if let Ok(text) = serde_json::to_string(&env) {
+                        println!("{text}");
+                        let _ = std::io::Write::flush(&mut std::io::stdout());
+                    }
+                    hard_exit(1);
                 }
             }
         })

@@ -201,7 +201,10 @@ mod tests {
 
     #[tokio::test]
     async fn bad_arguments_synthesize_an_honest_error() {
-        // clap 对未知子命令走 stderr 人类文本+exit 2,无 envelope。
+        // 2026-10-14 spec(clap 错误信封化):actl 子进程对坏参数现吐真 PROTOCOL
+        // 信封(command=unknown,clap 诊断渲染进 message),MCP 层原样透传——
+        // 优于旧合成错误(此前 stdout 空→"no JSON envelope"合成);断言翻转到
+        // 透传形态。
         let envelope = dispatch(&exe(), "definitely-not-a-command", &[]).await;
         assert_eq!(envelope["ok"], false);
         assert_eq!(envelope["error"]["code"], "PROTOCOL");
@@ -209,8 +212,8 @@ mod tests {
             envelope["error"]["message"]
                 .as_str()
                 .unwrap()
-                .contains("no JSON envelope"),
-            "{envelope}"
+                .contains("definitely-not-a-command"),
+            "clap diagnostic passes through verbatim: {envelope}"
         );
     }
 
