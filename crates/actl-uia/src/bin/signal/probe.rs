@@ -11,8 +11,10 @@ use actl_core::state::{SignalPaths, unix_ms};
 /// 探测节流与放弃边界。
 const PROBE_INTERVAL_MS: u64 = 5000;
 const PROBE_GIVE_UP_MS: u64 = 10 * 60 * 1000;
-/// auto_resume 预算(每流程,按持久记录累计)。
+/// auto_resume 预算(每流程,按持久记录累计)。预授权(全局常驻同意,
+/// 2026-10-14 信任对齐)是同意层最高档——预算放宽换吞吐,授予审计照记。
 const AUTO_RESUME_BUDGET: u32 = 2;
+const AUTO_RESUME_BUDGET_PREAUTH: u32 = 5;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Verdict {
@@ -235,6 +237,14 @@ pub fn consume_auto_resume(paths: &SignalPaths, id: &str, declared: bool, v: Ver
     if !declared || v != Verdict::Retriable {
         return false;
     }
+    // 2026-10-14 信任对齐:预授权(全局常驻同意)开着时预算放宽——信任档
+    // 换吞吐,授予审计行照记;其余门(停止代次/急停/needs_review 永不
+    // 自动续)不变
+    let budget = if paths.preauthorized() {
+        AUTO_RESUME_BUDGET_PREAUTH
+    } else {
+        AUTO_RESUME_BUDGET
+    };
     let used = std::fs::read_to_string(paths.dir.join("flows").join(id).join("probe.jsonl"))
         .map(|text| {
             text.lines()
@@ -242,7 +252,7 @@ pub fn consume_auto_resume(paths: &SignalPaths, id: &str, declared: bool, v: Ver
                 .count()
         })
         .unwrap_or(0);
-    (used as u32) < AUTO_RESUME_BUDGET
+    (used as u32) < budget
 }
 
 fn run_actl(args: Vec<String>) -> Result<bool, ()> {
@@ -266,6 +276,59 @@ fn run_actl(args: Vec<String>) -> Result<bool, ()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn auto_resume_budget_scales_with_preauthorization() {
+        // 2026-10-14 信任对齐:预授权(同意层最高档)开着时预算 2→5,
+        // 关闭时维持 2;显式声明与 Retriable 前置门不因此放宽
+        let tmp = std::env::temp_dir().join(format!(
+            "actl-probe-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let paths = actl_core::state::SignalPaths::at(&tmp);
+        std::fs::create_dir_all(tmp.join("flows").join("f1")).unwrap();
+        let probe = tmp.join("flows").join("f1").join("probe.jsonl");
+        // 未预授权:3 次已用 → 拒(预算 2)
+        std::fs::write(
+            &probe,
+            "\"event\":\"auto_resume\"
+\"event\":\"auto_resume\"
+\"event\":\"auto_resume\"
+",
+        )
+        .unwrap();
+        assert!(!consume_auto_resume(&paths, "f1", true, Verdict::Retriable));
+        // 预授权开:同 3 次已用 → 允(预算 5)
+        paths.set_preauth(true).unwrap();
+        assert!(consume_auto_resume(&paths, "f1", true, Verdict::Retriable));
+        // 5 次已用 → 预授权也拒
+        std::fs::write(
+            &probe,
+            "\"event\":\"auto_resume\":\"n\"
+"
+            .repeat(6)
+            .as_bytes(),
+        )
+        .unwrap();
+        assert!(!consume_auto_resume(&paths, "f1", true, Verdict::Retriable));
+        // 前置门不放宽:未声明 / 非 Retriable 仍拒
+        assert!(!consume_auto_resume(
+            &paths,
+            "f1",
+            false,
+            Verdict::Retriable
+        ));
+        assert!(!consume_auto_resume(
+            &paths,
+            "f1",
+            true,
+            Verdict::AlreadyDone
+        ));
+        std::fs::remove_dir_all(&tmp).ok();
+        // 清理显示端状态的 preauth 文件(测试目录内的,已在 remove_dir_all 内)
+    }
     #[test]
     fn only_current_action_failure_can_use_a_worker_result() {
         let now = unix_ms();

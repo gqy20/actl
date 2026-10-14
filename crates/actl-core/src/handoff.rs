@@ -478,6 +478,21 @@ pub fn plan_fingerprint(value: &serde_json::Value) -> String {
     format!("{h1:016x}{h2:016x}")
 }
 
+/// 结构指纹(2026-10-14 信任梯度补全):standing 信任的哈希面从全量冻结计划
+/// 收窄为**结构面**——剔除 inputs(调用方参数,设计上就该换:timing-sweep/
+/// 回归场景换参数不该击穿信任集)与 auto_resume(策略面,与结构无关)。
+/// 步骤增删改/name/handoff/popup_handlers 变更仍在哈希面内(模板结构性
+/// 变更自动失效的既有语义不变)。风险与预授权同档:信任的是"这份流程的
+/// 结构",参数本来就是调用方权限内的自由度。
+pub fn plan_structure_fingerprint(value: &serde_json::Value) -> String {
+    let mut structural = value.clone();
+    if let serde_json::Value::Object(map) = &mut structural {
+        map.remove("inputs");
+        map.remove("auto_resume");
+    }
+    plan_fingerprint(&structural)
+}
+
 /// 信任集条目:指纹 → 何时信任的何份计划。
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TrustEntry {
@@ -557,6 +572,41 @@ mod trust_tests {
         assert_eq!(fa, plan_fingerprint(&b), "identical plans must match");
         assert_ne!(fa, plan_fingerprint(&c), "changed plan must differ");
         assert_eq!(fa.len(), 32, "128-bit hex: {fa}");
+    }
+    #[test]
+    fn structure_fingerprint_ignores_params_but_not_steps() {
+        // 2026-10-14 信任梯度补全:inputs(参数面)与 auto_resume(策略面)
+        // 变更不击穿信任集;steps 结构变更必须失效
+        let base = serde_json::json!({
+            "name": "sweep", "steps": [{"click": ["name:微信"]}],
+            "inputs": {"window": {"default": "w1"}},
+            "auto_resume": "action_failed",
+        });
+        let mut param_changed = base.clone();
+        param_changed["inputs"]["window"]["default"] = "w2".into();
+        param_changed["auto_resume"] = serde_json::Value::Null;
+        assert_eq!(
+            plan_structure_fingerprint(&base),
+            plan_structure_fingerprint(&param_changed),
+            "param/strategy drift must not break the trust set"
+        );
+        let mut step_changed = base.clone();
+        step_changed["steps"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({"press": ["enter"]}));
+        assert_ne!(
+            plan_structure_fingerprint(&base),
+            plan_structure_fingerprint(&step_changed),
+            "structural change must invalidate"
+        );
+        // name 变更也属结构面(handoff 元数据)
+        let mut renamed = base.clone();
+        renamed["name"] = "sweep-v2".into();
+        assert_ne!(
+            plan_structure_fingerprint(&base),
+            plan_structure_fingerprint(&renamed)
+        );
     }
     #[test]
     fn trust_store_grant_revoke_and_bound() {
