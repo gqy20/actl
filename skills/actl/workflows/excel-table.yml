@@ -9,7 +9,7 @@ inputs:
     default: '${run.dir}/${run.id}.xlsx'
   app:
     default: '${run.id}'
-steps:
+prologue:
   - id: open
     title: Open isolated workbook
     run:
@@ -56,6 +56,7 @@ steps:
       start:
         type: string
         pointer: /process_start
+steps:
   - id: paste
     run:
       sequence:
@@ -579,6 +580,7 @@ steps:
         9: reopened-owner.hwnd
         11: reopened-owner.pid
     title: Close only the verified task process
+epilogue:
   - id: exit
     run:
       command: close-window

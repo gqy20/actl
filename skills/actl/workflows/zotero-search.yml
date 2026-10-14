@@ -13,7 +13,7 @@ inputs:
     default: 我的文库 - Zotero
   export:
     default: '${run.dir_native}\export.json'
-steps:
+prologue:
   - id: open
     title: Open isolated Zotero profile
     run:
@@ -63,6 +63,7 @@ steps:
       start:
         type: string
         pointer: /process_start
+steps:
   - id: import
     run:
       sequence:
@@ -467,6 +468,7 @@ steps:
       timeout_ms: 15000
       interval_ms: 1500
     title: Export record and verify JSON content
+epilogue:
   - id: close
     before:
       command: verify-owner

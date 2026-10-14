@@ -9,7 +9,7 @@ inputs:
     default: '${run.dir}/${run.id}.docx'
   app:
     default: '${run.id}'
-steps:
+prologue:
   - id: open
     title: 打开任务文档
     run:
@@ -48,6 +48,7 @@ steps:
       start:
         pointer: /process_start
         type: string
+steps:
   - id: insert
     title: 插入前缀并核对完整磁盘正文
     before:
@@ -495,6 +496,7 @@ steps:
         - '--normalize-lines'
         - '--app'
         - input: app
+epilogue:
   - id: close
     title: 关闭本任务文档并核对进程退出
     before:

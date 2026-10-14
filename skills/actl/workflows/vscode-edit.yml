@@ -21,7 +21,7 @@ inputs:
     default: 'uia:{"match":{"role":"ListItem","name_contains":"${run.id}.txt"},"within":{"id":"quickInput_list"}}'
   second_result:
     default: 'uia:{"match":{"role":"ListItem","name_contains":"${run.id}-second.txt"},"within":{"id":"quickInput_list"}}'
-steps:
+prologue:
   - id: open
     title: Open isolated editor
     run:
@@ -126,6 +126,7 @@ steps:
         - text
         - '--app'
         - input: app
+steps:
   - id: insert-1
     run:
       sequence:
@@ -1395,6 +1396,7 @@ steps:
       interval_ms: 1500
     title: Open file and verify full editor text
     evidence: full
+epilogue:
   - id: close
     run:
       command: close-window

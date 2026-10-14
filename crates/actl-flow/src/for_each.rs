@@ -50,74 +50,81 @@ pub struct ForEach {
 /// 形态(`{command: workflow-for-each, args: [config-json, child-json...]}`),
 /// 并在展开时校验(children 形状/嵌套/bind/占位规则)。镜像 sequence::expand。
 pub fn expand(raw: &mut serde_json::Value) -> Result<(), CtlError> {
-    let Some(steps) = raw
-        .get_mut("steps")
-        .and_then(serde_json::Value::as_array_mut)
-    else {
-        return Ok(());
-    };
-    for step in steps {
-        for field in ["run", "otherwise"] {
-            let Some(run) = step.get_mut(field) else {
-                continue;
-            };
-            if run.get("for_each").is_none() {
-                continue;
+    // 2026-10-14 bookends 组合面:三段统一展开(镜像 sequence::expand;
+    // 键消失后幂等 no-op)
+    for section in ["prologue", "steps", "epilogue"] {
+        let Some(steps) = raw
+            .get_mut(section)
+            .and_then(serde_json::Value::as_array_mut)
+        else {
+            continue;
+        };
+        for step in steps {
+            for field in ["run", "otherwise"] {
+                let Some(run) = step.get_mut(field) else {
+                    continue;
+                };
+                if run.get("for_each").is_none() {
+                    continue;
+                }
+                if run.as_object().is_none_or(|object| object.len() != 2)
+                    || run.get("body").is_none()
+                {
+                    return Err(CtlError::protocol(
+                        "for_each requires exactly the keys: for_each (config) and body (calls)",
+                    ));
+                }
+                let from = run
+                    .get("for_each")
+                    .and_then(|block| block.get("from"))
+                    .and_then(serde_json::Value::as_str)
+                    .ok_or_else(|| CtlError::protocol("for_each.from is required"))?
+                    .to_owned();
+                let max = match run.get("for_each").and_then(|block| block.get("max")) {
+                    None => DEFAULT_MAX,
+                    Some(value) => value
+                        .as_u64()
+                        .filter(|v| (1..=MAX_ITEMS as u64).contains(v))
+                        .ok_or_else(|| CtlError::protocol("for_each.max must be 1..=256"))?
+                        as usize,
+                };
+                let field_name = match run.get("for_each").and_then(|block| block.get("field")) {
+                    None => None,
+                    Some(value) => Some(
+                        value
+                            .as_str()
+                            .filter(|f| !f.is_empty())
+                            .ok_or_else(|| {
+                                CtlError::protocol("for_each.field must be a non-empty string")
+                            })?
+                            .to_owned(),
+                    ),
+                };
+                if !valid_reference(&from) {
+                    return Err(CtlError::protocol(
+                        "for_each.from must be \"stepid.output\"",
+                    ));
+                }
+                let body = run
+                    .get("body")
+                    .and_then(serde_json::Value::as_array)
+                    .ok_or_else(|| CtlError::protocol("for_each body must be an array"))?;
+                let args = std::iter::once(
+                    serde_json::json!({"from": from, "max": max, "field": field_name}),
+                )
+                .chain(body.iter().cloned())
+                .map(|value| {
+                    serde_json::to_string(&value).map_err(|e| CtlError::internal(e.to_string()))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+                let call = Invocation {
+                    command: COMMAND.into(),
+                    args,
+                    bind: Default::default(),
+                };
+                decode(&call)?;
+                *run = serde_json::to_value(call).map_err(|e| CtlError::internal(e.to_string()))?;
             }
-            if run.as_object().is_none_or(|object| object.len() != 2) || run.get("body").is_none() {
-                return Err(CtlError::protocol(
-                    "for_each requires exactly the keys: for_each (config) and body (calls)",
-                ));
-            }
-            let from = run
-                .get("for_each")
-                .and_then(|block| block.get("from"))
-                .and_then(serde_json::Value::as_str)
-                .ok_or_else(|| CtlError::protocol("for_each.from is required"))?
-                .to_owned();
-            let max = match run.get("for_each").and_then(|block| block.get("max")) {
-                None => DEFAULT_MAX,
-                Some(value) => value
-                    .as_u64()
-                    .filter(|v| (1..=MAX_ITEMS as u64).contains(v))
-                    .ok_or_else(|| CtlError::protocol("for_each.max must be 1..=256"))?
-                    as usize,
-            };
-            let field_name = match run.get("for_each").and_then(|block| block.get("field")) {
-                None => None,
-                Some(value) => Some(
-                    value
-                        .as_str()
-                        .filter(|f| !f.is_empty())
-                        .ok_or_else(|| {
-                            CtlError::protocol("for_each.field must be a non-empty string")
-                        })?
-                        .to_owned(),
-                ),
-            };
-            if !valid_reference(&from) {
-                return Err(CtlError::protocol(
-                    "for_each.from must be \"stepid.output\"",
-                ));
-            }
-            let body = run
-                .get("body")
-                .and_then(serde_json::Value::as_array)
-                .ok_or_else(|| CtlError::protocol("for_each body must be an array"))?;
-            let args =
-                std::iter::once(serde_json::json!({"from": from, "max": max, "field": field_name}))
-                    .chain(body.iter().cloned())
-                    .map(|value| {
-                        serde_json::to_string(&value).map_err(|e| CtlError::internal(e.to_string()))
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-            let call = Invocation {
-                command: COMMAND.into(),
-                args,
-                bind: Default::default(),
-            };
-            decode(&call)?;
-            *run = serde_json::to_value(call).map_err(|e| CtlError::internal(e.to_string()))?;
         }
     }
     Ok(())

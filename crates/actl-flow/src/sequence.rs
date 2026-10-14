@@ -42,10 +42,16 @@ pub fn decode(call: &Invocation) -> Result<Option<Vec<Invocation>>, CtlError> {
 }
 
 pub fn expand(raw: &mut serde_json::Value) -> Result<(), CtlError> {
-    if let Some(steps) = raw
-        .get_mut("steps")
-        .and_then(serde_json::Value::as_array_mut)
-    {
+    // 2026-10-14 bookends 组合面:prologue/epilogue 步骤与 steps 同形态,
+    // 三段统一展开(schema::decode 展开前调用时键尚在;展开后调用时
+    // 键已消失,幂等 no-op)
+    for section in ["prologue", "steps", "epilogue"] {
+        let Some(steps) = raw
+            .get_mut(section)
+            .and_then(serde_json::Value::as_array_mut)
+        else {
+            continue;
+        };
         for step in steps {
             for field in ["run", "otherwise"] {
                 if let Some(run) = step.get_mut(field)

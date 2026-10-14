@@ -200,14 +200,21 @@ fn combined_template_matches_individual_steps_and_resources() {
                 .unwrap()
                 .push(file);
         }
-        for step in raw["steps"].as_array_mut().unwrap() {
-            step["id"] = json!(format!("{name}-{}", step["id"].as_str().unwrap()));
-            bindings(step, name);
-            // The combined batch isolates each application as one section so a
-            // deterministic failure skips its own section only (docs/68).
-            step["section"] = json!(name);
-            step["on_failure"] = json!("skip_section");
-            expected["steps"].as_array_mut().unwrap().push(step.clone());
+        // 2026-10-14 bookends 改写:单流程的 prologue/epilogue 同样按段
+        // 拼入合成批(顺序 prologue->steps->epilogue,与引擎展开一致)
+        for section in ["prologue", "steps", "epilogue"] {
+            let Some(steps) = raw[section].as_array_mut() else {
+                continue;
+            };
+            for step in steps {
+                step["id"] = json!(format!("{name}-{}", step["id"].as_str().unwrap()));
+                bindings(step, name);
+                // The combined batch isolates each application as one section
+                // so a deterministic failure skips its own section (docs/68).
+                step["section"] = json!(name);
+                step["on_failure"] = json!("skip_section");
+                expected["steps"].as_array_mut().unwrap().push(step.clone());
+            }
         }
     }
     let actual: Value =
