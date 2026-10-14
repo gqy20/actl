@@ -19,6 +19,11 @@ quirks:
       设置窗**必须在前台**才有完整树——后台时 Slider/Toggle/ComboBox
       全部不可见(实测:后台 find --role Slider=0,前台化后=2)。流程
       序:launch/focus-window → 等 1s → 再观察;MSIX 应用的 UIA 惰性。
+      锚歧义警示(2026-10-14 实证):本机 wetype 输入法有常驻「设置」窗
+      (wetype.flutter.setting),--app 设置 三窗同名(宿主+渲染层+wetype),
+      verify-window 必 AMBIGUOUS——须 hwnd 锚或收紧后环境先核
+      list-windows 唯一性。
+
   - id: window_anchor
     note: >-
       锚=最大 element 数的"设置"窗(标题恒为"设置"不随页变,标题锚

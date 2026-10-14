@@ -2,13 +2,28 @@ pack_format: 1
 name: notepad
 display: 记事本(Windows 11 Store)
 launch: notepad.exe
-window: "Notepad"
+window: "Notepad"  # 锚见 quirk title_localization:实测「<文件名> - Notepad」与「记事本」两种形态,用前现拍
 app_version: "11.2607.14.0"
 verified_date: 2026-10-05
 verified_env: Win11 25H2 (build 26200) zh-cn
 quirks:
   - id: launch_resolution
     note: System32\notepad.exe 不存在(26200 移除),Store 版注册在 HKCU App Paths——`actl launch notepad.exe` 可解析;bash 会话裸名 `notepad`(无 .exe)仍会被 Git usr/bin 存根抢解析(os error 193)。launch 选项必须写在程序名之前(后置 token 原样转发子进程,`--wait-window` 后置会被 PROTOCOL 守卫拒绝带指引);窗口就绪用 `wait --window` 分离确认。
+  - id: title_localization
+    note: >-
+      窗口标题两种形态均实测在档:英文后缀「<文件名> - Notepad」(用户
+      26388 实例)与中文「记事本」(33844 实例,含弹窗宿主窗)。--app/
+      --window 锚不可预设单一形态——执行前 list-windows 现拍确认在场
+      标题;编排侧枚举过滤不得只按 ASCII 'Notepad' 匹配(中文「记事本」
+      会漏报,2026-10-14 用户目击纠错实证)。
+  - id: file_not_found_dialog
+    note: >-
+      launch 带不存在的文件路径 → 应用内弹确认框(标题「记事本」,
+      name=找不到文件: <路径>。
+要创建新文件吗?,按钮 是/否)阻塞
+      窗口就绪,wait --window <文件名> 随之超时——launch 文件名锚前
+      确保文件存在;误触弹窗的保守处置=点 否(不创建,弹窗内按钮
+      role=Button 与 Text 同名双命中,用 uia: 严格匹配收窄)。
   - id: session_restore_revival
     note: 关窗 ≠ 清会话:窗口级 close 后重启会把 TabState/云同步的脏标签逐个复活(文件已删仍复活)。破环 = 标签级 `ctrl+w` → 「不保存」(白名单清理动词)逐标签废弃,末标签后应用自然退出;勿 taskkill(AGENTS 禁令,会话复活更糟)。
   - id: title_shape
