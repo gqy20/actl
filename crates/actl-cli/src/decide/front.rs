@@ -164,6 +164,7 @@ pub(super) fn front_request(input: &FrontInput) -> Result<SystemOneRequest<'stat
                 },
             ),
         ]),
+        images: None,
     })
 }
 
@@ -179,6 +180,7 @@ pub(super) fn front_short_circuit(input: &FrontInput) -> Option<Decision> {
             resolved: None,
             family: Some("front_clear".into()),
             blocking: Some(0.0),
+            answers: None,
             candidates_sent: 0,
             dangerous_filtered: 0,
             provider_ms: None,
@@ -195,6 +197,7 @@ pub(super) fn front_short_circuit(input: &FrontInput) -> Option<Decision> {
             resolved: None,
             family: None,
             blocking: None,
+            answers: None,
             candidates_sent: 0,
             dangerous_filtered: 0,
             provider_ms: None,
@@ -264,6 +267,7 @@ pub(super) fn front_consult(
             resolved: None,
             family: None,
             blocking,
+            answers: None,
             candidates_sent: FRONT_FAMILIES.len(),
             dangerous_filtered: 0,
             provider_ms: Some(provider_ms),
@@ -279,6 +283,7 @@ pub(super) fn front_consult(
         resolved: None,
         family: Some(family.into()),
         blocking,
+        answers: None,
         candidates_sent: FRONT_FAMILIES.len(),
         dangerous_filtered: 0,
         provider_ms: Some(provider_ms),

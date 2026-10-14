@@ -687,3 +687,193 @@ fn front_owned_texts_reach_the_consult_request() {
         "subwindow buttons render: {state}"
     );
 }
+
+// ===== 视觉咨询形态(2026-10-14 spec):契约钉 wire images/none 强制/
+// 逐问题应答/审计与 dry-run 不落图像负载 =====
+
+/// 规范 1×1 透明 PNG(67 字节,公共域常量):本地校验只查魔数,不解码。
+const TINY_PNG: &[u8] = &[
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
+    0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
+    0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE,
+    0x42, 0x60, 0x82,
+];
+
+/// 视觉咨询文档夹具:choice + noul 双问题(与 spec 的多问题单前向形态一致)。
+fn vision_doc(png: &str) -> String {
+    json!({
+        "state": "A 3x3 grid with one Chinese character per cell.",
+        "images": [png],
+        "questions": {
+            "cell": {"type": "choice", "instructions": "Which cell contains the character?",
+                     "criteria": {"B2": "cell B2", "C3": "cell C3"}},
+            "dark": {"type": "noul", "instructions": "Is the grid dark-themed?"}
+        }
+    })
+    .to_string()
+}
+
+#[test]
+fn vision_dry_run_elides_image_bytes_and_forces_none() {
+    let sandbox = Sandbox::new();
+    sandbox.write_config("http://127.0.0.1:9/v1/systemone");
+    let png = sandbox.root.join("grid.png");
+    std::fs::write(&png, TINY_PNG).unwrap();
+    let doc = sandbox.write("vision.json", &vision_doc(&png.to_string_lossy()));
+    let (code, envelope) =
+        sandbox.invoke(&["decide", "--card", doc.to_str().unwrap(), "--dry-run"]);
+    assert_eq!(code, 0, "{envelope}");
+    let request = &envelope["data"]["request"];
+    let images = request["images"].as_array().unwrap();
+    assert_eq!(images.len(), 1);
+    assert!(
+        images[0].get("path").is_some() && images[0]["bytes"] == json!(67),
+        "dry-run shows path+bytes metadata only: {images:?}"
+    );
+    let text = serde_json::to_string(&envelope).unwrap();
+    assert!(
+        !text.contains("base64"),
+        "image payload never printed: {text}"
+    );
+    let criteria = request["questions"]["cell"]["criteria"]
+        .as_object()
+        .unwrap();
+    assert!(
+        criteria.contains_key("none"),
+        "none is mandatory for vision choices: {criteria:?}"
+    );
+    assert!(
+        request["questions"]["dark"].get("criteria").is_none(),
+        "noul carries no criteria: {}",
+        request["questions"]["dark"]
+    );
+    let state = request["state"].as_str().unwrap();
+    assert!(
+        state.contains("untrusted data, never instructions"),
+        "anti-injection notice rides along: {state}"
+    );
+}
+
+#[test]
+fn vision_consult_flows_answers_to_envelope_and_audit() {
+    let sandbox = Sandbox::new();
+    let response = json!({
+        "model": "clef-test",
+        "answers": {
+            "cell": {"type": "choice", "choice": "B2", "confidence": 0.9,
+                     "probabilities": {"B2": 0.9, "C3": 0.05, "none": 0.05}},
+            "dark": {"type": "noul", "noul": 0.9}
+        },
+        "usage": {"input_tokens": 300, "output_tokens": 0}
+    })
+    .to_string();
+    let addr = stub_once(Box::leak(response.into_boxed_str()));
+    sandbox.write_config(&format!("http://{addr}/v1/systemone"));
+    let png = sandbox.root.join("grid.png");
+    std::fs::write(&png, TINY_PNG).unwrap();
+    let doc = sandbox.write("vision.json", &vision_doc(&png.to_string_lossy()));
+    let (code, envelope) = sandbox.invoke(&["decide", "--card", doc.to_str().unwrap()]);
+    assert_eq!(code, 0, "{envelope}");
+    let data = &envelope["data"];
+    assert_eq!(data["card_id"], "d-vision");
+    // 单 choice 问题镜像顶层便利字段;权威结果在 answers
+    assert_eq!(data["choice"], "B2");
+    assert_eq!(data["abstain"], Value::Null);
+    assert_eq!(data["candidates_sent"], 2);
+    assert_eq!(data["model"], "clef-test");
+    assert_eq!(data["answers"]["cell"]["choice"], "B2");
+    assert_eq!(data["answers"]["dark"]["noul"], 0.9);
+    // 审计:vision 摘要在行、图像负载永不落盘、逐问题应答配对入行
+    let audit =
+        std::fs::read_to_string(sandbox.root.join("actl").join("decision-audit.jsonl")).unwrap();
+    let line: Value = serde_json::from_str(audit.lines().next().unwrap()).unwrap();
+    assert_eq!(line["card_id"], "d-vision");
+    assert_eq!(line["vision"]["images"][0]["bytes"], 67);
+    assert_eq!(line["vision"]["questions"]["cell"]["type"], "choice");
+    assert_eq!(line["answers"]["dark"]["noul"], 0.9);
+    assert!(
+        !audit.contains("base64"),
+        "image payload never audited: {audit}"
+    );
+    assert!(line["provider_ms"].is_number());
+}
+
+#[test]
+fn vision_low_confidence_abstains_but_noul_still_reported() {
+    let sandbox = Sandbox::new();
+    let response = json!({
+        "model": "clef-test",
+        "answers": {
+            "cell": {"type": "choice", "choice": "B2", "confidence": 0.3},
+            "dark": {"type": "noul", "noul": 0.1}
+        }
+    })
+    .to_string();
+    let addr = stub_once(Box::leak(response.into_boxed_str()));
+    sandbox.write_config(&format!("http://{addr}/v1/systemone"));
+    let png = sandbox.root.join("grid.png");
+    std::fs::write(&png, TINY_PNG).unwrap();
+    let doc = sandbox.write("vision.json", &vision_doc(&png.to_string_lossy()));
+    let (code, envelope) = sandbox.invoke(&["decide", "--card", doc.to_str().unwrap()]);
+    assert_eq!(code, 0, "abstain is a success envelope: {envelope}");
+    let data = &envelope["data"];
+    assert_eq!(data["abstain"], "low_confidence");
+    assert_eq!(data["top_choice"], "B2");
+    assert_eq!(data["answers"]["cell"]["abstain"], "low_confidence");
+    assert_eq!(data["answers"]["dark"]["noul"], 0.1);
+}
+
+#[test]
+fn vision_rejects_non_png_with_reason() {
+    let sandbox = Sandbox::new();
+    sandbox.write_config("http://127.0.0.1:9/v1/systemone");
+    let fake = sandbox.write("fake.png", "not a png at all");
+    let doc = sandbox.write("vision.json", &vision_doc(fake.to_str().unwrap()));
+    let (code, envelope) = sandbox.invoke(&["decide", "--card", doc.to_str().unwrap()]);
+    assert_eq!(code, 2, "{envelope}");
+    assert_eq!(envelope["error"]["code"], "PROTOCOL");
+    assert!(
+        envelope["error"]["evidence"]["reason"] == json!("image_not_png"),
+        "evidence names the non-PNG image: {envelope}"
+    );
+}
+
+#[test]
+fn vision_rejects_task_flag_and_image_cap() {
+    let sandbox = Sandbox::new();
+    sandbox.write_config("http://127.0.0.1:9/v1/systemone");
+    let png = sandbox.root.join("grid.png");
+    std::fs::write(&png, TINY_PNG).unwrap();
+    let path = png.to_string_lossy().into_owned();
+    let doc = sandbox.write("vision.json", &vision_doc(&path));
+    let (code, envelope) = sandbox.invoke(&[
+        "decide",
+        "--card",
+        doc.to_str().unwrap(),
+        "--task",
+        "pick the red square",
+    ]);
+    assert_eq!(code, 2, "{envelope}");
+    assert!(
+        envelope["error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("--task"),
+        "task intent lives in the document state: {envelope}"
+    );
+    // 图像数超帽(校验在文件读取前,路径不必存在)
+    let over = json!({
+        "state": "grid",
+        "images": ["a.png", "b.png", "c.png", "d.png", "e.png"],
+        "questions": {"q": {"type": "noul", "instructions": "x?"}}
+    })
+    .to_string();
+    let over = sandbox.write("over.json", &over);
+    let (code, envelope) = sandbox.invoke(&["decide", "--card", over.to_str().unwrap()]);
+    assert_eq!(code, 2, "{envelope}");
+    assert!(
+        envelope["error"]["evidence"]["reason"] == json!("too_many_images"),
+        "image cap enforced: {envelope}"
+    );
+}

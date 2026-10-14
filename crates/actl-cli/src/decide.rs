@@ -11,8 +11,10 @@
 //! - dangerous 候选只能由人/上层 agent 裁决(decide 永不代答,abstain 上抛);
 //! - none 强制入选项:模型有真实弃权出口(t_c 实证 0.87)。
 mod front;
+mod vision;
 
 use front::{NeverProvider, front_consult, front_input, front_request};
+use vision::{VisionInput, consult as vision_consult, prepare as vision_prepare};
 
 use actl_core::decision::DecisionCard;
 use actl_core::{CtlError, ErrorCode};
@@ -83,6 +85,10 @@ pub(crate) struct Decision {
     /// front-report 咨询形态的阻塞概率(0-1):存在遮蔽主内容的瞬态弹窗。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub blocking: Option<f64>,
+    /// 视觉咨询形态的逐问题应答(qid → {choice/abstain, confidence, ...}
+    /// 或 noul 概率);恰一个 choice 问题时另镜像到顶层便利字段。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub answers: Option<BTreeMap<String, serde_json::Value>>,
     pub candidates_sent: usize,
     pub dangerous_filtered: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -103,6 +109,9 @@ enum InputForm {
     Ambiguous(DecisionCard, Vec<ResolvedMeta>, bool),
     /// 弹窗判读咨询:前台引导层 + 任务意图。
     Front(front::FrontInput),
+    /// 视觉咨询文档:state + PNG 路径 + 判别式问题(choice/noul),
+    /// 图像单次前向逐问题并行(2026-10-14 spec)。
+    Vision(VisionInput),
 }
 
 /// Front 咨询形态的占位卡(run 的审计/错误路径引用 card_id;真实 id 由
@@ -118,6 +127,7 @@ fn empty_audit_decision(card_id: &str, dangerous_filtered: usize) -> Decision {
         resolved: None,
         family: None,
         blocking: None,
+        answers: None,
         candidates_sent: 0,
         dangerous_filtered,
         provider_ms: None,
@@ -163,6 +173,11 @@ struct ResolvedMeta {
 pub(crate) struct SystemOneRequest<'a> {
     pub state: String,
     pub questions: BTreeMap<&'a str, WireQuestion<'a>>,
+    /// 视觉咨询形态的图像载荷(PNG data URL;LM Studio /v1/systemone 实测
+    /// 接受该字段,单图/双图/确定性逐位复现均过)。文本形态恒 None——
+    /// wire 序列化省略,既有 provider 与 golden 零扰动。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub images: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -355,6 +370,17 @@ fn parse_input(text: &str, task: Option<&str>) -> Result<InputForm, CtlError> {
                 e
             });
     }
+    // 视觉咨询文档:images 键在场即按视觉形态解析(具体校验错误由形态
+    // 自身给出,比「无决策卡」泛化错误诚实);意图已在文档 state 内,
+    // --task 只对消歧/判读形态有意义。
+    if value.get("images").is_some() {
+        if task.is_some() {
+            return Err(CtlError::protocol(
+                "--task is only valid for AMBIGUOUS and front-report envelopes",
+            ));
+        }
+        return vision::parse(text).map(InputForm::Vision);
+    }
     let Some(card_value) = value
         .pointer("/data/decision_card")
         .or_else(|| value.get("decision_card"))
@@ -540,6 +566,7 @@ fn build_request(card: &DecisionCard) -> (Option<SystemOneRequest<'_>>, usize) {
                 criteria: Some(criteria),
             },
         )]),
+        images: None,
     };
     (Some(request), dangerous_count)
 }
@@ -596,6 +623,7 @@ pub(crate) fn answer_card(
             resolved: None,
             family: None,
             blocking: None,
+            answers: None,
             candidates_sent: 0,
             dangerous_filtered,
             provider_ms: None,
@@ -662,6 +690,7 @@ pub(crate) fn answer_card(
             resolved: None,
             family: None,
             blocking: None,
+            answers: None,
             candidates_sent: offered.len() - 1,
             dangerous_filtered,
             provider_ms: Some(provider_ms),
@@ -703,6 +732,7 @@ pub(crate) fn answer_card(
             resolved: None,
             family: None,
             blocking: None,
+            answers: None,
             candidates_sent: offered.len() - 1,
             dangerous_filtered,
             provider_ms: Some(provider_ms),
@@ -719,6 +749,7 @@ pub(crate) fn answer_card(
             resolved: None,
             family: None,
             blocking: None,
+            answers: None,
             candidates_sent: offered.len() - 1,
             dangerous_filtered,
             provider_ms: Some(provider_ms),
@@ -734,6 +765,7 @@ pub(crate) fn answer_card(
         resolved: None,
         family: None,
         blocking: None,
+        answers: None,
         candidates_sent: offered.len() - 1,
         dangerous_filtered,
         provider_ms: Some(provider_ms),
@@ -753,11 +785,6 @@ fn append_audit(
     responder: Option<&str>,
     card: Option<&DecisionCard>,
 ) {
-    let path = dir.join("decision-audit.jsonl");
-    let rotate = std::fs::metadata(&path).is_ok_and(|m| m.len() > AUDIT_MAX_BYTES);
-    if rotate && let Err(error) = std::fs::rename(&path, dir.join("decision-audit.jsonl.old")) {
-        eprintln!("decide: audit rotation failed: {error}");
-    }
     let mut line = serde_json::json!({
         "ts": std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -796,6 +823,17 @@ fn append_audit(
             "message": error.message,
         });
     }
+    write_audit_line(dir, line);
+}
+
+/// 审计落行(旁路:失败仅 stderr 警告,不影响命令语义):>4 MiB 轮换
+/// .old + 追加写。卡/front/视觉三形态共用。
+fn write_audit_line(dir: &std::path::Path, line: serde_json::Value) {
+    let path = dir.join("decision-audit.jsonl");
+    let rotate = std::fs::metadata(&path).is_ok_and(|m| m.len() > AUDIT_MAX_BYTES);
+    if rotate && let Err(error) = std::fs::rename(&path, dir.join("decision-audit.jsonl.old")) {
+        eprintln!("decide: audit rotation failed: {error}");
+    }
     let Ok(text) = serde_json::to_string(&line) else {
         return;
     };
@@ -808,6 +846,52 @@ fn append_audit(
     {
         eprintln!("decide: audit append failed: {error}");
     }
+}
+
+/// 视觉咨询审计:请求侧是摘要(state 截断+问题骨架+图像路径/字节数),
+/// 图像负载永不入行(屏幕内容是待观察数据;4KiB 行预算也装不下 base64);
+/// 应答侧 answers 逐问题入行,与卡形态同构地构成换模型回归语料。
+fn append_vision_audit(
+    dir: &std::path::Path,
+    decision: &Decision,
+    error: Option<&CtlError>,
+    prepared: &vision::VisionPrepared,
+) {
+    let mut line = serde_json::json!({
+        "ts": std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0),
+        "card_id": decision.card_id,
+        "candidates_sent": decision.candidates_sent,
+        "dangerous_filtered": decision.dangerous_filtered,
+        "vision": prepared.audit_summary(),
+    });
+    if let Some(answers) = &decision.answers {
+        line["answers"] = serde_json::to_value(answers).unwrap_or(serde_json::Value::Null);
+    }
+    if let Some(choice) = &decision.choice {
+        line["choice"] = serde_json::json!(choice);
+    }
+    if let Some(abstain) = &decision.abstain {
+        line["abstain"] = serde_json::json!(abstain);
+    }
+    if let Some(confidence) = decision.confidence {
+        line["confidence"] = serde_json::json!(confidence);
+    }
+    if let Some(model) = &decision.model {
+        line["model"] = serde_json::json!(model);
+    }
+    if let Some(ms) = decision.provider_ms {
+        line["provider_ms"] = serde_json::json!(ms);
+    }
+    if let Some(error) = error {
+        line["error"] = serde_json::json!({
+            "code": serde_json::to_value(error.code).unwrap_or_default(),
+            "message": error.message,
+        });
+    }
+    write_audit_line(dir, line);
 }
 
 /// CLI 入口。
@@ -828,13 +912,13 @@ pub(crate) struct DecideArgs {
 pub(crate) fn run(args: DecideArgs) -> Result<serde_json::Value, CtlError> {
     // 卡源三选一:--run(run 状态直读,不碰 stdin——无管道时会阻塞)/
     // --card(文件)/ stdin(管道)。--run 与 --task 互斥(意图只对消歧形态)。
-    let (card, metas, truncated, front) = if let Some(run_id) = &args.run {
+    let (card, metas, truncated, front, vision) = if let Some(run_id) = &args.run {
         if args.task.is_some() {
             return Err(CtlError::protocol(
                 "--task is only valid for AMBIGUOUS and front-report envelopes",
             ));
         }
-        (load_pending_card(run_id)?, None, false, None)
+        (load_pending_card(run_id)?, None, false, None, None)
     } else {
         let text = match &args.card {
             Some(path) => std::fs::read_to_string(path)
@@ -849,9 +933,12 @@ pub(crate) fn run(args: DecideArgs) -> Result<serde_json::Value, CtlError> {
         };
         let form = parse_input(&text, args.task.as_deref())?;
         match form {
-            InputForm::Card(card) => (card, None, false, None),
-            InputForm::Ambiguous(card, metas, truncated) => (card, Some(metas), truncated, None),
-            InputForm::Front(input) => (empty_card(), None, false, Some(input)),
+            InputForm::Card(card) => (card, None, false, None, None),
+            InputForm::Ambiguous(card, metas, truncated) => {
+                (card, Some(metas), truncated, None, None)
+            }
+            InputForm::Front(input) => (empty_card(), None, false, Some(input), None),
+            InputForm::Vision(input) => (empty_card(), None, false, None, Some(input)),
         }
     };
     let dir = std::env::var_os("LOCALAPPDATA")
@@ -871,6 +958,7 @@ pub(crate) fn run(args: DecideArgs) -> Result<serde_json::Value, CtlError> {
             resolved: None,
             family: None,
             blocking: None,
+            answers: None,
             candidates_sent: card.candidates.len(),
             dangerous_filtered: 0,
             provider_ms: None,
@@ -963,6 +1051,50 @@ pub(crate) fn run(args: DecideArgs) -> Result<serde_json::Value, CtlError> {
                 value
             });
     }
+    // 视觉咨询形态:图像文件在 prepare 读取(PNG 魔数/体积校验);图像
+    // 负载永不入 dry-run 输出(路径+字节数替代)与审计行——屏幕内容是
+    // 待观察数据,且审计行 4KiB 预算装不下 base64。
+    if let Some(input) = &vision {
+        let prepared = vision_prepare(input)?;
+        if args.dry_run {
+            let request = prepared.request();
+            return serde_json::to_value(serde_json::json!({
+                "dry_run": true,
+                "endpoint": endpoint,
+                "request": {
+                    "state": request.state.clone(),
+                    "questions": serde_json::to_value(&request.questions)
+                        .unwrap_or(serde_json::Value::Null),
+                    "images": prepared.image_meta,
+                },
+            }))
+            .map_err(|e| CtlError::internal(format!("request encode failed: {e}")));
+        }
+        let provider = UreqProvider {
+            endpoint: &endpoint,
+            api_key: api_key.as_deref(),
+            timeout: Duration::from_millis(timeout_ms),
+        };
+        let result = vision_consult(&prepared, &provider, min_confidence);
+        match &result {
+            Ok(decision) => append_vision_audit(&dir, decision, None, &prepared),
+            Err(error) => append_vision_audit(
+                &dir,
+                &empty_audit_decision("d-vision", 0),
+                Some(error),
+                &prepared,
+            ),
+        }
+        return result
+            .and_then(|decision| {
+                serde_json::to_value(&decision)
+                    .map_err(|e| CtlError::internal(format!("decision encode failed: {e}")))
+            })
+            .map(|mut value| {
+                value["endpoint"] = serde_json::json!(endpoint);
+                value
+            });
+    }
     let (request, dangerous_filtered) = build_request(&card);
     let Some(request) = request else {
         let decision = Decision {
@@ -974,6 +1106,7 @@ pub(crate) fn run(args: DecideArgs) -> Result<serde_json::Value, CtlError> {
             resolved: None,
             family: None,
             blocking: None,
+            answers: None,
             candidates_sent: 0,
             dangerous_filtered,
             provider_ms: None,

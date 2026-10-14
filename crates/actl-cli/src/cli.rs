@@ -302,7 +302,7 @@ pub(crate) enum Command {
     Status,
     /// Answer a pending decision card by asking a configured decision model (read-only, no desktop action)
     Decide {
-        /// Decision card JSON file (bare card or flow-status envelope); omit to read stdin
+        /// Decision card JSON file (bare card, flow-status envelope, or vision consult document {state, images[], questions}); omit to read stdin
         #[arg(long)]
         card: Option<String>,
         /// Read the pending card from a flow run's state (exploration runs; conflicts with --card)
