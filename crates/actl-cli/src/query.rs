@@ -947,7 +947,20 @@ pub(crate) fn list_windows_cmd(
             Value::Object(m)
         })
         .collect();
-    Ok(json!({ "windows": list, "count": list.len() }).into())
+    Ok(json!({
+        "windows": list,
+        "count": list.len(),
+        // 显示器拓扑(几何事实外露,2026-10-14):跨调用对比 monitors 数组
+        // 可检测分辨率/DPI/主屏切换/拔插,提前触发重观察
+        "monitors": actl_uia::monitors()?
+            .into_iter()
+            .map(|m| {
+                json!({"rect": [m.rect.0, m.rect.1, m.rect.2, m.rect.3],
+                       "primary": m.primary, "dpi": [m.dpi.0, m.dpi.1]})
+            })
+            .collect::<Vec<_>>(),
+    })
+    .into())
 }
 
 #[allow(clippy::too_many_arguments)]

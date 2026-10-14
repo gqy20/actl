@@ -85,6 +85,7 @@ bounds 是屏幕物理像素 `[left,top,right,bottom]`。成功表示显示帧�
 目标离屏、窗口最小化、无有效边界或中心点遮挡返回 NOT_ACTIONABLE；查询失败保留原错误。
 预览期间重查同一元素的身份和边界；变化返回 STALE_REF（reason=preview_target_changed），停止返回 ABORTED，均销毁本次窗口。
 中心点命中检查不证明控件全区域无遮挡。同步 COM 调用无硬超时，窗口变化与下一次采样之间存在竞态。
+命中检查双判据（2026-10-14 托盘轮）：根 HWND 相等（空 Win32 标题窗——任务栏标题空串、UIA Name 才是「任务栏」，标题比对结构性失配，HWND 是唯一可靠通道）或根标题相等（WinUI 三件套跨 HWND 同窗）；两者都不满足才判 occluded。元素路径的空标题目标不再报 no native handle——句柄在则照做。
 显示渲染的 unsafe 限定在 actl-uia，复用现有依赖。设计与验收见 [46](46-target-preview.md)。
 
 候选纠正：`preview @e3 --candidate @e7 [--candidate @e9] --app <window> --snapshot <id> --duration 30000`。
@@ -185,6 +186,9 @@ list-windows [--native [--hwnd <n>]] / list-surfaces # 窗口/虚拟桌面枚举
                                      # list-windows 附物理层叠放事实:foreground / topmost /
                                      # minimized / visible / z_order(0 = 最顶) / rect / owner_title
                                      # (rect 为物理像素,PMv2 口径——与 screenshot/xy: 同坐标系)
+                                     # 附 monitors[] 显示器拓扑(EnumDisplayMonitors:物理 rect+主屏+有效
+                                     # DPI)——跨调用 diff 该数组即可检测显示配置变更(分辨率/DPI/拔插),
+                                     # 提前重观察,不拿陈旧坐标撞守卫(2026-10-14 显示变更现场实证)
 extract @ref [--table]              # 结构化提取(表格→JSON 数组),@ref 指定容器
                                      # GridPattern 直读优先(source:"grid-pattern",带 row/col
                                      # 语义),树扁平化兜底(source:"tree-flatten");来源随结果上报
@@ -232,6 +236,10 @@ focus @e5 --app X          # 建立键盘焦点(SetFocus+读回核验,零键注�
 paste --app Excel                                 # ctrl+v 到当前选中(无元素落点;pack 路线原语)
 select @e7 "选项"          toggle @e8
 scroll @e9 --down 3        drag @e3 @e8                   # drag/hover 无 UIA pattern,默认物理执行
+                                                           # scroll 位移核验:uia-scroll 报 Ok 但前后
+                                                           # vertical percent 零变化且不在目标边界
+                                                           # (0%/100%)=假位移,降级物理滚轮;percent
+                                                           # 不可读维持原判(诚实边界;Chromium 页实证)
 hover @e3                  (其余物理兜底:同参数 + --physical)
 key-down space --app X --duration 800             # 长按:按下→持有→自动抬起(50-60000ms;
                                                    # 急停即释放并 ABORTED)
@@ -871,6 +879,8 @@ flow 因交接中断保存 paused，写步骤 uncertain，恢复先验证而不�
 
 **前台资格链**：focus-window 成功须验证原生前台根 HWND；错误按 window_prepare 阶段报告具体 reason，
 前台激活超时附 `foreground_before`、`activation_requested`、`activation_returned`（未请求时为 null）、`caller_pid`、`waited_ms`。
+前台锁被拒（调用进程非前台进程，全屏窗覆盖/Electron 抢回形态）时执行一次最小化→还原强制激活
+（窗口管理器合法路由，与 restore-window 同机制，非按键合成），失败证据附 `min_restore_retry:true`（2026-10-14 微信 AppEx 窗实证）。
 `activation_returned` 是 SetForegroundWindow 的原始布尔结果，不等于最终前台核验结果；不读取该 API 未定义的 LastError。
 显示端只在任务授权通过后向同目录 actl.exe 的当前调用 PID 请求 AllowSetForegroundWindow；每调用一次，失败不伪装成拒绝任务授权或成功激活。history 的 foreground_transfer 记录 request_call/caller_pid/accepted/failure。Windows 前台资格可随输入失效，不能据 once_per_run 推定永久可激活。
 同目录执行器身份比较支持规范化后的同文件路径，解析失败不放行不同路径。flow 默认 metadata 错误证据保留 window_prepare/window_discovery 的阶段、已知原因、HWND、激活结果及 process_started/relaunch；不保留窗口标题或输入正文。

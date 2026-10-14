@@ -52,6 +52,74 @@ pub fn native_window(handle: isize) -> Result<Vec<WindowEntry>, CtlError> {
         .collect())
 }
 
+/// 显示器拓扑条目:物理 rect(l,t,r,b,与 list-windows 窗口 rect 同格式)、
+/// 主屏标记、有效 DPI(读不到时 0)。
+pub struct MonitorInfo {
+    pub rect: (i32, i32, i32, i32),
+    pub primary: bool,
+    pub dpi: (u32, u32),
+}
+
+// SAFETY: EnumDisplayMonitors is synchronous on this thread; LPARAM points to
+// the caller's live Vec for the whole call.
+unsafe extern "system" fn collect_monitor(
+    hmon: windows::Win32::Graphics::Gdi::HMONITOR,
+    _dc: windows::Win32::Graphics::Gdi::HDC,
+    _rect: *mut RECT,
+    param: LPARAM,
+) -> BOOL {
+    let acc = unsafe { &mut *(param.0 as *mut Vec<MonitorInfo>) };
+    let mut info = windows::Win32::Graphics::Gdi::MONITORINFO {
+        cbSize: std::mem::size_of::<windows::Win32::Graphics::Gdi::MONITORINFO>() as u32,
+        ..Default::default()
+    };
+    let primary =
+        unsafe { windows::Win32::Graphics::Gdi::GetMonitorInfoW(hmon, &mut info).as_bool() }
+            && (info.dwFlags & windows::Win32::UI::WindowsAndMessaging::MONITORINFOF_PRIMARY) != 0;
+    let mut dx = 0u32;
+    let mut dy = 0u32;
+    let _ = unsafe {
+        windows::Win32::UI::HiDpi::GetDpiForMonitor(
+            hmon,
+            windows::Win32::UI::HiDpi::MDT_EFFECTIVE_DPI,
+            &mut dx,
+            &mut dy,
+        )
+    };
+    let r = info.rcMonitor;
+    acc.push(MonitorInfo {
+        rect: (r.left, r.top, r.right, r.bottom),
+        primary,
+        dpi: (dx, dy),
+    });
+    BOOL(1)
+}
+
+/// 显示器拓扑(几何事实外露,2026-10-14 显示配置变更轮):agent 跨调用对比
+/// monitors 数组即可检测分辨率/DPI/主屏切换/拔插——提前触发重观察,
+/// 而不是拿陈旧坐标撞窗口边界守卫(用户改显示配置的现场实证)。失败是
+/// 错误,不是空清单(与 native_windows 同诚实纪律)。
+pub fn monitors() -> Result<Vec<MonitorInfo>, CtlError> {
+    let _dpi = crate::capture::Pmv2Guard::enter();
+    let mut acc = Vec::<MonitorInfo>::new();
+    if !unsafe {
+        windows::Win32::Graphics::Gdi::EnumDisplayMonitors(
+            None,
+            None,
+            Some(collect_monitor),
+            LPARAM((&mut acc as *mut Vec<MonitorInfo>) as isize),
+        )
+    }
+    .as_bool()
+    {
+        return Err(crate::internal("EnumDisplayMonitors failed"));
+    }
+    if acc.is_empty() {
+        return Err(crate::internal("EnumDisplayMonitors returned no monitors"));
+    }
+    Ok(acc)
+}
+
 /// Resolve native title candidates before touching any accessibility provider.
 /// None preserves the existing UIA fallback for virtual/non-native windows.
 pub(crate) fn title_elements(

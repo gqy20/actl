@@ -1226,3 +1226,33 @@ fn residue_report_contract() {
     assert!(text.contains("Errors:"), "help lacks Errors");
     assert!(text.contains("WER"), "help lacks WER signature surface");
 }
+
+/// list-windows 显示器拓扑(2026-10-14 几何事实外露):envelope 恒带
+/// monitors[]——agent 跨调用 diff 该数组即可检测显示配置变更(分辨率/
+/// DPI/主屏切换/拔插),提前重观察而非拿陈旧坐标撞守卫(用户现场实证)。
+/// 语义钉三点:至少一块屏、主屏恰好一块、rect/dpi 形状稳定。
+#[test]
+fn list_windows_monitors_topology() {
+    let out = support::IsolatedCommand::new()
+        .command
+        .args(["list-windows"])
+        .output()
+        .expect("spawn actl");
+    assert_eq!(out.status.code(), Some(0));
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    let mons = v["data"]["monitors"].as_array().expect("monitors array");
+    assert!(!mons.is_empty(), "at least one monitor");
+    assert_eq!(
+        mons.iter()
+            .filter(|m| m["primary"].as_bool().unwrap_or(false))
+            .count(),
+        1,
+        "exactly one primary monitor"
+    );
+    for m in mons {
+        let r = m["rect"].as_array().expect("rect array");
+        assert_eq!(r.len(), 4, "rect is [l,t,r,b]");
+        let dpi = m["dpi"].as_array().expect("dpi array");
+        assert_eq!(dpi.len(), 2, "dpi is [x,y]");
+    }
+}

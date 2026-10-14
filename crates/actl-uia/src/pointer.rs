@@ -145,17 +145,19 @@ fn pointer_physical_inner(
     };
     let (px, py) = (point.get_x(), point.get_y());
 
-    // 命中检查:坐标处最顶层窗口的根标题 == 目标窗口根标题。
-    // ①目标侧从元素沿父链上溯到窗口根(WinUI 控件本身没有 HWND);
-    // ②两侧取根标题比对而非严格 HWND——WinUI 三件套(框架/CoreWindow
-    //   分属不同 HWND)会让同窗口的严格比对必然失败(实测)。
+    // 命中检查:坐标处最顶层窗口的根 == 目标窗口根。两条判据任一满足:
+    // ①根 HWND 相等(精确;空 Win32 标题窗——任务栏 Shell_TrayWnd 标题是
+    //   空串、「任务栏」只是 UIA Name,标题比对结构性失配,HWND 是唯一
+    //   可靠通道,2026-10-14 托盘轮实证);
+    // ②根标题相等(WinUI 三件套框架/CoreWindow 分属不同 HWND 会让严格
+    //   HWND 比对必然失败,标题同窗判过,实测)。
     let auto = UIAutomation::new().map_err(internal)?;
     let walker = auto.create_tree_walker().map_err(internal)?;
     // 目标窗口 HWND:①从元素沿父链爬到第一个带句柄的元素;②部分 provider
-    // 不暴露 NativeWindowHandle(实测记事本),按窗口标题兜底重解析
-    // 目标窗口标题 + 根 HWND:①从元素沿父链爬到第一个带句柄的元素;②部分
-    // provider 不暴露 NativeWindowHandle(实测记事本),按窗口标题兜底重解析。
+    // 不暴露 NativeWindowHandle(实测记事本),按窗口标题兜底重解析。
     // hwnd 供 --no-activate 的样式守护使用(取 GA_ROOT 根)。
+    // 空标题窗(任务栏类):标题通道给空串,HWND 判据兜底,不再报
+    // no native handle——句柄在,命中检查照做。
     let (target_title, target_hwnd) = {
         let mut root = loc.element.clone();
         while native_hwnd(&root).is_none() {
@@ -170,13 +172,15 @@ fn pointer_physical_inner(
             None => {
                 let w = find_window(&auto, &walker, &loc.window_title).ok();
                 let hwnd = w.as_ref().and_then(native_hwnd);
-                let title = hwnd.and_then(window_title_of).ok_or_else(|| {
-                    CtlError::new(
-                        ErrorCode::NotActionable,
-                        "target window has no native handle for hit-checking",
-                    )
-                })?;
-                (title, hwnd)
+                match hwnd {
+                    Some(h) => (hwnd.and_then(window_title_of).unwrap_or_default(), Some(h)),
+                    None => {
+                        return Err(CtlError::new(
+                            ErrorCode::NotActionable,
+                            "target window has no native handle for hit-checking",
+                        ));
+                    }
+                }
             }
         }
     };
@@ -185,11 +189,14 @@ fn pointer_physical_inner(
         (!r.0.is_null()).then_some(r)
     };
     let hit = unsafe { WindowFromPoint(POINT { x: px, y: py }) };
-    let hit_title = (!hit.0.is_null())
-        .then_some(hit)
-        .and_then(root_of)
-        .and_then(window_title_of);
-    if hit_title.as_deref() != Some(target_title.as_str()) {
+    let hit_root = (!hit.0.is_null()).then_some(hit).and_then(root_of);
+    let target_root = target_hwnd.and_then(root_of);
+    let hit_ok = hit_root.is_some_and(|r| {
+        Some(r) == target_root
+            || (!target_title.is_empty()
+                && window_title_of(r).as_deref() == Some(target_title.as_str()))
+    });
+    if !hit_ok {
         return Err(CtlError::new(
             ErrorCode::NotActionable,
             format!(
@@ -212,9 +219,13 @@ fn pointer_physical_inner(
     inject_pointer_at(px, py, action.to_spec(), &loc.window_title, bg_hwnd, || {
         crate::feedback::check_stop()?;
         let hit = unsafe { WindowFromPoint(POINT { x: px, y: py }) };
-        if root_of(hit).and_then(window_title_of).as_deref() != Some(target_title.as_str())
-            || crate::feedback::target(&loc.element, &loc.window_title).bounds != bounds
-        {
+        let hr = root_of(hit);
+        let ok = hr.is_some_and(|r| {
+            Some(r) == target_root
+                || (!target_title.is_empty()
+                    && window_title_of(r).as_deref() == Some(target_title.as_str()))
+        });
+        if !ok || crate::feedback::target(&loc.element, &loc.window_title).bounds != bounds {
             return Err(CtlError::new(
                 ErrorCode::NotActionable,
                 "pointer target changed during preparation",
@@ -386,15 +397,24 @@ pub fn pointer_at_physical(
             ),
         ));
     }
-    // 命中检查:坐标处最顶层窗口的根标题 == 目标窗口标题(遮挡拒绝)
+    // 命中检查:坐标处最顶层窗口的根 == 目标窗口根(遮挡拒绝)。双判据任一
+    // 满足:①根 HWND 相等(空 Win32 标题窗——任务栏 Shell_TrayWnd 标题空串,
+    // 标题比对结构性失配,HWND 是唯一可靠通道,2026-10-14 托盘轮实证);
+    // ②根标题相等(WinUI 三件套跨 HWND 同窗)。都不满足才拒绝。
     let hit = unsafe { WindowFromPoint(POINT { x, y }) };
-    let hit_title = (!hit.0.is_null()).then_some(hit).and_then(|h| {
+    let hit_root = (!hit.0.is_null()).then_some(hit).and_then(|h| {
         let root = unsafe { GetAncestor(h, GA_ROOT) };
-        (!root.0.is_null())
-            .then_some(root)
-            .and_then(window_title_of)
+        (!root.0.is_null()).then_some(root)
     });
-    if hit_title.as_deref() != Some(title.as_str()) {
+    let target_root = {
+        let r = unsafe { GetAncestor(hwnd, GA_ROOT) };
+        (!r.0.is_null()).then_some(r)
+    };
+    let hit_ok = hit_root.is_some_and(|r| {
+        Some(r) == target_root
+            || (!title.is_empty() && window_title_of(r).as_deref() == Some(title.as_str()))
+    });
+    if !hit_ok {
         return Err(CtlError::new(
             ErrorCode::NotActionable,
             format!(
@@ -416,14 +436,21 @@ pub fn pointer_at_physical(
         let mut current = RECT::default();
         unsafe { GetWindowRect(hwnd, &mut current) }.map_err(internal)?;
         let hit = unsafe { WindowFromPoint(POINT { x, y }) };
-        let hit_title = window_title_of(unsafe { GetAncestor(hit, GA_ROOT) });
+        let hit_root = {
+            let r = unsafe { GetAncestor(hit, GA_ROOT) };
+            (!r.0.is_null()).then_some(r)
+        };
+        let ok = hit_root.is_some_and(|r| {
+            Some(r) == target_root
+                || (!title.is_empty() && window_title_of(r).as_deref() == Some(title.as_str()))
+        });
         if unsafe { IsIconic(hwnd) }.as_bool()
             || current != before
             || x < current.left
             || x >= current.right
             || y < current.top
             || y >= current.bottom
-            || hit_title.as_deref() != Some(title.as_str())
+            || !ok
         {
             return Err(CtlError::new(
                 ErrorCode::NotActionable,
@@ -813,6 +840,12 @@ pub fn scroll_element(
     let _watchdog = crate::watchdog::enter();
     let mut uia_ok = false;
     if let Ok(scroll) = loc.element.get_pattern::<UIScrollPattern>() {
+        // 位移核验(2026-10-14 微信搜一搜轮实证):Chromium 页上 uia-scroll
+        // 报 Ok 但视野零位移(元素宣称 Scroll pattern 却滚自己的空容器),
+        // 收割循环把通道故障误判为「内容封顶」。前后 vertical percent 比对:
+        // 未动且不在目标边界 = 假位移,落物理滚轮;percent 不可读 = 无法核验,
+        // 维持原判(诚实边界);notches>=0 朝开头(边界 0%),<0 朝末尾(100%)。
+        let percent_before = scroll.get_vertical_scroll_percent().ok();
         // notches 语义与物理滚轮对齐(正=向上/朝列表头):UIA 分支按
         // Increment/Decrement 的"朝末尾/朝开头"语义映射——原实现
         // notches>=0→SmallIncrement 把 --up 滚成了向下,与物理分支反向
@@ -842,7 +875,16 @@ pub fn scroll_element(
         }
         if ok {
             feedback.delivered();
-            uia_ok = true;
+            let percent_after = scroll.get_vertical_scroll_percent().ok();
+            uia_ok = match (percent_before, percent_after) {
+                (Some(b), Some(a)) => {
+                    let moved = (b - a).abs() > 0.01;
+                    let at_boundary = if notches >= 0 { a <= 0.01 } else { a >= 99.99 };
+                    moved || at_boundary
+                }
+                // percent 读不出(部分 provider)→ 无法核验,维持原判
+                _ => true,
+            };
         }
     }
     let info = loc.into_info();

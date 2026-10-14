@@ -3,5 +3,5 @@
   "ok": true,
   "command": "list-windows",
   "duration_ms": "<duration>",
-  "data": {"count": "<count>", "windows": "<windows>"}
+  "data": {"count": "<count>", "monitors": "<monitors>", "windows": "<windows>"}
 }

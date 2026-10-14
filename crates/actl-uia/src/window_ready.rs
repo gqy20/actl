@@ -101,16 +101,34 @@ pub(crate) fn activate(win: &uiautomation::UIElement) -> Result<(), CtlError> {
         }
         std::thread::sleep(Duration::from_millis(crate::timing().fast_poll_ms));
     }
+    // 前台锁二次尝试(2026-10-14 微信 AppEx 文章窗实证):SetForegroundWindow
+    // 对非前台调用进程会被前台锁拒绝(全屏窗覆盖+Electron 抢回),请求一次后
+    // 零移交。最小化→还原是窗口管理器自己的合法激活路由(与 restore-window
+    // 动词同机制,非按键合成)——只试一次,仍在有界观察内裁决成败。
+    let _ = unsafe { ShowWindowAsync(root, SW_MINIMIZE) };
+    std::thread::sleep(Duration::from_millis(150));
+    let _ = unsafe { ShowWindowAsync(root, SW_RESTORE) };
+    std::thread::sleep(Duration::from_millis(150));
+    let _ = unsafe { SetForegroundWindow(root) };
+    let start2 = Instant::now();
+    while start2.elapsed() < Duration::from_millis(crate::timing().vis_probe_ms) {
+        crate::feedback::check_stop()?;
+        if unsafe { GetForegroundWindow() } == root && !unsafe { IsIconic(root).as_bool() } {
+            return Ok(());
+        }
+        std::thread::sleep(Duration::from_millis(crate::timing().fast_poll_ms));
+    }
     let mut error = failure("foreground_not_acquired");
     if let Some(serde_json::Value::Object(evidence)) = error.evidence.as_mut()
         && let serde_json::Value::Object(details) = activation_evidence(
             foreground_before,
             requested,
             std::process::id(),
-            start.elapsed().as_millis() as u64,
+            (start.elapsed() + start2.elapsed()).as_millis() as u64,
         )
     {
         evidence.extend(details);
+        evidence.insert("min_restore_retry".into(), serde_json::json!(true));
     }
     Err(error)
 }

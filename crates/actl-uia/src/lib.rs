@@ -84,7 +84,7 @@ pub use capture::{
     screenshot_window, screenshot_window_rect,
 };
 pub use collect::{CollectOptions, CollectReport, collect};
-pub use native_windows::{native_window, native_windows};
+pub use native_windows::{monitors, native_window, native_windows};
 
 pub use action::{
     InputResult, TypeOutcome, click, focus_element, paste, press_half, press_half_with_direction,

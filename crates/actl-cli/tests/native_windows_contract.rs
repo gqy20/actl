@@ -29,6 +29,9 @@ fn native_inventory_envelope_and_unique_handles() {
     envelope["duration_ms"] = "<duration>".into();
     envelope["data"]["count"] = "<count>".into();
     envelope["data"]["windows"] = "<windows>".into();
+    // monitors 是 spec 字段(2026-10-14):内容随真实显示器拓扑变化,
+    // golden 钉形状占位;拓扑语义(≥1 屏/恰一主屏)在 cli_contract 断言
+    envelope["data"]["monitors"] = "<monitors>".into();
     let golden: serde_json::Value =
         serde_json::from_str(include_str!("golden/list_windows_native.json")).unwrap();
     assert_eq!(envelope, golden);
