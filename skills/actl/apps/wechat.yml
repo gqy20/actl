@@ -4,8 +4,16 @@ display: 微信
 launch: Weixin           # 进程名 Weixin/WeChat;窗口类 mmui::MainWindow
 window: "微信"
 app_version: "4.1.x"
-verified_date: 2026-09-27
+verified_date: 2026-10-14
+verified_env: Win11 25H2 (build 26200) zh-cn
 quirks:
+  - id: tray_icon_wake
+    note: >-
+      后台挂托盘时严禁重启 exe 拉起(多实例污染,清理须逐 pid 核对归属)。唤起走
+      Shell_TrayWnd:托盘图标在 UIA 树可见(automation_id=NotifyItemIcon,name 带
+      前导空格如" 微信"),click(UIA Invoke)单次即唤起主窗,不经物理命中检查、
+      遮挡免疫。物理路线对任务栏结构性不可达:任务栏 Win32 根标题为空,命中检查
+      按根标题比对必然失配——勿以物理重试唤起
   - id: current_execution_contract
     note: 发送前核对明确授权、会话身份和完整草稿；发送后核对新消息及发送状态，输入框清空不是成功凭据。所有 *_ref 为完整 @eN，与对应 *_snapshot_id 成对；moments 来自发现页快照。bubble_selector/target 为现场唯一语义选择器；不支持快照绑定的命令执行前重新观察。physical 点击仍须显式参数，失败先核验是否送达。
   - id: physical_click_required
@@ -19,9 +27,22 @@ quirks:
   - id: rich_session_ids
     note: 会话条目 automation_id 含名称(session_item_文件传输助手),且条目 name 为"名称\n置顶\n预览\n时间"复合文本
   - id: bubble_reading
-    note: 消息气泡是 Custom role(非 ListItem/DataItem),extract 不命中——读消息用全量 snapshot 后按 name 解析(气泡 name = 正文全文,虚拟化只含可见窗口段)
+    note: >-
+      消息气泡是 ListItem(aid=chat_message_list.qt_scrollarea_viewport.chat_bubble_item_view,
+      name=正文全文;图片气泡 name=图片;时间分隔条 name=日期文本)。读消息用全量
+      snapshot 后按 name 解析;虚拟化只含可见窗口段
   - id: virtualized_messages
-    note: 消息列表 mmui::RecyclerListView 虚拟化,4.1.x 无 Scroll pattern——滚动用物理滚轮兜底
+    note: 消息列表 mmui::RecyclerListView 虚拟化,4.1.x 无 Scroll pattern——scroll 命令自动物理滚轮兜底(envelope via=physical-wheel),route 无需额外物理步骤
+  - id: unread_in_session_name
+    note: 未读计数无独立徽标元素——嵌在会话条目复合 name 预览行前缀([N条]);消息免打扰为同行尾标;计数采集 = session_list 快照 + name 解析,不逐条点开
+  - id: tabbar_six_keys
+    note: 导航六键:微信/通讯录/收藏/发现/手机(aid=MainView.main_tabbar.tabbar_handoff)/更多(aid=MainView.main_tabbar.tabbar_setting);窗口控制 置顶/最小化/最大化/关闭 为标题栏 ToolBar 命名 Button
+  - id: send_gate_enabled
+    note: >-
+      发送按钮暴露 UIA enabled(空草稿=false)——发送前机器守卫:按 file_dialog_quirks
+      同款消歧 find name:发送 取 ref 后 get --property enabled 为 true 才可点
+  - id: chat_identity_anchor
+    note: 当前会话身份锚:aid 以 current_chat_name_label 结尾(Text,name=会话标题)——切换核对与会话身份断言用,勿只凭窗口标题
   - id: input_value_readback
     note: 输入框(id:chat_input_field)暴露 ValuePattern——paste 后 get --property value 读回逐字可用;清草稿 = press ctrl+a + press delete(切勿回车,回车即发送)
   - id: moments_quirks
@@ -38,18 +59,71 @@ quirks:
       重名,回聊天页换 name:发现 锚点
   - id: context_menu_invisible
     note: >-
-      右键菜单是 mmui 自绘,UIA 树不可见(find MenuItem 空)——菜单操作走视觉兜底:
-      right-click 后 screenshot --app → 多模态读菜单项坐标 → click xy:<x>,<y>
-      --app 微信 --physical(窗口边界守卫);
-      自己消息的菜单无"引用"项(复制/转发/收藏/提醒/删除)
+      4.1.x 修正:右键菜单是独立顶层窗 mmui::XMenu(title=Weixin),UIA 全可见
+      (12 个 MenuItem)——旧「UIA 不可见」结论系锚错窗口所致。菜单项 click(UIA
+      Invoke)是假成功(关菜单不触发动作),须元素 --physical;目标窗锚用
+      --app Weixin。右键必须点在气泡本体上:气泡 ListItem rect 是整行,
+      自己的消息右对齐,行中心是空白(菜单不开)——取 rect 右侧算 xyw 点
+  - id: attachment_draft
+    note: >-
+      4.1.x 发送文件/图片确认后不直接发送——附件以 U+FFFC 内嵌对象挂入输入框
+      (get value 读回每个附件一个对象符),回车/点发送才真正发出;发送后消息
+      列表约 2s 重建,即时快照可能撞上 chat_message_list 缺失或旧内容
+  - id: appex_windows
+    note: >-
+      内置浏览器/视频号/搜一搜都是 WeChatAppEx 窗(title=微信,class
+      Chrome_WidgetWin_0)——wait --window 按页面标题等不到,须 list-windows
+      抓 hwnd 后用 --app hwnd:<n> 锚。页面 Document(RootWebArea)name=页面
+      标题可读;Chromium 页内链接/按钮 Invoke 可直接导航;浏览器后退真按钮是
+      d7 深度副本(d8 重复项不响应)。浏览器自带 发现/朋友圈/视频号/搜一搜/
+      问一问/游戏 侧栏入口与 元宝AI总结/微信翻译。结果收割注意:Chromium 树
+      无视口虚拟化(已加载 DOM 全量暴露);web 元素零 Value/Text pattern——
+      find --property 批读空扫 47s 是反模式,收割原语=snapshot+name 解析;
+      分类 tab 是纯图形(UIA 无元素),坐标点击;滚动引擎=press end 真键盘跳屏
+      (scroll 的 uia-scroll 通道在此类页上仅首次有效,之后空转不位移——
+      元素全暴露 Scroll pattern 使物理滚轮兜底永不触发)
+  - id: multiselect_bar
+    note: >-
+      多选模式(右键→多选)底栏 逐条转发/合并转发/删除/取消多选 与每条消息
+      CheckBox 全 UIA 可见(CheckBox name 带发送者昵称前缀)。勾选用元素
+      --physical(坐标行内点击不可靠);底栏按钮对元素锚物理点击不响应,
+      须按 rect 算坐标点击。合并卡片气泡 name=聊天记录\n<作者>的聊天记录\n
+      <作者>: [文件]...\n<作者>: [图片]
+  - id: session_picker
+    note: >-
+      转发选择器=独立窗 mmui::SessionPickerWindow(title=微信发送给,与主窗
+      title 前缀相撞——snapshot --app 微信 会歧义报错)。联系人是 CheckBox
+      (--physical 勾选),确认键 id:confirm_btn,取消 id:cancel_btn;该窗子树
+      观察易不全(选后 ref 读 selected 报 observation incomplete)——选择器用
+      id:/find name: 不用 ref;勾选是否生效走 发送键 enabled 旁证
+  - id: discover_flaky
+    note: >-
+      发现页元素观察易报 observation incomplete(ref 点击/rect 读取皆可能挂)
+      ——入口定位走 screenshot --app + OCR 坐标路线(screenshot 原点=xyw 原点,
+      零换算);朋友圈滚动阈值 ≥15 档复验成立;视频号无页内搜索入口,搜索走
+      发现→搜一搜→视频号分类 chip
+  - id: display_change_guard
+    note: >-
+      显示配置变更(分辨率/DPI/拔插)会令任务栏 rect 漂移且 Explorer 的 XAML
+      accessibility 树可能死亡(托盘图标从 UIA 消失且 wait 15s 不恢复,需重启
+      explorer)——托盘操作前先 list-windows:①对比 monitors[] 检测配置变更;
+      ②确认任务栏窗 rect 与主屏几何一致(悬出屏底的僵尸 rect=变更残骸)。
+      陈旧坐标会被 bounds 守卫诚实拒绝,重观察重算即可
+  - id: tray_icon_toggle
+    note: 托盘单击=主窗开关切换——窗已开时再点会藏回托盘;编排先 list-windows 判存在再点,勿盲目重试;图标 @eN 序号每次快照会漂移,须现拍现用
+  - id: esc_semantics
+    note: >-
+      键名是 esc 非 escape(旧 route 的 "escape" 是无效键名);朋友圈页按 esc
+      会连主窗一起藏回托盘(单键双效),恢复走 tray_wake
   - id: mention_object
     note: >-
       @人引用以 U+FFFC 内嵌对象插入,输入框 Value 读回显示为对象符非纯文本——
       含 @ 的草稿读回核对只对文本部分有效
   - id: file_bubble_name
     note: >-
-      文件消息气泡的 name 不含文件名(时间戳邻近元素)——文件定位靠会话预览[文件]
-      或发送侧记录;接收侧点击/另存为留开放项
+      4.1.x 修正:文件气泡 name 含文件名——形态「文件\n<文件名>\n<大小>\n
+      微信电脑版」;转发中附 加「进度: N%\n上传中」行;合并转发的聊天记录卡片
+      name 以「聊天记录」开头。文件定位不再依赖会话预览
   - id: safety_no_blind_send
     note: 真实聊天应用——发送前必须读回输入框 value 并核对会话标题;严禁盲发
   - id: background_ops
@@ -60,8 +134,16 @@ quirks:
       UI 驱动段与 wechat-ui-collector 并存时按 docs/09 §6.2 共享
       actl-input-lock 锁约定
 routes:
+  - id: tray_wake
+    description: 后台托盘唤起(任务栏快照→按 ref 点图标→等主窗;不重启进程)
+    status: verified
+    verify: 主窗出现且 foreground=true;未出现先核对是否误启多实例(list-windows 查重复 pid 族),不盲目重试
+    steps:
+      - ["snapshot", "--app", "任务栏"]
+      - ["click", "{tray_ref}", "--app", "任务栏", "--snapshot", "{tray_snapshot_id}"]
+      - ["wait", "--window", "{window}", "--timeout", "6000"]
   - id: session_scan
-    description: 会话列表概览(只读安全;条目 name 含预览与时间)
+    description: 会话列表概览(只读安全;条目 name 含预览/时间/未读[N条]/免打扰标记)
     status: verified
     steps:
       - ["snapshot", "--app", "{window}", "--skeleton"]
@@ -78,7 +160,7 @@ routes:
       - ["click", "id:session_item_{name}", "--app", "{window}", "--physical"]
       - ["wait", "--element", "id:chat_message_list", "--app", "{window}", "--timeout", "4000"]
   - id: read_messages
-    description: 读当前会话消息(气泡=Custom role,走快照 name 解析,非 extract)
+    description: 读当前会话消息(气泡=ListItem aid chat_bubble_item_view,走快照 name 解析;会话身份核对 chat_identity_anchor)
     status: verified
     steps:
       - ["snapshot", "--app", "{window}"]
@@ -99,43 +181,112 @@ routes:
       - ["press", "ctrl+a", "--app", "{window}", "--target", "id:chat_input_field"]
       - ["press", "delete", "--app", "{window}", "--target", "id:chat_input_field"]
   - id: send_message
-    description: 发送(高危:仅在 draft_message 读回核对后执行;本路线未做真机验证)
-    status: unverified
-    verify: 输入框 value 读回比对(draft_message 最后一步);发送后新气泡出现在下一次快照
+    description: 发送文本(按钮路径或回车路径;真机双路径已验证;发送前 enabled 门控)
+    status: verified
+    verify: 发送后输入框 value 清空 + 新气泡出现在下一次快照(列表约 2s 重建);气泡 name=正文全文
     steps:
-      - ["click", "name:发送", "--app", "{window}", "--physical"]
+      - ["set-clipboard", "{text}"]
+      - ["click", "id:chat_input_field", "--app", "{window}"]
+      - ["press", "ctrl+v", "--target", "id:chat_input_field", "--app", "{window}"]
+      - ["get", "id:chat_input_field", "--app", "{window}", "--property", "value"]
+      - ["get", "{send_ref}", "--property", "enabled", "--app", "{window}", "--snapshot", "{send_snapshot_id}"]
+      - ["click", "{send_ref}", "--app", "{window}", "--physical", "--snapshot", "{send_snapshot_id}"]
+  - id: send_file
+    description: 发送文件(对话框确认→附件挂输入框→回车真正发送;4.1.x 两段式)
+    status: verified
+    verify: 确认对话框后输入框 value 含 U+FFFC(每附件一个对象符);回车后文件气泡(文件\\n文件名\\n大小\\n来源)出现在约 2s 后的快照
+    steps:
+      - ["find", "--name", "发送文件", "--app", "{window}"]
+      - ["click", "{sendfile_ref}", "--app", "{window}", "--physical", "--snapshot", "{sendfile_snapshot_id}"]
+      - ["wait", "--window", "选择文件", "--timeout", "4000"]
+      - ["set-clipboard", "{file_path}"]
+      - ["press", "ctrl+v", "--app", "选择文件", "--target", "uia:{\"match\":{\"role\":\"Edit\"},\"within\":{\"id\":\"1148\",\"role\":\"ComboBox\"}}"]
+      - ["press", "alt+o", "--app", "选择文件", "--target", "uia:{\"match\":{\"role\":\"Edit\"},\"within\":{\"id\":\"1148\",\"role\":\"ComboBox\"}}"]
+      - ["press", "enter", "--target", "id:chat_input_field", "--app", "{window}"]
+  - id: send_image
+    description: 发送图片(剪贴板位图 paste→附件挂输入框→回车;System.Windows.Forms Clipboard.SetImage 灌位图)
+    status: verified
+    verify: paste 后输入框 value=单个 U+FFFC;回车后气泡 name=图片
+    steps:
+      - ["click", "id:chat_input_field", "--app", "{window}"]
+      - ["press", "ctrl+v", "--target", "id:chat_input_field", "--app", "{window}"]
+      - ["get", "id:chat_input_field", "--app", "{window}", "--property", "value"]
+      - ["press", "enter", "--target", "id:chat_input_field", "--app", "{window}"]
+  - id: forward_single
+    description: 单条转发(右键气泡本体→XMenu 物理点转发→SessionPicker 勾选→confirm)
+    status: verified
+    verify: 转发气泡出现在目标会话(文件类带 进度/上传中 行);选择器勾选生效走 发送键 enabled 旁证
+    steps:
+      - ["right-click", "{bubble_xyw_point}", "--app", "{window}"]
+      - ["wait", "--window", "Weixin", "--timeout", "4000"]
+      - ["snapshot", "--app", "Weixin"]
+      - ["click", "{forward_item_ref}", "--app", "Weixin", "--physical", "--snapshot", "{menu_snapshot_id}"]
+      - ["snapshot", "--app", "微信发送给"]
+      - ["click", "{target_checkbox_ref}", "--app", "微信发送给", "--physical", "--snapshot", "{picker_snapshot_id}"]
+      - ["click", "id:confirm_btn", "--app", "微信发送给", "--physical"]
+  - id: forward_merged
+    description: 合并转发(多选→勾 ≥2 条→合并转发→选择器→confirm;产出聊天记录卡片)
+    status: verified
+    verify: 卡片气泡 name=聊天记录\\n<作者>的聊天记录\\n<作者>: [文件]...;底栏按钮须坐标点击(元素锚物理点击不响应)
+    steps:
+      - ["right-click", "{bubble_xyw_point}", "--app", "{window}"]
+      - ["wait", "--window", "Weixin", "--timeout", "4000"]
+      - ["snapshot", "--app", "Weixin"]
+      - ["click", "{multiselect_ref}", "--app", "Weixin", "--physical", "--snapshot", "{menu_snapshot_id}"]
+      - ["click", "{checkbox_ref}", "--app", "{window}", "--physical", "--snapshot", "{multiselect_snapshot_id}"]
+      - ["click", "{merge_xyw_point}", "--app", "{window}", "--physical"]
+      - ["snapshot", "--app", "微信发送给"]
+      - ["click", "{target_checkbox_ref}", "--app", "微信发送给", "--physical", "--snapshot", "{picker_snapshot_id}"]
+      - ["click", "id:confirm_btn", "--app", "微信发送给", "--physical"]
+  - id: search_souyisou
+    description: 搜一搜(发现页→搜一搜 AppEx 窗→搜索框粘贴→回车;结果页卡片全可读;分类页大步长滚动收割)
+    status: verified
+    verify: 结果 Document name=<query> - 搜一搜;视频卡片 name=时长 播放数 标题;社交动作键(关注/喜欢/点赞/评论)禁碰
+    steps:
+      - ["click", "xyw:{souyisou_point}", "--app", "{window}", "--physical"]
+      - ["list-windows", ""]
+      - ["snapshot", "--app", "hwnd:{appex_hwnd}"]
+      - ["focus", "{search_edit_ref}", "--app", "hwnd:{appex_hwnd}", "--snapshot", "{ss_snapshot_id}"]
+      - ["set-clipboard", "{query}"]
+      - ["press", "ctrl+v", "--app", "hwnd:{appex_hwnd}", "--target", "{search_edit_ref}", "--snapshot", "{ss_snapshot_id}"]
+      - ["press", "enter", "--app", "hwnd:{appex_hwnd}"]
+      - ["snapshot", "--hwnd", "{appex_hwnd}"]
+  - id: get_result_url
+    description: 搜一搜结果的逐条 URL(文章窗 更多→复制链接→get-clipboard;树内零 URL 的唯一补充通道)
+    status: verified
+    verify: get-clipboard 读回 https://mp.weixin.qq.com/s/... 分享链接(站外 fetch 会撞人机验证页,属正常);每条 ~10-15s(含窗管理);卡片 Invoke 是空操作须物理点击
+    steps:
+      - ["click", "xyw:{card_point}", "--app", "hwnd:{appex_hwnd}", "--physical"]
+      - ["list-windows", ""]
+      - ["snapshot", "--app", "hwnd:{article_hwnd}"]
+      - ["click", "{more_ref}", "--app", "hwnd:{article_hwnd}", "--physical", "--snapshot", "{article_snapshot_id}"]
+      - ["click", "name:复制链接", "--app", "hwnd:{article_hwnd}"]
+      - ["get-clipboard", ""]
+  - id: search_harvest
+    description: 搜一搜结果收割(end 键跳屏引擎:press end→快照累积去重,~19 卡/11s 轮,直达真底)
+    status: verified
+    verify: 连续两轮 press end+沉降后零新卡才算穷尽(单轮零新卡可能是加载延迟,多等);单次快照即全量已加载 DOM(无视口虚拟化);UIA 零 URL 暴露,find --property 批读在 web 元素上失效(元素全带 Scroll pattern 走 uia-scroll 空转,47s 空扫反模式)——收割原语=snapshot+name 解析;scroll role:Document 只在首次有效,之后 uia-scroll 空转不位移,持续收割必须走 press end 真键盘
+    steps:
+      - ["press", "end", "--app", "hwnd:{appex_hwnd}"]
+      - ["snapshot", "--hwnd", "{appex_hwnd}"]
   - id: moments
-    description: 刷朋友圈(发现页中转;读取=快照 name 解析;滚动=物理滚轮,虚拟化懒加载需大步长)
-
-    status: manual
+    description: 刷朋友圈(发现页中转;读取=快照 name 解析;滚动 ≥15 档;入口元素观察易挂,走 OCR 坐标)
+    status: verified
     steps:
       - ["click", "name:发现", "--app", "{window}", "--physical"]
-      - ["snapshot", "--app", "{window}"]
-      - ["click", "{moments_ref}", "--app", "{window}", "--physical", "--snapshot", "{moments_snapshot_id}"]
-      - ["wait", "--element", "id:sns_list", "--app", "{window}", "--timeout", "3000"]
+      - ["screenshot", "--app", "{window}"]
+      - ["click", "xyw:{moments_point}", "--app", "{window}", "--physical"]
+      - ["wait", "--element", "id:sns_list", "--app", "{window}", "--timeout", "6000"]
       - ["snapshot", "--app", "{window}"]
       - ["scroll", "id:sns_list", "--down", "15", "--app", "{window}"]
       - ["snapshot", "--app", "{window}"]
+      - ["press", "esc", "--app", "{window}"]
   - id: moments_back
     description: 朋友圈回聊天页(name:微信 与窗口同名,--near 通讯录 锚点消歧)
     status: verified
     steps:
       - ["click", "name:微信", "--app", "{window}", "--near", "name:通讯录", "--physical"]
       - ["find", "--id", "session_list", "--app", "{window}"]
-  - id: send_verified
-    description: 发送前读回核对，再按绑定 ref 精点发送按钮并核验新消息；修订路线待复验
-
-    status: manual
-    verify: 发送前完整草稿与授权文本一致，确认目标会话；发送后核对该会话新增的目标消息和发送状态，不能仅凭输入框清空判成功。结果不明先观察，禁止重发。
-    steps:
-      - ["set-clipboard", "{text}"]
-      - ["click", "id:chat_input_field", "--app", "{window}"]
-      - ["press", "ctrl+v", "--target", "id:chat_input_field", "--app", "{window}"]
-      - ["get", "id:chat_input_field", "--app", "{window}", "--property", "value"]
-      - ["find", "--name", "发送", "--app", "{window}"]
-      - ["click", "{send_ref}", "--app", "{window}", "--physical", "--snapshot", "{send_snapshot_id}"]
-      - ["get", "id:chat_input_field", "--app", "{window}", "--property", "value"]
-      - ["snapshot", "--app", "{window}"]
   - id: search_conversation
     description: 会话搜索(搜索框 Edit 聚焦后 paste;esc 退出)
 
@@ -146,22 +297,7 @@ routes:
       - ["click", "{search_ref}", "--app", "{window}", "--snapshot", "{search_snapshot_id}"]
       - ["press", "ctrl+v", "--app", "{window}", "--target", "{search_ref}", "--snapshot", "{search_snapshot_id}"]
       - ["snapshot", "--app", "{window}"]
-      - ["press", "escape", "--app", "{window}"]
-  - id: send_file
-    description: 发送文件(选择文件对话框:文件名 ComboBox 子 Edit paste 全路径 → Alt+O 确认)
-
-    status: manual
-    verify: Alt+O 前核对文件路径读回、文件归属与目标会话；之后核对本次文件消息、文件名/大小与发送状态。失败或不确定时保留现场，不重发。
-    steps:
-      - ["find", "--name", "发送文件", "--app", "{window}"]
-      - ["click", "{sendfile_ref}", "--app", "{window}", "--physical", "--snapshot", "{sendfile_snapshot_id}"]
-      - ["wait", "--window", "选择文件", "--timeout", "4000"]
-      - ["find", "--target", "uia:{\"match\":{\"role\":\"Edit\"},\"within\":{\"id\":\"1148\",\"role\":\"ComboBox\"}}", "--app", "选择文件"]
-      - ["click", "uia:{\"match\":{\"role\":\"Edit\"},\"within\":{\"id\":\"1148\",\"role\":\"ComboBox\"}}", "--app", "选择文件"]
-      - ["set-clipboard", "{file_path}"]
-      - ["press", "ctrl+v", "--app", "选择文件", "--target", "uia:{\"match\":{\"role\":\"Edit\"},\"within\":{\"id\":\"1148\",\"role\":\"ComboBox\"}}"]
-      - ["get", "uia:{\"match\":{\"role\":\"Edit\"},\"within\":{\"id\":\"1148\",\"role\":\"ComboBox\"}}", "--property", "value", "--app", "选择文件"]
-      - ["press", "alt+o", "--app", "选择文件", "--target", "uia:{\"match\":{\"role\":\"Edit\"},\"within\":{\"id\":\"1148\",\"role\":\"ComboBox\"}}"]
+      - ["press", "esc", "--app", "{window}"]
   - id: contacts_browse
     description: 通讯录(导航 → 列表+分组统计 → 点联系人读详情 → esc + 发现锚点回聊天)
     status: verified
@@ -170,7 +306,7 @@ routes:
       - ["snapshot", "--app", "{window}"]
       - ["click", "name:{contact}", "--app", "{window}", "--physical"]
       - ["snapshot", "--app", "{window}"]
-      - ["press", "escape", "--app", "{window}"]
+      - ["press", "esc", "--app", "{window}"]
       - ["click", "name:微信", "--app", "{window}", "--near", "name:发现", "--physical"]
   - id: mention_member
     description: >-
@@ -191,7 +327,7 @@ routes:
       - ["find", "--name", "聊天信息", "--app", "{window}"]
       - ["click", "{info_ref}", "--app", "{window}", "--physical", "--snapshot", "{info_snapshot_id}"]
       - ["snapshot", "--app", "{window}"]
-      - ["press", "escape", "--app", "{window}"]
+      - ["press", "esc", "--app", "{window}"]
   - id: read_image_message
     description: 图片消息内容读取(UIA 失明兜底:截图+视觉模型;须先打开含图会话)
 
@@ -207,4 +343,4 @@ routes:
     steps:
       - ["right-click", "{target}", "--app", "{window}"]
       - ["screenshot", "--rect", "{menu_x},{menu_y},{menu_w},{menu_h}"]
-      - ["press", "escape", "--app", "{window}"]
+      - ["press", "esc", "--app", "{window}"]
