@@ -735,7 +735,11 @@ fn validate_explore(explore: &ExploreSpec) -> Result<(), CtlError> {
     Ok(())
 }
 
-fn decode_yaml(text: &str) -> Result<serde_json::Value, CtlError> {
+/// YAML/JSON 计划文本 → 原始 Value(引擎与消费方共用的解码入口;纯文本解析,
+/// 无 schema 语义——schema 归 parse/inputs 解析期)。供 flow-validate、模板
+/// 一致性测试等需要**原始模板形态**的消费者使用;parse 消费 inputs/resources
+/// 返回强类型 Plan,两者用途不同。
+pub fn decode_yaml(text: &str) -> Result<serde_json::Value, CtlError> {
     if text.len() > 262_144 {
         return Err(CtlError::protocol("flow exceeds 256 KiB"));
     }

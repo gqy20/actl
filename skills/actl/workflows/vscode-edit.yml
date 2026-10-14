@@ -1,2502 +1,1446 @@
-{
-  "version": 1,
-  "name": "vscode-edit",
-  "handoff": {
-    "approval": "once_per_run"
-  },
-  "inputs": {
-    "program": {
-      "default": "${env:LOCALAPPDATA}/Programs/Microsoft VS Code/Code.exe"
-    },
-    "profile": {
-      "default": "${run.dir}/profile"
-    },
-    "file": {
-      "default": "${run.dir}/${run.id}.txt"
-    },
-    "app": {
-      "default": "${run.id}"
-    },
-    "editor": {
-      "default": "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"${run.id}.txt\"}}"
-    },
-    "second": {
-      "default": "${run.dir}/${run.id}-second.txt"
-    },
-    "second_editor": {
-      "default": "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"${run.id}-second.txt\"}}"
-    },
-    "file_result": {
-      "default": "uia:{\"match\":{\"role\":\"ListItem\",\"name_contains\":\"${run.id}.txt\"},\"within\":{\"id\":\"quickInput_list\"}}"
-    },
-    "second_result": {
-      "default": "uia:{\"match\":{\"role\":\"ListItem\",\"name_contains\":\"${run.id}-second.txt\"},\"within\":{\"id\":\"quickInput_list\"}}"
-    }
-  },
-  "steps": [
-    {
-      "title": "Open isolated editor",
-      "run": {
-        "command": "launch",
-        "args": [
-          {
-            "input": "program"
-          },
-          "--locale",
-          "en",
-          "--new-window",
-          "--disable-extensions",
-          "--skip-welcome",
-          "--skip-release-notes",
-          "--force-renderer-accessibility",
-          "--user-data-dir",
-          {
-            "input": "profile"
-          },
-          {
-            "input": "file"
-          }
-        ]
-      },
-      "verify": {
-        "command": "wait",
-        "args": [
-          "--window",
-          {
-            "input": "app"
-          },
-          "--timeout",
-          "20000"
-        ]
-      },
-      "id": "open"
-    },
-    {
-      "run": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "profile"
-          }
-        ]
-      },
-      "id": "ownership",
-      "title": "Verify isolated task process",
-      "outputs": {
-        "pid": {
-          "type": "number",
-          "pointer": "/pid"
-        },
-        "hwnd": {
-          "type": "number",
-          "pointer": "/hwnd"
-        },
-        "start": {
-          "type": "string",
-          "pointer": "/process_start"
-        }
-      }
-    },
-    {
-      "id": "initial-foreground",
-      "title": "Ensure owned window is foreground",
-      "unless": {
-        "command": "verify-window",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--state",
-          "foreground"
-        ]
-      },
-      "before": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "profile"
-          }
-        ]
-      },
-      "run": {
-        "command": "focus-window",
-        "args": [
-          {
-            "input": "app"
-          }
-        ]
-      },
-      "verify": {
-        "command": "verify-window",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--state",
-          "foreground"
-        ]
-      }
-    },
-    {
-      "id": "initial-ready",
-      "title": "Wait for editor content and verify complete text",
-      "run": {
-        "sequence": [
-          {
-            "args": [
-              "--element",
-              "uia:{\"match\":{\"role\":\"MenuItem\",\"name\":\"File\"}}",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000"
-            ],
-            "command": "wait"
-          },
-          {
-            "command": "wait",
-            "args": [
-              "--element",
-              {
-                "input": "editor"
-              },
-              "--stable",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "15000"
-            ]
-          }
-        ]
-      },
-      "verify": {
-        "command": "verify",
-        "args": [
-          "--value",
-          {
-            "input": "editor"
-          },
-          "Original 中文 baseline 123\nSecond line\n",
-          "--property",
-          "text",
-          "--app",
-          {
-            "input": "app"
-          }
-        ]
-      }
-    },
-    {
-      "run": {
-        "sequence": [
-          {
-            "command": "press",
-            "args": [
-              "ctrl+home",
-              "--target",
-              {
-                "input": "editor"
-              },
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "command": "type",
-            "args": [
-              {
-                "input": "editor"
-              },
-              "Round 1 中文 789\n",
-              "--paste",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"File\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          },
-          {
-            "args": [
-              "--element",
-              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000"
-            ],
-            "command": "wait"
-          },
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          }
-        ]
-      },
-      "title": "insert 1 and verify full file",
-      "resume_check": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "profile"
-          }
-        ]
-      },
-      "verify": {
-        "command": "verify-file",
-        "args": [
-          "--path",
-          {
-            "input": "file"
-          },
-          "--kind",
-          "text",
-          "--expected",
-          "\"Round 1 中文 789\\nOriginal 中文 baseline 123\\nSecond line\\n\"",
-          "--subset"
-        ]
-      },
-      "id": "insert-1",
-      "before": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "profile"
-          }
-        ]
-      }
-    },
-    {
-      "run": {
-        "sequence": [
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"Edit\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          },
-          {
-            "args": [
-              "--element",
-              "uia:{\"match\":{\"name\":\"Undo Ctrl+Z\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000"
-            ],
-            "command": "wait"
-          },
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"Undo Ctrl+Z\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          },
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"File\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          },
-          {
-            "args": [
-              "--element",
-              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000"
-            ],
-            "command": "wait"
-          },
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          }
-        ]
-      },
-      "title": "undo 1 and verify full file",
-      "resume_check": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "profile"
-          }
-        ]
-      },
-      "verify": {
-        "command": "verify-file",
-        "args": [
-          "--path",
-          {
-            "input": "file"
-          },
-          "--kind",
-          "text",
-          "--expected",
-          "\"Original 中文 baseline 123\\nSecond line\\n\"",
-          "--subset"
-        ]
-      },
-      "id": "undo-1",
-      "before": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "profile"
-          }
-        ]
-      }
-    },
-    {
-      "run": {
-        "sequence": [
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"Edit\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          },
-          {
-            "args": [
-              "--element",
-              "uia:{\"match\":{\"name\":\"Redo Ctrl+Y\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000"
-            ],
-            "command": "wait"
-          },
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"Redo Ctrl+Y\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          },
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"File\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          },
-          {
-            "args": [
-              "--element",
-              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000"
-            ],
-            "command": "wait"
-          },
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          }
-        ]
-      },
-      "title": "redo 1 and verify full file",
-      "resume_check": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "profile"
-          }
-        ]
-      },
-      "verify": {
-        "command": "verify-file",
-        "args": [
-          "--path",
-          {
-            "input": "file"
-          },
-          "--kind",
-          "text",
-          "--expected",
-          "\"Round 1 中文 789\\nOriginal 中文 baseline 123\\nSecond line\\n\"",
-          "--subset"
-        ]
-      },
-      "id": "redo-1",
-      "before": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "profile"
-          }
-        ]
-      }
-    },
-    {
-      "run": {
-        "sequence": [
-          {
-            "command": "press",
-            "args": [
-              "ctrl+home",
-              "--target",
-              {
-                "input": "editor"
-              },
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "command": "type",
-            "args": [
-              {
-                "input": "editor"
-              },
-              "Round 2 spaces & symbols [] {}\n",
-              "--paste",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"File\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          },
-          {
-            "args": [
-              "--element",
-              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000"
-            ],
-            "command": "wait"
-          },
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          }
-        ]
-      },
-      "title": "insert 2 and verify full file",
-      "resume_check": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "profile"
-          }
-        ]
-      },
-      "verify": {
-        "command": "verify-file",
-        "args": [
-          "--path",
-          {
-            "input": "file"
-          },
-          "--kind",
-          "text",
-          "--expected",
-          "\"Round 2 spaces & symbols [] {}\\nRound 1 中文 789\\nOriginal 中文 baseline 123\\nSecond line\\n\"",
-          "--subset"
-        ]
-      },
-      "id": "insert-2",
-      "before": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "profile"
-          }
-        ]
-      }
-    },
-    {
-      "run": {
-        "sequence": [
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"Edit\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          },
-          {
-            "args": [
-              "--element",
-              "uia:{\"match\":{\"name\":\"Undo Ctrl+Z\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000"
-            ],
-            "command": "wait"
-          },
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"Undo Ctrl+Z\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          },
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"File\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          },
-          {
-            "args": [
-              "--element",
-              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000"
-            ],
-            "command": "wait"
-          },
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          }
-        ]
-      },
-      "title": "undo 2 and verify full file",
-      "resume_check": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "profile"
-          }
-        ]
-      },
-      "verify": {
-        "command": "verify-file",
-        "args": [
-          "--path",
-          {
-            "input": "file"
-          },
-          "--kind",
-          "text",
-          "--expected",
-          "\"Round 1 中文 789\\nOriginal 中文 baseline 123\\nSecond line\\n\"",
-          "--subset"
-        ]
-      },
-      "id": "undo-2",
-      "before": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "profile"
-          }
-        ]
-      }
-    },
-    {
-      "run": {
-        "sequence": [
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"Edit\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          },
-          {
-            "args": [
-              "--element",
-              "uia:{\"match\":{\"name\":\"Redo Ctrl+Y\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000"
-            ],
-            "command": "wait"
-          },
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"Redo Ctrl+Y\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          },
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"File\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          },
-          {
-            "args": [
-              "--element",
-              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000"
-            ],
-            "command": "wait"
-          },
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          }
-        ]
-      },
-      "title": "redo 2 and verify full file",
-      "resume_check": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "profile"
-          }
-        ]
-      },
-      "verify": {
-        "command": "verify-file",
-        "args": [
-          "--path",
-          {
-            "input": "file"
-          },
-          "--kind",
-          "text",
-          "--expected",
-          "\"Round 2 spaces & symbols [] {}\\nRound 1 中文 789\\nOriginal 中文 baseline 123\\nSecond line\\n\"",
-          "--subset"
-        ]
-      },
-      "id": "redo-2",
-      "before": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "profile"
-          }
-        ]
-      }
-    },
-    {
-      "run": {
-        "sequence": [
-          {
-            "command": "press",
-            "args": [
-              "ctrl+home",
-              "--target",
-              {
-                "input": "editor"
-              },
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "command": "type",
-            "args": [
-              {
-                "input": "editor"
-              },
-              "Round 3 多行\nUnicode Ω 12345\n",
-              "--paste",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"File\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          },
-          {
-            "args": [
-              "--element",
-              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000"
-            ],
-            "command": "wait"
-          },
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          }
-        ]
-      },
-      "title": "insert 3 and verify full file",
-      "resume_check": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "profile"
-          }
-        ]
-      },
-      "verify": {
-        "command": "verify-file",
-        "args": [
-          "--path",
-          {
-            "input": "file"
-          },
-          "--kind",
-          "text",
-          "--expected",
-          "\"Round 3 多行\\nUnicode Ω 12345\\nRound 2 spaces & symbols [] {}\\nRound 1 中文 789\\nOriginal 中文 baseline 123\\nSecond line\\n\"",
-          "--subset"
-        ]
-      },
-      "id": "insert-3",
-      "before": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "profile"
-          }
-        ]
-      }
-    },
-    {
-      "run": {
-        "sequence": [
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"Edit\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          },
-          {
-            "args": [
-              "--element",
-              "uia:{\"match\":{\"name\":\"Undo Ctrl+Z\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000"
-            ],
-            "command": "wait"
-          },
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"Undo Ctrl+Z\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          },
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"File\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          },
-          {
-            "args": [
-              "--element",
-              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000"
-            ],
-            "command": "wait"
-          },
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          }
-        ]
-      },
-      "title": "undo 3 and verify full file",
-      "resume_check": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "profile"
-          }
-        ]
-      },
-      "verify": {
-        "command": "verify-file",
-        "args": [
-          "--path",
-          {
-            "input": "file"
-          },
-          "--kind",
-          "text",
-          "--expected",
-          "\"Round 2 spaces & symbols [] {}\\nRound 1 中文 789\\nOriginal 中文 baseline 123\\nSecond line\\n\"",
-          "--subset"
-        ]
-      },
-      "id": "undo-3",
-      "before": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "profile"
-          }
-        ]
-      }
-    },
-    {
-      "run": {
-        "sequence": [
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"Edit\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          },
-          {
-            "args": [
-              "--element",
-              "uia:{\"match\":{\"name\":\"Redo Ctrl+Y\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000"
-            ],
-            "command": "wait"
-          },
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"Redo Ctrl+Y\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          },
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"File\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          },
-          {
-            "args": [
-              "--element",
-              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000"
-            ],
-            "command": "wait"
-          },
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          }
-        ]
-      },
-      "title": "redo 3 and verify full file",
-      "resume_check": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "profile"
-          }
-        ]
-      },
-      "verify": {
-        "command": "verify-file",
-        "args": [
-          "--path",
-          {
-            "input": "file"
-          },
-          "--kind",
-          "text",
-          "--expected",
-          "\"Round 3 多行\\nUnicode Ω 12345\\nRound 2 spaces & symbols [] {}\\nRound 1 中文 789\\nOriginal 中文 baseline 123\\nSecond line\\n\"",
-          "--subset"
-        ]
-      },
-      "id": "redo-3",
-      "before": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "profile"
-          }
-        ]
-      }
-    },
-    {
-      "run": {
-        "sequence": [
-          {
-            "command": "press",
-            "args": [
-              "ctrl+a",
-              "--target",
-              {
-                "input": "editor"
-              },
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "command": "type",
-            "args": [
-              {
-                "input": "editor"
-              },
-              "Replacement 中文 final\nNumber 123456789\n",
-              "--paste",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"File\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          },
-          {
-            "args": [
-              "--element",
-              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000"
-            ],
-            "command": "wait"
-          },
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          }
-        ]
-      },
-      "title": "Replace entire document and verify file",
-      "resume_check": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "profile"
-          }
-        ]
-      },
-      "verify": {
-        "command": "verify-file",
-        "args": [
-          "--path",
-          {
-            "input": "file"
-          },
-          "--kind",
-          "text",
-          "--expected",
-          "\"Replacement 中文 final\\nNumber 123456789\\n\"",
-          "--subset"
-        ]
-      },
-      "id": "replace",
-      "before": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "profile"
-          }
-        ]
-      }
-    },
-    {
-      "run": {
-        "command": "close-window",
-        "args": [
-          "--hwnd",
-          "1"
-        ],
-        "bind": {
-          "1": "ownership.hwnd"
-        }
-      },
-      "id": "close-before-reopen",
-      "verify": {
-        "command": "verify-closed",
-        "args": [
-          "--hwnd",
-          "1",
-          "--pid",
-          "1",
-          "--instance",
-          "pending"
-        ],
-        "bind": {
-          "5": "ownership.start",
-          "1": "ownership.hwnd",
-          "3": "ownership.pid"
-        }
-      },
-      "before": {
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "profile"
-          },
-          "--instance",
-          "pending",
-          "--hwnd",
-          "1",
-          "--pid",
-          "1"
-        ],
-        "command": "verify-owner",
-        "bind": {
-          "7": "ownership.start",
-          "9": "ownership.hwnd",
-          "11": "ownership.pid"
-        }
-      },
-      "title": "Close only the verified task process"
-    },
-    {
-      "title": "Reopen the saved task file",
-      "run": {
-        "command": "launch",
-        "args": [
-          {
-            "input": "program"
-          },
-          "--locale",
-          "en",
-          "--new-window",
-          "--disable-extensions",
-          "--skip-welcome",
-          "--skip-release-notes",
-          "--force-renderer-accessibility",
-          "--user-data-dir",
-          {
-            "input": "profile"
-          },
-          {
-            "input": "file"
-          }
-        ]
-      },
-      "verify": {
-        "command": "wait",
-        "args": [
-          "--window",
-          {
-            "input": "app"
-          },
-          "--timeout",
-          "20000"
-        ]
-      },
-      "id": "reopen"
-    },
-    {
-      "run": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "profile"
-          }
-        ]
-      },
-      "id": "reopened-owner",
-      "outputs": {
-        "pid": {
-          "type": "number",
-          "pointer": "/pid"
-        },
-        "hwnd": {
-          "type": "number",
-          "pointer": "/hwnd"
-        },
-        "start": {
-          "type": "string",
-          "pointer": "/process_start"
-        }
-      },
-      "title": "Verify reopened process identity"
-    },
-    {
-      "id": "reopened-foreground",
-      "title": "Ensure owned window is foreground",
-      "unless": {
-        "command": "verify-window",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--state",
-          "foreground"
-        ]
-      },
-      "before": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "profile"
-          }
-        ]
-      },
-      "run": {
-        "command": "focus-window",
-        "args": [
-          {
-            "input": "app"
-          }
-        ]
-      },
-      "verify": {
-        "command": "verify-window",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--state",
-          "foreground"
-        ]
-      }
-    },
-    {
-      "id": "reopened-ready",
-      "recovery": {"max_retries": 3, "timeout_ms": 15000, "interval_ms": 1500},
-      "title": "Wait for editor content and verify complete text",
-      "run": {
-        "sequence": [
-          {
-            "args": [
-              "--element",
-              "uia:{\"match\":{\"role\":\"MenuItem\",\"name\":\"File\"}}",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000"
-            ],
-            "command": "wait"
-          },
-          {
-            "command": "wait",
-            "args": [
-              "--element",
-              {
-                "input": "editor"
-              },
-              "--stable",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "15000"
-            ]
-          }
-        ]
-      },
-      "verify": {
-        "command": "verify",
-        "args": [
-          "--value",
-          {
-            "input": "editor"
-          },
-          "Replacement 中文 final\nNumber 123456789\n",
-          "--property",
-          "text",
-          "--app",
-          {
-            "input": "app"
-          }
-        ]
-      }
-    },
-    {
-      "run": {
-        "command": "verify-file",
-        "args": [
-          "--path",
-          {
-            "input": "file"
-          },
-          "--kind",
-          "text",
-          "--expected",
-          "\"Replacement 中文 final\\nNumber 123456789\\n\"",
-          "--subset"
-        ]
-      },
-      "id": "reopened-content",
-      "recovery": {"max_retries": 3, "timeout_ms": 15000, "interval_ms": 1500},
-      "title": "Verify complete saved content after reopen"
-    },
-    {
-      "title": "Verify reopened editor text",
-      "run": {
-        "command": "verify",
-        "args": [
-          "--value",
-          {
-            "input": "editor"
-          },
-          "Replacement 中文 final\nNumber 123456789\n",
-          "--property",
-          "text",
-          "--app",
-          {
-            "input": "app"
-          }
-        ]
-      },
-      "id": "reopened-uia",
-      "recovery": {"max_retries": 3, "timeout_ms": 15000, "interval_ms": 1500}
-    },
-    {
-      "run": {
-        "sequence": [
-          {
-            "args": [
-              {
-                "input": "app"
-              }
-            ],
-            "command": "focus-window"
-          },
-          {
-            "args": [
-              "uia:{\"match\":{\"role\":\"Button\"},\"within\":{\"id\":\"status.editor.selection\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          },
-          {
-            "command": "wait",
-            "args": [
-              "--element",
-              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"Go to line.\"}}",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000",
-              "--stable"
-            ]
-          },
-          {
-            "command": "set-value",
-            "args": [
-              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"Go to line.\"}}",
-              ":2",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "command": "verify",
-            "args": [
-              "--value",
-              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"Go to line.\"}}",
-              ":2",
-              "--property",
-              "value",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "command": "wait",
-            "args": [
-              "--element",
-              "uia:{\"match\":{\"role\":\"ListItem\",\"name\":\"Go to line 2, column 1. Press Enter to navigate.\"},\"within\":{\"id\":\"quickInput_list\"}}",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000",
-              "--stable"
-            ]
-          },
-          {
-            "command": "click",
-            "args": [
-              "uia:{\"match\":{\"role\":\"ListItem\",\"name\":\"Go to line 2, column 1. Press Enter to navigate.\"},\"within\":{\"id\":\"quickInput_list\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "args": [
-              "--element",
-              "uia:{\"match\":{\"role\":\"Button\",\"name\":\"Ln 2, Col 1\"},\"within\":{\"id\":\"status.editor.selection\"}}",
-              "--stable",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000"
-            ],
-            "command": "wait"
-          },
-          {
-            "command": "verify",
-            "args": [
-              "--value",
-              "id:status.editor.selection",
-              "Ln 2, Col 1",
-              "--property",
-              "name",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "command": "type",
-            "args": [
-              {
-                "input": "editor"
-              },
-              "GOTO-",
-              "--paste",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"File\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          },
-          {
-            "args": [
-              "--element",
-              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000"
-            ],
-            "command": "wait"
-          },
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          }
-        ]
-      },
-      "before": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "profile"
-          }
-        ]
-      },
-      "resume_check": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "profile"
-          }
-        ]
-      },
-      "verify": {
-        "command": "verify-file",
-        "args": [
-          "--path",
-          {
-            "input": "file"
-          },
-          "--kind",
-          "text",
-          "--expected",
-          "\"Replacement 中文 final\\nGOTO-Number 123456789\\n\""
-        ]
-      },
-      "id": "goto-line",
-      "recovery": {"max_retries": 3, "timeout_ms": 15000, "interval_ms": 1500},
-      "title": "Go to line and verify inserted text",
-      "evidence": "full"
-    },
-    {
-      "run": {
-        "sequence": [
-          {
-            "args": [
-              {
-                "input": "app"
-              }
-            ],
-            "command": "focus-window"
-          },
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"Edit\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          },
-          {
-            "args": [
-              "--element",
-              "uia:{\"match\":{\"name\":\"Replace Ctrl+H\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000"
-            ],
-            "command": "wait"
-          },
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"Replace Ctrl+H\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          },
-          {
-            "args": [
-              "--element",
-              "uia:{\"within\":{\"name\":\"Find / Replace\",\"role\":\"Window\"},\"match\":{\"name\":\"Find\",\"role\":\"Edit\"}}",
-              "--stable",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000"
-            ],
-            "command": "wait"
-          },
-          {
-            "command": "set-value",
-            "args": [
-              "uia:{\"within\":{\"name\":\"Find / Replace\",\"role\":\"Window\"},\"match\":{\"name\":\"Find\",\"role\":\"Edit\"}}",
-              "123456789",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "args": [
-              "--value",
-              "uia:{\"within\":{\"name\":\"Find / Replace\",\"role\":\"Window\"},\"match\":{\"name\":\"Find\",\"role\":\"Edit\"}}",
-              "123456789",
-              "--property",
-              "value",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "verify"
-          },
-          {
-            "args": [
-              "--element",
-              "uia:{\"within\":{\"name\":\"Find / Replace\",\"role\":\"Window\"},\"match\":{\"name\":\"Replace\",\"role\":\"Edit\"}}",
-              "--stable",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000"
-            ],
-            "command": "wait"
-          },
-          {
-            "command": "set-value",
-            "args": [
-              "uia:{\"within\":{\"name\":\"Find / Replace\",\"role\":\"Window\"},\"match\":{\"name\":\"Replace\",\"role\":\"Edit\"}}",
-              "987654321",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "args": [
-              "--value",
-              "uia:{\"within\":{\"name\":\"Find / Replace\",\"role\":\"Window\"},\"match\":{\"name\":\"Replace\",\"role\":\"Edit\"}}",
-              "987654321",
-              "--property",
-              "value",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "verify"
-          },
-          {
-            "command": "click",
-            "args": [
-              "uia:{\"within\":{\"name\":\"Find / Replace\",\"role\":\"Window\"},\"match\":{\"name\":\"Replace All (Ctrl+Alt+Enter)\",\"role\":\"Button\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "command": "click",
-            "args": [
-              "uia:{\"within\":{\"name\":\"Find / Replace\",\"role\":\"Window\"},\"match\":{\"name\":\"Close (Escape)\",\"role\":\"Button\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"File\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          },
-          {
-            "args": [
-              "--element",
-              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000"
-            ],
-            "command": "wait"
-          },
-          {
-            "args": [
-              "uia:{\"match\":{\"name\":\"Save Ctrl+S\",\"role\":\"MenuItem\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          }
-        ]
-      },
-      "before": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "profile"
-          }
-        ]
-      },
-      "resume_check": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "profile"
-          }
-        ]
-      },
-      "verify": {
-        "command": "verify-file",
-        "args": [
-          "--path",
-          {
-            "input": "file"
-          },
-          "--kind",
-          "text",
-          "--expected",
-          "\"Replacement 中文 final\\nGOTO-Number 987654321\\n\""
-        ]
-      },
-      "id": "find-replace",
-      "recovery": {"max_retries": 3, "timeout_ms": 15000, "interval_ms": 1500},
-      "title": "Replace matches and verify complete saved text",
-      "evidence": "full"
-    },
-    {
-      "run": {
-        "sequence": [
-          {
-            "args": [
-              {
-                "input": "app"
-              }
-            ],
-            "command": "focus-window"
-          },
-          {
-            "args": [
-              "uia:{\"match\":{\"role\":\"Button\",\"name\":\"Open Quick Access\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          },
-          {
-            "command": "wait",
-            "args": [
-              "--element",
-              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"Search files by name\"}}",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000",
-              "--stable"
-            ]
-          },
-          {
-            "command": "set-value",
-            "args": [
-              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"Search files by name\"}}",
-              {
-                "input": "second"
-              },
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "command": "verify",
-            "args": [
-              "--value",
-              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"Search files by name\"}}",
-              {
-                "input": "second"
-              },
-              "--property",
-              "value",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "command": "wait",
-            "args": [
-              "--element",
-              {
-                "input": "second_result"
-              },
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000",
-              "--stable"
-            ]
-          },
-          {
-            "command": "click",
-            "args": [
-              {
-                "input": "second_result"
-              },
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          }
-        ]
-      },
-      "before": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "profile"
-          }
-        ]
-      },
-      "resume_check": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "profile"
-          }
-        ]
-      },
-      "verify": {
-        "command": "verify",
-        "args": [
-          "--value",
-          {
-            "input": "second_editor"
-          },
-          "Second owned file\n",
-          "--property",
-          "text",
-          "--app",
-          {
-            "input": "app"
-          }
-        ]
-      },
-      "id": "quick-open-second",
-      "recovery": {"max_retries": 3, "timeout_ms": 15000, "interval_ms": 1500},
-      "title": "Open second and verify full editor text",
-      "evidence": "full"
-    },
-    {
-      "run": {
-        "sequence": [
-          {
-            "args": [
-              {
-                "input": "app"
-              }
-            ],
-            "command": "focus-window"
-          },
-          {
-            "args": [
-              "uia:{\"match\":{\"role\":\"Button\",\"name\":\"Open Quick Access\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ],
-            "command": "click"
-          },
-          {
-            "command": "wait",
-            "args": [
-              "--element",
-              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"Search files by name\"}}",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000",
-              "--stable"
-            ]
-          },
-          {
-            "command": "set-value",
-            "args": [
-              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"Search files by name\"}}",
-              {
-                "input": "file"
-              },
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "command": "verify",
-            "args": [
-              "--value",
-              "uia:{\"match\":{\"role\":\"Edit\",\"name_contains\":\"Search files by name\"}}",
-              {
-                "input": "file"
-              },
-              "--property",
-              "value",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "command": "wait",
-            "args": [
-              "--element",
-              {
-                "input": "file_result"
-              },
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "5000",
-              "--stable"
-            ]
-          },
-          {
-            "command": "click",
-            "args": [
-              {
-                "input": "file_result"
-              },
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          }
-        ]
-      },
-      "before": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "profile"
-          }
-        ]
-      },
-      "resume_check": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "profile"
-          }
-        ]
-      },
-      "verify": {
-        "command": "verify",
-        "args": [
-          "--value",
-          {
-            "input": "editor"
-          },
-          "Replacement 中文 final\nGOTO-Number 987654321\n",
-          "--property",
-          "text",
-          "--app",
-          {
-            "input": "app"
-          }
-        ]
-      },
-      "id": "quick-open-file",
-      "recovery": {"max_retries": 3, "timeout_ms": 15000, "interval_ms": 1500},
-      "title": "Open file and verify full editor text",
-      "evidence": "full"
-    },
-    {
-      "run": {
-        "command": "close-window",
-        "args": [
-          "--hwnd",
-          "1"
-        ],
-        "bind": {
-          "1": "reopened-owner.hwnd"
-        }
-      },
-      "id": "close",
-      "verify": {
-        "command": "verify-closed",
-        "args": [
-          "--hwnd",
-          "1",
-          "--pid",
-          "1",
-          "--instance",
-          "pending"
-        ],
-        "bind": {
-          "5": "reopened-owner.start",
-          "1": "reopened-owner.hwnd",
-          "3": "reopened-owner.pid"
-        }
-      },
-      "before": {
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "profile"
-          },
-          "--instance",
-          "pending",
-          "--hwnd",
-          "1",
-          "--pid",
-          "1"
-        ],
-        "command": "verify-owner",
-        "bind": {
-          "7": "reopened-owner.start",
-          "9": "reopened-owner.hwnd",
-          "11": "reopened-owner.pid"
-        }
-      },
-      "title": "Close only the verified task process"
-    }
-  ],
-  "resources": {
-    "directories": [
-      "profile"
-    ],
-    "files": [
-      {
-        "path": "${run.id}.txt",
-        "text": "Original 中文 baseline 123\nSecond line\n"
-      },
-      {
-        "path": "${run.id}-second.txt",
-        "text": "Second owned file\n"
-      }
-    ]
-  }
-}
+version: 1
+name: vscode-edit
+handoff:
+  approval: once_per_run
+inputs:
+  program:
+    default: '${env:LOCALAPPDATA}/Programs/Microsoft VS Code/Code.exe'
+  profile:
+    default: '${run.dir}/profile'
+  file:
+    default: '${run.dir}/${run.id}.txt'
+  app:
+    default: '${run.id}'
+  editor:
+    default: 'uia:{"match":{"role":"Edit","name_contains":"${run.id}.txt"}}'
+  second:
+    default: '${run.dir}/${run.id}-second.txt'
+  second_editor:
+    default: 'uia:{"match":{"role":"Edit","name_contains":"${run.id}-second.txt"}}'
+  file_result:
+    default: 'uia:{"match":{"role":"ListItem","name_contains":"${run.id}.txt"},"within":{"id":"quickInput_list"}}'
+  second_result:
+    default: 'uia:{"match":{"role":"ListItem","name_contains":"${run.id}-second.txt"},"within":{"id":"quickInput_list"}}'
+steps:
+  - id: open
+    title: Open isolated editor
+    run:
+      command: launch
+      args:
+        - input: program
+        - '--locale'
+        - en
+        - '--new-window'
+        - '--disable-extensions'
+        - '--skip-welcome'
+        - '--skip-release-notes'
+        - '--force-renderer-accessibility'
+        - '--user-data-dir'
+        - input: profile
+        - input: file
+    verify:
+      command: wait
+      args:
+        - '--window'
+        - input: app
+        - '--timeout'
+        - '20000'
+  - id: ownership
+    run:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: profile
+    title: Verify isolated task process
+    outputs:
+      pid:
+        type: number
+        pointer: /pid
+      hwnd:
+        type: number
+        pointer: /hwnd
+      start:
+        type: string
+        pointer: /process_start
+  - id: initial-foreground
+    title: Ensure owned window is foreground
+    unless:
+      command: verify-window
+      args:
+        - '--app'
+        - input: app
+        - '--state'
+        - foreground
+    before:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: profile
+    run:
+      command: focus-window
+      args:
+        - input: app
+    verify:
+      command: verify-window
+      args:
+        - '--app'
+        - input: app
+        - '--state'
+        - foreground
+  - id: initial-ready
+    title: Wait for editor content and verify complete text
+    run:
+      sequence:
+        - args:
+          - '--element'
+          - 'uia:{"match":{"role":"MenuItem","name":"File"}}'
+          - '--app'
+          - input: app
+          - '--timeout'
+          - '5000'
+          command: wait
+        - command: wait
+          args:
+            - '--element'
+            - input: editor
+            - '--stable'
+            - '--app'
+            - input: app
+            - '--timeout'
+            - '15000'
+    verify:
+      command: verify
+      args:
+        - '--value'
+        - input: editor
+        - "Original 中文 baseline 123\nSecond line\n"
+        - '--property'
+        - text
+        - '--app'
+        - input: app
+  - id: insert-1
+    run:
+      sequence:
+        - command: press
+          args:
+            - ctrl+home
+            - '--target'
+            - input: editor
+            - '--app'
+            - input: app
+        - command: type
+          args:
+            - input: editor
+            - "Round 1 中文 789\n"
+            - '--paste'
+            - '--app'
+            - input: app
+        - args:
+          - 'uia:{"match":{"name":"File","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+        - args:
+          - '--element'
+          - 'uia:{"match":{"name":"Save Ctrl+S","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          - '--timeout'
+          - '5000'
+          command: wait
+        - args:
+          - 'uia:{"match":{"name":"Save Ctrl+S","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+    title: insert 1 and verify full file
+    resume_check:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: profile
+    verify:
+      command: verify-file
+      args:
+        - '--path'
+        - input: file
+        - '--kind'
+        - text
+        - '--expected'
+        - '"Round 1 中文 789\nOriginal 中文 baseline 123\nSecond line\n"'
+        - '--subset'
+    before:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: profile
+  - id: undo-1
+    run:
+      sequence:
+        - args:
+          - 'uia:{"match":{"name":"Edit","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+        - args:
+          - '--element'
+          - 'uia:{"match":{"name":"Undo Ctrl+Z","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          - '--timeout'
+          - '5000'
+          command: wait
+        - args:
+          - 'uia:{"match":{"name":"Undo Ctrl+Z","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+        - args:
+          - 'uia:{"match":{"name":"File","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+        - args:
+          - '--element'
+          - 'uia:{"match":{"name":"Save Ctrl+S","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          - '--timeout'
+          - '5000'
+          command: wait
+        - args:
+          - 'uia:{"match":{"name":"Save Ctrl+S","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+    title: undo 1 and verify full file
+    resume_check:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: profile
+    verify:
+      command: verify-file
+      args:
+        - '--path'
+        - input: file
+        - '--kind'
+        - text
+        - '--expected'
+        - '"Original 中文 baseline 123\nSecond line\n"'
+        - '--subset'
+    before:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: profile
+  - id: redo-1
+    run:
+      sequence:
+        - args:
+          - 'uia:{"match":{"name":"Edit","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+        - args:
+          - '--element'
+          - 'uia:{"match":{"name":"Redo Ctrl+Y","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          - '--timeout'
+          - '5000'
+          command: wait
+        - args:
+          - 'uia:{"match":{"name":"Redo Ctrl+Y","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+        - args:
+          - 'uia:{"match":{"name":"File","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+        - args:
+          - '--element'
+          - 'uia:{"match":{"name":"Save Ctrl+S","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          - '--timeout'
+          - '5000'
+          command: wait
+        - args:
+          - 'uia:{"match":{"name":"Save Ctrl+S","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+    title: redo 1 and verify full file
+    resume_check:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: profile
+    verify:
+      command: verify-file
+      args:
+        - '--path'
+        - input: file
+        - '--kind'
+        - text
+        - '--expected'
+        - '"Round 1 中文 789\nOriginal 中文 baseline 123\nSecond line\n"'
+        - '--subset'
+    before:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: profile
+  - id: insert-2
+    run:
+      sequence:
+        - command: press
+          args:
+            - ctrl+home
+            - '--target'
+            - input: editor
+            - '--app'
+            - input: app
+        - command: type
+          args:
+            - input: editor
+            - "Round 2 spaces & symbols [] {}\n"
+            - '--paste'
+            - '--app'
+            - input: app
+        - args:
+          - 'uia:{"match":{"name":"File","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+        - args:
+          - '--element'
+          - 'uia:{"match":{"name":"Save Ctrl+S","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          - '--timeout'
+          - '5000'
+          command: wait
+        - args:
+          - 'uia:{"match":{"name":"Save Ctrl+S","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+    title: insert 2 and verify full file
+    resume_check:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: profile
+    verify:
+      command: verify-file
+      args:
+        - '--path'
+        - input: file
+        - '--kind'
+        - text
+        - '--expected'
+        - '"Round 2 spaces & symbols [] {}\nRound 1 中文 789\nOriginal 中文 baseline 123\nSecond line\n"'
+        - '--subset'
+    before:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: profile
+  - id: undo-2
+    run:
+      sequence:
+        - args:
+          - 'uia:{"match":{"name":"Edit","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+        - args:
+          - '--element'
+          - 'uia:{"match":{"name":"Undo Ctrl+Z","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          - '--timeout'
+          - '5000'
+          command: wait
+        - args:
+          - 'uia:{"match":{"name":"Undo Ctrl+Z","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+        - args:
+          - 'uia:{"match":{"name":"File","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+        - args:
+          - '--element'
+          - 'uia:{"match":{"name":"Save Ctrl+S","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          - '--timeout'
+          - '5000'
+          command: wait
+        - args:
+          - 'uia:{"match":{"name":"Save Ctrl+S","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+    title: undo 2 and verify full file
+    resume_check:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: profile
+    verify:
+      command: verify-file
+      args:
+        - '--path'
+        - input: file
+        - '--kind'
+        - text
+        - '--expected'
+        - '"Round 1 中文 789\nOriginal 中文 baseline 123\nSecond line\n"'
+        - '--subset'
+    before:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: profile
+  - id: redo-2
+    run:
+      sequence:
+        - args:
+          - 'uia:{"match":{"name":"Edit","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+        - args:
+          - '--element'
+          - 'uia:{"match":{"name":"Redo Ctrl+Y","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          - '--timeout'
+          - '5000'
+          command: wait
+        - args:
+          - 'uia:{"match":{"name":"Redo Ctrl+Y","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+        - args:
+          - 'uia:{"match":{"name":"File","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+        - args:
+          - '--element'
+          - 'uia:{"match":{"name":"Save Ctrl+S","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          - '--timeout'
+          - '5000'
+          command: wait
+        - args:
+          - 'uia:{"match":{"name":"Save Ctrl+S","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+    title: redo 2 and verify full file
+    resume_check:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: profile
+    verify:
+      command: verify-file
+      args:
+        - '--path'
+        - input: file
+        - '--kind'
+        - text
+        - '--expected'
+        - '"Round 2 spaces & symbols [] {}\nRound 1 中文 789\nOriginal 中文 baseline 123\nSecond line\n"'
+        - '--subset'
+    before:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: profile
+  - id: insert-3
+    run:
+      sequence:
+        - command: press
+          args:
+            - ctrl+home
+            - '--target'
+            - input: editor
+            - '--app'
+            - input: app
+        - command: type
+          args:
+            - input: editor
+            - "Round 3 多行\nUnicode Ω 12345\n"
+            - '--paste'
+            - '--app'
+            - input: app
+        - args:
+          - 'uia:{"match":{"name":"File","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+        - args:
+          - '--element'
+          - 'uia:{"match":{"name":"Save Ctrl+S","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          - '--timeout'
+          - '5000'
+          command: wait
+        - args:
+          - 'uia:{"match":{"name":"Save Ctrl+S","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+    title: insert 3 and verify full file
+    resume_check:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: profile
+    verify:
+      command: verify-file
+      args:
+        - '--path'
+        - input: file
+        - '--kind'
+        - text
+        - '--expected'
+        - '"Round 3 多行\nUnicode Ω 12345\nRound 2 spaces & symbols [] {}\nRound 1 中文 789\nOriginal 中文 baseline 123\nSecond line\n"'
+        - '--subset'
+    before:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: profile
+  - id: undo-3
+    run:
+      sequence:
+        - args:
+          - 'uia:{"match":{"name":"Edit","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+        - args:
+          - '--element'
+          - 'uia:{"match":{"name":"Undo Ctrl+Z","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          - '--timeout'
+          - '5000'
+          command: wait
+        - args:
+          - 'uia:{"match":{"name":"Undo Ctrl+Z","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+        - args:
+          - 'uia:{"match":{"name":"File","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+        - args:
+          - '--element'
+          - 'uia:{"match":{"name":"Save Ctrl+S","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          - '--timeout'
+          - '5000'
+          command: wait
+        - args:
+          - 'uia:{"match":{"name":"Save Ctrl+S","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+    title: undo 3 and verify full file
+    resume_check:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: profile
+    verify:
+      command: verify-file
+      args:
+        - '--path'
+        - input: file
+        - '--kind'
+        - text
+        - '--expected'
+        - '"Round 2 spaces & symbols [] {}\nRound 1 中文 789\nOriginal 中文 baseline 123\nSecond line\n"'
+        - '--subset'
+    before:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: profile
+  - id: redo-3
+    run:
+      sequence:
+        - args:
+          - 'uia:{"match":{"name":"Edit","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+        - args:
+          - '--element'
+          - 'uia:{"match":{"name":"Redo Ctrl+Y","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          - '--timeout'
+          - '5000'
+          command: wait
+        - args:
+          - 'uia:{"match":{"name":"Redo Ctrl+Y","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+        - args:
+          - 'uia:{"match":{"name":"File","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+        - args:
+          - '--element'
+          - 'uia:{"match":{"name":"Save Ctrl+S","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          - '--timeout'
+          - '5000'
+          command: wait
+        - args:
+          - 'uia:{"match":{"name":"Save Ctrl+S","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+    title: redo 3 and verify full file
+    resume_check:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: profile
+    verify:
+      command: verify-file
+      args:
+        - '--path'
+        - input: file
+        - '--kind'
+        - text
+        - '--expected'
+        - '"Round 3 多行\nUnicode Ω 12345\nRound 2 spaces & symbols [] {}\nRound 1 中文 789\nOriginal 中文 baseline 123\nSecond line\n"'
+        - '--subset'
+    before:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: profile
+  - id: replace
+    run:
+      sequence:
+        - command: press
+          args:
+            - ctrl+a
+            - '--target'
+            - input: editor
+            - '--app'
+            - input: app
+        - command: type
+          args:
+            - input: editor
+            - "Replacement 中文 final\nNumber 123456789\n"
+            - '--paste'
+            - '--app'
+            - input: app
+        - args:
+          - 'uia:{"match":{"name":"File","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+        - args:
+          - '--element'
+          - 'uia:{"match":{"name":"Save Ctrl+S","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          - '--timeout'
+          - '5000'
+          command: wait
+        - args:
+          - 'uia:{"match":{"name":"Save Ctrl+S","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+    title: Replace entire document and verify file
+    resume_check:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: profile
+    verify:
+      command: verify-file
+      args:
+        - '--path'
+        - input: file
+        - '--kind'
+        - text
+        - '--expected'
+        - '"Replacement 中文 final\nNumber 123456789\n"'
+        - '--subset'
+    before:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: profile
+  - id: close-before-reopen
+    run:
+      command: close-window
+      args:
+        - '--hwnd'
+        - '1'
+      bind:
+        1: ownership.hwnd
+    verify:
+      command: verify-closed
+      args:
+        - '--hwnd'
+        - '1'
+        - '--pid'
+        - '1'
+        - '--instance'
+        - pending
+      bind:
+        5: ownership.start
+        1: ownership.hwnd
+        3: ownership.pid
+    before:
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: profile
+        - '--instance'
+        - pending
+        - '--hwnd'
+        - '1'
+        - '--pid'
+        - '1'
+      command: verify-owner
+      bind:
+        7: ownership.start
+        9: ownership.hwnd
+        11: ownership.pid
+    title: Close only the verified task process
+  - id: reopen
+    title: Reopen the saved task file
+    run:
+      command: launch
+      args:
+        - input: program
+        - '--locale'
+        - en
+        - '--new-window'
+        - '--disable-extensions'
+        - '--skip-welcome'
+        - '--skip-release-notes'
+        - '--force-renderer-accessibility'
+        - '--user-data-dir'
+        - input: profile
+        - input: file
+    verify:
+      command: wait
+      args:
+        - '--window'
+        - input: app
+        - '--timeout'
+        - '20000'
+  - id: reopened-owner
+    run:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: profile
+    outputs:
+      pid:
+        type: number
+        pointer: /pid
+      hwnd:
+        type: number
+        pointer: /hwnd
+      start:
+        type: string
+        pointer: /process_start
+    title: Verify reopened process identity
+  - id: reopened-foreground
+    title: Ensure owned window is foreground
+    unless:
+      command: verify-window
+      args:
+        - '--app'
+        - input: app
+        - '--state'
+        - foreground
+    before:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: profile
+    run:
+      command: focus-window
+      args:
+        - input: app
+    verify:
+      command: verify-window
+      args:
+        - '--app'
+        - input: app
+        - '--state'
+        - foreground
+  - id: reopened-ready
+    recovery:
+      max_retries: 3
+      timeout_ms: 15000
+      interval_ms: 1500
+    title: Wait for editor content and verify complete text
+    run:
+      sequence:
+        - args:
+          - '--element'
+          - 'uia:{"match":{"role":"MenuItem","name":"File"}}'
+          - '--app'
+          - input: app
+          - '--timeout'
+          - '5000'
+          command: wait
+        - command: wait
+          args:
+            - '--element'
+            - input: editor
+            - '--stable'
+            - '--app'
+            - input: app
+            - '--timeout'
+            - '15000'
+    verify:
+      command: verify
+      args:
+        - '--value'
+        - input: editor
+        - "Replacement 中文 final\nNumber 123456789\n"
+        - '--property'
+        - text
+        - '--app'
+        - input: app
+  - id: reopened-content
+    run:
+      command: verify-file
+      args:
+        - '--path'
+        - input: file
+        - '--kind'
+        - text
+        - '--expected'
+        - '"Replacement 中文 final\nNumber 123456789\n"'
+        - '--subset'
+    recovery:
+      max_retries: 3
+      timeout_ms: 15000
+      interval_ms: 1500
+    title: Verify complete saved content after reopen
+  - id: reopened-uia
+    title: Verify reopened editor text
+    run:
+      command: verify
+      args:
+        - '--value'
+        - input: editor
+        - "Replacement 中文 final\nNumber 123456789\n"
+        - '--property'
+        - text
+        - '--app'
+        - input: app
+    recovery:
+      max_retries: 3
+      timeout_ms: 15000
+      interval_ms: 1500
+  - id: goto-line
+    run:
+      sequence:
+        - args:
+          - input: app
+          command: focus-window
+        - args:
+          - 'uia:{"match":{"role":"Button"},"within":{"id":"status.editor.selection"}}'
+          - '--app'
+          - input: app
+          command: click
+        - command: wait
+          args:
+            - '--element'
+            - 'uia:{"match":{"role":"Edit","name_contains":"Go to line."}}'
+            - '--app'
+            - input: app
+            - '--timeout'
+            - '5000'
+            - '--stable'
+        - command: set-value
+          args:
+            - 'uia:{"match":{"role":"Edit","name_contains":"Go to line."}}'
+            - ':2'
+            - '--app'
+            - input: app
+        - command: verify
+          args:
+            - '--value'
+            - 'uia:{"match":{"role":"Edit","name_contains":"Go to line."}}'
+            - ':2'
+            - '--property'
+            - value
+            - '--app'
+            - input: app
+        - command: wait
+          args:
+            - '--element'
+            - 'uia:{"match":{"role":"ListItem","name":"Go to line 2, column 1. Press Enter to navigate."},"within":{"id":"quickInput_list"}}'
+            - '--app'
+            - input: app
+            - '--timeout'
+            - '5000'
+            - '--stable'
+        - command: click
+          args:
+            - 'uia:{"match":{"role":"ListItem","name":"Go to line 2, column 1. Press Enter to navigate."},"within":{"id":"quickInput_list"}}'
+            - '--app'
+            - input: app
+        - args:
+          - '--element'
+          - 'uia:{"match":{"role":"Button","name":"Ln 2, Col 1"},"within":{"id":"status.editor.selection"}}'
+          - '--stable'
+          - '--app'
+          - input: app
+          - '--timeout'
+          - '5000'
+          command: wait
+        - command: verify
+          args:
+            - '--value'
+            - id:status.editor.selection
+            - Ln 2, Col 1
+            - '--property'
+            - name
+            - '--app'
+            - input: app
+        - command: type
+          args:
+            - input: editor
+            - GOTO-
+            - '--paste'
+            - '--app'
+            - input: app
+        - args:
+          - 'uia:{"match":{"name":"File","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+        - args:
+          - '--element'
+          - 'uia:{"match":{"name":"Save Ctrl+S","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          - '--timeout'
+          - '5000'
+          command: wait
+        - args:
+          - 'uia:{"match":{"name":"Save Ctrl+S","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+    before:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: profile
+    resume_check:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: profile
+    verify:
+      command: verify-file
+      args:
+        - '--path'
+        - input: file
+        - '--kind'
+        - text
+        - '--expected'
+        - '"Replacement 中文 final\nGOTO-Number 123456789\n"'
+    recovery:
+      max_retries: 3
+      timeout_ms: 15000
+      interval_ms: 1500
+    title: Go to line and verify inserted text
+    evidence: full
+  - id: find-replace
+    run:
+      sequence:
+        - args:
+          - input: app
+          command: focus-window
+        - args:
+          - 'uia:{"match":{"name":"Edit","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+        - args:
+          - '--element'
+          - 'uia:{"match":{"name":"Replace Ctrl+H","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          - '--timeout'
+          - '5000'
+          command: wait
+        - args:
+          - 'uia:{"match":{"name":"Replace Ctrl+H","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+        - args:
+          - '--element'
+          - 'uia:{"within":{"name":"Find / Replace","role":"Window"},"match":{"name":"Find","role":"Edit"}}'
+          - '--stable'
+          - '--app'
+          - input: app
+          - '--timeout'
+          - '5000'
+          command: wait
+        - command: set-value
+          args:
+            - 'uia:{"within":{"name":"Find / Replace","role":"Window"},"match":{"name":"Find","role":"Edit"}}'
+            - '123456789'
+            - '--app'
+            - input: app
+        - args:
+          - '--value'
+          - 'uia:{"within":{"name":"Find / Replace","role":"Window"},"match":{"name":"Find","role":"Edit"}}'
+          - '123456789'
+          - '--property'
+          - value
+          - '--app'
+          - input: app
+          command: verify
+        - args:
+          - '--element'
+          - 'uia:{"within":{"name":"Find / Replace","role":"Window"},"match":{"name":"Replace","role":"Edit"}}'
+          - '--stable'
+          - '--app'
+          - input: app
+          - '--timeout'
+          - '5000'
+          command: wait
+        - command: set-value
+          args:
+            - 'uia:{"within":{"name":"Find / Replace","role":"Window"},"match":{"name":"Replace","role":"Edit"}}'
+            - '987654321'
+            - '--app'
+            - input: app
+        - args:
+          - '--value'
+          - 'uia:{"within":{"name":"Find / Replace","role":"Window"},"match":{"name":"Replace","role":"Edit"}}'
+          - '987654321'
+          - '--property'
+          - value
+          - '--app'
+          - input: app
+          command: verify
+        - command: click
+          args:
+            - 'uia:{"within":{"name":"Find / Replace","role":"Window"},"match":{"name":"Replace All (Ctrl+Alt+Enter)","role":"Button"}}'
+            - '--app'
+            - input: app
+        - command: click
+          args:
+            - 'uia:{"within":{"name":"Find / Replace","role":"Window"},"match":{"name":"Close (Escape)","role":"Button"}}'
+            - '--app'
+            - input: app
+        - args:
+          - 'uia:{"match":{"name":"File","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+        - args:
+          - '--element'
+          - 'uia:{"match":{"name":"Save Ctrl+S","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          - '--timeout'
+          - '5000'
+          command: wait
+        - args:
+          - 'uia:{"match":{"name":"Save Ctrl+S","role":"MenuItem"}}'
+          - '--app'
+          - input: app
+          command: click
+    before:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: profile
+    resume_check:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: profile
+    verify:
+      command: verify-file
+      args:
+        - '--path'
+        - input: file
+        - '--kind'
+        - text
+        - '--expected'
+        - '"Replacement 中文 final\nGOTO-Number 987654321\n"'
+    recovery:
+      max_retries: 3
+      timeout_ms: 15000
+      interval_ms: 1500
+    title: Replace matches and verify complete saved text
+    evidence: full
+  - id: quick-open-second
+    run:
+      sequence:
+        - args:
+          - input: app
+          command: focus-window
+        - args:
+          - 'uia:{"match":{"role":"Button","name":"Open Quick Access"}}'
+          - '--app'
+          - input: app
+          command: click
+        - command: wait
+          args:
+            - '--element'
+            - 'uia:{"match":{"role":"Edit","name_contains":"Search files by name"}}'
+            - '--app'
+            - input: app
+            - '--timeout'
+            - '5000'
+            - '--stable'
+        - command: set-value
+          args:
+            - 'uia:{"match":{"role":"Edit","name_contains":"Search files by name"}}'
+            - input: second
+            - '--app'
+            - input: app
+        - command: verify
+          args:
+            - '--value'
+            - 'uia:{"match":{"role":"Edit","name_contains":"Search files by name"}}'
+            - input: second
+            - '--property'
+            - value
+            - '--app'
+            - input: app
+        - command: wait
+          args:
+            - '--element'
+            - input: second_result
+            - '--app'
+            - input: app
+            - '--timeout'
+            - '5000'
+            - '--stable'
+        - command: click
+          args:
+            - input: second_result
+            - '--app'
+            - input: app
+    before:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: profile
+    resume_check:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: profile
+    verify:
+      command: verify
+      args:
+        - '--value'
+        - input: second_editor
+        - "Second owned file\n"
+        - '--property'
+        - text
+        - '--app'
+        - input: app
+    recovery:
+      max_retries: 3
+      timeout_ms: 15000
+      interval_ms: 1500
+    title: Open second and verify full editor text
+    evidence: full
+  - id: quick-open-file
+    run:
+      sequence:
+        - args:
+          - input: app
+          command: focus-window
+        - args:
+          - 'uia:{"match":{"role":"Button","name":"Open Quick Access"}}'
+          - '--app'
+          - input: app
+          command: click
+        - command: wait
+          args:
+            - '--element'
+            - 'uia:{"match":{"role":"Edit","name_contains":"Search files by name"}}'
+            - '--app'
+            - input: app
+            - '--timeout'
+            - '5000'
+            - '--stable'
+        - command: set-value
+          args:
+            - 'uia:{"match":{"role":"Edit","name_contains":"Search files by name"}}'
+            - input: file
+            - '--app'
+            - input: app
+        - command: verify
+          args:
+            - '--value'
+            - 'uia:{"match":{"role":"Edit","name_contains":"Search files by name"}}'
+            - input: file
+            - '--property'
+            - value
+            - '--app'
+            - input: app
+        - command: wait
+          args:
+            - '--element'
+            - input: file_result
+            - '--app'
+            - input: app
+            - '--timeout'
+            - '5000'
+            - '--stable'
+        - command: click
+          args:
+            - input: file_result
+            - '--app'
+            - input: app
+    before:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: profile
+    resume_check:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: profile
+    verify:
+      command: verify
+      args:
+        - '--value'
+        - input: editor
+        - "Replacement 中文 final\nGOTO-Number 987654321\n"
+        - '--property'
+        - text
+        - '--app'
+        - input: app
+    recovery:
+      max_retries: 3
+      timeout_ms: 15000
+      interval_ms: 1500
+    title: Open file and verify full editor text
+    evidence: full
+  - id: close
+    run:
+      command: close-window
+      args:
+        - '--hwnd'
+        - '1'
+      bind:
+        1: reopened-owner.hwnd
+    verify:
+      command: verify-closed
+      args:
+        - '--hwnd'
+        - '1'
+        - '--pid'
+        - '1'
+        - '--instance'
+        - pending
+      bind:
+        5: reopened-owner.start
+        1: reopened-owner.hwnd
+        3: reopened-owner.pid
+    before:
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: profile
+        - '--instance'
+        - pending
+        - '--hwnd'
+        - '1'
+        - '--pid'
+        - '1'
+      command: verify-owner
+      bind:
+        7: reopened-owner.start
+        9: reopened-owner.hwnd
+        11: reopened-owner.pid
+    title: Close only the verified task process
+resources:
+  directories:
+    - profile
+  files:
+    - path: '${run.id}.txt'
+      text: "Original 中文 baseline 123\nSecond line\n"
+    - path: '${run.id}-second.txt'
+      text: "Second owned file\n"

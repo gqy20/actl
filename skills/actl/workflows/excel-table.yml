@@ -1,1004 +1,609 @@
-{
-  "version": 1,
-  "name": "excel-table",
-  "handoff": {
-    "approval": "once_per_run"
-  },
-  "inputs": {
-    "program": {
-      "default": "${env:ProgramFiles}/Microsoft Office/Root/Office16/EXCEL.EXE"
-    },
-    "file": {
-      "default": "${run.dir}/${run.id}.xlsx"
-    },
-    "app": {
-      "default": "${run.id}"
-    }
-  },
-  "steps": [
-    {
-      "title": "Open isolated workbook",
-      "run": {
-        "command": "launch",
-        "args": [
-          {
-            "input": "program"
-          },
-          "/x",
-          {
-            "input": "file"
-          }
-        ]
-      },
-      "verify": {
-        "command": "wait",
-        "args": [
-          "--element",
-          "id:1001",
-          "--app",
-          {
-            "input": "app"
-          },
-          "--timeout",
-          "20000"
-        ]
-      },
-      "recovery": {
-        "max_retries": 3,
-        "timeout_ms": 15000,
-        "interval_ms": 1500
-      },
-      "id": "open"
-    },
-    {
-      "run": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "file"
-          }
-        ]
-      },
-      "recovery": {
-        "max_retries": 3,
-        "timeout_ms": 15000,
-        "interval_ms": 1500
-      },
-      "id": "ownership",
-      "title": "Verify isolated task process",
-      "outputs": {
-        "pid": {
-          "type": "number",
-          "pointer": "/pid"
-        },
-        "hwnd": {
-          "type": "number",
-          "pointer": "/hwnd"
-        },
-        "start": {
-          "type": "string",
-          "pointer": "/process_start"
-        }
-      }
-    },
-    {
-      "run": {
-        "sequence": [
-          {
-            "command": "set-value",
-            "args": [
-              "id:1001",
-              "A1",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "command": "press",
-            "args": [
-              "enter",
-              "--target",
-              "id:1001",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "command": "type",
-            "args": [
-              "uia:{\"match\":{\"name\":\"A1\"}}",
-              "Item\tQty\tPrice\tTotal\r\nAlpha\t2\t12.5\t=B2*C2\r\n中文\t3\t7\t=B3*C3\r\nSum\t\t\t=SUM(D2:D3)",
-              "--paste",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "command": "press",
-            "args": [
-              "ctrl+s",
-              "--target",
-              "uia:{\"match\":{\"name\":\"A1\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          }
-        ]
-      },
-      "title": "paste and verify saved cells and formulas",
-      "resume_check": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "file"
-          }
-        ]
-      },
-      "verify": {
-        "command": "verify-file",
-        "args": [
-          "--path",
-          {
-            "input": "file"
-          },
-          "--kind",
-          "xlsx",
-          "--expected",
-          "{\"D1\":{\"value\":\"Total\"},\"C3\":{\"value\":\"7\"},\"C2\":{\"value\":\"12.5\"},\"D3\":{\"value\":\"21\",\"formula\":\"B3*C3\"},\"B3\":{\"value\":\"3\"},\"A4\":{\"value\":\"Sum\"},\"D2\":{\"formula\":\"B2*C2\",\"value\":\"25\"},\"A1\":{\"value\":\"Item\"},\"C1\":{\"value\":\"Price\"},\"D4\":{\"formula\":\"SUM(D2:D3)\",\"value\":\"46\"},\"A2\":{\"value\":\"Alpha\"},\"B1\":{\"value\":\"Qty\"},\"A3\":{\"value\":\"中文\"},\"B2\":{\"value\":\"2\"}}",
-          "--subset"
-        ]
-      },
-      "recovery": {
-        "max_retries": 3,
-        "timeout_ms": 15000,
-        "interval_ms": 1500
-      },
-      "id": "paste",
-      "before": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "file"
-          }
-        ]
-      }
-    },
-    {
-      "run": {
-        "sequence": [
-          {
-            "command": "set-value",
-            "args": [
-              "id:1001",
-              "B2",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "command": "press",
-            "args": [
-              "enter",
-              "--target",
-              "id:1001",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "command": "type",
-            "args": [
-              "uia:{\"match\":{\"name\":\"B2\"}}",
-              "4",
-              "--paste",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "command": "press",
-            "args": [
-              "ctrl+s",
-              "--target",
-              "uia:{\"match\":{\"name\":\"B2\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          }
-        ]
-      },
-      "title": "recalculate and verify saved cells and formulas",
-      "resume_check": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "file"
-          }
-        ]
-      },
-      "verify": {
-        "command": "verify-file",
-        "args": [
-          "--path",
-          {
-            "input": "file"
-          },
-          "--kind",
-          "xlsx",
-          "--expected",
-          "{\"D1\":{\"value\":\"Total\"},\"C3\":{\"value\":\"7\"},\"C2\":{\"value\":\"12.5\"},\"D3\":{\"value\":\"21\",\"formula\":\"B3*C3\"},\"B3\":{\"value\":\"3\"},\"A4\":{\"value\":\"Sum\"},\"D2\":{\"formula\":\"B2*C2\",\"value\":\"50\"},\"A1\":{\"value\":\"Item\"},\"C1\":{\"value\":\"Price\"},\"D4\":{\"formula\":\"SUM(D2:D3)\",\"value\":\"71\"},\"A2\":{\"value\":\"Alpha\"},\"B1\":{\"value\":\"Qty\"},\"A3\":{\"value\":\"中文\"},\"B2\":{\"value\":\"4\"}}",
-          "--subset"
-        ]
-      },
-      "recovery": {
-        "max_retries": 3,
-        "timeout_ms": 15000,
-        "interval_ms": 1500
-      },
-      "id": "recalculate",
-      "before": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "file"
-          }
-        ]
-      }
-    },
-    {
-      "run": {
-        "sequence": [
-          {
-            "command": "press",
-            "args": [
-              "ctrl+z",
-              "--target",
-              "uia:{\"match\":{\"name\":\"B2\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "command": "press",
-            "args": [
-              "ctrl+s",
-              "--target",
-              "uia:{\"match\":{\"name\":\"B2\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          }
-        ]
-      },
-      "title": "undo and verify saved cells and formulas",
-      "resume_check": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "file"
-          }
-        ]
-      },
-      "verify": {
-        "command": "verify-file",
-        "args": [
-          "--path",
-          {
-            "input": "file"
-          },
-          "--kind",
-          "xlsx",
-          "--expected",
-          "{\"D1\":{\"value\":\"Total\"},\"C3\":{\"value\":\"7\"},\"C2\":{\"value\":\"12.5\"},\"D3\":{\"value\":\"21\",\"formula\":\"B3*C3\"},\"B3\":{\"value\":\"3\"},\"A4\":{\"value\":\"Sum\"},\"D2\":{\"formula\":\"B2*C2\",\"value\":\"25\"},\"A1\":{\"value\":\"Item\"},\"C1\":{\"value\":\"Price\"},\"D4\":{\"formula\":\"SUM(D2:D3)\",\"value\":\"46\"},\"A2\":{\"value\":\"Alpha\"},\"B1\":{\"value\":\"Qty\"},\"A3\":{\"value\":\"中文\"},\"B2\":{\"value\":\"2\"}}",
-          "--subset"
-        ]
-      },
-      "recovery": {
-        "max_retries": 3,
-        "timeout_ms": 15000,
-        "interval_ms": 1500
-      },
-      "id": "undo",
-      "before": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "file"
-          }
-        ]
-      }
-    },
-    {
-      "run": {
-        "sequence": [
-          {
-            "command": "press",
-            "args": [
-              "ctrl+y",
-              "--target",
-              "uia:{\"match\":{\"name\":\"B2\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "command": "press",
-            "args": [
-              "ctrl+s",
-              "--target",
-              "uia:{\"match\":{\"name\":\"B2\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          }
-        ]
-      },
-      "title": "redo and verify saved cells and formulas",
-      "resume_check": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "file"
-          }
-        ]
-      },
-      "verify": {
-        "command": "verify-file",
-        "args": [
-          "--path",
-          {
-            "input": "file"
-          },
-          "--kind",
-          "xlsx",
-          "--expected",
-          "{\"D1\":{\"value\":\"Total\"},\"C3\":{\"value\":\"7\"},\"C2\":{\"value\":\"12.5\"},\"D3\":{\"value\":\"21\",\"formula\":\"B3*C3\"},\"B3\":{\"value\":\"3\"},\"A4\":{\"value\":\"Sum\"},\"D2\":{\"formula\":\"B2*C2\",\"value\":\"50\"},\"A1\":{\"value\":\"Item\"},\"C1\":{\"value\":\"Price\"},\"D4\":{\"formula\":\"SUM(D2:D3)\",\"value\":\"71\"},\"A2\":{\"value\":\"Alpha\"},\"B1\":{\"value\":\"Qty\"},\"A3\":{\"value\":\"中文\"},\"B2\":{\"value\":\"4\"}}",
-          "--subset"
-        ]
-      },
-      "recovery": {
-        "max_retries": 3,
-        "timeout_ms": 15000,
-        "interval_ms": 1500
-      },
-      "id": "redo",
-      "before": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "file"
-          }
-        ]
-      }
-    },
-    {
-      "resume_check": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "file"
-          }
-        ]
-      },
-      "title": "Copy complete range and verify clipboard",
-      "run": {
-        "sequence": [
-          {
-            "command": "type",
-            "args": [
-              "id:1001",
-              "A1:D4",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--verify-value",
-              "A1:D4"
-            ]
-          },
-          {
-            "command": "press",
-            "args": [
-              "enter",
-              "--target",
-              "id:1001",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "command": "press",
-            "args": [
-              "ctrl+c",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          }
-        ]
-      },
-      "recovery": {
-        "max_retries": 3,
-        "timeout_ms": 15000,
-        "interval_ms": 1500
-      },
-      "id": "copy-range",
-      "before": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "file"
-          }
-        ]
-      },
-      "verify": {
-        "command": "verify-clipboard",
-        "args": [
-          "--expected",
-          "Item\tQty\tPrice\tTotal\nAlpha\t4\t12.5\t50\n中文\t3\t7\t21\nSum\t\t\t71",
-          "--normalize-lines"
-        ]
-      }
-    },
-    {
-      "run": {
-        "sequence": [
-          {
-            "command": "click",
-            "args": [
-              "name:文件",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "command": "click",
-            "args": [
-              "uia:{\"match\":{\"role\":\"ListItem\",\"name\":\"关闭\"},\"within\":{\"id\":\"NavBarMenu\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "command": "wait",
-            "args": [
-              "--gone",
-              "uia:{\"match\":{\"id\":\"NavBarMenu\"}}",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "20000"
-            ]
-          }
-        ]
-      },
-      "recovery": {
-        "max_retries": 3,
-        "timeout_ms": 15000,
-        "interval_ms": 1500
-      },
-      "id": "close-before-reopen",
-      "verify": {
-        "command": "wait",
-        "args": [
-          "--gone",
-          "id:1001",
-          "--app",
-          {
-            "input": "app"
-          },
-          "--timeout",
-          "60000"
-        ]
-      },
-      "before": {
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "file"
-          },
-          "--instance",
-          "pending",
-          "--hwnd",
-          "1",
-          "--pid",
-          "1"
-        ],
-        "command": "verify-owner",
-        "bind": {
-          "7": "ownership.start",
-          "9": "ownership.hwnd",
-          "11": "ownership.pid"
-        }
-      },
-      "title": "Close only the verified task process"
-    },
-    {
-      "run": {
-        "command": "close-window",
-        "args": [
-          "--hwnd",
-          "1",
-          "--system-close"
-        ],
-        "bind": {
-          "1": "ownership.hwnd"
-        }
-      },
-      "recovery": {
-        "max_retries": 3,
-        "timeout_ms": 15000,
-        "interval_ms": 1500
-      },
-      "id": "close-frame",
-      "verify": {
-        "command": "verify-window",
-        "args": [
-          "--app",
-          "1",
-          "--state",
-          "absent"
-        ],
-        "bind": {
-          "1": "ownership.hwnd"
-        }
-      },
-      "title": "Exit the emptied frame via the title-bar close command"
-    },
-    {
-      "title": "Reopen the saved task file",
-      "run": {
-        "command": "launch",
-        "args": [
-          {
-            "input": "program"
-          },
-          "/x",
-          {
-            "input": "file"
-          }
-        ]
-      },
-      "verify": {
-        "command": "wait",
-        "args": [
-          "--element",
-          "id:1001",
-          "--app",
-          {
-            "input": "app"
-          },
-          "--timeout",
-          "20000"
-        ]
-      },
-      "recovery": {
-        "max_retries": 3,
-        "timeout_ms": 15000,
-        "interval_ms": 1500
-      },
-      "id": "reopen"
-    },
-    {
-      "run": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "file"
-          }
-        ]
-      },
-      "recovery": {
-        "max_retries": 3,
-        "timeout_ms": 15000,
-        "interval_ms": 1500
-      },
-      "id": "reopened-owner",
-      "outputs": {
-        "pid": {
-          "type": "number",
-          "pointer": "/pid"
-        },
-        "hwnd": {
-          "type": "number",
-          "pointer": "/hwnd"
-        },
-        "start": {
-          "type": "string",
-          "pointer": "/process_start"
-        }
-      },
-      "title": "Verify reopened process identity"
-    },
-    {
-      "run": {
-        "command": "verify-file",
-        "args": [
-          "--path",
-          {
-            "input": "file"
-          },
-          "--kind",
-          "xlsx",
-          "--expected",
-          "{\"D1\":{\"value\":\"Total\"},\"C3\":{\"value\":\"7\"},\"C2\":{\"value\":\"12.5\"},\"D3\":{\"value\":\"21\",\"formula\":\"B3*C3\"},\"B3\":{\"value\":\"3\"},\"A4\":{\"value\":\"Sum\"},\"D2\":{\"formula\":\"B2*C2\",\"value\":\"50\"},\"A1\":{\"value\":\"Item\"},\"C1\":{\"value\":\"Price\"},\"D4\":{\"formula\":\"SUM(D2:D3)\",\"value\":\"71\"},\"A2\":{\"value\":\"Alpha\"},\"B1\":{\"value\":\"Qty\"},\"A3\":{\"value\":\"中文\"},\"B2\":{\"value\":\"4\"}}",
-          "--subset"
-        ]
-      },
-      "recovery": {
-        "max_retries": 3,
-        "timeout_ms": 15000,
-        "interval_ms": 1500
-      },
-      "id": "reopened-content",
-      "title": "Verify complete saved content after reopen"
-    },
-    {
-      "run": {
-        "sequence": [
-          {
-            "command": "type",
-            "args": [
-              "id:1001",
-              "D4",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--verify-value",
-              "D4"
-            ]
-          },
-          {
-            "command": "press",
-            "args": [
-              "enter",
-              "--target",
-              "id:1001",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "command": "press",
-            "args": [
-              "ctrl+c",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          }
-        ]
-      },
-      "recovery": {
-        "max_retries": 3,
-        "timeout_ms": 15000,
-        "interval_ms": 1500
-      },
-      "id": "reopen-cell-readback",
-      "resume_check": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "file"
-          }
-        ]
-      },
-      "verify": {
-        "command": "verify-clipboard",
-        "args": [
-          "--expected",
-          "71",
-          "--normalize-lines"
-        ]
-      },
-      "title": "Read reopened calculation via clipboard",
-      "before": {
-        "command": "verify-owner",
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "file"
-          }
-        ]
-      }
-    },
-    {
-      "run": {
-        "sequence": [
-          {
-            "command": "click",
-            "args": [
-              "name:文件",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "command": "click",
-            "args": [
-              "uia:{\"match\":{\"role\":\"ListItem\",\"name\":\"关闭\"},\"within\":{\"id\":\"NavBarMenu\"}}",
-              "--app",
-              {
-                "input": "app"
-              }
-            ]
-          },
-          {
-            "command": "wait",
-            "args": [
-              "--gone",
-              "uia:{\"match\":{\"id\":\"NavBarMenu\"}}",
-              "--app",
-              {
-                "input": "app"
-              },
-              "--timeout",
-              "20000"
-            ]
-          }
-        ]
-      },
-      "recovery": {
-        "max_retries": 3,
-        "timeout_ms": 15000,
-        "interval_ms": 1500
-      },
-      "id": "close",
-      "verify": {
-        "command": "wait",
-        "args": [
-          "--gone",
-          "id:1001",
-          "--app",
-          {
-            "input": "app"
-          },
-          "--timeout",
-          "60000"
-        ]
-      },
-      "before": {
-        "args": [
-          "--app",
-          {
-            "input": "app"
-          },
-          "--program",
-          {
-            "input": "program"
-          },
-          "--token",
-          {
-            "input": "file"
-          },
-          "--instance",
-          "pending",
-          "--hwnd",
-          "1",
-          "--pid",
-          "1"
-        ],
-        "command": "verify-owner",
-        "bind": {
-          "7": "reopened-owner.start",
-          "9": "reopened-owner.hwnd",
-          "11": "reopened-owner.pid"
-        }
-      },
-      "title": "Close only the verified task process"
-    },
-    {
-      "run": {
-        "command": "close-window",
-        "args": [
-          "--hwnd",
-          "1",
-          "--system-close"
-        ],
-        "bind": {
-          "1": "reopened-owner.hwnd"
-        }
-      },
-      "recovery": {
-        "max_retries": 3,
-        "timeout_ms": 15000,
-        "interval_ms": 1500
-      },
-      "id": "exit",
-      "verify": {
-        "command": "verify-window",
-        "args": [
-          "--app",
-          "1",
-          "--state",
-          "absent"
-        ],
-        "bind": {
-          "1": "reopened-owner.hwnd"
-        }
-      },
-      "title": "Exit the emptied frame via the title-bar close command"
-    }
-  ],
-  "resources": {
-    "directories": [],
-    "files": [
-      {
-        "path": "${run.id}.xlsx",
-        "copy": "assets/seed.xlsx"
-      }
-    ]
-  }
-}
+version: 1
+name: excel-table
+handoff:
+  approval: once_per_run
+inputs:
+  program:
+    default: '${env:ProgramFiles}/Microsoft Office/Root/Office16/EXCEL.EXE'
+  file:
+    default: '${run.dir}/${run.id}.xlsx'
+  app:
+    default: '${run.id}'
+steps:
+  - id: open
+    title: Open isolated workbook
+    run:
+      command: launch
+      args:
+        - input: program
+        - /x
+        - input: file
+    verify:
+      command: wait
+      args:
+        - '--element'
+        - id:1001
+        - '--app'
+        - input: app
+        - '--timeout'
+        - '20000'
+    recovery:
+      max_retries: 3
+      timeout_ms: 15000
+      interval_ms: 1500
+  - id: ownership
+    run:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: file
+    recovery:
+      max_retries: 3
+      timeout_ms: 15000
+      interval_ms: 1500
+    title: Verify isolated task process
+    outputs:
+      pid:
+        type: number
+        pointer: /pid
+      hwnd:
+        type: number
+        pointer: /hwnd
+      start:
+        type: string
+        pointer: /process_start
+  - id: paste
+    run:
+      sequence:
+        - command: set-value
+          args:
+            - id:1001
+            - A1
+            - '--app'
+            - input: app
+        - command: press
+          args:
+            - enter
+            - '--target'
+            - id:1001
+            - '--app'
+            - input: app
+        - command: type
+          args:
+            - 'uia:{"match":{"name":"A1"}}'
+            - "Item\tQty\tPrice\tTotal\r\nAlpha\t2\t12.5\t=B2*C2\r\n中文\t3\t7\t=B3*C3\r\nSum\t\t\t=SUM(D2:D3)"
+            - '--paste'
+            - '--app'
+            - input: app
+        - command: press
+          args:
+            - ctrl+s
+            - '--target'
+            - 'uia:{"match":{"name":"A1"}}'
+            - '--app'
+            - input: app
+    title: paste and verify saved cells and formulas
+    resume_check:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: file
+    verify:
+      command: verify-file
+      args:
+        - '--path'
+        - input: file
+        - '--kind'
+        - xlsx
+        - '--expected'
+        - '{"D1":{"value":"Total"},"C3":{"value":"7"},"C2":{"value":"12.5"},"D3":{"value":"21","formula":"B3*C3"},"B3":{"value":"3"},"A4":{"value":"Sum"},"D2":{"formula":"B2*C2","value":"25"},"A1":{"value":"Item"},"C1":{"value":"Price"},"D4":{"formula":"SUM(D2:D3)","value":"46"},"A2":{"value":"Alpha"},"B1":{"value":"Qty"},"A3":{"value":"中文"},"B2":{"value":"2"}}'
+        - '--subset'
+    recovery:
+      max_retries: 3
+      timeout_ms: 15000
+      interval_ms: 1500
+    before:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: file
+  - id: recalculate
+    run:
+      sequence:
+        - command: set-value
+          args:
+            - id:1001
+            - B2
+            - '--app'
+            - input: app
+        - command: press
+          args:
+            - enter
+            - '--target'
+            - id:1001
+            - '--app'
+            - input: app
+        - command: type
+          args:
+            - 'uia:{"match":{"name":"B2"}}'
+            - '4'
+            - '--paste'
+            - '--app'
+            - input: app
+        - command: press
+          args:
+            - ctrl+s
+            - '--target'
+            - 'uia:{"match":{"name":"B2"}}'
+            - '--app'
+            - input: app
+    title: recalculate and verify saved cells and formulas
+    resume_check:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: file
+    verify:
+      command: verify-file
+      args:
+        - '--path'
+        - input: file
+        - '--kind'
+        - xlsx
+        - '--expected'
+        - '{"D1":{"value":"Total"},"C3":{"value":"7"},"C2":{"value":"12.5"},"D3":{"value":"21","formula":"B3*C3"},"B3":{"value":"3"},"A4":{"value":"Sum"},"D2":{"formula":"B2*C2","value":"50"},"A1":{"value":"Item"},"C1":{"value":"Price"},"D4":{"formula":"SUM(D2:D3)","value":"71"},"A2":{"value":"Alpha"},"B1":{"value":"Qty"},"A3":{"value":"中文"},"B2":{"value":"4"}}'
+        - '--subset'
+    recovery:
+      max_retries: 3
+      timeout_ms: 15000
+      interval_ms: 1500
+    before:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: file
+  - id: undo
+    run:
+      sequence:
+        - command: press
+          args:
+            - ctrl+z
+            - '--target'
+            - 'uia:{"match":{"name":"B2"}}'
+            - '--app'
+            - input: app
+        - command: press
+          args:
+            - ctrl+s
+            - '--target'
+            - 'uia:{"match":{"name":"B2"}}'
+            - '--app'
+            - input: app
+    title: undo and verify saved cells and formulas
+    resume_check:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: file
+    verify:
+      command: verify-file
+      args:
+        - '--path'
+        - input: file
+        - '--kind'
+        - xlsx
+        - '--expected'
+        - '{"D1":{"value":"Total"},"C3":{"value":"7"},"C2":{"value":"12.5"},"D3":{"value":"21","formula":"B3*C3"},"B3":{"value":"3"},"A4":{"value":"Sum"},"D2":{"formula":"B2*C2","value":"25"},"A1":{"value":"Item"},"C1":{"value":"Price"},"D4":{"formula":"SUM(D2:D3)","value":"46"},"A2":{"value":"Alpha"},"B1":{"value":"Qty"},"A3":{"value":"中文"},"B2":{"value":"2"}}'
+        - '--subset'
+    recovery:
+      max_retries: 3
+      timeout_ms: 15000
+      interval_ms: 1500
+    before:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: file
+  - id: redo
+    run:
+      sequence:
+        - command: press
+          args:
+            - ctrl+y
+            - '--target'
+            - 'uia:{"match":{"name":"B2"}}'
+            - '--app'
+            - input: app
+        - command: press
+          args:
+            - ctrl+s
+            - '--target'
+            - 'uia:{"match":{"name":"B2"}}'
+            - '--app'
+            - input: app
+    title: redo and verify saved cells and formulas
+    resume_check:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: file
+    verify:
+      command: verify-file
+      args:
+        - '--path'
+        - input: file
+        - '--kind'
+        - xlsx
+        - '--expected'
+        - '{"D1":{"value":"Total"},"C3":{"value":"7"},"C2":{"value":"12.5"},"D3":{"value":"21","formula":"B3*C3"},"B3":{"value":"3"},"A4":{"value":"Sum"},"D2":{"formula":"B2*C2","value":"50"},"A1":{"value":"Item"},"C1":{"value":"Price"},"D4":{"formula":"SUM(D2:D3)","value":"71"},"A2":{"value":"Alpha"},"B1":{"value":"Qty"},"A3":{"value":"中文"},"B2":{"value":"4"}}'
+        - '--subset'
+    recovery:
+      max_retries: 3
+      timeout_ms: 15000
+      interval_ms: 1500
+    before:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: file
+  - id: copy-range
+    resume_check:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: file
+    title: Copy complete range and verify clipboard
+    run:
+      sequence:
+        - command: type
+          args:
+            - id:1001
+            - A1:D4
+            - '--app'
+            - input: app
+            - '--verify-value'
+            - A1:D4
+        - command: press
+          args:
+            - enter
+            - '--target'
+            - id:1001
+            - '--app'
+            - input: app
+        - command: press
+          args:
+            - ctrl+c
+            - '--app'
+            - input: app
+    recovery:
+      max_retries: 3
+      timeout_ms: 15000
+      interval_ms: 1500
+    before:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: file
+    verify:
+      command: verify-clipboard
+      args:
+        - '--expected'
+        - "Item\tQty\tPrice\tTotal\nAlpha\t4\t12.5\t50\n中文\t3\t7\t21\nSum\t\t\t71"
+        - '--normalize-lines'
+  - id: close-before-reopen
+    run:
+      sequence:
+        - command: click
+          args:
+            - name:文件
+            - '--app'
+            - input: app
+        - command: click
+          args:
+            - 'uia:{"match":{"role":"ListItem","name":"关闭"},"within":{"id":"NavBarMenu"}}'
+            - '--app'
+            - input: app
+        - command: wait
+          args:
+            - '--gone'
+            - 'uia:{"match":{"id":"NavBarMenu"}}'
+            - '--app'
+            - input: app
+            - '--timeout'
+            - '20000'
+    recovery:
+      max_retries: 3
+      timeout_ms: 15000
+      interval_ms: 1500
+    verify:
+      command: wait
+      args:
+        - '--gone'
+        - id:1001
+        - '--app'
+        - input: app
+        - '--timeout'
+        - '60000'
+    before:
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: file
+        - '--instance'
+        - pending
+        - '--hwnd'
+        - '1'
+        - '--pid'
+        - '1'
+      command: verify-owner
+      bind:
+        7: ownership.start
+        9: ownership.hwnd
+        11: ownership.pid
+    title: Close only the verified task process
+  - id: close-frame
+    run:
+      command: close-window
+      args:
+        - '--hwnd'
+        - '1'
+        - '--system-close'
+      bind:
+        1: ownership.hwnd
+    recovery:
+      max_retries: 3
+      timeout_ms: 15000
+      interval_ms: 1500
+    verify:
+      command: verify-window
+      args:
+        - '--app'
+        - '1'
+        - '--state'
+        - absent
+      bind:
+        1: ownership.hwnd
+    title: Exit the emptied frame via the title-bar close command
+  - id: reopen
+    title: Reopen the saved task file
+    run:
+      command: launch
+      args:
+        - input: program
+        - /x
+        - input: file
+    verify:
+      command: wait
+      args:
+        - '--element'
+        - id:1001
+        - '--app'
+        - input: app
+        - '--timeout'
+        - '20000'
+    recovery:
+      max_retries: 3
+      timeout_ms: 15000
+      interval_ms: 1500
+  - id: reopened-owner
+    run:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: file
+    recovery:
+      max_retries: 3
+      timeout_ms: 15000
+      interval_ms: 1500
+    outputs:
+      pid:
+        type: number
+        pointer: /pid
+      hwnd:
+        type: number
+        pointer: /hwnd
+      start:
+        type: string
+        pointer: /process_start
+    title: Verify reopened process identity
+  - id: reopened-content
+    run:
+      command: verify-file
+      args:
+        - '--path'
+        - input: file
+        - '--kind'
+        - xlsx
+        - '--expected'
+        - '{"D1":{"value":"Total"},"C3":{"value":"7"},"C2":{"value":"12.5"},"D3":{"value":"21","formula":"B3*C3"},"B3":{"value":"3"},"A4":{"value":"Sum"},"D2":{"formula":"B2*C2","value":"50"},"A1":{"value":"Item"},"C1":{"value":"Price"},"D4":{"formula":"SUM(D2:D3)","value":"71"},"A2":{"value":"Alpha"},"B1":{"value":"Qty"},"A3":{"value":"中文"},"B2":{"value":"4"}}'
+        - '--subset'
+    recovery:
+      max_retries: 3
+      timeout_ms: 15000
+      interval_ms: 1500
+    title: Verify complete saved content after reopen
+  - id: reopen-cell-readback
+    run:
+      sequence:
+        - command: type
+          args:
+            - id:1001
+            - D4
+            - '--app'
+            - input: app
+            - '--verify-value'
+            - D4
+        - command: press
+          args:
+            - enter
+            - '--target'
+            - id:1001
+            - '--app'
+            - input: app
+        - command: press
+          args:
+            - ctrl+c
+            - '--app'
+            - input: app
+    recovery:
+      max_retries: 3
+      timeout_ms: 15000
+      interval_ms: 1500
+    resume_check:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: file
+    verify:
+      command: verify-clipboard
+      args:
+        - '--expected'
+        - '71'
+        - '--normalize-lines'
+    title: Read reopened calculation via clipboard
+    before:
+      command: verify-owner
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: file
+  - id: close
+    run:
+      sequence:
+        - command: click
+          args:
+            - name:文件
+            - '--app'
+            - input: app
+        - command: click
+          args:
+            - 'uia:{"match":{"role":"ListItem","name":"关闭"},"within":{"id":"NavBarMenu"}}'
+            - '--app'
+            - input: app
+        - command: wait
+          args:
+            - '--gone'
+            - 'uia:{"match":{"id":"NavBarMenu"}}'
+            - '--app'
+            - input: app
+            - '--timeout'
+            - '20000'
+    recovery:
+      max_retries: 3
+      timeout_ms: 15000
+      interval_ms: 1500
+    verify:
+      command: wait
+      args:
+        - '--gone'
+        - id:1001
+        - '--app'
+        - input: app
+        - '--timeout'
+        - '60000'
+    before:
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: file
+        - '--instance'
+        - pending
+        - '--hwnd'
+        - '1'
+        - '--pid'
+        - '1'
+      command: verify-owner
+      bind:
+        7: reopened-owner.start
+        9: reopened-owner.hwnd
+        11: reopened-owner.pid
+    title: Close only the verified task process
+  - id: exit
+    run:
+      command: close-window
+      args:
+        - '--hwnd'
+        - '1'
+        - '--system-close'
+      bind:
+        1: reopened-owner.hwnd
+    recovery:
+      max_retries: 3
+      timeout_ms: 15000
+      interval_ms: 1500
+    verify:
+      command: verify-window
+      args:
+        - '--app'
+        - '1'
+        - '--state'
+        - absent
+      bind:
+        1: reopened-owner.hwnd
+    title: Exit the emptied frame via the title-bar close command
+resources:
+  directories: []
+  files:
+    - path: '${run.id}.xlsx'
+      copy: assets/seed.xlsx

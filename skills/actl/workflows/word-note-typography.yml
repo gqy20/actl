@@ -1,634 +1,391 @@
-{
-    "version":  1,
-    "name":  "Word 笔记样式排版",
-    "handoff":  {
-                    "approval":  "once_per_run"
-                },
-    "popup_handlers":  [
-                           {
-                               "classification":  "error",
-                               "app":  ".docx",
-                               "click":  "id:2",
-                               "name_contains":  "目录名无效"
-                           }
-                       ],
-    "inputs":  {
-                   "program":  {
-                                   "default":  "${env:ProgramFiles}/Microsoft Office/Root/Office16/WINWORD.EXE"
-                               },
-                   "file":  {
-                                "default":  "${run.dir}/${run.id}.docx"
-                            },
-                   "app":  {
-                               "default":  "${run.id}.docx"
-                           }
-               },
-    "steps":  [
-                  {
-                      "run":  {
-                                  "args":  [
-                                               {
-                                                   "input":  "program"
-                                               },
-                                               "/n",
-                                               {
-                                                   "input":  "file"
-                                               }
-                                           ],
-                                  "command":  "launch"
-                              },
-                      "title":  "打开样式模板副本(骨架预检)",
-                      "before":  {
-                                     "args":  [
-                                                  "--path",
-                                                  {
-                                                      "input":  "file"
-                                                  },
-                                                  "--kind",
-                                                  "docx-styles",
-                                                  "--expected",
-                                                  "{\"paragraphs\":[{\"text\":\"\",\"style\":\"1\"},{\"text\":\"\",\"style\":\"\"},{\"text\":\"\",\"style\":\"2\"},{\"text\":\"\",\"style\":\"\"},{\"text\":\"\",\"style\":\"\"},{\"text\":\"\",\"style\":\"\"},{\"text\":\"\",\"style\":\"\"},{\"text\":\"\",\"style\":\"2\"},{\"text\":\"\",\"style\":\"\"},{\"text\":\"\",\"style\":\"\"},{\"text\":\"\",\"style\":\"\"},{\"text\":\"\",\"style\":\"\"}]}",
-                                                  "--subset"
-                                              ],
-                                     "command":  "verify-file"
-                                 },
-                      "id":  "open",
-                      "verify":  {
-                                     "args":  [
-                                                  "--element",
-                                                  "role:Document",
-                                                  "--app",
-                                                  {
-                                                      "input":  "app"
-                                                  },
-                                                  "--timeout",
-                                                  "30000"
-                                              ],
-                                     "command":  "wait"
-                                 }
-                  },
-                  {
-                      "run":  {
-                                  "args":  [
-                                               "--app",
-                                               {
-                                                   "input":  "app"
-                                               },
-                                               "--program",
-                                               {
-                                                   "input":  "program"
-                                               },
-                                               "--token",
-                                               {
-                                                   "input":  "file"
-                                               }
-                                           ],
-                                  "command":  "verify-owner"
-                              },
-                      "title":  "核对任务进程归属",
-                      "outputs":  {
-                                      "hwnd":  {
-                                                   "pointer":  "/hwnd",
-                                                   "type":  "number"
-                                               },
-                                      "pid":  {
-                                                  "pointer":  "/pid",
-                                                  "type":  "number"
-                                              },
-                                      "start":  {
-                                                    "pointer":  "/process_start",
-                                                    "type":  "string"
-                                                }
-                                  },
-                      "id":  "ownership"
-                  },
-                  {
-                      "run":  {
-                                  "sequence":  [
-                                                   {
-                                                       "args":  [
-                                                                    "role:Document",
-                                                                    " ",
-                                                                    "--paste",
-                                                                    "--app",
-                                                                    {
-                                                                        "input":  "app"
-                                                                    }
-                                                                ],
-                                                       "command":  "type"
-                                                   },
-                                                   {
-                                                       "args":  [
-                                                                    "ctrl+z",
-                                                                    "--target",
-                                                                    "role:Document",
-                                                                    "--app",
-                                                                    {
-                                                                        "input":  "app"
-                                                                    }
-                                                                ],
-                                                       "command":  "press"
-                                                   }
-                                               ]
-                              },
-                      "title":  "建立正文焦点(保留骨架段落)",
-                      "id":  "focus",
-                      "verify":  {
-                                     "args":  [
-                                                  "--value",
-                                                  "role:Document",
-                                                  "",
-                                                  "--property",
-                                                  "text",
-                                                  "--normalize-lines",
-                                                  "--app",
-                                                  {
-                                                      "input":  "app"
-                                                  }
-                                              ],
-                                     "command":  "verify"
-                                 }
-                  },
-                  {
-                      "run":  {
-                                  "sequence":  [
-                                                   {
-                                                       "args":  [
-                                                                    "role:Document",
-                                                                    "笔记 2026-10-04",
-                                                                    "--paste",
-                                                                    "--app",
-                                                                    {
-                                                                        "input":  "app"
-                                                                    }
-                                                                ],
-                                                       "command":  "type"
-                                                   },
-                                                   {
-                                                       "args":  [
-                                                                    "down",
-                                                                    "--target",
-                                                                    "role:Document",
-                                                                    "--app",
-                                                                    {
-                                                                        "input":  "app"
-                                                                    }
-                                                                ],
-                                                       "command":  "press"
-                                                   },
-                                                   {
-                                                       "args":  [
-                                                                    "role:Document",
-                                                                    "主题:用 actl CLI 在 Word 里写一篇笔记并保存到桌面",
-                                                                    "--paste",
-                                                                    "--app",
-                                                                    {
-                                                                        "input":  "app"
-                                                                    }
-                                                                ],
-                                                       "command":  "type"
-                                                   },
-                                                   {
-                                                       "args":  [
-                                                                    "down",
-                                                                    "--target",
-                                                                    "role:Document",
-                                                                    "--app",
-                                                                    {
-                                                                        "input":  "app"
-                                                                    }
-                                                                ],
-                                                       "command":  "press"
-                                                   },
-                                                   {
-                                                       "args":  [
-                                                                    "role:Document",
-                                                                    "过程记录:",
-                                                                    "--paste",
-                                                                    "--app",
-                                                                    {
-                                                                        "input":  "app"
-                                                                    }
-                                                                ],
-                                                       "command":  "type"
-                                                   },
-                                                   {
-                                                       "args":  [
-                                                                    "down",
-                                                                    "--target",
-                                                                    "role:Document",
-                                                                    "--app",
-                                                                    {
-                                                                        "input":  "app"
-                                                                    }
-                                                                ],
-                                                       "command":  "press"
-                                                   },
-                                                   {
-                                                       "args":  [
-                                                                    "role:Document",
-                                                                    "① 先探测再动手:桌面真实路径是 D:\\C\\Desktop(用户目录经过重定向),不能按默认的 C:\\Users 路径猜;",
-                                                                    "--paste",
-                                                                    "--app",
-                                                                    {
-                                                                        "input":  "app"
-                                                                    }
-                                                                ],
-                                                       "command":  "type"
-                                                   }
-                                               ]
-                              },
-                      "title":  "填充 P1-P4",
-                      "id":  "fill-1",
-                      "verify":  {
-                                     "args":  [
-                                                  "--value",
-                                                  "role:Document",
-                                                  "笔记 2026-10-04\n主题:用 actl CLI 在 Word 里写一篇笔记并保存到桌面\n过程记录:\n① 先探测再动手:桌面真实路径是 D:\\C\\Desktop(用户目录经过重定向),不能按默认的 C:\\Users 路径猜;",
-                                                  "--property",
-                                                  "text",
-                                                  "--normalize-lines",
-                                                  "--app",
-                                                  {
-                                                      "input":  "app"
-                                                  }
-                                              ],
-                                     "command":  "verify"
-                                 }
-                  },
-                  {
-                      "run":  {
-                                  "sequence":  [
-                                                   {
-                                                       "args":  [
-                                                                    "down",
-                                                                    "--target",
-                                                                    "role:Document",
-                                                                    "--app",
-                                                                    {
-                                                                        "input":  "app"
-                                                                    }
-                                                                ],
-                                                       "command":  "press"
-                                                   },
-                                                   {
-                                                       "args":  [
-                                                                    "role:Document",
-                                                                    "② 复制样式模板 docx 作为独立文档,launch /n 打开,等待 role:Document 就绪;",
-                                                                    "--paste",
-                                                                    "--app",
-                                                                    {
-                                                                        "input":  "app"
-                                                                    }
-                                                                ],
-                                                       "command":  "type"
-                                                   },
-                                                   {
-                                                       "args":  [
-                                                                    "down",
-                                                                    "--target",
-                                                                    "role:Document",
-                                                                    "--app",
-                                                                    {
-                                                                        "input":  "app"
-                                                                    }
-                                                                ],
-                                                       "command":  "press"
-                                                   },
-                                                   {
-                                                       "args":  [
-                                                                    "role:Document",
-                                                                    "③ 逐段编舞:回车开新段,剪贴板粘贴正文,光标处按 Ctrl+Alt+N 应用标题样式;",
-                                                                    "--paste",
-                                                                    "--app",
-                                                                    {
-                                                                        "input":  "app"
-                                                                    }
-                                                                ],
-                                                       "command":  "type"
-                                                   },
-                                                   {
-                                                       "args":  [
-                                                                    "down",
-                                                                    "--target",
-                                                                    "role:Document",
-                                                                    "--app",
-                                                                    {
-                                                                        "input":  "app"
-                                                                    }
-                                                                ],
-                                                       "command":  "press"
-                                                   },
-                                                   {
-                                                       "args":  [
-                                                                    "role:Document",
-                                                                    "④ ctrl+s 原地保存;关闭重开后用 verify-file --kind docx-styles 逐段断言样式。",
-                                                                    "--paste",
-                                                                    "--app",
-                                                                    {
-                                                                        "input":  "app"
-                                                                    }
-                                                                ],
-                                                       "command":  "type"
-                                                   },
-                                                   {
-                                                       "args":  [
-                                                                    "down",
-                                                                    "--target",
-                                                                    "role:Document",
-                                                                    "--app",
-                                                                    {
-                                                                        "input":  "app"
-                                                                    }
-                                                                ],
-                                                       "command":  "press"
-                                                   },
-                                                   {
-                                                       "args":  [
-                                                                    "role:Document",
-                                                                    "心得:",
-                                                                    "--paste",
-                                                                    "--app",
-                                                                    {
-                                                                        "input":  "app"
-                                                                    }
-                                                                ],
-                                                       "command":  "type"
-                                                   }
-                                               ]
-                              },
-                      "title":  "填充 P5-P8",
-                      "id":  "fill-2",
-                      "verify":  {
-                                     "args":  [
-                                                  "--value",
-                                                  "role:Document",
-                                                  "笔记 2026-10-04\n主题:用 actl CLI 在 Word 里写一篇笔记并保存到桌面\n过程记录:\n① 先探测再动手:桌面真实路径是 D:\\C\\Desktop(用户目录经过重定向),不能按默认的 C:\\Users 路径猜;\n② 复制样式模板 docx 作为独立文档,launch /n 打开,等待 role:Document 就绪;\n③ 逐段编舞:回车开新段,剪贴板粘贴正文,光标处按 Ctrl+Alt+N 应用标题样式;\n④ ctrl+s 原地保存;关闭重开后用 verify-file --kind docx-styles 逐段断言样式。\n心得:",
-                                                  "--property",
-                                                  "text",
-                                                  "--normalize-lines",
-                                                  "--app",
-                                                  {
-                                                      "input":  "app"
-                                                  }
-                                              ],
-                                     "command":  "verify"
-                                 }
-                  },
-                  {
-                      "run":  {
-                                  "sequence":  [
-                                                   {
-                                                       "args":  [
-                                                                    "down",
-                                                                    "--target",
-                                                                    "role:Document",
-                                                                    "--app",
-                                                                    {
-                                                                        "input":  "app"
-                                                                    }
-                                                                ],
-                                                       "command":  "press"
-                                                   },
-                                                   {
-                                                       "args":  [
-                                                                    "role:Document",
-                                                                    "• 样式定义预置在模板,运行时只应用不修改,字体/字号/行距一处定义全文生效;",
-                                                                    "--paste",
-                                                                    "--app",
-                                                                    {
-                                                                        "input":  "app"
-                                                                    }
-                                                                ],
-                                                       "command":  "type"
-                                                   },
-                                                   {
-                                                       "args":  [
-                                                                    "down",
-                                                                    "--target",
-                                                                    "role:Document",
-                                                                    "--app",
-                                                                    {
-                                                                        "input":  "app"
-                                                                    }
-                                                                ],
-                                                       "command":  "press"
-                                                   },
-                                                   {
-                                                       "args":  [
-                                                                    "role:Document",
-                                                                    "• 逐段断言用 docx-styles 的 styleId 比对,机器可验,不依赖视觉;",
-                                                                    "--paste",
-                                                                    "--app",
-                                                                    {
-                                                                        "input":  "app"
-                                                                    }
-                                                                ],
-                                                       "command":  "type"
-                                                   },
-                                                   {
-                                                       "args":  [
-                                                                    "down",
-                                                                    "--target",
-                                                                    "role:Document",
-                                                                    "--app",
-                                                                    {
-                                                                        "input":  "app"
-                                                                    }
-                                                                ],
-                                                       "command":  "press"
-                                                   },
-                                                   {
-                                                       "args":  [
-                                                                    "role:Document",
-                                                                    "• 启动期错误框经 popup_handlers 声明由引擎弹层治理自动处置。",
-                                                                    "--paste",
-                                                                    "--app",
-                                                                    {
-                                                                        "input":  "app"
-                                                                    }
-                                                                ],
-                                                       "command":  "type"
-                                                   },
-                                                   {
-                                                       "args":  [
-                                                                    "down",
-                                                                    "--target",
-                                                                    "role:Document",
-                                                                    "--app",
-                                                                    {
-                                                                        "input":  "app"
-                                                                    }
-                                                                ],
-                                                       "command":  "press"
-                                                   },
-                                                   {
-                                                       "args":  [
-                                                                    "role:Document",
-                                                                    "(本笔记由 actl 样式流程输入并保存)",
-                                                                    "--paste",
-                                                                    "--app",
-                                                                    {
-                                                                        "input":  "app"
-                                                                    }
-                                                                ],
-                                                       "command":  "type"
-                                                   }
-                                               ]
-                              },
-                      "title":  "填充 P9-P12",
-                      "id":  "fill-3",
-                      "verify":  {
-                                     "args":  [
-                                                  "--value",
-                                                  "role:Document",
-                                                  "笔记 2026-10-04\n主题:用 actl CLI 在 Word 里写一篇笔记并保存到桌面\n过程记录:\n① 先探测再动手:桌面真实路径是 D:\\C\\Desktop(用户目录经过重定向),不能按默认的 C:\\Users 路径猜;\n② 复制样式模板 docx 作为独立文档,launch /n 打开,等待 role:Document 就绪;\n③ 逐段编舞:回车开新段,剪贴板粘贴正文,光标处按 Ctrl+Alt+N 应用标题样式;\n④ ctrl+s 原地保存;关闭重开后用 verify-file --kind docx-styles 逐段断言样式。\n心得:\n• 样式定义预置在模板,运行时只应用不修改,字体/字号/行距一处定义全文生效;\n• 逐段断言用 docx-styles 的 styleId 比对,机器可验,不依赖视觉;\n• 启动期错误框经 popup_handlers 声明由引擎弹层治理自动处置。\n(本笔记由 actl 样式流程输入并保存)",
-                                                  "--property",
-                                                  "text",
-                                                  "--normalize-lines",
-                                                  "--app",
-                                                  {
-                                                      "input":  "app"
-                                                  }
-                                              ],
-                                     "command":  "verify"
-                                 }
-                  },
-                  {
-                      "run":  {
-                                  "args":  [
-                                               "ctrl+s",
-                                               "--target",
-                                               "role:Document",
-                                               "--app",
-                                               {
-                                                   "input":  "app"
-                                               }
-                                           ],
-                                  "command":  "press"
-                              },
-                      "title":  "原地保存",
-                      "id":  "save",
-                      "verify":  {
-                                     "args":  [
-                                                  "--value",
-                                                  "role:Document",
-                                                  "笔记 2026-10-04\n主题:用 actl CLI 在 Word 里写一篇笔记并保存到桌面\n过程记录:\n① 先探测再动手:桌面真实路径是 D:\\C\\Desktop(用户目录经过重定向),不能按默认的 C:\\Users 路径猜;\n② 复制样式模板 docx 作为独立文档,launch /n 打开,等待 role:Document 就绪;\n③ 逐段编舞:回车开新段,剪贴板粘贴正文,光标处按 Ctrl+Alt+N 应用标题样式;\n④ ctrl+s 原地保存;关闭重开后用 verify-file --kind docx-styles 逐段断言样式。\n心得:\n• 样式定义预置在模板,运行时只应用不修改,字体/字号/行距一处定义全文生效;\n• 逐段断言用 docx-styles 的 styleId 比对,机器可验,不依赖视觉;\n• 启动期错误框经 popup_handlers 声明由引擎弹层治理自动处置。\n(本笔记由 actl 样式流程输入并保存)",
-                                                  "--property",
-                                                  "text",
-                                                  "--normalize-lines",
-                                                  "--app",
-                                                  {
-                                                      "input":  "app"
-                                                  }
-                                              ],
-                                     "command":  "verify"
-                                 }
-                  },
-                  {
-                      "run":  {
-                                  "args":  [
-                                               "--path",
-                                               {
-                                                   "input":  "file"
-                                               },
-                                               "--kind",
-                                               "meta",
-                                               "--expected",
-                                               "{\"size_min\":11000}",
-                                               "--subset"
-                                           ],
-                                  "command":  "verify-file"
-                              },
-                      "title":  "保存落盘元数据断言",
-                      "id":  "save-disk"
-                  },
-                  {
-                      "run":  {
-                                  "args":  [
-                                               "--hwnd",
-                                               "1"
-                                           ],
-                                  "bind":  {
-                                               "1":  "ownership.hwnd"
-                                           },
-                                  "command":  "close-window"
-                              },
-                      "title":  "关闭任务文档",
-                      "before":  {
-                                     "args":  [
-                                                  "--app",
-                                                  {
-                                                      "input":  "app"
-                                                  },
-                                                  "--program",
-                                                  {
-                                                      "input":  "program"
-                                                  },
-                                                  "--token",
-                                                  {
-                                                      "input":  "file"
-                                                  },
-                                                  "--instance",
-                                                  "pending",
-                                                  "--hwnd",
-                                                  "1",
-                                                  "--pid",
-                                                  "1"
-                                              ],
-                                     "bind":  {
-                                                  "9":  "ownership.hwnd",
-                                                  "11":  "ownership.pid",
-                                                  "7":  "ownership.start"
-                                              },
-                                     "command":  "verify-owner"
-                                 },
-                      "id":  "close",
-                      "verify":  {
-                                     "args":  [
-                                                  "--hwnd",
-                                                  "1",
-                                                  "--pid",
-                                                  "1",
-                                                  "--instance",
-                                                  "pending"
-                                              ],
-                                     "bind":  {
-                                                  "5":  "ownership.start",
-                                                  "1":  "ownership.hwnd",
-                                                  "3":  "ownership.pid"
-                                              },
-                                     "command":  "verify-closed"
-                                 }
-                  },
-                  {
-                      "run":  {
-                                  "args":  [
-                                               "--path",
-                                               {
-                                                   "input":  "file"
-                                               },
-                                               "--kind",
-                                               "docx-styles",
-                                               "--expected",
-                                               "{\"paragraphs\":[{\"text\":\"笔记 2026-10-04\",\"style\":\"1\"},{\"text\":\"主题:用 actl CLI 在 Word 里写一篇笔记并保存到桌面\",\"style\":\"\"},{\"text\":\"过程记录:\",\"style\":\"2\"},{\"text\":\"① 先探测再动手:桌面真实路径是 D:\\\\C\\\\Desktop(用户目录经过重定向),不能按默认的 C:\\\\Users 路径猜;\",\"style\":\"\"},{\"text\":\"② 复制样式模板 docx 作为独立文档,launch /n 打开,等待 role:Document 就绪;\",\"style\":\"\"},{\"text\":\"③ 逐段编舞:回车开新段,剪贴板粘贴正文,光标处按 Ctrl+Alt+N 应用标题样式;\",\"style\":\"\"},{\"text\":\"④ ctrl+s 原地保存;关闭重开后用 verify-file --kind docx-styles 逐段断言样式。\",\"style\":\"\"},{\"text\":\"心得:\",\"style\":\"2\"},{\"text\":\"• 样式定义预置在模板,运行时只应用不修改,字体/字号/行距一处定义全文生效;\",\"style\":\"\"},{\"text\":\"• 逐段断言用 docx-styles 的 styleId 比对,机器可验,不依赖视觉;\",\"style\":\"\"},{\"text\":\"• 启动期错误框经 popup_handlers 声明由引擎弹层治理自动处置。\",\"style\":\"\"},{\"text\":\"(本笔记由 actl 样式流程输入并保存)\",\"style\":\"\"}]}",
-                                               "--subset"
-                                           ],
-                                  "command":  "verify-file"
-                              },
-                      "title":  "逐段样式断言(docx-styles)",
-                      "id":  "verify-styles"
-                  }
-              ],
-    "resources":  {
-                      "directories":  [
-
-                                      ],
-                      "files":  [
-                                    {
-                                        "copy":  "assets/note-template.docx",
-                                        "path":  "${run.id}.docx"
-                                    }
-                                ]
-                  }
-}
+version: 1
+name: Word 笔记样式排版
+handoff:
+  approval: once_per_run
+popup_handlers:
+  - classification: error
+    app: .docx
+    click: id:2
+    name_contains: 目录名无效
+inputs:
+  program:
+    default: '${env:ProgramFiles}/Microsoft Office/Root/Office16/WINWORD.EXE'
+  file:
+    default: '${run.dir}/${run.id}.docx'
+  app:
+    default: '${run.id}.docx'
+steps:
+  - id: open
+    run:
+      args:
+        - input: program
+        - /n
+        - input: file
+      command: launch
+    title: 打开样式模板副本(骨架预检)
+    before:
+      args:
+        - '--path'
+        - input: file
+        - '--kind'
+        - docx-styles
+        - '--expected'
+        - '{"paragraphs":[{"text":"","style":"1"},{"text":"","style":""},{"text":"","style":"2"},{"text":"","style":""},{"text":"","style":""},{"text":"","style":""},{"text":"","style":""},{"text":"","style":"2"},{"text":"","style":""},{"text":"","style":""},{"text":"","style":""},{"text":"","style":""}]}'
+        - '--subset'
+      command: verify-file
+    verify:
+      args:
+        - '--element'
+        - role:Document
+        - '--app'
+        - input: app
+        - '--timeout'
+        - '30000'
+      command: wait
+  - id: ownership
+    run:
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: file
+      command: verify-owner
+    title: 核对任务进程归属
+    outputs:
+      hwnd:
+        pointer: /hwnd
+        type: number
+      pid:
+        pointer: /pid
+        type: number
+      start:
+        pointer: /process_start
+        type: string
+  - id: focus
+    run:
+      sequence:
+        - args:
+          - role:Document
+          - ' '
+          - '--paste'
+          - '--app'
+          - input: app
+          command: type
+        - args:
+          - ctrl+z
+          - '--target'
+          - role:Document
+          - '--app'
+          - input: app
+          command: press
+    title: 建立正文焦点(保留骨架段落)
+    verify:
+      args:
+        - '--value'
+        - role:Document
+        - ""
+        - '--property'
+        - text
+        - '--normalize-lines'
+        - '--app'
+        - input: app
+      command: verify
+  - id: fill-1
+    run:
+      sequence:
+        - args:
+          - role:Document
+          - 笔记 2026-10-04
+          - '--paste'
+          - '--app'
+          - input: app
+          command: type
+        - args:
+          - down
+          - '--target'
+          - role:Document
+          - '--app'
+          - input: app
+          command: press
+        - args:
+          - role:Document
+          - 主题:用 actl CLI 在 Word 里写一篇笔记并保存到桌面
+          - '--paste'
+          - '--app'
+          - input: app
+          command: type
+        - args:
+          - down
+          - '--target'
+          - role:Document
+          - '--app'
+          - input: app
+          command: press
+        - args:
+          - role:Document
+          - '过程记录:'
+          - '--paste'
+          - '--app'
+          - input: app
+          command: type
+        - args:
+          - down
+          - '--target'
+          - role:Document
+          - '--app'
+          - input: app
+          command: press
+        - args:
+          - role:Document
+          - ① 先探测再动手:桌面真实路径是 D:\C\Desktop(用户目录经过重定向),不能按默认的 C:\Users 路径猜;
+          - '--paste'
+          - '--app'
+          - input: app
+          command: type
+    title: 填充 P1-P4
+    verify:
+      args:
+        - '--value'
+        - role:Document
+        - "笔记 2026-10-04\n主题:用 actl CLI 在 Word 里写一篇笔记并保存到桌面\n过程记录:\n① 先探测再动手:桌面真实路径是 D:\\C\\Desktop(用户目录经过重定向),不能按默认的 C:\\Users 路径猜;"
+        - '--property'
+        - text
+        - '--normalize-lines'
+        - '--app'
+        - input: app
+      command: verify
+  - id: fill-2
+    run:
+      sequence:
+        - args:
+          - down
+          - '--target'
+          - role:Document
+          - '--app'
+          - input: app
+          command: press
+        - args:
+          - role:Document
+          - ② 复制样式模板 docx 作为独立文档,launch /n 打开,等待 role:Document 就绪;
+          - '--paste'
+          - '--app'
+          - input: app
+          command: type
+        - args:
+          - down
+          - '--target'
+          - role:Document
+          - '--app'
+          - input: app
+          command: press
+        - args:
+          - role:Document
+          - ③ 逐段编舞:回车开新段,剪贴板粘贴正文,光标处按 Ctrl+Alt+N 应用标题样式;
+          - '--paste'
+          - '--app'
+          - input: app
+          command: type
+        - args:
+          - down
+          - '--target'
+          - role:Document
+          - '--app'
+          - input: app
+          command: press
+        - args:
+          - role:Document
+          - ④ ctrl+s 原地保存;关闭重开后用 verify-file --kind docx-styles 逐段断言样式。
+          - '--paste'
+          - '--app'
+          - input: app
+          command: type
+        - args:
+          - down
+          - '--target'
+          - role:Document
+          - '--app'
+          - input: app
+          command: press
+        - args:
+          - role:Document
+          - '心得:'
+          - '--paste'
+          - '--app'
+          - input: app
+          command: type
+    title: 填充 P5-P8
+    verify:
+      args:
+        - '--value'
+        - role:Document
+        - "笔记 2026-10-04\n主题:用 actl CLI 在 Word 里写一篇笔记并保存到桌面\n过程记录:\n① 先探测再动手:桌面真实路径是 D:\\C\\Desktop(用户目录经过重定向),不能按默认的 C:\\Users 路径猜;\n② 复制样式模板 docx 作为独立文档,launch /n 打开,等待 role:Document 就绪;\n③ 逐段编舞:回车开新段,剪贴板粘贴正文,光标处按 Ctrl+Alt+N 应用标题样式;\n④ ctrl+s 原地保存;关闭重开后用 verify-file --kind docx-styles 逐段断言样式。\n心得:"
+        - '--property'
+        - text
+        - '--normalize-lines'
+        - '--app'
+        - input: app
+      command: verify
+  - id: fill-3
+    run:
+      sequence:
+        - args:
+          - down
+          - '--target'
+          - role:Document
+          - '--app'
+          - input: app
+          command: press
+        - args:
+          - role:Document
+          - • 样式定义预置在模板,运行时只应用不修改,字体/字号/行距一处定义全文生效;
+          - '--paste'
+          - '--app'
+          - input: app
+          command: type
+        - args:
+          - down
+          - '--target'
+          - role:Document
+          - '--app'
+          - input: app
+          command: press
+        - args:
+          - role:Document
+          - • 逐段断言用 docx-styles 的 styleId 比对,机器可验,不依赖视觉;
+          - '--paste'
+          - '--app'
+          - input: app
+          command: type
+        - args:
+          - down
+          - '--target'
+          - role:Document
+          - '--app'
+          - input: app
+          command: press
+        - args:
+          - role:Document
+          - • 启动期错误框经 popup_handlers 声明由引擎弹层治理自动处置。
+          - '--paste'
+          - '--app'
+          - input: app
+          command: type
+        - args:
+          - down
+          - '--target'
+          - role:Document
+          - '--app'
+          - input: app
+          command: press
+        - args:
+          - role:Document
+          - (本笔记由 actl 样式流程输入并保存)
+          - '--paste'
+          - '--app'
+          - input: app
+          command: type
+    title: 填充 P9-P12
+    verify:
+      args:
+        - '--value'
+        - role:Document
+        - "笔记 2026-10-04\n主题:用 actl CLI 在 Word 里写一篇笔记并保存到桌面\n过程记录:\n① 先探测再动手:桌面真实路径是 D:\\C\\Desktop(用户目录经过重定向),不能按默认的 C:\\Users 路径猜;\n② 复制样式模板 docx 作为独立文档,launch /n 打开,等待 role:Document 就绪;\n③ 逐段编舞:回车开新段,剪贴板粘贴正文,光标处按 Ctrl+Alt+N 应用标题样式;\n④ ctrl+s 原地保存;关闭重开后用 verify-file --kind docx-styles 逐段断言样式。\n心得:\n• 样式定义预置在模板,运行时只应用不修改,字体/字号/行距一处定义全文生效;\n• 逐段断言用 docx-styles 的 styleId 比对,机器可验,不依赖视觉;\n• 启动期错误框经 popup_handlers 声明由引擎弹层治理自动处置。\n(本笔记由 actl 样式流程输入并保存)"
+        - '--property'
+        - text
+        - '--normalize-lines'
+        - '--app'
+        - input: app
+      command: verify
+  - id: save
+    run:
+      args:
+        - ctrl+s
+        - '--target'
+        - role:Document
+        - '--app'
+        - input: app
+      command: press
+    title: 原地保存
+    verify:
+      args:
+        - '--value'
+        - role:Document
+        - "笔记 2026-10-04\n主题:用 actl CLI 在 Word 里写一篇笔记并保存到桌面\n过程记录:\n① 先探测再动手:桌面真实路径是 D:\\C\\Desktop(用户目录经过重定向),不能按默认的 C:\\Users 路径猜;\n② 复制样式模板 docx 作为独立文档,launch /n 打开,等待 role:Document 就绪;\n③ 逐段编舞:回车开新段,剪贴板粘贴正文,光标处按 Ctrl+Alt+N 应用标题样式;\n④ ctrl+s 原地保存;关闭重开后用 verify-file --kind docx-styles 逐段断言样式。\n心得:\n• 样式定义预置在模板,运行时只应用不修改,字体/字号/行距一处定义全文生效;\n• 逐段断言用 docx-styles 的 styleId 比对,机器可验,不依赖视觉;\n• 启动期错误框经 popup_handlers 声明由引擎弹层治理自动处置。\n(本笔记由 actl 样式流程输入并保存)"
+        - '--property'
+        - text
+        - '--normalize-lines'
+        - '--app'
+        - input: app
+      command: verify
+  - id: save-disk
+    run:
+      args:
+        - '--path'
+        - input: file
+        - '--kind'
+        - meta
+        - '--expected'
+        - '{"size_min":11000}'
+        - '--subset'
+      command: verify-file
+    title: 保存落盘元数据断言
+  - id: close
+    run:
+      args:
+        - '--hwnd'
+        - '1'
+      bind:
+        1: ownership.hwnd
+      command: close-window
+    title: 关闭任务文档
+    before:
+      args:
+        - '--app'
+        - input: app
+        - '--program'
+        - input: program
+        - '--token'
+        - input: file
+        - '--instance'
+        - pending
+        - '--hwnd'
+        - '1'
+        - '--pid'
+        - '1'
+      bind:
+        9: ownership.hwnd
+        11: ownership.pid
+        7: ownership.start
+      command: verify-owner
+    verify:
+      args:
+        - '--hwnd'
+        - '1'
+        - '--pid'
+        - '1'
+        - '--instance'
+        - pending
+      bind:
+        5: ownership.start
+        1: ownership.hwnd
+        3: ownership.pid
+      command: verify-closed
+  - id: verify-styles
+    run:
+      args:
+        - '--path'
+        - input: file
+        - '--kind'
+        - docx-styles
+        - '--expected'
+        - '{"paragraphs":[{"text":"笔记 2026-10-04","style":"1"},{"text":"主题:用 actl CLI 在 Word 里写一篇笔记并保存到桌面","style":""},{"text":"过程记录:","style":"2"},{"text":"① 先探测再动手:桌面真实路径是 D:\\C\\Desktop(用户目录经过重定向),不能按默认的 C:\\Users 路径猜;","style":""},{"text":"② 复制样式模板 docx 作为独立文档,launch /n 打开,等待 role:Document 就绪;","style":""},{"text":"③ 逐段编舞:回车开新段,剪贴板粘贴正文,光标处按 Ctrl+Alt+N 应用标题样式;","style":""},{"text":"④ ctrl+s 原地保存;关闭重开后用 verify-file --kind docx-styles 逐段断言样式。","style":""},{"text":"心得:","style":"2"},{"text":"• 样式定义预置在模板,运行时只应用不修改,字体/字号/行距一处定义全文生效;","style":""},{"text":"• 逐段断言用 docx-styles 的 styleId 比对,机器可验,不依赖视觉;","style":""},{"text":"• 启动期错误框经 popup_handlers 声明由引擎弹层治理自动处置。","style":""},{"text":"(本笔记由 actl 样式流程输入并保存)","style":""}]}'
+        - '--subset'
+      command: verify-file
+    title: 逐段样式断言(docx-styles)
+resources:
+  directories: []
+  files:
+    - copy: assets/note-template.docx
+      path: '${run.id}.docx'

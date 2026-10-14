@@ -1,3 +1,4 @@
+use actl_flow::decode_yaml;
 use serde_json::{Value, json};
 use std::{path::PathBuf, process::Command};
 
@@ -161,10 +162,11 @@ fn combined_template_matches_individual_steps_and_resources() {
         .unwrap()
         .push(json!({"id":"idle-gate","title":"Wait for an idle desktop before the batch","run":{"command":"wait","args":["--idle","15000","--timeout","300000"]}}));
     for name in ["vscode-edit", "excel-table", "word-edit", "zotero-search"] {
-        let mut raw: Value = serde_json::from_str(
-            &std::fs::read_to_string(base.join(format!("{name}.yml"))).unwrap(),
-        )
-        .unwrap();
+        // 2026-10-14 模板迁移 YAML 语法:原始形态解码走引擎公开入口
+        // (serde_json 只吃 JSON;五模板已迁 YAML)
+        let mut raw: Value =
+            decode_yaml(&std::fs::read_to_string(base.join(format!("{name}.yml"))).unwrap())
+                .unwrap();
         for (key, decl) in raw["inputs"].as_object().unwrap() {
             let mut decl = decl.clone();
             decl["default"] = json!(
@@ -208,10 +210,9 @@ fn combined_template_matches_individual_steps_and_resources() {
             expected["steps"].as_array_mut().unwrap().push(step.clone());
         }
     }
-    let actual: Value = serde_json::from_str(
-        &std::fs::read_to_string(base.join("verify-applications.yml")).unwrap(),
-    )
-    .unwrap();
+    let actual: Value =
+        decode_yaml(&std::fs::read_to_string(base.join("verify-applications.yml")).unwrap())
+            .unwrap();
     assert_eq!(
         actual, expected,
         "update the combined template when an application workflow changes"
