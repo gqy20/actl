@@ -31,13 +31,52 @@ pub(crate) fn commands() -> Result<Value, CtlError> {
                 })
             })
             .collect();
+        let name = sub.get_name();
         list.push(json!({
-            "name": sub.get_name(),
+            "name": name,
+            "family": family_of(name),
             "about": sub.get_about().map(|h| h.to_string()),
             "args": args,
         }));
     }
     Ok(json!({ "commands": list }))
+}
+
+/// 命令族归类(2026-10-14 审计轮 P1):97 命令平铺无子命令,族信息此前
+/// 只在命名惯例里——family 让机器消费方一读即知分族(verify 族里
+/// verify-owner 是治理动作、clipboard 族是快照对这类子结构)。
+/// 规则:连字符前缀即族;显式映射覆盖例外(无前缀的观察/桌面命令)。
+fn family_of(name: &str) -> String {
+    match name {
+        // 观察族(无前缀的核心读命令)
+        "commands" | "status" | "snapshot" | "find" | "get" | "wait" | "preview"
+        | "preview-map" | "image-regions" | "verify-visual" | "screenshot" | "find-image"
+        | "collect" | "extract" | "history" => "observe".into(),
+        // 输入动作族
+        "click" | "type" | "press" | "paste" | "set-value" | "focus" | "right-click"
+        | "double-click" | "middle-click" | "triple-click" | "hover" | "drag" | "scroll"
+        | "key-down" | "key-up" | "select" | "toggle" => "input".into(),
+        // 窗口/桌面治理族
+        "focus-window" | "minimize-window" | "maximize-window" | "restore-window"
+        | "resize-window" | "close-window" | "list-windows" | "desktop-prepare"
+        | "desktop-restore" | "get-selection" | "task-archive" => "window".into(),
+        // 决策/恢复族
+        "decide" | "execution-status" | "execution-recover" => "decision".into(),
+        // 剪贴板读写对(get/set 与 save/restore 同族:读写+快照两对偶)
+        "get-clipboard" | "set-clipboard" => "clipboard".into(),
+        // 桌面诊断三报告(display 侧监督诊断;非输入动作)
+        "focus-report" | "front-report" | "residue-report" => "diagnostic".into(),
+        // 应用生命周期(launch 与 app-locate/register 同域)
+        "launch" => "app".into(),
+        // 挑战解题(browser 轨的闭环动作)
+        "challenge-solve" => "browser".into(),
+        // 探索回写(flow 轨)
+        "explore-writeback" => "flow".into(),
+        // batch 是多命令批执行器(自成一族)
+        "batch" => "batch".into(),
+        // 其余:连字符首段即族(flow-* -> flow, browser-* -> browser ...)
+        _ => name.split('-').next().unwrap_or(name).to_string(),
+    }
 }
 
 pub(crate) fn status() -> Result<Value, CtlError> {

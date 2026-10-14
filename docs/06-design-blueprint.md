@@ -1305,6 +1305,16 @@ actl flow-resume --id readback-001
 
 **flow-revise**（计划版本化修订）：`flow-revise --id <id> --file <新.yml> [--inputs <值.yml>] [--message] [--accept-rerun <step>]... [--resume]`——--file 收完整模板形态（resources 块经 prepare 剥离、`{"input":...}` 引用经 defaults 或 --inputs 解析、pack 级 popup_ignores 注入与 load_plan 同口径）。新 YAML 解析后与冻结计划做**步骤级 diff**（按位+id 对齐：unchanged/modified/added/removed，规格相等 = 规范化 JSON 一致）。处置政策（全部显式）：完成步规格未变 → 结果保留（StepRecord 带 `plan_version` 溯源，Run 记录当前 `plan_version`）；完成**读步**规格已变 → 重置 Pending（无副作用）；完成**写步**规格已变 → 必须 `--accept-rerun` 点名否则 PROTOCOL 列名拒绝；uncertain 步规格已变 → 重置 Pending——**修订本身即该步的重试授权**；uncertain 规格未变 → 保持（仍走 `--retry-step` 原语义）。持久化序：旧计划字节归档 `revisions/vN.plan.json`（永不覆盖）→ 新 plan.json → 新 state → `revisions/index.json` 追加版本事件（version/fingerprint/message/diff/revised_ms）；flow-status 展示版本谱系（revisions 数组）。默认修订后**不自动续跑**（`--resume` 才链式恢复，同 flow-resume 的停止/锁检查）；续跑前置由既有 freshness/resume_check 重立。探索 run 拒绝修订（PROTOCOL）。调节粒度 = 步边界（不做指令级打断）；冻结计划四不变量保持——「冻结」升级为「版本化」。
 
+**prologue/epilogue 样板展开**(2026-10-14,YAML 审计轮 P0-2):流程级
+`prologue: [步骤]`/`epilogue: [步骤]` 声明——准备/收尾样板(隔离启动
+→归属声明 / 优雅关闭→清验收口)单点书写,schema 解码期展开为全量 steps
+(顺序 prologue→steps→epilogue)。展开发生在原始 Value 层:冻结计划、
+指纹、revise、恢复零改动,样板步就是普通步骤(可 pause_before/ensure/
+verify,写步护栏全适用)。语义=纯位置拼接,不引入 try/finally——步骤
+失败停在失败步,epilogue 不跑(资源留现场,AGENTS 排障纪律)。约束:
+与 explore 互斥;三段 step id 全局唯一;两键解码后从计划中消失(展开后
+的 steps 才是冻结面)。
+
 **ensure 幂等**：`ensure: {check: <只读调用>}` 步骤——Pending 步 check 通过 → 直接 Completed+verified，run 不派发（重跑/修订续跑的环境准备前缀自动短路）；不通过 → 走正常 run+verify；check 观察错误如实传播（与 when/unless 同族）；与 outputs 互斥（满足路径不产出绑定值）。
 
 **AMBIGUOUS 目标串联（pick）**：run 相定位**多命中**（AMBIGUOUS、目标在 args[0]、有 `--app` 锚、证据含候选）时不走通用失败语义——引擎立即锚定一份**骨架快照**（候选 ref 的身份来源），候选证据**全量保留**（不走默认 redaction——候选是应答面），run 进 needs_review（reason=`ambiguous_target:<step>`）、步保持 **Pending**（locate 拒绝=零派发，无 uncertain 语义）；快照失败则落回通用失败语义。应答走 **`flow-resume --id <id> --pick @eN`**（与 --decision/--retry-step 互斥，探索 run 拒绝）：引擎校验 ref ∈ 候选集（唯一待应答暂停）后置位 picked，续跑时 args[0] 重写为选中 ref 并追加 `--snapshot <锚定 id>`——身份核验交给既有 ReplayGuard（窗口重建/元素漂移即 STALE_REF 拒绝派发，不消费重写）；步骤目标经修订已变（陈旧 pick）→ PROTOCOL 引导重新判读或 flow-revise。flow-status 附 **ambiguous_hint**（候选清单+可复制应答命令）。pick 是**运行时纠正**，不改 plan_version、不触碰冻结计划四不变式；步骤的 AMBIGUOUS 记录随修订重置不迁移。**自动缩小查询不做**（引擎侧静默改写选择器违背冻结计划的显式变更纪律，缩小路径 = 调用方 pick 显式选择或 flow-revise 显式修订）。

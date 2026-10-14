@@ -238,7 +238,21 @@ fn self_describing_commands_schema() {
     }
     for c in cmds {
         assert!(c["about"].is_string(), "every command has about");
+        // 2026-10-14 P1:family 字段——97 命令的分族让机器消费方一读即知
+        // (verify 族里 verify-owner 是治理动作、clipboard 族是快照对)
+        assert!(c["family"].is_string(), "every command has family");
     }
+    let fam = |n: &str| -> String {
+        cmds.iter().find(|c| c["name"] == n).unwrap()["family"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    assert_eq!(fam("verify-owner"), "verify");
+    assert_eq!(fam("get-clipboard"), "clipboard");
+    assert_eq!(fam("front-report"), "diagnostic");
+    assert_eq!(fam("challenge-solve"), "browser");
+    assert_eq!(fam("explore-writeback"), "flow");
 }
 
 #[test]

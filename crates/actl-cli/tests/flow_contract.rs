@@ -335,6 +335,56 @@ fn url_query_assertion_contract() {
 }
 
 #[test]
+fn bookends_expand_into_step_list() {
+    // P0-2 prologue/epilogue(2026-10-14 YAML 审计轮):流程级准备/收尾
+    // 样板声明,validate 期展开为全量 steps——冻结计划/指纹/revise 零改动。
+    let s = Sandbox::new();
+    let file = s.file(
+        "version: 1
+name: Book
+inputs: {app: {default: x}}
+prologue:
+ - id: launch
+   title: L
+   run: {command: status, args: []}
+steps:
+ - id: work
+   title: W
+   run: {command: snapshot, args: [--app, {input: app}]}
+epilogue:
+ - id: close
+   title: C
+   run: {command: status, args: []}
+",
+    );
+    let (code, value) = s.invoke(&["flow-validate", "--file", &file]);
+    assert_eq!(code, 0, "{value}");
+    // 展开:样板步并入业务步(1 prologue + 1 业务 + 1 epilogue = 3);
+    // 顺序与 id 唯一性由 actl-flow schema 单测钉死(展开语义同层)
+    assert_eq!(
+        value["data"]["steps"], 3,
+        "bookends expand into the step list"
+    );
+    // 重复 id 跨段拒
+    let bad = s.file(
+        "version: 1
+name: Bad
+prologue:
+ - id: dup
+   title: P
+   run: {command: status, args: []}
+steps:
+ - id: dup
+   title: S
+   run: {command: status, args: []}
+",
+    );
+    let (code, value) = s.invoke(&["flow-validate", "--file", &bad]);
+    assert_ne!(code, 0);
+    assert_eq!(value["error"]["code"], "PROTOCOL");
+}
+
+#[test]
 fn declared_inputs_validate_and_save_a_concrete_plan() {
     let s = Sandbox::new();
     let file = s.file("version: 1\nname: Inputs\ninputs: {app: {}}\nsteps:\n - id: read\n   title: Read\n   run: {command: snapshot, args: [--app, {input: app}]}\n");
