@@ -1,13 +1,16 @@
-//! locate —— 定位链(L1 精确 → L2 名称模糊 → L3 序数/锚点 → L4 虚拟化容器),
-//! 以及基于定位的元素等待(wait/wait --gone)。候选 ref 编号与 snapshot 同源。
+//! locate —— 定位链(L1 精确 → L2 名称模糊 → L3 序数/锚点 → L4 虚拟化容器)。
+//! 候选 ref 编号与 snapshot 同源;元素等待(wait 族)见 locate/wait.rs。
 
 use actl_core::target::Target;
 use actl_core::{CtlError, ErrorCode};
 
 use uiautomation::{UIAutomation, UIElement, UITreeWalker};
 
+use crate::internal;
 use crate::window::{ensure_window_responsive, find_window, top_level_of_focused};
-use crate::{internal, timing};
+
+mod wait;
+pub use wait::{StableOutcome, wait_element, wait_gone, wait_property, wait_stable};
 
 /// 定位结果:命中元素 + 所在窗口。
 pub struct Located {
@@ -884,74 +887,6 @@ fn poll(app: Option<&str>, target: &Target) -> Result<Option<Located>, CtlError>
     crate::scoped_locate::observed(locate(app, target, None))
 }
 
-/// wait --element:轮询定位直到目标可解析(TIMEOUT 语义;与 --expect 的
-/// "立即断言"分工见 06 §3.6"耐心等待")。
-pub fn wait_element(app: Option<&str>, target: &Target, timeout_ms: u64) -> Result<(), CtlError> {
-    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
-    // 观察瞬态有界重试(docs/81 §8):首次解析在弹窗收尾/窗口重构过渡期可
-    // 报 STALE_REF/INTERNAL(Word open 步每轮必现、稍后同命令即通)。等待是
-    // 耐心命令——瞬态观察错误按"尚未出现"继续轮询(wait --gone 同款语义),
-    // 超时仍如实失败;非瞬态错误立即上抛。
-    let mut last_transient: Option<CtlError> = None;
-    // 看门狗心跳:每轮轮询 = 进展(长 --timeout 与慢沉降不误杀;原实现只在
-    // 循环前重置一次——轮询超期限即误杀,潜伏缺陷)。
-    loop {
-        actl_core::watchdog::reset();
-        match poll(app, target) {
-            Ok(Some(_)) => return Ok(()),
-            Ok(None) => {}
-            Err(error)
-                if matches!(error.code, ErrorCode::StaleRef | ErrorCode::Internal)
-                    && std::time::Instant::now() < deadline =>
-            {
-                last_transient = Some(error);
-            }
-            Err(error) => return Err(error),
-        }
-        if std::time::Instant::now() >= deadline {
-            if let Some(transient) = last_transient {
-                return Err(transient);
-            }
-            return Err(CtlError::new(
-                ErrorCode::Timeout,
-                format!(
-                    "element {} did not resolve within {timeout_ms}ms",
-                    target.describe()
-                ),
-            ));
-        }
-        std::thread::sleep(std::time::Duration::from_millis(timing().poll_ms));
-    }
-}
-
-/// wait --gone:轮询直到目标**不再**可解析(消失;TIMEOUT 语义)。
-/// 观察失败(如窗口拆除期 STALE_REF)视作"尚未消失"继续轮询——耐心命令
-/// 不被瞬态观察错误打断,超时仍如实失败。
-pub fn wait_gone(app: Option<&str>, target: &Target, timeout_ms: u64) -> Result<(), CtlError> {
-    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
-    // 看门狗心跳:每轮轮询 = 进展(长 --timeout 与慢沉降不误杀;原实现只在
-    // 循环前重置一次——轮询超期限即误杀,潜伏缺陷)。
-    loop {
-        actl_core::watchdog::reset();
-        match poll(app, target) {
-            Ok(None) => return Ok(()),
-            Ok(Some(_)) => {}
-            Err(_) if std::time::Instant::now() < deadline => {}
-            Err(error) => return Err(error),
-        }
-        if std::time::Instant::now() >= deadline {
-            return Err(CtlError::new(
-                ErrorCode::Timeout,
-                format!(
-                    "{} still resolves after {timeout_ms}ms (expected it to disappear)",
-                    target.describe()
-                ),
-            ));
-        }
-        std::thread::sleep(std::time::Duration::from_millis(timing().poll_ms));
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::{CandidateMeta, ambiguous_error, container_query_for};
@@ -1043,124 +978,6 @@ mod tests {
         assert!(container_query_for(&Target::RoleAt("ListItem".into(), 2)).is_none());
         assert!(container_query_for(&Target::Ref(7)).is_none());
     }
-}
-
-/// wait --property:轮询直到元素可解析且属性满足期望(06 §3.4 完整谓词语法)。
-/// 谓词:`value=<expected>`(Value/TextPattern 双通道)| `name=<substr>` | `checked=on|off`;
-/// contains=true 时 value/name 用子串语义。元素尚未可解析视为"未满足"继续等
-/// (与 --element 的分工:property 隐含存在性)。
-pub fn wait_property(
-    app: Option<&str>,
-    target: &Target,
-    predicate: &WaitPredicate,
-    timeout_ms: u64,
-) -> Result<String, CtlError> {
-    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
-    let mut last: Option<String> = None;
-    // 看门狗心跳:每轮轮询 = 进展(长 --timeout 与慢沉降不误杀;原实现只在
-    // 循环前重置一次——轮询超期限即误杀,潜伏缺陷)。
-    loop {
-        actl_core::watchdog::reset();
-        if let Some(loc) = poll(app, target)? {
-            let actual = predicate.read(&loc.element)?;
-            if predicate.satisfied(actual.as_deref()) {
-                return Ok(actual.unwrap_or_default());
-            }
-            last = actual;
-        }
-        if std::time::Instant::now() >= deadline {
-            return Err(CtlError::with_evidence(
-                ErrorCode::Timeout,
-                format!(
-                    "{} did not satisfy {} within {timeout_ms}ms",
-                    target.describe(),
-                    predicate.describe()
-                ),
-                serde_json::json!({ "last_actual": last, "actual":last, "target":target.describe(), "expected":predicate.expected, "property":predicate.describe().split('=').next(), "channel":match predicate.prop { WaitProp::Value => "value-or-text-pattern", WaitProp::Name => "name", WaitProp::Text => "text-pattern", WaitProp::Checked => "toggle-pattern" }, "comparison":if predicate.contains {"contains"} else {"exact"} }),
-            ));
-        }
-        std::thread::sleep(std::time::Duration::from_millis(timing().poll_ms));
-    }
-}
-
-/// wait --stable 的结果(settle 证据:采样数/变化数/末次样本长度)。
-pub struct StableOutcome {
-    pub samples: usize,
-    pub changes: usize,
-    pub last_len: usize,
-}
-
-/// wait --stable:settle 谓词——轮询直到元素可解析且观测样本连续两次不变
-/// (采样间隔 settle_ms,默认 250ms，跨一个采样间隔)。样本通道:text 优先、
-/// value 次之、name 兜底(Chromium Document 的 Value=URL 对内容 settle 无
-/// 意义,正文只能走 TextPattern,与 get 的 text/value 分工一致)。元素消失
-/// 期间稳定计数清零(隐含存在性);超时 TIMEOUT 附 samples/changes evidence。
-pub fn wait_stable(
-    app: Option<&str>,
-    target: &Target,
-    timeout_ms: u64,
-) -> Result<StableOutcome, CtlError> {
-    const STABLE_SAMPLES: usize = 2;
-    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
-    let mut last: Option<String> = None;
-    let mut stable = 0usize;
-    let mut samples = 0usize;
-    let mut changes = 0usize;
-    // 看门狗心跳:每轮轮询 = 进展(长 --timeout 与慢沉降不误杀;原实现只在
-    // 循环前重置一次——轮询超期限即误杀,潜伏缺陷)。
-    loop {
-        actl_core::watchdog::reset();
-        if let Some(loc) = poll(app, target)? {
-            let sample = stability_sample(&loc.element)?;
-            samples += 1;
-            stable = match &last {
-                Some(prev) if prev == &sample => stable + 1,
-                Some(_) => {
-                    changes += 1;
-                    1
-                }
-                None => 1,
-            };
-            last = Some(sample);
-            if stable >= STABLE_SAMPLES {
-                return Ok(StableOutcome {
-                    samples,
-                    changes,
-                    last_len: last.as_deref().map(str::len).unwrap_or(0),
-                });
-            }
-        } else {
-            stable = 0;
-        }
-        if std::time::Instant::now() >= deadline {
-            return Err(CtlError::with_evidence(
-                ErrorCode::Timeout,
-                format!(
-                    "{} did not settle within {timeout_ms}ms (content still changing or element absent)",
-                    target.describe()
-                ),
-                serde_json::json!({
-                    "samples": samples,
-                    "changes": changes,
-                    "last_len": last.as_deref().map(str::len),
-                }),
-            ));
-        }
-        std::thread::sleep(std::time::Duration::from_millis(timing().settle_ms));
-    }
-}
-
-/// 稳定性采样:text > value > name(富文本正文只有 TextPattern 可读;
-/// value 通道兜底纯控件,name 最后)。
-fn stability_sample(elem: &UIElement) -> Result<String, CtlError> {
-    if let Some(text) = crate::read::read_text(elem)? {
-        return Ok(text);
-    }
-    if let Some(value) = crate::read::read_value(elem)? {
-        return Ok(value);
-    }
-    elem.get_name()
-        .map_err(|e| crate::read_channel::failure("name", e))
 }
 
 /// wait/verify 共用的属性谓词(解析与判定分离,便于单测)。
