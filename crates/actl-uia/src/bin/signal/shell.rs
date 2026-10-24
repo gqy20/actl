@@ -21,6 +21,10 @@ static MENU_FLOW: Mutex<Option<(String, bool)>> = Mutex::new(None);
 /// 菜单打开时录制项的(1-based 序号, 是否为"开始")——序号随前置动态项
 /// (流程暂停/继续)有无而漂移,menu_action 按存储序号匹配(menu() 同轮写入)。
 static MENU_RECORD: Mutex<Option<(usize, bool)>> = Mutex::new(None);
+/// 「关闭」恒在菜单末位(撤销授权+发布 closed 租约+退出,居中易误触中断
+/// 会话);序号随前置动态项(流程/录制)有无漂移,menu_action 按存储序号
+/// 匹配(menu() 同轮写入)。
+static MENU_CLOSE: Mutex<Option<usize>> = Mutex::new(None);
 static CURSOR: Mutex<Option<ActionCursor>> = Mutex::new(None);
 static PREPARING: Mutex<String> = Mutex::new(String::new());
 static CAPTURES: Mutex<Vec<u32>> = Mutex::new(Vec::new());
@@ -636,7 +640,6 @@ unsafe fn menu(hwnd: HWND) {
         } else {
             "显示".into()
         },
-        "关闭".into(),
     ];
     let paths = SignalPaths::default();
     let action = super::flow_ui::discover(&paths).and_then(|id| {
@@ -669,18 +672,32 @@ unsafe fn menu(hwnd: HWND) {
     if let Ok(mut stored) = MENU_RECORD.lock() {
         *stored = Some((lines.len(), start_recording)); // lines.len() = 1-based 序号
     }
+    lines.push("关闭".into());
+    if let Ok(mut stored) = MENU_CLOSE.lock() {
+        *stored = Some(lines.len()); // lines.len() = 1-based 序号
+    }
     super::popup::show(hwnd, lines, true);
 }
 
 unsafe fn menu_action(hwnd: HWND, cmd: usize) {
-    // 录制项先于固定序号匹配:它的序号可能是 7 或 8(流程暂停/继续有无),
-    // 与固定 7(流程操作)仅在流程项缺席时重叠——MENU_FLOW 为 None 时两者不冲突。
+    // 动态序号项(录制/关闭)先于固定序号匹配:录制项的序号随流程项有无在
+    // 6/7 漂移,与固定 6(流程操作)仅在流程项缺席时数值重叠——MENU_FLOW
+    // 为 None 时该臂空转,两者不冲突;关闭项(7/8)不与任何固定臂重叠。
     if let Some((cmd_record, start)) = MENU_RECORD.lock().ok().and_then(|slot| *slot)
         && cmd == cmd_record
     {
         if let Err(error) = super::record_ui::request(start) {
             super::popup::show(hwnd, vec!["录制操作未启动".into(), error], false);
         }
+        tick(hwnd);
+        return;
+    }
+    if let Some(cmd_close) = MENU_CLOSE.lock().ok().and_then(|slot| *slot)
+        && cmd == cmd_close
+    {
+        super::handoff::revoke();
+        publish_lease(&SignalPaths::default(), "closed");
+        let _ = DestroyWindow(hwnd);
         tick(hwnd);
         return;
     }
@@ -707,12 +724,7 @@ unsafe fn menu_action(hwnd: HWND, cmd: usize) {
             );
         }
         5 => {
-            super::handoff::revoke();
-            publish_lease(&SignalPaths::default(), "closed");
-            let _ = DestroyWindow(hwnd);
-        }
-        6 => {
-            // 预授权开关(固定第 6 项,流程操作在它之后动态追加):授予动作只发生在
+            // 预授权开关(固定第 5 项,流程操作在它之后动态追加):授予动作只发生在
             // 显示端 UI(本菜单),agent/CLI 无写入通道。关闭时立即撤销常驻同意,
             // 回到点击模式;急停在任何模式下都有效。
             let paths = SignalPaths::default();
@@ -739,7 +751,7 @@ unsafe fn menu_action(hwnd: HWND, cmd: usize) {
                 ),
             }
         }
-        7 => {
+        6 => {
             let action = MENU_FLOW.lock().ok().and_then(|a| a.clone());
             if let Some((id, resume)) = action {
                 let result = flow_action(&id, resume);
