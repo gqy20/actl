@@ -219,31 +219,42 @@ impl Provider for UreqProvider<'_> {
         &self,
         request: &SystemOneRequest<'_>,
     ) -> Result<(Option<String>, serde_json::Value), CtlError> {
-        let agent = ureq::AgentBuilder::new().timeout(self.timeout).build();
+        // ureq 3:AgentBuilder→Config;http_status_as_error(false) 保留 4xx/5xx
+        // 响应体可读(StatusCode 错误不再携带响应);timeout_global 覆盖整次
+        // 调用含读体,与 ureq 2 的 .timeout() 语义对齐。
+        let agent = ureq::Agent::new_with_config(
+            ureq::config::Config::builder()
+                .http_status_as_error(false)
+                .timeout_global(Some(self.timeout))
+                .build(),
+        );
         let body = serde_json::to_string(request)
             .map_err(|e| CtlError::internal(format!("request encode failed: {e}")))?;
         let mut call = agent
             .post(self.endpoint)
-            .set("Content-Type", "application/json");
+            .header("Content-Type", "application/json");
         if let Some(key) = self.api_key {
-            call = call.set("Authorization", &format!("Bearer {key}"));
+            call = call.header("Authorization", format!("Bearer {key}").as_str());
         }
-        let text = match call.send_string(&body) {
-            Ok(response) => response.into_string().map_err(|e| {
-                provider_unavailable("response read failed", Some(&e.to_string()), None)
-            })?,
-            Err(ureq::Error::Status(code, response)) => {
+        let text = match call.send(body.as_str()) {
+            Ok(mut response) => {
+                let status = response.status().as_u16();
                 let detail = response
-                    .into_string()
-                    .unwrap_or_default()
-                    .chars()
-                    .take(400)
-                    .collect::<String>();
-                return Err(provider_unavailable(
-                    &format!("provider returned HTTP {code}"),
-                    Some(&detail),
-                    None,
-                ));
+                    .body_mut()
+                    .with_config()
+                    .limit(2_000_000)
+                    .read_to_string()
+                    .map_err(|e| {
+                        provider_unavailable("response read failed", Some(&e.to_string()), None)
+                    })?;
+                if status >= 400 {
+                    return Err(provider_unavailable(
+                        &format!("provider returned HTTP {status}"),
+                        Some(&detail.chars().take(400).collect::<String>()),
+                        None,
+                    ));
+                }
+                detail
             }
             Err(error) => {
                 let transport = error.to_string();

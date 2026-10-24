@@ -12,6 +12,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **cargo 依赖组升级×6(build,dependabot #10 补全)**:serde_json 1.0.151→1.0.154 / tokio 1.53.2→1.53.3 / rmcp 3.5→3.6 / zip 8.6→9.0 / ureq 2→3 / serde-saphyr 1.3→2.0(TECH_STACK §3 版本行同步)。三个大版本的迁移面:①zip 9 `file_names()` 迭代项变 `Result`(条目名读取可失败)——xlsx 证据的 sharedStrings 命中判定改 `is_ok_and` 比较,失败即不匹配;②ureq 3 `AgentBuilder`→`Agent::new_with_config`,`Error::Status(code,response)` 变体移除——decide 决策通道改 `http_status_as_error(false)` 保住 4xx/5xx 响应体可读(错误详情截断语义不变),`timeout_global` 对齐旧 `.timeout()` 整次调用覆盖,响应体读取加 2MB 上限(ureq 3 官方建议);③serde-saphyr 2 与 rmcp 3.6 零代码改动。workspace check/clippy/tests 全绿(58 套件 0 失败);devtools 的 zip 用途(install/package)编译即兼容。
+
 ### Fixed
 
 - **wait 族瞬态恢复语义统一——property/stable 对齐 element 的耐心轮询(spec,2026-10-24,[06 §3.6/观察语义](docs/06-design-blueprint.md))**:同一类 UIA 目标重建/瞬态观察错误此前只有 `wait --element` 容忍(时限内 STALE_REF/INTERNAL 按"尚未出现"继续轮询),`wait --property`/`wait --stable` 对定位与属性读取用 `?` 立即上抛——真实 Chromium 导航后核验曾报 INTERNAL 即退出,尚未用完的等待时限不能再提供观察机会。修复:抽 `TransientBudget` 共享策略,三个耐心等待统一——瞬态在时限内继续轮询、耗尽如实返回**最后一次瞬态错误**(code/evidence/hint 完整,不冒充 TIMEOUT)、非瞬态(权限/歧义/provider 其他错误)立即上抛;stable 的连续稳定计数随缺席/瞬态清零(元素身份不可延续)。循环泛型化为 `*_with` 支持注入式 observe,新增单测 9(瞬态吸收后成功/瞬态耗尽保留原错误×3/非瞬态立即上抛/纯超时 evidence 形态不变/stable 计数随瞬态与缺席清零×2)。docs/06 两处矛盾同步(§3.6 瞬态重试行与观察完整性 bullet 此前互相打架,bullet 连既有 element 行为都没对上);wait help 的 Errors 行补 STALE_REF/INTERNAL 条款。定位层 matches() 的通用 internal 映射保留不动——两码已被同一策略吸收,行为中立;未知 INTERNAL 不笼统改 StaleRef(issue 边界)。**真机 A/B 验收(2026-10-24,Edge 抖动页:input 每 40ms 整体重建、9s 后落定 value=OK)**:旧二进制(安装版 0.2.3)property 在 churn 竞态中 **2.1s 即被 STALE_REF 打断快败**(evidence native_code=-2147220991,与 issue 现场同码),30s 预算弃用 27.9s;新二进制同页同型 **9.0s 穿越 churn 至 settle 成功**,另一轮(节流冻结页)坐满 30s 预算后**如实返回最后一次瞬态 STALE_REF**——终值非 TIMEOUT 即瞬态确被吸收的实锤;element/stable 正常路径全绿。证据 target/wait-transient-acceptance-20261024/(双二进制指纹在档)。附带判例入 browser pack:本机 Chrome 当前版本经 UIA 不暴露网页内容树(--force-renderer-accessibility 亦只有浏览器 chrome),msedge 正常——网页内容 UIA 场景以 msedge 为载具。

@@ -14,7 +14,7 @@ repository = "https://github.com/gqy20/actl"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
-zip = { version = "=8.6.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+zip = { version = "=9.0.5", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 # 浏览器深水层(用户授权 2026-10-13;spike 证据 prototypes/browser-lib-probe):
 # chromiumoxide 全域类型化 CDP,许可面干净(MIT OR Apache-2.0 全树);
 # async 圈在 actl-browser 的 bridge 同步门面之后(ADR-001 修订,TECH_STACK §4)
@@ -25,7 +25,7 @@ uiautomation = "0.25.1"
 # 决策 provider 通道(用户授权 2026-10-13,actl-cli decide):同步阻塞 HTTP,
 # native-tls 链 Windows 系统 schannel(仅 Windows 端,体量最小;不拖 rustls 树)。
 # ProviderUnavailable 语义与 TECH_STACK §3 登记见 docs/06 decide 节。
-ureq = { version = "2", default-features = false, features = ["native-tls"] }
+ureq = { version = "3", default-features = false, features = ["native-tls"] }
 windows = { version = "0.62.2", features = ["Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging", "Win32_System_DataExchange", "Win32_System_Memory", "Win32_System_Threading", "Win32_System_Com_StructuredStorage", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Pipes", "Win32_UI_Shell"] }
 webview2-com = "=0.39.1"
 

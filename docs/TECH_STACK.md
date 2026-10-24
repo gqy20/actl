@@ -51,13 +51,13 @@ serde-saphyr 与标准文件锁要求的 MSRV 已同步根 Cargo.toml；实际�
 | 深水层 CDP | `chromiumoxide` | 跟 0.9 stable | 仅 actl-browser(bridge+ops/deep 全动词):类型化全协议域;async 圈在 bridge 同步门面后(ADR-001 修订);全树许可宽松(spike 实证,prototypes/browser-lib-probe);Phase 2 吸收后唯一 CDP 通道(手写 tungstenite 客户端已退役,docs/72 §5) |
 | 深水层 runtime | `tokio` | 跟 1 stable(rt-multi-thread/time/sync 最小面) | 仅 actl-browser bridge:受控单 worker runtime,公共 API 保持同步 |
 | 深水层 stream | `futures` | 跟 0.3 stable | 仅 actl-browser bridge:handler 泵(StreamExt) |
-| MCP 协议 | `rmcp`(官方) | =3.5 | **仅 actl-mcp**(边界适配,ADR-001 修订)；server+streamable-http-server 最小 feature；协议层不手写(用户裁定,docs/82) |
+| MCP 协议 | `rmcp`(官方) | =3.6 | **仅 actl-mcp**(边界适配,ADR-001 修订)；server+streamable-http-server 最小 feature；协议层不手写(用户裁定,docs/82) |
 | MCP HTTP 壳 | `axum` | 跟 0.8 stable | 仅 actl-mcp:承载 StreamableHttpService + Bearer/Origin 中间件 |
 | MCP 熵源 | `getrandom` | 跟 stable | 仅 actl-mcp:256-bit 配对 token(纯安全 API 无 unsafe) |
-| 决策 provider HTTP | `ureq` | =2(native-tls) | 仅 actl-cli decide:同步阻塞 HTTP,schannel 系统栈(不拖 rustls 树);System One 端点(Jev/Kev 族,docs/06 §7.9);命令面唯一出站网络触点,危险候选构造前剥离 |
+| 决策 provider HTTP | `ureq` | =3(native-tls) | 仅 actl-cli decide:同步阻塞 HTTP,schannel 系统栈(不拖 rustls 树);System One 端点(Jev/Kev 族,docs/06 §7.9);命令面唯一出站网络触点,危险候选构造前剥离 |
 | 序列化 | `serde` + `serde_json` | 跟 stable | envelope 唯一出口 |
-| 流程 YAML | `serde-saphyr` | =1.3.0 | actl-flow；预算限制、重复键拒绝；不启用 include/robotics；实际外部直接依赖去重为 7（含 UIA 开发依赖） |
-| ZIP/OOXML | `zip` | =8.2.0 | 仅 deflate-flate2-zlib-rs；运行时检查与开发打包共用 |
+| 流程 YAML | `serde-saphyr` | =2.0.0 | actl-flow；预算限制、重复键拒绝；不启用 include/robotics；实际外部直接依赖去重为 7（含 UIA 开发依赖） |
+| ZIP/OOXML | `zip` | =9.0.5 | 仅 deflate-flate2-zlib-rs；运行时检查与开发打包共用 |
 | 错误 | `thiserror` | 跟 stable | 单一 Error 枚举 → 错误码映射(ADR-004) |
 | 日志 | `tracing` + `tracing-subscriber` | 跟 stable | 仅写 **stderr**(ADR-002) |
 | 物理输入 | `enigo` | feature `actl-physical` 内 | SendInput 级 |

@@ -329,7 +329,12 @@ pub fn office(path: &str, kind: &str) -> Result<Value, CtlError> {
         }
         "xlsx" => {
             let mut strings = vec![];
-            if zip.file_names().any(|n| n == "xl/sharedStrings.xml") {
+            // zip 9:file_names 迭代项是 Result(条目名读取可失败)——失败即
+            // 不匹配;命中判定用模式比较。
+            if zip.file_names().any(|n| {
+                n.as_deref()
+                    .is_ok_and(|name| name == "xl/sharedStrings.xml")
+            }) {
                 let shared = xml(&mut zip, "xl/sharedStrings.xml")?;
                 for n in nodes(&shared, "//*[local-name()='si']")? {
                     strings.push(text(&n, ".//*[local-name()='t']")?);

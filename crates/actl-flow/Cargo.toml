@@ -11,7 +11,7 @@ repository.workspace = true
 actl-core = { path = "../actl-core", version = "0.2.1" }
 serde.workspace = true
 serde_json.workspace = true
-serde-saphyr = { version = "=1.3.0", default-features = false, features = ["deserialize"] }
+serde-saphyr = { version = "=2.0.0", default-features = false, features = ["deserialize"] }
 
 [lints]
 workspace = true
