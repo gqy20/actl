@@ -53,7 +53,7 @@ steps:
 - 用语义选择器，每次重新定位。禁止临时 `@eN`、`--snapshot`、batch、嵌套 flow、管理命令和 key-down/key-up。
 - 支持简单 `when`/`unless` 与可选 `otherwise`：条件为即时只读断言，成功为真、ASSERTION_FAILED 为假，其他错误暂停。严格 UIA `verify --exists` 仅在已确认窗口/容器中完整查询零命中才为假。未派发步骤恢复重新判断；不确定步骤保留路线先核验。条件步骤不声明 outputs。不支持字符串插值、通用表达式、嵌套分支、循环、并行或自动引用 pack。物理操作仍需显式 `--physical`，沿用命令的焦点及桌面交接护栏。
 - `verify-window --app <唯一标题片段|hwnd:句柄> --state exists|absent|foreground|minimized|visible` 可判断原生窗口状态；visible 不证明无遮挡。窗口缺失时 absent 为真、其他为假；多个匹配报 AMBIGUOUS。模板见 workflows/ensure-app-window.yml、dismiss-optional-control.yml、ensure-element-value.yml。两条路线都预检，公共 before/resume_check/verify 须适用于两条路线。
-- 可配置 `recovery: {max_retries: 2, timeout_ms: 3000, interval_ms: 200}`，与 retry 互斥。预算按步共享并持久化，仅额外重查 STALE_REF/TIMEOUT/NOT_FOUND 的只读观察，截断、交接和临时 ref 不重试。继续可重新观察一次，但不补满预算；超时限制后续派发，不能强制中断同步 provider 调用。不会自动缩小查询、选择歧义候选或启动窗口；已经派发的动作先核验。
+- 可配置 `recovery: {max_retries: 2, timeout_ms: 3000, interval_ms: 200}`，与 retry 互斥。预算按步共享并持久化，仅额外重查 STALE_REF/TIMEOUT/NOT_FOUND/INTERNAL 的只读观察（INTERNAL 属观察通道瞬态：冷启动/垂死窗口的 UIA 查询抖动），截断、交接和临时 ref 不重试。继续可重新观察一次，但不补满预算；超时限制后续派发，不能强制中断同步 provider 调用。不会自动缩小查询、选择歧义候选或启动窗口；已经派发的动作先核验。
 
 ```powershell
 actl flow-validate --file task.yml
